@@ -248,6 +248,7 @@ test("the store's page says the team fits Teder to the business and connects it,
   assert.ok(page.indexOf(sec) > page.indexOf('id="show"'), 'after the slideshow');
   assert.ok(sec.includes('<h2 id="links-h">מותאם לעסק שלכם. החיבורים עלינו.</h2>'));
   assert.ok(sec.includes('ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.'), 'the lede, at no extra cost');
+  assert.ok(sec.includes('את ההדגמה הזו תדר בנה מהמוצרים שבאתר שלכם: חנות ב-Shopify, ב-WooCommerce או ב-Wix הוא קורא לבד.'), 'what it reads on its own, said as it is');
   for (const name of ['TikTok', 'Instagram', 'Facebook', 'YouTube', 'Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva'])
     assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
   assert.ok(sec.includes('<li class="wide" title="WooCommerce">'), 'the wordmark on a wider tile');

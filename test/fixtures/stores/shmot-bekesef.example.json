@@ -1,0 +1,199 @@
+{
+ "recorded": "2026-10-24",
+ "store": "https://shmot-bekesef.example",
+ "platform": "woocommerce",
+ "about": "A fictional WooCommerce store in the shape recorded from a real Israeli one (2026-10-24): its Store API open, prices in whole shekels (currency_minor_unit 0), its og:site_name a list of keywords, a PNG logo.",
+ "responses": {
+  "https://shmot-bekesef.example": {
+   "text": "<!doctype html>\n<html dir=\"rtl\" lang=\"he-IL\">\n<head>\n<title>ראשי - שרשראות שם | טבעות כסף | צמידים | תליונים | עגילים</title>\n<meta property=\"og:site_name\" content=\"שרשראות שם | טבעות כסף | צמידים | תליונים | עגילים\" />\n<meta name=\"generator\" content=\"WordPress 7.1.3\" />\n<meta name=\"generator\" content=\"WooCommerce 10.5.3\" />\n<meta name=\"generator\" content=\"Elementor 4.2.4; features: additional_custom_breakpoints; settings: css_print_method-external, google_font-enabled, font_display-auto\">\n</head>\n<body>\n<style id=\"woocommerce-inline-inline-css\">\n<img src=\"https://shmot-bekesef.example/wp-content/uploads/2021/03/logo-main.png\" alt=\"שרשראות שם | טבעות כסף | צמידים | תליונים | עגילים\" style=\"max-width: 250px;\" />\n</body>\n</html>\n"
+  },
+  "https://shmot-bekesef.example/wp-json/wc/store/v1/products?per_page=100": {
+   "json": [
+    {
+     "id": 2101,
+     "name": "תליון לב מכסף 925",
+     "slug": "%d7%aa%d7%9c%d7%99%d7%95%d7%9f-%d7%9c%d7%91-%d7%9e%d7%9b%d7%a1%d7%a3-925",
+     "type": "simple",
+     "permalink": "https://shmot-bekesef.example/product/%d7%aa%d7%9c%d7%99%d7%95%d7%9f-%d7%9c%d7%91-%d7%9e%d7%9b%d7%a1%d7%a3-925/",
+     "description": "<p>תליון לב קטן מכסף 925, עם שרשרת באורך 45 ס\"מ.</p>",
+     "prices": {
+      "price": "180",
+      "regular_price": "240",
+      "sale_price": "180",
+      "price_range": null,
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 0,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "₪",
+      "currency_suffix": ""
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 21010,
+       "src": "https://shmot-bekesef.example/wp-content/uploads/2025/10/tilyon-lev.jpg",
+       "name": "תליון לב מכסף 925",
+       "alt": "תליון לב מכסף 925"
+      }
+     ],
+     "categories": [
+      {
+       "id": 31,
+       "name": "תליונים",
+       "slug": "%d7%aa%d7%9c%d7%99%d7%95%d7%a0%d7%99%d7%9d"
+      }
+     ],
+     "tags": [
+      {
+       "id": 71,
+       "name": "כסף",
+       "slug": "%d7%9b%d7%a1%d7%a3"
+      }
+     ]
+    },
+    {
+     "id": 2102,
+     "name": "שרשרת שם בציפוי זהב",
+     "slug": "%d7%a9%d7%a8%d7%a9%d7%a8%d7%aa-%d7%a9%d7%9d-%d7%91%d7%a6%d7%99%d7%a4%d7%95%d7%99-%d7%96%d7%94%d7%91",
+     "type": "simple",
+     "permalink": "https://shmot-bekesef.example/product/%d7%a9%d7%a8%d7%a9%d7%a8%d7%aa-%d7%a9%d7%9d-%d7%91%d7%a6%d7%99%d7%a4%d7%95%d7%99-%d7%96%d7%94%d7%91/",
+     "description": "<p>שרשרת עם שם אחד בכתב יד, מכסף בציפוי זהב צהוב.</p>",
+     "prices": {
+      "price": "390",
+      "regular_price": "450",
+      "sale_price": "390",
+      "price_range": null,
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 0,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "₪",
+      "currency_suffix": ""
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 21020,
+       "src": "https://shmot-bekesef.example/wp-content/uploads/2025/06/sharsheret-shem.jpg",
+       "name": "שרשרת שם בציפוי זהב",
+       "alt": "שרשרת שם בציפוי זהב"
+      },
+      {
+       "id": 21021,
+       "src": "https://shmot-bekesef.example/wp-content/uploads/2025/06/sharsheret-shem-2.jpg",
+       "name": "שרשרת שם בציפוי זהב",
+       "alt": ""
+      }
+     ],
+     "categories": [
+      {
+       "id": 32,
+       "name": "שרשראות שם",
+       "slug": "%d7%a9%d7%a8%d7%a9%d7%a8%d7%90%d7%95%d7%aa-%d7%a9%d7%9d"
+      },
+      {
+       "id": 33,
+       "name": "מוצרים מיוחדים",
+       "slug": "%d7%9e%d7%95%d7%a6%d7%a8%d7%99%d7%9d-%d7%9e%d7%99%d7%95%d7%97%d7%93%d7%99%d7%9d"
+      }
+     ],
+     "tags": [
+      {
+       "id": 72,
+       "name": "זהב",
+       "slug": "%d7%96%d7%94%d7%91"
+      },
+      {
+       "id": 73,
+       "name": "חריטה",
+       "slug": "%d7%97%d7%a8%d7%99%d7%98%d7%94"
+      }
+     ]
+    },
+    {
+     "id": 2103,
+     "name": "טבעת כסף עם חריטה",
+     "slug": "%d7%98%d7%91%d7%a2%d7%aa-%d7%9b%d7%a1%d7%a3-%d7%a2%d7%9d-%d7%97%d7%a8%d7%99%d7%98%d7%94",
+     "type": "simple",
+     "permalink": "https://shmot-bekesef.example/product/%d7%98%d7%91%d7%a2%d7%aa-%d7%9b%d7%a1%d7%a3-%d7%a2%d7%9d-%d7%97%d7%a8%d7%99%d7%98%d7%94/",
+     "description": "",
+     "prices": {
+      "price": "520",
+      "regular_price": "520",
+      "sale_price": "520",
+      "price_range": null,
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 0,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "₪",
+      "currency_suffix": ""
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 21030,
+       "src": "https://shmot-bekesef.example/wp-content/uploads/2024/11/taba-at-kesef.jpg",
+       "name": "טבעת כסף עם חריטה",
+       "alt": "טבעת כסף עם חריטה"
+      }
+     ],
+     "categories": [
+      {
+       "id": 34,
+       "name": "טבעות כסף",
+       "slug": "%d7%98%d7%91%d7%a2%d7%95%d7%aa-%d7%9b%d7%a1%d7%a3"
+      }
+     ],
+     "tags": []
+    },
+    {
+     "id": 2104,
+     "name": "צמיד חוליות מזהב 14K",
+     "slug": "%d7%a6%d7%9e%d7%99%d7%93-%d7%97%d7%95%d7%9c%d7%99%d7%95%d7%aa-%d7%9e%d7%96%d7%94%d7%91-14k",
+     "type": "simple",
+     "permalink": "https://shmot-bekesef.example/product/%d7%a6%d7%9e%d7%99%d7%93-%d7%97%d7%95%d7%9c%d7%99%d7%95%d7%aa-%d7%9e%d7%96%d7%94%d7%91-14k/",
+     "description": "<p>צמיד חוליות דק מזהב 14 קראט.</p>",
+     "prices": {
+      "price": "1890",
+      "regular_price": "1890",
+      "sale_price": "1890",
+      "price_range": null,
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 0,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "₪",
+      "currency_suffix": ""
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 21040,
+       "src": "https://shmot-bekesef.example/wp-content/uploads/2024/02/tzamid-zahav.jpg",
+       "name": "צמיד חוליות מזהב 14K",
+       "alt": "צמיד חוליות מזהב 14K"
+      }
+     ],
+     "categories": [
+      {
+       "id": 35,
+       "name": "צמידים",
+       "slug": "%d7%a6%d7%9e%d7%99%d7%93%d7%99%d7%9d"
+      }
+     ],
+     "tags": []
+    }
+   ]
+  }
+ }
+}

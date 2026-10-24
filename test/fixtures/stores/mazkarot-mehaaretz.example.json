@@ -1,0 +1,26 @@
+{
+ "recorded": "2026-10-24",
+ "store": "https://mazkarot-mehaaretz.example",
+ "platform": "wix",
+ "about": "A fictional Wix store in the shape recorded from a real Israeli one (2026-10-24): sitemap.xml, the store products sitemap on www, three product pages with their schema.org Product (one slug in Latin letters), a PNG logo on the homepage.",
+ "responses": {
+  "https://mazkarot-mehaaretz.example": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>מתנות מישראל | מזכרות בעבודת יד | מזכרות מהארץ</title>\n<meta name=\"generator\" content=\"Wix.com Website Builder\"/>\n<meta property=\"og:site_name\" content=\"מזכרות מהארץ\"/>\n</head>\n<body>\n<img fetchpriority=\"high\" sizes=\"242px\" id=\"img_comp-0000000a\" src=\"https://static.wixstatic.com/media/0d0d0d_00000000000000000000000000000000~mv2.png/v1/fill/w_242,h_79,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo-PNG.png\" alt=\"logo-PNG.png\" style=\"object-fit:cover\" class=\"gRkIq0 sFiSiq\" width=\"242\" height=\"79\"/>\n</body>\n</html>\n"
+  },
+  "https://mazkarot-mehaaretz.example/sitemap.xml": {
+   "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<sitemap><loc>https://www.mazkarot-mehaaretz.example/store-products-sitemap.xml</loc></sitemap>\n</sitemapindex>\n"
+  },
+  "https://www.mazkarot-mehaaretz.example/store-products-sitemap.xml": {
+   "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://www.mazkarot-mehaaretz.example/product-page/פסלון-אריה</loc></url>\n<url><loc>https://www.mazkarot-mehaaretz.example/product-page/Dove</loc></url>\n<url><loc>https://www.mazkarot-mehaaretz.example/product-page/מחברת-עם-כריכת-בד</loc></url>\n</urlset>\n"
+  },
+  "https://www.mazkarot-mehaaretz.example/product-page/פסלון-אריה": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>פסלון אריה | מזכרות מהארץ</title>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org/\",\"@type\":\"Product\",\"name\":\"פסלון אריה\",\"description\":\"פסלון אריה מפוליאסטר, בגובה 12 ס\\\"מ, צבוע ביד.\",\"sku\":\"1034\",\"image\":[{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0d0d0d_00000000000000000000000000000001~mv2.png/v1/fit/w_500,h_500,q_90/file.png\"},{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0d0d0d_00000000000000000000000000000002~mv2.png/v1/fit/w_500,h_500,q_90/file.png\"}],\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.mazkarot-mehaaretz.example/product-page/פסלון-אריה\",\"priceCurrency\":\"ILS\",\"price\":\"64\",\"availability\":\"https://schema.org/InStock\",\"seller\":{\"@type\":\"Organization\",\"name\":\"מזכרות מהארץ\"}}}</script>\n</head>\n<body></body>\n</html>\n"
+  },
+  "https://www.mazkarot-mehaaretz.example/product-page/Dove": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>פסלון יונה | מזכרות מהארץ</title>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org/\",\"@type\":\"Product\",\"name\":\"פסלון יונה\",\"description\":\"פסלון יונה מפוליאסטר, בגובה 10 ס\\\"מ, צבוע ביד.\",\"sku\":\"1035\",\"image\":[{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0d0d0d_00000000000000000000000000000003~mv2.png/v1/fit/w_500,h_500,q_90/file.png\"},{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0d0d0d_00000000000000000000000000000004~mv2.png/v1/fit/w_500,h_500,q_90/file.png\"}],\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.mazkarot-mehaaretz.example/product-page/Dove\",\"priceCurrency\":\"ILS\",\"price\":\"64\",\"availability\":\"https://schema.org/InStock\",\"seller\":{\"@type\":\"Organization\",\"name\":\"מזכרות מהארץ\"}}}</script>\n</head>\n<body></body>\n</html>\n"
+  },
+  "https://www.mazkarot-mehaaretz.example/product-page/מחברת-עם-כריכת-בד": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>מחברת עם כריכת בד | מזכרות מהארץ</title>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org/\",\"@type\":\"Product\",\"name\":\"מחברת עם כריכת בד\",\"description\":\"מחברת A5 עם 80 דפים וכריכת בד.\",\"sku\":\"2001\",\"image\":[{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0d0d0d_00000000000000000000000000000005~mv2.png/v1/fit/w_500,h_500,q_90/file.png\"}],\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.mazkarot-mehaaretz.example/product-page/מחברת-עם-כריכת-בד\",\"priceCurrency\":\"ILS\",\"price\":\"18\",\"availability\":\"https://schema.org/InStock\",\"seller\":{\"@type\":\"Organization\",\"name\":\"מזכרות מהארץ\"}}}</script>\n</head>\n<body></body>\n</html>\n"
+  }
+ }
+}

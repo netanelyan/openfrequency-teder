@@ -110,7 +110,7 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
     const store = await read(demo.url);
     const storeDoc = storeDocument(store);
     if (storeDoc.text.split('\n').length < 3) throw new DemoError('לא מצאנו בחנות מוצרים עם תמונה, מחיר ומלאי');
-    const storeRow = { name: store.name, currency: store.currency, accent: store.accent, stats: storeStats(store), shelf: [] };
+    const storeRow = { name: store.name, platform: store.platform || null, currency: store.currency, accent: store.accent, stats: storeStats(store), shelf: [] };
     set(db, id, { store_json: storeRow });
     const topic = await choose(ctx, { store, skip });
     if (!topic.angle || !topic.articles.length) throw new DemoError('לא הצלחנו לבחור נושא מהתחום של החנות');

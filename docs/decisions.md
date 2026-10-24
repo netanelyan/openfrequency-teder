@@ -1557,3 +1557,42 @@ engine can act on, and what changed:
     than refused. The operator can still give one account another number of posts,
     never dollars. The kill switches, the strike and publish-error pauses, the takedown
     pause and development's refusal of the API without `--allow-api` are unchanged.
+
+- **A store's demo reads WooCommerce and Wix too (2026-10-24).** The demo was built
+  from Shopify's public catalogue alone, and any other store was turned away. Now
+  `src/demos/store.js` reads the homepage first and names the platform from what each
+  writes into every page (Shopify's CDN, WooCommerce's classes, Wix's generator line);
+  a homepage that names none is tried as each in turn. Each is read from what it serves
+  any visitor, with no key and no sign-in:
+  - *WooCommerce* through its Store API (`/wp-json/wc/store/v1/products?per_page=100`).
+    Its prices are strings in the currency's minor unit (`currency_minor_unit`: "254"
+    is 254 shekels in a store that sets 0, "1900" is 19 in one that sets 2), and a
+    variable product's range is kept as its lowest and highest price. A security
+    plugin can turn the Store API off; the store is then read from its sitemap
+    (WordPress's own, Yoast's or Rank Math's index, the products sitemap in it) and
+    each product page's schema.org Product. Some themes print no Product at all (one
+    caterer's product pages had none), and some print it with an empty price: such a
+    store with its Store API off cannot be read, and the operator is told so.
+  - *Wix* from `/sitemap.xml`, the store's products sitemap in it, and each product
+    page's schema.org Product (name, images, `offers.price`, `priceCurrency`,
+    `availability`). A Wix product page weighs about 2.4 MB, so at most 24 pages are
+    read (`MAX_PAGES`), one after another, never on another host.
+  - Every platform's products come out in Shopify's shape (title, product_type,
+    images, variants with price and stock), so the demo, its document and its page
+    never ask which platform it was; the demo row keeps it (`store_json.platform`).
+  - A store's own name is og:site_name, else its title, the first part that is not
+    "home"; one that is a list of keywords (a jeweller's "name necklaces | silver rings |
+    bracelets | ...") is no name, and the domain stands in.
+  - Developed against real Israeli stores the same day: two WooCommerce stores with the
+    Store API open (a jeweller in whole shekels, a caterer in agorot with price ranges),
+    one WooCommerce store read from its sitemap, two Wix stores (a distillery, a
+    souvenir shop) and one Shopify store. Their names stay private (they are on the
+    private denylist that `check:public` reads). The fixtures in `test/fixtures/stores`
+    are fictional stores on `.example`, each in the shape recorded from one of the real
+    ones and trimmed (the fields, the minor units and price ranges, the JSON-LD, the
+    sitemap layout), with made-up names, products, prices and addresses, as Toran's
+    `examples/` are.
+  - The store's page said the team connects Teder to WooCommerce and Wix among the
+    things built in the service. For the catalogue that is now simply true of the demo
+    itself, and the page says so: the demo was made from the products on the store's
+    own site, and a store on Shopify, WooCommerce or Wix is read by Teder on its own.

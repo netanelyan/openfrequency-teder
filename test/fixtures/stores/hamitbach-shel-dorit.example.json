@@ -1,0 +1,183 @@
+{
+ "recorded": "2026-10-24",
+ "store": "https://hamitbach-shel-dorit.example",
+ "platform": "woocommerce",
+ "about": "A fictional WooCommerce store in the shape recorded from a real Israeli one (2026-10-24): its Store API open, prices in agorot (currency_minor_unit 2), variable products with a price range, an SVG logo (never taken).",
+ "responses": {
+  "https://hamitbach-shel-dorit.example": {
+   "text": "<!doctype html>\n<html dir=\"rtl\" lang=\"he-IL\">\n<head>\n<title>דף הבית - המטבח של דורית</title>\n<meta property=\"og:site_name\" content=\"המטבח של דורית\" />\n<meta name=\"generator\" content=\"WordPress 7.1.3\" />\n<meta name=\"generator\" content=\"WooCommerce 10.0.6\" />\n</head>\n<body>\n<link rel='stylesheet' id='wc-blocks-style-rtl-css' href='https://hamitbach-shel-dorit.example/wp-content/plugins/woocommerce/assets/client/blocks/wc-blocks-rtl.css?ver=wc-10.0.6' media='all' />\n<img src=\"https://hamitbach-shel-dorit.example/wp-content/uploads/2024/08/logo-dorit.svg\" class=\"attachment-full size-full wp-image-21\" alt=\"\" />\n</body>\n</html>\n"
+  },
+  "https://hamitbach-shel-dorit.example/wp-json/wc/store/v1/products?per_page=100": {
+   "json": [
+    {
+     "id": 4401,
+     "name": "סלט חצילים בטחינה",
+     "slug": "%d7%a1%d7%9c%d7%98-%d7%97%d7%a6%d7%99%d7%9c%d7%99%d7%9d-%d7%91%d7%98%d7%97%d7%99%d7%a0%d7%94",
+     "type": "variable",
+     "permalink": "https://hamitbach-shel-dorit.example/product/%d7%a1%d7%9c%d7%98-%d7%97%d7%a6%d7%99%d7%9c%d7%99%d7%9d-%d7%91%d7%98%d7%97%d7%99%d7%a0%d7%94/",
+     "description": "",
+     "prices": {
+      "price": "2200",
+      "regular_price": "2200",
+      "sale_price": "2200",
+      "price_range": {
+       "min_amount": "2200",
+       "max_amount": "11900"
+      },
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 2,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "",
+      "currency_suffix": " ₪"
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 44010,
+       "src": "https://hamitbach-shel-dorit.example/wp-content/uploads/2024/09/hatzilim.jpg",
+       "name": "סלט חצילים בטחינה",
+       "alt": "סלט חצילים בטחינה"
+      }
+     ],
+     "categories": [
+      {
+       "id": 19,
+       "name": "סלטים",
+       "slug": "%d7%a1%d7%9c%d7%98%d7%99%d7%9d"
+      }
+     ],
+     "tags": []
+    },
+    {
+     "id": 4402,
+     "name": "סלט כרוב סגול",
+     "slug": "%d7%a1%d7%9c%d7%98-%d7%9b%d7%a8%d7%95%d7%91-%d7%a1%d7%92%d7%95%d7%9c",
+     "type": "variable",
+     "permalink": "https://hamitbach-shel-dorit.example/product/%d7%a1%d7%9c%d7%98-%d7%9b%d7%a8%d7%95%d7%91-%d7%a1%d7%92%d7%95%d7%9c/",
+     "description": "",
+     "prices": {
+      "price": "1900",
+      "regular_price": "1900",
+      "sale_price": "1900",
+      "price_range": {
+       "min_amount": "1900",
+       "max_amount": "9900"
+      },
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 2,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "",
+      "currency_suffix": " ₪"
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 44020,
+       "src": "https://hamitbach-shel-dorit.example/wp-content/uploads/2024/09/kruv.jpg",
+       "name": "סלט כרוב סגול",
+       "alt": "סלט כרוב סגול"
+      }
+     ],
+     "categories": [
+      {
+       "id": 19,
+       "name": "סלטים",
+       "slug": "%d7%a1%d7%9c%d7%98%d7%99%d7%9d"
+      }
+     ],
+     "tags": []
+    },
+    {
+     "id": 4403,
+     "name": "חומוס ביתי",
+     "slug": "%d7%97%d7%95%d7%9e%d7%95%d7%a1-%d7%91%d7%99%d7%aa%d7%99",
+     "type": "variable",
+     "permalink": "https://hamitbach-shel-dorit.example/product/%d7%97%d7%95%d7%9e%d7%95%d7%a1-%d7%91%d7%99%d7%aa%d7%99/",
+     "description": "",
+     "prices": {
+      "price": "2400",
+      "regular_price": "2400",
+      "sale_price": "2400",
+      "price_range": {
+       "min_amount": "2400",
+       "max_amount": "12900"
+      },
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 2,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "",
+      "currency_suffix": " ₪"
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 44030,
+       "src": "https://hamitbach-shel-dorit.example/wp-content/uploads/2024/09/humus.jpg",
+       "name": "חומוס ביתי",
+       "alt": "חומוס ביתי"
+      }
+     ],
+     "categories": [
+      {
+       "id": 19,
+       "name": "סלטים",
+       "slug": "%d7%a1%d7%9c%d7%98%d7%99%d7%9d"
+      }
+     ],
+     "tags": []
+    },
+    {
+     "id": 4404,
+     "name": "מטבוחה",
+     "slug": "%d7%9e%d7%98%d7%91%d7%95%d7%97%d7%94",
+     "type": "variable",
+     "permalink": "https://hamitbach-shel-dorit.example/product/%d7%9e%d7%98%d7%91%d7%95%d7%97%d7%94/",
+     "description": "",
+     "prices": {
+      "price": "2100",
+      "regular_price": "2100",
+      "sale_price": "2100",
+      "price_range": {
+       "min_amount": "2100",
+       "max_amount": "10900"
+      },
+      "currency_code": "ILS",
+      "currency_symbol": "₪",
+      "currency_minor_unit": 2,
+      "currency_decimal_separator": ".",
+      "currency_thousand_separator": ",",
+      "currency_prefix": "",
+      "currency_suffix": " ₪"
+     },
+     "is_in_stock": true,
+     "is_purchasable": true,
+     "images": [
+      {
+       "id": 44040,
+       "src": "https://hamitbach-shel-dorit.example/wp-content/uploads/2024/09/matbucha.jpg",
+       "name": "מטבוחה",
+       "alt": "מטבוחה"
+      }
+     ],
+     "categories": [
+      {
+       "id": 19,
+       "name": "סלטים",
+       "slug": "%d7%a1%d7%9c%d7%98%d7%99%d7%9d"
+      }
+     ],
+     "tags": []
+    }
+   ]
+  }
+ }
+}

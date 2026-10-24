@@ -1,0 +1,26 @@
+{
+ "recorded": "2026-10-24",
+ "store": "https://shloshet-haetzim.example",
+ "platform": "wix",
+ "about": "A fictional Wix store in the shape recorded from a real Israeli one (2026-10-24): sitemap.xml, the store products sitemap on www, three product pages with their schema.org Product; no logo on the homepage.",
+ "responses": {
+  "https://shloshet-haetzim.example": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>מזקקת שלושת העצים | ליקרים ושנאפס</title>\n<meta name=\"generator\" content=\"Wix.com Website Builder\"/>\n<meta property=\"og:site_name\" content=\"מזקקת שלושת העצים\"/>\n</head>\n<body>\n\n</body>\n</html>\n"
+  },
+  "https://shloshet-haetzim.example/sitemap.xml": {
+   "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<sitemap><loc>https://www.shloshet-haetzim.example/store-products-sitemap.xml</loc></sitemap>\n</sitemapindex>\n"
+  },
+  "https://www.shloshet-haetzim.example/store-products-sitemap.xml": {
+   "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://www.shloshet-haetzim.example/product-page/ליקר-תפוזים</loc></url>\n<url><loc>https://www.shloshet-haetzim.example/product-page/שנאפס-אגסים</loc></url>\n<url><loc>https://www.shloshet-haetzim.example/product-page/מארז-טעימות</loc></url>\n</urlset>\n"
+  },
+  "https://www.shloshet-haetzim.example/product-page/ליקר-תפוזים": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>ליקר תפוזים | מזקקת שלושת העצים</title>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org/\",\"@type\":\"Product\",\"name\":\"ליקר תפוזים\",\"description\":\"ליקר תפוזים מתפוזי השרון, 18% אלכוהול, 500 מ\\\"ל.\",\"image\":[{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0c0c0c_00000000000000000000000000000001~mv2.jpg/v1/fit/w_500,h_500,q_90/file.jpg\"},{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0c0c0c_00000000000000000000000000000002~mv2.jpg/v1/fit/w_500,h_500,q_90/file.jpg\"}],\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.shloshet-haetzim.example/product-page/ליקר-תפוזים\",\"priceCurrency\":\"ILS\",\"price\":\"120\",\"availability\":\"https://schema.org/InStock\",\"seller\":{\"@type\":\"Organization\",\"name\":\"מזקקת שלושת העצים\"}}}</script>\n</head>\n<body></body>\n</html>\n"
+  },
+  "https://www.shloshet-haetzim.example/product-page/שנאפס-אגסים": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>שנאפס אגסים | מזקקת שלושת העצים</title>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org/\",\"@type\":\"Product\",\"name\":\"שנאפס אגסים\",\"description\":\"שנאפס מאגסים שזוקקו פעמיים, 40% אלכוהול, 500 מ\\\"ל.\",\"image\":[{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0c0c0c_00000000000000000000000000000003~mv2.jpg/v1/fit/w_500,h_500,q_90/file.jpg\"}],\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.shloshet-haetzim.example/product-page/שנאפס-אגסים\",\"priceCurrency\":\"ILS\",\"price\":\"160\",\"availability\":\"https://schema.org/InStock\",\"seller\":{\"@type\":\"Organization\",\"name\":\"מזקקת שלושת העצים\"}}}</script>\n</head>\n<body></body>\n</html>\n"
+  },
+  "https://www.shloshet-haetzim.example/product-page/מארז-טעימות": {
+   "text": "<!doctype html>\n<html lang=\"he\">\n<head>\n<title>מארז טעימות | מזקקת שלושת העצים</title>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org/\",\"@type\":\"Product\",\"name\":\"מארז טעימות\",\"description\":\"מארז של ארבעה בקבוקים קטנים לטעימה.\",\"image\":[{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0c0c0c_00000000000000000000000000000005~mv2.jpg/v1/fit/w_500,h_500,q_90/file.jpg\"},{\"@type\":\"ImageObject\",\"contentUrl\":\"https://static.wixstatic.com/media/0c0c0c_00000000000000000000000000000006~mv2.jpg/v1/fit/w_500,h_500,q_90/file.jpg\"}],\"offers\":{\"@type\":\"Offer\",\"url\":\"https://www.shloshet-haetzim.example/product-page/מארז-טעימות\",\"priceCurrency\":\"ILS\",\"price\":\"90\",\"availability\":\"https://schema.org/InStock\",\"seller\":{\"@type\":\"Organization\",\"name\":\"מזקקת שלושת העצים\"}}}</script>\n</head>\n<body></body>\n</html>\n"
+  }
+ }
+}

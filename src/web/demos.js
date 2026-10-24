@@ -221,7 +221,7 @@ const articleName = (title) => String(title || '').replace(/\s*\(Wikipedia[^)]*\
 // on what is built when nothing exists yet. The same on every page, nothing in it about the store; as on Toran's
 // (openfrequency-toran src/pitch/page.ts, linksSec).
 const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h">מותאם לעסק שלכם. החיבורים עלינו.</h2>
-<p class="links-lede">הצוות שלנו מגדיר את תדר לפי הקול של העסק שלכם ומחבר אותו למערכות שלכם: הקטלוג של החנות, החשבונות ברשתות החברתיות, ספריית התמונות והקבצים. כל מערכת שיש לה API. ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.</p>
+<p class="links-lede">הצוות שלנו מגדיר את תדר לפי הקול של העסק שלכם ומחבר אותו למערכות שלכם: הקטלוג של החנות, החשבונות ברשתות החברתיות, ספריית התמונות והקבצים. כל מערכת שיש לה API. את ההדגמה הזו תדר בנה מהמוצרים שבאתר שלכם: חנות ב-Shopify, ב-WooCommerce או ב-Wix הוא קורא לבד. ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.</p>
 <ul class="logos" aria-label="חלק מהמערכות שתדר מתחבר אליהן">${LOGOS.map((l) => `<li${l.box ? ' class="wide"' : ''} title="${l.name}"><svg viewBox="${l.box || '0 0 24 24'}" role="img" aria-label="${l.name}"><path fill="${l.color}" d="${l.path}"/></svg></li>`).join('')}<li class="more"><span class="plus" aria-hidden="true">+</span><span>וכל חיבור נוסף שתרצו וקיים בעולם</span></li></ul>
 <div class="glass links-note"><h3>וכשצריך משהו שעוד לא קיים, מפתחים אותו.</h3>
 <p>אנחנו חברת פיתוח: אפליקציות, אוטומציות וסוכני AI. מערכת ניהול, חיבור שאין לו לוגו כאן, או זרימת עבודה שתפורה לעסק שלכם: הצוות שבנה את תדר בונה גם אותם, וגם זה כלול בשירות.</p></div>

@@ -1,0 +1,176 @@
+{
+ "recorded": "2026-10-24",
+ "store": "https://kelim-yafim.example",
+ "platform": "shopify",
+ "about": "A fictional Shopify store in the shape recorded from a real Israeli one (2026-10-24): a homepage that names its CDN and a theme-color that is not a colour, products.json with two products unavailable at 0.00, meta.json and collections.json.",
+ "responses": {
+  "https://kelim-yafim.example": {
+   "text": "<!doctype html>\n<html \n  \n  class=\"h-full\"\n  >\n<head>\n<title>\n      kelim\n</title>\n<meta property=\"og:site_name\" content=\"kelim\">\n<meta name=\"theme-color\" content=\"FFFFFF\">\n</head>\n<body>\n<link rel=\"preconnect\" href=\"https://cdn.shopify.com\" crossorigin>\n</body>\n</html>\n"
+  },
+  "https://kelim-yafim.example/products.json?limit=100": {
+   "json": {
+    "products": [
+     {
+      "id": 9000000000001,
+      "title": "Oak Coat Stand",
+      "handle": "oak-coat-stand",
+      "product_type": "Cabinets",
+      "tags": [],
+      "published_at": "2026-10-13T00:52:23+03:00",
+      "vendor": "Studio Kelim",
+      "images": [
+       {
+        "id": 90000000000010,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/oak-coat-stand.jpg?v=1700000000"
+       },
+       {
+        "id": 90000000000011,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/oak-coat-stand-2.jpg?v=1700000000"
+       }
+      ],
+      "variants": [
+       {
+        "id": 900000000000100,
+        "title": "Default Title",
+        "price": "0.00",
+        "available": false
+       }
+      ]
+     },
+     {
+      "id": 9000000000002,
+      "title": "Paper Screen",
+      "handle": "paper-screen",
+      "product_type": "Cabinets",
+      "tags": [
+       "wide"
+      ],
+      "published_at": "2026-10-13T00:47:34+03:00",
+      "vendor": "Studio Kelim",
+      "images": [
+       {
+        "id": 90000000000020,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/paper-screen.jpg?v=1700000000"
+       },
+       {
+        "id": 90000000000021,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/paper-screen-2.jpg?v=1700000000"
+       }
+      ],
+      "variants": [
+       {
+        "id": 900000000000200,
+        "title": "Default Title",
+        "price": "0.00",
+        "available": false
+       }
+      ]
+     },
+     {
+      "id": 9000000000003,
+      "title": "פמוט פליז",
+      "handle": "%d7%a4%d7%9e%d7%95%d7%98-%d7%a4%d7%9c%d7%99%d7%96",
+      "product_type": "Home & Design",
+      "tags": [
+       "eshop"
+      ],
+      "published_at": "2026-10-09T00:21:32+03:00",
+      "vendor": "Studio Kelim",
+      "images": [
+       {
+        "id": 90000000000030,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/brass-candlestick.jpg?v=1700000000"
+       },
+       {
+        "id": 90000000000031,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/brass-candlestick-2.jpg?v=1700000000"
+       }
+      ],
+      "variants": [
+       {
+        "id": 900000000000300,
+        "title": "Default Title",
+        "price": "330.00",
+        "available": true
+       }
+      ]
+     },
+     {
+      "id": 9000000000004,
+      "title": "Wind chime | פעמון רוח",
+      "handle": "wind-chime-%7c-%d7%a4%d7%a2%d7%9e%d7%95%d7%9f-%d7%a8%d7%95%d7%97",
+      "product_type": "Home & Design",
+      "tags": [
+       "eshop"
+      ],
+      "published_at": "2026-10-09T00:11:29+03:00",
+      "vendor": "Studio Kelim",
+      "images": [
+       {
+        "id": 90000000000040,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/wind-chime.jpg?v=1700000000"
+       },
+       {
+        "id": 90000000000041,
+        "src": "https://cdn.shopify.com/s/files/1/0000/0000/0001/files/wind-chime-2.jpg?v=1700000000"
+       }
+      ],
+      "variants": [
+       {
+        "id": 900000000000400,
+        "title": "Default Title",
+        "price": "250.00",
+        "available": true
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "https://kelim-yafim.example/meta.json": {
+   "json": {
+    "name": "kelim",
+    "currency": "ILS",
+    "domain": "kelim-yafim.example",
+    "city": "תל אביב",
+    "country": "IL"
+   }
+  },
+  "https://kelim-yafim.example/collections.json?limit=50": {
+   "json": {
+    "collections": [
+     {
+      "id": 1000,
+      "title": "Ceramics",
+      "handle": "ceramics"
+     },
+     {
+      "id": 1001,
+      "title": "Art & Craft Collection",
+      "handle": "art-%26-craft-collection"
+     },
+     {
+      "id": 1002,
+      "title": "Glass",
+      "handle": "glass"
+     },
+     {
+      "id": 1003,
+      "title": "Textiles",
+      "handle": "textiles"
+     },
+     {
+      "id": 1004,
+      "title": "color collection \"Moderato\"",
+      "handle": "color-collection-%22moderato%22"
+     },
+     {
+      "id": 1005,
+      "title": "color collection Arc",
+      "handle": "color-collection-arc"
+     }
+    ]
+   }
+  }
+ }
+}
