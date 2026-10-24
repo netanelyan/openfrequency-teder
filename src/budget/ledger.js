@@ -1,40 +1,14 @@
 import { monthKey, now, nowIso } from '../core/clock.js';
-import { getSetting, settings } from '../core/store.js';
 import { BATCH_FACTOR, MODEL_RATES } from './pricing.js';
 
-// HARD RULE 7: a monthly cost cap, global and per account, that nothing can cross.
+// What every paid call cost, recorded after it: for the operator (Settings, the ledger by customer), for the cost per
+// post (docs/costs.md), and for nothing else. Nothing here refuses a call. There is no money cap: a customer's month is
+// a plan of posts (src/budget/quota.js, 40 suggestions and 10 redos), and that plan is what bounds the spend
+// (docs/decisions.md, "The budget is gone, the plan is the limit").
 //
-// THE GLOBAL CAP is ANTHROPIC_MONTHLY_BUDGET_USD in $OF_HOME/.env ($20 by default,
-// raised from $15 by the owner on 2026-10-15; OF_BUDGET_MONTHLY_USD is still read). It
-// covers every metered service the engine calls (Claude, Brave, image APIs)
-// and nothing else: Zernio is a subscription, billed per connected account, and
-// is tracked outside it. The website can set a lower cap, never a higher one.
-//
-// EACH ACCOUNT HAS A SHARE of the global cap, by the weights in its pack.json
-// (budget.share, 1 by default) after a small reserve for engine-wide work
-// (onboarding a new account). The planner (plan.js) can move money between
-// accounts when it cuts the weakest one's volume; its allocation, when there is
-// one for this month, is the account's cap.
-//
-// EACH CUSTOMER HAS A CAP OF ITS OWN on top: the most one account may cost in a
-// month, whatever its share ($12 unless the operator set another on the
-// website, src/budget/quota.js). It fails closed: an account with no row, or a
-// cap that is not a number, may spend nothing. Hitting it pauses the account
-// and tells the operator (rails.js capPause).
-//
-// HOW THE CAP HOLDS. Every paid call reserves its ceiling first: the most it can
-// possibly cost, from the size of the prompt in bytes (no token is shorter than
-// a byte) and max_tokens (no answer is longer), at the dearest rate the call can
-// be billed at. The reservation is refused if what was spent plus what is
-// already reserved plus this ceiling would cross either cap. When the answer
-// comes back, the reservation is replaced by the real cost from the usage block
-// the API returned. A call can cost less than its ceiling, never more, so the
-// sum of real costs never crosses the cap, however many calls are in flight
-// (a batch of the day's drafts is many reservations at once).
-//
-// Claude is priced from the usage block, at the published rates in pricing.js.
-// A model that is not there is refused before it is called (anthropic.js); an
-// estimate for one (a recorded answer) is billed at the dearest rate.
+// Claude is priced from the usage block the API returned, at the published rates in pricing.js. A model that is not
+// there, and an estimate for a recorded answer, are priced at the dearest rate there is, so a cost is overstated rather
+// than hidden. Zernio is a subscription per connected account, recorded beside this in zernio_costs.
 
 export { BATCH_FACTOR, MODEL_RATES, PRICES_VERIFIED } from './pricing.js';
 export const WORST = Object.values(MODEL_RATES).reduce((a, b) => (b.in + b.out > a.in + a.out ? b : a));
@@ -60,20 +34,7 @@ export function claudeCost(usage = {}, model, { batch = false } = {}) {
   return batch ? usd * BATCH_FACTOR : usd;
 }
 
-/**
- * The most one call can cost: every prompt token billed at the dearest input
- * rate (a 1-hour cache write), and max_tokens of output. promptTokens must be an
- * upper bound (bytes, plus framing). With a server-side fallback the call may be
- * re-run on another model, so it is priced at the dearest model there is.
- */
-export function ceilingUsd({ model, promptTokens, maxTokens, batch = false, fallback = false }) {
-  const r = fallback ? WORST : ratesFor(model, promptTokens);
-  const worstIn = Math.max(r.in, r.write1h || r.in * 2);
-  const usd = (promptTokens * worstIn + maxTokens * r.out) / 1e6;
-  return batch && !fallback ? usd * BATCH_FACTOR : usd;
-}
-
-/** Metered APIs other than Claude, per call. Zernio is a per-account subscription, outside the cap. */
+/** Metered APIs other than Claude, per call. Zernio is a per-account subscription, recorded on its own. */
 export const API_PRICES = {
   brave: 5 / 1000,
   youtube: 0,
@@ -81,18 +42,6 @@ export const API_PRICES = {
   unsplash: 0,
   commons: 0,
 };
-
-export class BudgetError extends Error {
-  constructor(message, { scope, accountId = null, spent = 0, cap = 0 } = {}) {
-    super(message);
-    this.name = 'BudgetError';
-    this.code = 'budget';
-    this.scope = scope;
-    this.accountId = accountId;
-    this.spent = spent;
-    this.cap = cap;
-  }
-}
 
 /** This month's spend: one account's, or everything when accountId is undefined. */
 export function monthSpend(db, accountId, t = now()) {
@@ -102,120 +51,6 @@ export function monthSpend(db, accountId, t = now()) {
       ? db.get('SELECT COALESCE(SUM(usd), 0) AS usd, COUNT(*) AS calls FROM spend WHERE month = ?', month)
       : db.get('SELECT COALESCE(SUM(usd), 0) AS usd, COUNT(*) AS calls FROM spend WHERE month = ? AND account_id IS ?', month, accountId);
   return { usd: row.usd, calls: row.calls, month };
-}
-
-/** Money reserved by calls still in flight this month: one account's, or all. */
-export function monthReserved(db, accountId, t = now()) {
-  const month = monthKey(t);
-  const row =
-    accountId === undefined
-      ? db.get('SELECT COALESCE(SUM(usd), 0) AS usd, COUNT(*) AS n FROM reservations WHERE month = ?', month)
-      : db.get('SELECT COALESCE(SUM(usd), 0) AS usd, COUNT(*) AS n FROM reservations WHERE month = ? AND account_id IS ?', month, accountId);
-  return { usd: row.usd, n: row.n };
-}
-
-export const DEFAULT_MONTHLY_USD = 20;
-/** The most one customer's account may cost in a month when the operator set nothing else. */
-export const DEFAULT_CUSTOMER_CAP_USD = 12;
-
-/** One account's own monthly cap in dollars: its cap_usd, $12 when unset, 0 when there is no row or no number. */
-export function customerCap(db, accountId) {
-  const row = db.get('SELECT cap_usd FROM accounts WHERE id = ?', accountId);
-  if (!row) return 0;
-  if (row.cap_usd == null) return DEFAULT_CUSTOMER_CAP_USD;
-  const n = Number(row.cap_usd);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-/** The share of the cap kept for engine-wide work (a new account's discovery and samples). */
-export const ENGINE_RESERVE = 0.05;
-
-/** The global cap: ANTHROPIC_MONTHLY_BUDGET_USD (or the older OF_BUDGET_MONTHLY_USD), or a lower one set on the website. */
-export function globalCap(db, env = process.env) {
-  const fromEnv = Number(env.ANTHROPIC_MONTHLY_BUDGET_USD || env.OF_BUDGET_MONTHLY_USD);
-  const hard = Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_MONTHLY_USD;
-  const set = Number(settings(db).globalBudgetUsd);
-  return set > 0 ? Math.min(hard, set) : hard;
-}
-
-/** Each account's weight, written by syncAccounts from pack.json (budget.share). */
-const weights = (db) => getSetting(db, 'budget:weights', {}) || {};
-
-/** An account's equal-by-weight share of the cap, before any planner allocation. */
-export function baseShare(db, accountId, env = process.env) {
-  const w = weights(db);
-  const total = Object.values(w).reduce((a, b) => a + (Number(b) || 0), 0);
-  const mine = Number(w[accountId]) || 0;
-  if (!total || !mine) return globalCap(db, env) * (1 - ENGINE_RESERVE);
-  return (globalCap(db, env) * (1 - ENGINE_RESERVE) * mine) / total;
-}
-
-/**
- * The caps that apply to a call: the global one, the account's (the planner's
- * allocation for this month if there is one, else its share; never above the
- * pack's own budget.monthlyUsd when the pack sets one), and the customer's own.
- */
-export function caps(db, pack, { t = now(), env = process.env } = {}) {
-  const global = globalCap(db, env);
-  if (!pack) return { global, account: 0, customer: 0 };
-  const alloc = getSetting(db, `budget:alloc:${monthKey(t)}`, null)?.[pack.id];
-  let account = Number(alloc) > 0 ? Number(alloc) : baseShare(db, pack.id, env);
-  const own = Number(pack.meta?.budget?.monthlyUsd);
-  if (own > 0) account = Math.min(account, own);
-  return { global, account: Math.min(account, global), customer: customerCap(db, pack.id) };
-}
-
-/**
- * The account a call is for, or null for engine-wide work. A context outside any one account (onboarding) carries the
- * engine's pack lookup where a pack would be: that is no account, and counts against the global cap alone.
- */
-const accountOf = (pack) => (pack && typeof pack.id === 'string' ? pack : null);
-
-/**
- * Refuse a call that would cross a cap. `estimateUsd` is the most this call can
- * cost. Pass pack = null for engine-wide work (onboarding), which counts
- * against the global cap only.
- */
-export function guard(db, { pack = null, estimateUsd = 0, t = now(), env = process.env } = {}) {
-  pack = accountOf(pack);
-  const c = caps(db, pack, { t, env });
-  const all = monthSpend(db, undefined, t).usd + monthReserved(db, undefined, t).usd;
-  if (all + estimateUsd > c.global + 1e-12) {
-    throw new BudgetError(`the global monthly budget is used up ($${all.toFixed(2)} of $${c.global}${estimateUsd ? `, this call could cost up to $${estimateUsd.toFixed(3)}` : ''})`, { scope: 'global', spent: all, cap: c.global });
-  }
-  if (pack) {
-    const mine = monthSpend(db, pack.id, t).usd + monthReserved(db, pack.id, t).usd;
-    if (mine + estimateUsd > c.account + 1e-12) {
-      throw new BudgetError(`${pack.id}: this month's share is used up ($${mine.toFixed(2)} of $${c.account.toFixed(2)}${estimateUsd ? `, this call could cost up to $${estimateUsd.toFixed(3)}` : ''})`, { scope: 'account', accountId: pack.id, spent: mine, cap: c.account });
-    }
-    if (mine + estimateUsd > c.customer + 1e-12) {
-      throw new BudgetError(`${pack.id}: the customer's monthly cap is reached ($${mine.toFixed(2)} of $${c.customer.toFixed(2)}${estimateUsd ? `, this call could cost up to $${estimateUsd.toFixed(3)}` : ''})`, { scope: 'customer', accountId: pack.id, spent: mine, cap: c.customer });
-    }
-  }
-}
-
-/**
- * Hold `usd` against the caps until the call it is for is settled. The check and
- * the hold are one transaction, so two calls cannot both pass on the same
- * remaining money. Returns the reservation id.
- */
-export function reserve(db, { pack = null, postId = null, usd, tag = null, t = now(), env = process.env }) {
-  return db.tx(() => {
-    guard(db, { pack, estimateUsd: usd, t, env });
-    return db.insert('reservations', { account_id: accountOf(pack)?.id ?? null, post_id: postId, usd, tag, month: monthKey(t), at: nowIso() });
-  });
-}
-
-/** Drop a reservation (the call was never made, or was not billed). */
-export function release(db, reservationId) {
-  if (reservationId != null) db.run('DELETE FROM reservations WHERE id = ?', reservationId);
-}
-
-/** Replace a reservation by what the call really cost, in one transaction. */
-export function settle(db, reservationId, row) {
-  return db.tx(() => {
-    release(db, reservationId);
-    return record(db, row);
-  });
 }
 
 export function record(db, { accountId = null, postId = null, api, model = null, units = 1, usd, estimated = false, tag = null, t = now(), batch = false, usage = null, apiUsd = null }) {
@@ -244,3 +79,15 @@ export function apiEquivalent(usage = {}, model, { cachedShare = 0, batch = true
 
 /** A post's own total, for the cost-per-post figure. */
 export const postSpend = (db, postId) => db.get('SELECT COALESCE(SUM(usd), 0) AS usd, MAX(estimated) AS estimated FROM spend WHERE post_id = ?', postId);
+
+/**
+ * AI spend per produced post over the last 30 days, every call included (the ones for posts our checks stopped too):
+ * what Settings shows the operator. null until the account has four posts, or while its costs are estimates.
+ */
+export function costPerPost(db, accountId, t = now()) {
+  const since = new Date(t - 30 * 86_400_000).toISOString();
+  const spend = db.get("SELECT COALESCE(SUM(usd), 0) AS usd, MAX(estimated) AS est FROM spend WHERE account_id = ? AND api = 'claude' AND at >= ?", accountId, since);
+  const made = db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND sample = 0 AND created_at >= ? AND status NOT IN ('blocked', 'drafting')", accountId, since).n;
+  if (made < 4 || spend.est) return null;
+  return spend.usd / made;
+}

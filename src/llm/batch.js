@@ -1,7 +1,6 @@
 import { nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
-import { claudeCost, release, settle } from '../budget/ledger.js';
-import { recordCall } from '../budget/anthropic.js';
+import { claudeCost, record } from '../budget/ledger.js';
 import { ClaudeError, requestParams, readMessage } from './claude.js';
 
 // Drafting through the Message Batches API, at half price.
@@ -16,10 +15,9 @@ import { ClaudeError, requestParams, readMessage } from './claude.js';
 //   const batcher = makeBatcher(ctx, { api });
 //   await Promise.all(plans.map((p) => batcher.run(() => buildPost({ ...ctx, llm: batcher }, p))));
 //
-// THE MONEY. askJson() reserves each request's ceiling before it is queued. When
-// a batch ends, the batcher replaces each reservation by the real cost from that
-// request's usage block, at the batch rate, before it hands the answer back. A
-// request that errored or expired was not billed, and its reservation is dropped.
+// THE MONEY. When a batch ends, the batcher records each request's real cost from
+// its usage block, at the batch rate, before it hands the answer back. A request
+// that errored or expired was not billed, and nothing is recorded for it.
 //
 // A RESTART IN THE MIDDLE. Every batch is written to the `batches` table with
 // what each request was for. recoverBatches() finds the ones not recorded yet,
@@ -44,10 +42,10 @@ function readResult(r, meta) {
   }
 }
 
-/** Record one result's cost against its reservation. Idempotent per batch row. */
+/** Record one result's cost, when it was billed. Once per batch row: a recorded batch is never read again. */
 function account(db, meta, res) {
-  if (!res.billed) return release(db, meta.reservation);
-  settle(db, meta.reservation, {
+  if (!res.billed) return;
+  record(db, {
     accountId: meta.account_id, postId: meta.post_id, api: 'claude', model: res.model || meta.model, usd: res.usd, tag: meta.tag, batch: true,
     usage: res.usage || null,
   });
@@ -105,7 +103,6 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
       for (const it of items) {
         const res = answers.get(it.customId);
         if (!res) {
-          release(db, it.meta.reservation);
           it.reject(Object.assign(new ClaudeError('the batch ended without this request', 'batch_missing'), { settled: true }));
         } else if (res.ok) it.resolve({ data: res.data, usage: res.usage, model: res.model, usd: res.usd, estimated: false, batch: true, settled: true });
         else it.reject(Object.assign(res.error, { settled: true }));
@@ -128,11 +125,9 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
 
   return {
     kind: 'claude',
-    // The paid API, at the batch rate: every request it carries is checked against the monthly cap and recorded in
-    // the spend file (askJson). Without it the runner's daily drafts, which all go through here, were never counted.
+    // The paid API, at the batch rate: every request it carries is recorded here when its batch ends.
     backend: 'api',
     batch: true,
-    fallsBack: () => false,
     owned,
     /** Build inside the batcher: its requests are held until every builder is waiting. */
     async run(fn) {
@@ -147,7 +142,7 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
     json(req) {
       const params = req.params || requestParams(req);
       const customId = `${String(req.meta?.postId || 'x').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}-${req.task || 'call'}-${++seq}`.slice(0, 64);
-      const meta = { account_id: req.meta?.accountId ?? null, post_id: req.meta?.postId ?? null, model: params.model, tag: req.tag || req.task || null, reservation: req.reservation ?? null };
+      const meta = { account_id: req.meta?.accountId ?? null, post_id: req.meta?.postId ?? null, model: params.model, tag: req.tag || req.task || null };
       waiting++;
       return new Promise((resolve, reject) => {
         pending.push({
@@ -186,9 +181,7 @@ export async function recoverBatches(ctx, { api, skip = new Set() } = {}) {
       seen.add(r.custom_id);
       const res = readResult(r, m);
       account(ctx.db, m, res);
-      if (res.billed && res.usage) recordCall({ model: res.model || m.model, usage: res.usage, usd: res.usd, job: m.tag, batch: true, log: ctx.log });
     }
-    for (const [id, m] of Object.entries(meta)) if (!seen.has(id)) release(ctx.db, m.reservation);
     ctx.db.update('batches', row.id, { status: 'recorded', ended_at: row.ended_at || nowIso(), recorded_at: nowIso(), counts_json: b.counts || null });
     out.push(row.id);
   }

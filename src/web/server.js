@@ -152,7 +152,6 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/accounts\/([\w-]+)\/resume$/, (c, u, m) => act.resume(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/quota$/, (c, u, m, f) => act.setQuota(c, u, { id: m[1] }, f)],
     ['POST', /^\/settings\/kill$/, (c, u, m, f) => act.globalKill(c, u, {}, f)],
-    ['POST', /^\/settings\/budget$/, (c, u, m, f) => act.setBudget(c, u, {}, f)],
     ['POST', /^\/settings\/generate-at$/, (c, u, m, f) => act.setGenerateAt(c, u, {}, f)],
     ['POST', /^\/sources\/(\d+)\/approve$/, (c, u, m, f) => act.sourceStatus(c, u, { id: m[1] }, f, 'approved')],
     ['POST', /^\/sources\/(\d+)\/remove$/, (c, u, m, f) => act.sourceStatus(c, u, { id: m[1] }, f, 'removed')],
@@ -316,7 +315,6 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
           if (!m) continue;
           try {
             const r = await fn(c, user, m, form);
-            ctx._plan = null; // a change can move the budget plan: the next page computes it afresh
             if (ajax) return json(req, res, 200, r);
             if (r.go) return send(req, res, 200, goPage(r.go, { name: r.goName, v: V }), 'text/html; charset=utf-8', { 'referrer-policy': 'no-referrer' });
             const back = r.redirect || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname + new URL(req.headers.referer).search : '/');

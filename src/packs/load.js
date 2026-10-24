@@ -2,7 +2,6 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { examplesDir, packsDir } from '../core/paths.js';
 import { nowIso } from '../core/clock.js';
-import { setSetting } from '../core/store.js';
 import { packWarnings, validateAll, validatePack, voiceExamples } from './validate.js';
 import { factsSource } from '../sources/facts.js';
 
@@ -142,8 +141,6 @@ export function syncAccounts(db, packs) {
         }
       }
     }
-    // Each account's weight in the budget (pack.json budget.share, 1 by default).
-    setSetting(db, 'budget:weights', Object.fromEntries(packs.map((pk) => [pk.id, Number(pk.meta.budget?.share) > 0 ? Number(pk.meta.budget.share) : 1])));
   });
 }
 

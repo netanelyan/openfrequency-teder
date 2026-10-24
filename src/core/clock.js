@@ -23,5 +23,5 @@ export function newId(prefix = '') {
 
 const MONTH = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit' });
 
-/** The Israel month, YYYY-MM: the budget ledger's key. */
+/** The Israel month, YYYY-MM: the spend ledger's and the plan's key. */
 export const monthKey = (t = now()) => MONTH.format(new Date(t)).slice(0, 7);

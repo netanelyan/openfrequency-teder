@@ -1,17 +1,14 @@
-import { nowIso, monthKey } from '../core/clock.js';
+import { nowIso } from '../core/clock.js';
 import { audit, settings } from '../core/store.js';
-import { customerCap, monthReserved, monthSpend } from '../budget/ledger.js';
-import { notify } from '../notify/index.js';
 
 // The safety rails, in every mode:
 //   - a kill switch per account and a global one
-//   - auto-pause on a platform strike, a streak of publish errors, an exhausted
-//     budget, or the customer's own monthly cap. A failed fact check blocks its
-//     post and nothing else: the account goes on
+//   - auto-pause on a platform strike, a streak of publish errors, or repeated
+//     takedown notices. A failed fact check blocks its post and nothing else: the
+//     account goes on
 // A paused account says why, on the website, and stays paused until the owner
-// resumes it, except a budget pause, which lifts itself when the month turns,
-// and a customer-cap pause, which lifts when the month turns or the operator
-// raises the cap.
+// resumes it. Money pauses nothing: there is no cap, and the month's plan (40
+// slideshows, 10 redos) stops the drafting without pausing (src/budget/quota.js).
 
 export const PAUSE_REASONS = {
   kill: 'מתג הכיבוי הופעל',
@@ -19,8 +16,6 @@ export const PAUSE_REASONS = {
   fact_check: 'בדיקת עובדות נכשלה', // no longer set; an account paused for it before still says so
   strike: 'הפלטפורמה דחתה פוסט כהפרת מדיניות',
   publish_errors: 'רצף שגיאות פרסום',
-  budget: 'התקציב החודשי נגמר',
-  customer_cap: 'הגיע לתקרת העלות החודשית שלו',
   takedowns: 'הודעות הסרה חוזרות',
 };
 
@@ -56,59 +51,4 @@ export function publishErrorStreak(db, accountId) {
     n++;
   }
   return n;
-}
-
-/**
- * The customer's monthly cap was hit: the account stops generating and the operator is told, once. Its notification
- * is the operator's alone (no account on the row, so no customer browser is woken by it). Returns whether it paused.
- */
-export async function capPause(ctx, pack, detail = null) {
-  const { db } = ctx;
-  const acc = db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', pack.id);
-  if (!acc || (acc.status === 'paused' && ['customer_cap', 'kill'].includes(acc.paused_reason))) return false;
-  const spent = monthSpend(db, pack.id).usd + monthReserved(db, pack.id).usd;
-  const cap = customerCap(db, pack.id);
-  pauseAccount(db, pack.id, 'customer_cap', detail || `$${spent.toFixed(2)} of $${cap.toFixed(2)} this month`);
-  await notify(ctx, {
-    kind: 'customer_cap',
-    title: `${pack.meta.displayName} הגיע לתקרה החודשית`,
-    body: `הוצאו $${spent.toFixed(2)} מתוך $${cap.toFixed(2)} החודש, אז הכתיבה בחשבון נעצרה. היא תחזור בתחילת החודש הבא, או כשמעלים את התקרה בהגדרות.`,
-    url: '/settings#quotas',
-  }).catch((e) => ctx.log?.(`notify: ${e.message}`));
-  return true;
-}
-
-/** After the operator changed an account's cap: a cap pause lifts at once when there is money under the new one. */
-export function liftCapPause(db, accountId, actor = 'engine') {
-  const acc = db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', accountId);
-  if (acc?.status !== 'paused' || acc.paused_reason !== 'customer_cap') return false;
-  if (monthSpend(db, accountId).usd + monthReserved(db, accountId).usd >= customerCap(db, accountId) - 1e-9) return false;
-  resumeAccount(db, accountId, actor);
-  return true;
-}
-
-/**
- * A budget pause lifts itself in a new month, or sooner when the month's plan
- * gave the account room again (a cut elsewhere freed money): at least three
- * posts' worth left in its allocation, and the global budget not stopped.
- */
-export function liftBudgetPauses(db, t = Date.now(), plan = null) {
-  const lifted = [];
-  // The customer's cap is the month's: a new month lifts it. Within the month only a higher cap does (liftCapPause),
-  // or an account a cent under its cap would be lifted, refused and paused again every day, telling the operator each time.
-  for (const a of db.all("SELECT id, paused_at FROM accounts WHERE status = 'paused' AND paused_reason = 'customer_cap'")) {
-    if (monthKey(Date.parse(a.paused_at)) !== monthKey(t)) {
-      resumeAccount(db, a.id);
-      lifted.push(a.id);
-    }
-  }
-  for (const a of db.all("SELECT id, paused_at FROM accounts WHERE status = 'paused' AND paused_reason = 'budget'")) {
-    const row = plan?.level !== 'stop' ? plan?.accounts?.find((x) => x.id === a.id) : null;
-    const room = row ? row.alloc - row.spent - row.reserved >= 3 * row.costPerPost : false;
-    if (monthKey(Date.parse(a.paused_at)) !== monthKey(t) || room) {
-      resumeAccount(db, a.id);
-      lifted.push(a.id);
-    }
-  }
-  return lifted;
 }

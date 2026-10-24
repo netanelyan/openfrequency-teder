@@ -5,8 +5,7 @@ import { waitingImages } from '../images/index.js';
 import { KEYS, isSet } from '../core/env.js';
 import { settings } from '../core/store.js';
 import { j } from '../db/index.js';
-import { DEFAULT_MONTHLY_USD, monthSpend } from '../budget/ledger.js';
-import { planMonth, WARN_AT } from '../budget/plan.js';
+import { costPerPost, monthSpend } from '../budget/ledger.js';
 import { lastMonths, ledger, usage } from '../budget/quota.js';
 import { loadPost } from '../pipeline/build.js';
 import { photoChoices } from '../pipeline/light.js';
@@ -37,7 +36,7 @@ import { zernioCost } from '../publish/connect.js';
 
 /**
  * The site seen from one account: every page lists ctx.packs, so a context whose packs are that account alone shows
- * that account alone. The budget is the month's for every account, so its plan is made from the whole context.
+ * that account alone.
  */
 export function scoped(ctx, pack) {
   const s = Object.create(ctx.root || ctx);
@@ -49,38 +48,8 @@ export function scoped(ctx, pack) {
 /** The ids of the accounts a context shows, and the SQL that keeps a query to them; a context without packs is every one. */
 const inAccounts = (ctx, col = 'account_id') => (ctx.packs ? [`${col} IN (${ctx.packs.map(() => '?').join(', ') || 'NULL'})`, ctx.packs.map((p) => p.id)] : ['1 = 1', []]);
 
-/**
- * The month's budget plan, computed at most every few seconds (a page asks for it more than once). It is made for
- * every account on the server, since they share one cap. A workspace sees its own part of it: its accounts, what
- * they spent and hold, and the sum of their shares as its cap. The server's total and the other accounts are the
- * operator's alone.
- */
-const planOf = (ctx) => {
-  const g = (ctx.root || ctx).global || ctx.root || ctx;
-  if (!g._plan || Date.now() - g._plan.at > 5000) g._plan = { at: Date.now(), plan: planMonth(g.db, g.packs) };
-  const plan = g._plan.plan;
-  if (ctx.workspaceId == null) return plan;
-  const mine = new Set((ctx.root || ctx).packs.map((p) => p.id));
-  const accounts = plan.accounts.filter((a) => mine.has(a.id));
-  const sum = (k) => accounts.reduce((s, a) => s + (Number(a[k]) || 0), 0);
-  const cap = sum('alloc');
-  const spent = sum('spent');
-  const reserved = sum('reserved');
-  return {
-    ...plan,
-    accounts,
-    cap,
-    spent,
-    reserved,
-    forecast: sum('forecast'),
-    left: Math.max(0, cap - spent - reserved),
-    postsLeft: sum('remainingPosts'),
-  };
-};
-
 export function header(ctx) {
   const s = settings(ctx.db);
-  const plan = planOf(ctx);
   // What waits, per account: the switcher says it beside each name, the Posts tab for the account shown.
   const per = Object.fromEntries(ctx.db.all("SELECT account_id, COUNT(*) AS n FROM posts WHERE status = 'queued' AND sample = 0 GROUP BY account_id").map((r) => [r.account_id, r.n]));
   // The switcher lists the context's accounts: a workspace's, or every one for the operator.
@@ -91,7 +60,6 @@ export function header(ctx) {
   const quota = ctx.packs.map((p) => usage(ctx.db, p.id).suggested).reduce((a, x) => ({ used: a.used + x.used, limit: a.limit + x.limit }), { used: 0, limit: 0 });
   return {
     quota,
-    budget: { level: plan.level, share: plan.cap ? plan.spent / plan.cap : 0, warnAt: plan.warnAt ?? WARN_AT, forecast: plan.forecast, cap: plan.cap, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ id: a.id, name: a.name, perDay: a.perDay, planned: a.planned })) },
     waiting,
     accounts,
     current: ctx.packs.length === 1 ? ctx.packs[0].id : null,
@@ -100,14 +68,10 @@ export function header(ctx) {
 }
 
 export function accountRows(ctx) {
-  const plan = planOf(ctx);
   return ctx.packs.map((pack) => {
     const acc = ctx.db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
-    const spend = monthSpend(ctx.db, pack.id);
-    const p = plan.accounts.find((a) => a.id === pack.id) || null;
-    const cap = p ? p.alloc : 0;
-    // The customer's month: suggestions and redos used of their plan, and their own cost cap.
-    return { pack, acc, spend: spend.usd, cap, plan: p, reached: p ? spend.usd >= cap - 1e-9 : false, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id), connect: connectData(ctx, pack) };
+    // The customer's month: suggestions and redos used of their plan. What it cost is the operator's to see.
+    return { pack, acc, spend: monthSpend(ctx.db, pack.id).usd, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id), connect: connectData(ctx, pack) };
   });
 }
 
@@ -287,7 +251,6 @@ export function sourcesFor(ctx, accountId) {
 /** Settings. A workspace sees its own accounts, browsers and spend; the server's keys, engine and log are the operator's. */
 export function settingsData(ctx) {
   const s = settings(ctx.db);
-  const envCap = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
   const operator = ctx.workspaceId == null;
   // Every account of the workspace, not only the one shown.
   const mine = (ctx.root || ctx).packs.map((p) => p.id);
@@ -295,8 +258,8 @@ export function settingsData(ctx) {
     settings: s,
     spend: operator ? monthSpend(ctx.db, undefined) : { usd: mine.reduce((a, id) => a + monthSpend(ctx.db, id).usd, 0), month: monthKey() },
     month: monthKey(),
-    plan: planOf(ctx),
-    envCap,
+    // What each account cost this month, and per post over 30 days: the operator's, to read. Nothing is capped.
+    costs: operator ? (ctx.root || ctx).packs.map((pack) => ({ id: pack.id, name: pack.meta.displayName, spent: monthSpend(ctx.db, pack.id).usd, perPost: costPerPost(ctx.db, pack.id) })) : [],
     perAccount: accountRows(ctx),
     keys: KEYS.map((k2) => ({ ...k2, set: isSet(k2.name) })),
     mode: engineMode(),
@@ -329,7 +292,7 @@ export function quotasData(ctx, t = now()) {
   const months = lastMonths(3, t);
   return {
     months,
-    // Zernio's bill for the account's profile, next to the API spend: a subscription, outside the cap.
+    // Zernio's bill for the account's profile, next to the API spend: a subscription, billed per connected account.
     accounts: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id, t), ledgers: months.map((m) => ledger(ctx.db, pack.id, m)), zernio: Object.fromEntries(months.map((m) => [m, zernioCost(ctx.db, pack.id, m)])) })),
   };
 }

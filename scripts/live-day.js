@@ -9,7 +9,7 @@
 // It then prints what each post really cost, from the usage blocks the API
 // returned, and the cost per post to put in docs/costs.md.
 //
-// It spends real money (a few tens of cents) against this month's cap, which is
+// It spends real money (a few tens of cents) on the project's key, which is
 // why it asks for --confirm, and on a laptop (OF_ENV=dev) for --allow-api too: in
 // development every API call is refused without it.
 
@@ -26,7 +26,7 @@ loadEnv();
 const args = process.argv.slice(2);
 if (!isSet('ANTHROPIC_API_KEY')) (console.error('ANTHROPIC_API_KEY is not set in $OF_HOME/.env.'), process.exit(1));
 if (!args.includes('--confirm')) {
-  console.error('This drafts one day of posts on real calls (a few tens of cents, against the month\'s cap). Run it with --confirm.');
+  console.error('This drafts one day of posts on real calls (a few tens of cents, on the project\'s key). Run it with --confirm.');
   process.exit(1);
 }
 if (args.includes('--direct')) process.env.OF_BATCH = 'off';

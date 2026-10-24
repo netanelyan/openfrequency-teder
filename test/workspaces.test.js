@@ -239,7 +239,6 @@ const casesFor = () => {
     ['/accounts/bravo/tiktok', { mode: 'direct' }],
     ['/accounts/loose/kill'],
     ['/settings/kill', { on: '1' }],
-    ['/settings/budget', { budget: '100' }],
     ['/settings/generate-at', { at: '05:00' }],
     ['/settings/dev', { on: '1' }],
     ['/account/switch', { to: 'bravo' }],

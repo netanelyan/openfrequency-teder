@@ -10,7 +10,7 @@ import { lineDraft } from '../rules/overlay.js';
 import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
-import { canRun, liftCapPause, pauseAccount, resumeAccount } from '../autonomy/rails.js';
+import { canRun, pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
 import { restAt } from '../schedule/shabbat.js';
 import { timeHe } from './ui.js';
@@ -22,7 +22,7 @@ import { subscribe, unsubscribe } from '../notify/index.js';
 import { catalogSource } from '../sources/catalog.js';
 import { robotsAllows } from '../sources/robots.js';
 import { israelDate } from '../schedule/israel.js';
-import { BudgetError, DEFAULT_MONTHLY_USD, postSpend } from '../budget/ledger.js';
+import { postSpend } from '../budget/ledger.js';
 import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budget/quota.js';
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
@@ -54,7 +54,7 @@ const via = (user, detail = null) => (user.via ? { ...(detail || {}), via: user.
 /** The engine's own context (every account), for its work once the row is known to be the session's. */
 const engineOf = (ctx) => ctx.global || ctx;
 
-/** The settings that are the whole server's (the API budget, the kill switch, when posts are written): the operator's alone. */
+/** The settings that are the whole server's (the kill switch, when posts are written, each account's plan): the operator's alone. */
 const operatorOnly = (user) => {
   if (!user.operator) throw new ActionError('את זה משנה רק מי שמפעיל את תדר', 403);
 };
@@ -248,7 +248,7 @@ export async function edit(ctx, user, { id }, form) {
  * The one model call a light edit makes: the reviewer's fact check, on the texts the customer changed and nothing
  * else, billed to the post (tag edit-check, src/budget/quota.js ledger). A text that says more than its facts is
  * refused, as the engine's own would be; how much it sounds like a bot is the customer's call. Offline the reviewer
- * is the code's and costs nothing. A cap that stops the check stops the edit: nothing is saved unchecked.
+ * is the code's and costs nothing. A check that fails stops the edit: nothing is saved unchecked.
  */
 async function factCheckChanged(ctx, { post, pack, draft, form }) {
   const before = new Map(textsOf(postDraft(post)).map((t) => [t.where, String(t.text || '')]));
@@ -258,9 +258,6 @@ async function factCheckChanged(ctx, { post, pack, draft, form }) {
   let review;
   try {
     review = await reviewTexts({ ...engine, pack, postId: post.id }, { pack, texts: changed, facts: post.facts.filter((f) => f.verified), tag: 'edit-check' });
-  } catch (e) {
-    if (e instanceof BudgetError) throw new ActionError('בדיקת העובדות לא רצה כי התקציב של החודש נגמר, אז השינוי לא נשמר.', 422, { values: { ...form } });
-    throw e;
   } finally {
     ctx.db.update('posts', post.id, { cost_usd: postSpend(ctx.db, post.id).usd });
   }
@@ -343,18 +340,14 @@ export async function removeSlide(ctx, user, { id, idx }) {
   return redrawn(ctx, id, post, 'השקף הוסר והשקפים צוירו מחדש.');
 }
 
-/**
- * The operator sets an account's month: suggested slideshows, redos and the cost cap in dollars. An empty field is
- * the default. A cap raised over what was spent lifts a cap pause at once.
- */
+/** The operator sets an account's month: suggested slideshows and redos. An empty field is the default (40, 10). */
 export function setQuota(ctx, user, { id }, form) {
   operatorOnly(user);
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
-  const r = setPlan(ctx.db, id, { suggested: form.suggested, redos: form.redos, capUsd: form.cap });
-  if (r.problems) throw new ActionError(`לא נשמר. הצעות והחלפות הן מספר שלם עד ${MAX_PLAN.suggested}, והתקרה היא סכום בדולרים עד ${MAX_PLAN.capUsd}.`, 422);
-  const lifted = liftCapPause(ctx.db, id, user.name);
-  audit(ctx.db, { actor: user.name, action: 'quota', accountId: id, detail: { suggested: r.suggested, redos: r.redos, capUsd: r.capUsd, lifted } });
-  return { ok: true, message: `נשמר: ${r.suggested} הצעות ו-${r.redos} החלפות בחודש, ותקרה של $${r.capUsd}.${lifted ? ' החשבון חזר לכתוב.' : ''}` };
+  const r = setPlan(ctx.db, id, { suggested: form.suggested, redos: form.redos });
+  if (r.problems) throw new ActionError(`לא נשמר. הצעות והחלפות הן מספר שלם עד ${MAX_PLAN.suggested}.`, 422);
+  audit(ctx.db, { actor: user.name, action: 'quota', accountId: id, detail: { suggested: r.suggested, redos: r.redos } });
+  return { ok: true, message: `נשמר: ${r.suggested} הצעות ו-${r.redos} החלפות בחודש.` };
 }
 
 export function setMode(ctx, user, { id }, form) {
@@ -392,19 +385,6 @@ export function globalKill(ctx, user, _p, form) {
   setSetting(ctx.db, 'globalKill', on);
   audit(ctx.db, { actor: user.name, action: on ? 'global_kill_on' : 'global_kill_off' });
   return { ok: true, message: on ? 'הכל נעצר.' : 'הכל פועל שוב.' };
-}
-
-/** A lower cap than OF_BUDGET_MONTHLY_USD for now, never a higher one; 0 goes back to it. */
-export function setBudget(ctx, user, _p, form) {
-  operatorOnly(user);
-  const hard = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
-  // In dollars, as the ledger counts, to the cent.
-  const t = Number(form.budget);
-  if (!(t >= 0 && t <= hard)) throw new ActionError(`התקרה צריכה להיות בין $0 ל-$${hard}`);
-  const n = Math.round(t * 100) / 100;
-  setSetting(ctx.db, 'globalBudgetUsd', n);
-  audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n || hard } });
-  return { ok: true, message: n ? `התקרה לחודש הזה: $${n}.` : `התקרה חזרה ל-$${hard}.` };
 }
 
 export function setGenerateAt(ctx, user, _p, form) {

@@ -9,12 +9,10 @@ import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
-import { canRun, capPause, liftBudgetPauses, pauseAccount } from './rails.js';
+import { canRun } from './rails.js';
 import { usage } from '../budget/quota.js';
-import { ledgerUsd, reconcileState, utcMonth } from '../budget/anthropic.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
 import { collectSignals, scoreTopics } from '../topics/index.js';
-import { perDayFor, planMonth, savePlan } from '../budget/plan.js';
 import { makeBatcher, recoverBatches } from '../llm/batch.js';
 import { wantedPublisher } from '../publish/index.js';
 import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
@@ -26,8 +24,7 @@ import { zernioTick } from '../publish/connect.js';
 
 // The engine running on its own: one tick a minute.
 //
-//   1. plan the month against the budget; lift a budget pause when the money is
-//      there again (a new month, or room in the account's allocation)
+//   1. the calendars of the packs that follow events
 //   1b. the morning's feedback, at settings.feedbackAt (never after generateAt):
 //      the last three days' posts read fresh and put in their boxes, and what
 //      each box asks becomes a directive the day's generation hands to a slot
@@ -36,13 +33,12 @@ import { zernioTick } from '../publish/connect.js';
 //      each running account gets a post for each of tomorrow's slots (Shabbat,
 //      the festivals and out-of-window slots are dropped by slotsFor and never
 //      planned), plus any of today's slots that have none and are far enough
-//      away. The planner may have cut the account to one post a day. With
-//      Claude live, the whole day's posts are drafted together through the
-//      Message Batches API at half price, in the background, while the ticks go
-//      on publishing. Nothing is generated once the month's budget is spent,
-//      and no more posts than the account's month has left (src/budget/quota.js):
-//      when its suggestions are used up, nothing until the next month; when the
-//      customer's own cap is spent, the account is paused and the operator told.
+//      away. With Claude live, the whole day's posts are drafted together through
+//      the Message Batches API at half price, in the background, while the ticks
+//      go on publishing. No more posts than the account's month has left
+//      (src/budget/quota.js, 40 suggestions and 10 redos): when its suggestions
+//      are used up, nothing until the next month. No money cap stops or slows
+//      anything.
 //   3. modes, at each post's slot:
 //        approve  the post waits for the owner; unapproved by the end of its
 //                 day, it expires
@@ -61,8 +57,7 @@ import { zernioTick } from '../publish/connect.js';
 //   6. write yesterday's summary
 //
 // The rails (kill switches, pauses) are checked before every generation and
-// every publish, and the reasons a post was blocked pause the account when they
-// should (a failed fact check, an exhausted budget).
+// every publish.
 
 /** Batches draft in minutes to hours: today's empty slots are filled only when this far away. */
 export const CATCH_UP_LEAD_MS = 3 * 3_600_000;
@@ -70,8 +65,7 @@ export const CATCH_UP_LEAD_MS = 3 * 3_600_000;
 /** The slots to draft for one account at today's generation: tomorrow's, and today's that have no post yet. */
 export function generationTargets(db, pack, { t = now(), lead = 0 } = {}) {
   const today = israelDate(t);
-  const cut = perDayFor(db, pack.id, t);
-  const sched = { ...pack.meta.schedule, ...(cut ? { postsPerDay: cut } : {}) };
+  const sched = pack.meta.schedule;
   const live = db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status NOT IN ('blocked', 'drafting')", pack.id).map((r) => r.slot_at);
   const have = new Set(live);
   const onDay = (d) => live.filter((s) => israelDate(Date.parse(s)) === d).length;
@@ -98,11 +92,8 @@ export async function generate(ctx, plans, report) {
       const res = await buildPost(gctx, { pack, slotAt, formatKey, subject, directive });
       if (directive?.id) db.update('directives', directive.id, { used_post_id: res.postId });
       db.update('posts', res.postId, { mode_at_queue: db.get('SELECT mode FROM accounts WHERE id = ?', pack.id)?.mode });
-      report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
       // A failed fact check blocks that post alone: the account goes on with the rest of its day.
-      if (res.kind === 'budget') pauseAccount(db, pack.id, 'budget', res.reason);
-      if (res.kind === 'customer_cap') await capPause(ctx, pack, res.reason);
-      if (res.kind === 'budget' || res.kind === 'customer_cap') stopped.add(pack.id);
+      report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
     } catch (e) {
       if (e instanceof PausedError) stopped.add(pack.id);
       else report.errors.push({ account: pack.id, step: 'generate', error: e.message });
@@ -183,17 +174,7 @@ export async function tick(ctx, { t = now() } = {}) {
   const { db } = ctx;
   const today = israelDate(t);
   const cfg = settings(db);
-  // The spend file is never below the database's ledger: whatever settled a call there without the file is counted.
-  if (ctx.llm?.backend === 'api' || ctx.batchApi) {
-    try {
-      const raised = reconcileState({ month: utcMonth(t), ledgerUsd: ledgerUsd(db, utcMonth(t)) });
-      if (raised) ctx.log?.(`budget: ${raised.month} raised from ${raised.from.toFixed(4)} to ${raised.to.toFixed(4)}, the ledger's total`);
-    } catch {
-      /* a missing or unreadable spend file blocks every call by itself */
-    }
-  }
-  const plan = planMonth(db, ctx.packs, { t });
-  const report = { at: new Date(t).toISOString(), generated: [], published: [], expired: [], approved: [], errors: [], budget: plan.level, lifted: liftBudgetPauses(db, t, plan) };
+  const report = { at: new Date(t).toISOString(), generated: [], published: [], expired: [], approved: [], errors: [] };
 
   // ---- 0. a batch a restart left behind is recorded, so no paid call goes unbilled
   if (ctx.batchApi && db.get("SELECT id FROM batches WHERE status != 'recorded' LIMIT 1")) {
@@ -249,23 +230,13 @@ export async function tick(ctx, { t = now() } = {}) {
       const acc = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
       const genKey = `generated:${pack.id}:${today}`;
       if (!acc || acc.status === 'onboarding' || getSetting(db, genKey) || !canRun(db, pack.id).ok) continue;
-      if (plan.level === 'stop') {
-        report.budgetStop = true;
-        continue;
-      }
-      // The customer's month, before the day is marked generated: a quota or a cap the operator raises later in the
-      // day lets the account's posts be drafted the same day.
+      // The customer's month, before the day is marked generated: a quota the operator raises later in the day lets
+      // the account's posts be drafted the same day.
       const month = usage(db, pack.id, t);
-      if (month.cost.reached) {
-        await capPause(ctx, pack);
-        (report.customerCap ||= []).push(pack.id);
-        continue;
-      }
       if (month.suggested.left <= 0) {
         (report.quotaFull ||= []).push(pack.id);
         continue;
       }
-      if (!plans.length) savePlan(db, plan, { t });
       setSetting(db, genKey, nowIso());
       const lead = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off' ? CATCH_UP_LEAD_MS : 0;
       // No more slots than the month has suggestions left, the earliest first; cut before the directives are handed

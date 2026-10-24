@@ -238,13 +238,13 @@ test("the operator's settings: a customer is refused on the server; the operator
   const owner = fake.session(customer(1)).cookie;
   const csrf = await csrfOf(owner);
   const before = ctx.db.all('SELECT key, value_json FROM settings ORDER BY key');
-  for (const [p, body] of [['/settings/kill', { on: '1' }], ['/settings/budget', { budget: '100' }], ['/settings/generate-at', { at: '05:00' }], ['/settings/dev', { on: '1' }]]) {
+  for (const [p, body] of [['/settings/kill', { on: '1' }], ['/settings/generate-at', { at: '05:00' }], ['/settings/dev', { on: '1' }]]) {
     const res = await post(p, owner, { _csrf: csrf, ...body });
     assert.equal(res.status, 403, p);
   }
   assert.deepEqual(ctx.db.all('SELECT key, value_json FROM settings ORDER BY key'), before, 'nothing changed');
   const page = await (await get('/settings', owner)).text();
-  for (const p of ['/settings/kill', '/settings/budget', '/settings/generate-at']) assert.ok(!page.includes(`action="${p}"`), `no ${p} form for a customer`);
+  for (const p of ['/settings/kill', '/settings/generate-at']) assert.ok(!page.includes(`action="${p}"`), `no ${p} form for a customer`);
   assert.match(page, /נכנסתם בתור <b class="ltr">owner1@example\.test<\/b>, בחשבון <b>Workspace 1<\/b>/);
   assert.match(page, /href="https:\/\/accounts\.test\/logout"/, 'signing out is accounts\'');
 

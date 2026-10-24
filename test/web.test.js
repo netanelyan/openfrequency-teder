@@ -12,7 +12,7 @@ import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js
 
 // The website: a session accounts vouches for on everything, a CSRF token on every change, Hebrew right to left
 // on every page, and the approve and edit flows end to end. Signed in as the owner of the workspace the demo
-// account is in, except where a setting is the operator's (the server's budget, developer mode).
+// account is in, except where a setting is the operator's (the kill switch, each account's plan, developer mode).
 
 let home;
 let ctx;
@@ -246,23 +246,19 @@ test('rivals are typed in by hand per account: refused when malformed, shown, up
   assert.ok(ctx.db.get("SELECT id FROM audit WHERE action = 'rival_removed'"));
 });
 
-test('the Settings page shows the month against the cap: spent, forecast, posts left, each account\'s share; a higher cap is refused', async () => {
+test("the Settings page shows the operator what the month cost, with no cap to set; each account's cost per post is developer mode's", async () => {
   const cookie = await loginOperator();
   const html = await (await get('/settings', cookie)).text();
-  for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'פוסטים']) assert.ok(html.includes(s), s);
-  // Each account's share and where the cap is set are developer mode's.
-  assert.ok(!html.includes('OF_BUDGET_MONTHLY_USD'));
+  assert.match(html, /id="costs"/);
+  assert.match(html, /אין תקרת הוצאה/);
+  for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'OF_BUDGET_MONTHLY_USD', 'action="/settings/budget"', 'name="cap"']) assert.ok(!html.includes(s), s);
   const dev = await (await get('/settings', `${cookie}; of_dev=1`)).text();
-  for (const s of ['OF_BUDGET_MONTHLY_USD', 'נתח']) assert.ok(dev.includes(s), s);
-  const csrf = await csrfOf(cookie);
-  // The operator reads and types dollars, as the ledger counts: there are no tokens.
+  assert.ok(dev.includes('לפוסט, 30 יום'));
+  // The operator reads dollars, as the ledger counts: there are no tokens.
   assert.doesNotMatch(html, /טוקנ/);
-  let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '400' });
-  assert.equal(res.status, 400, 'never above OF_BUDGET_MONTHLY_USD');
-  res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '10' });
-  assert.equal(res.status, 200);
-  assert.match(await (await get('/settings', cookie)).text(), /\/ <span class="num ltr">\$10<\/span><\/b>/, 'a cap of $10');
-  await post('/settings/budget', cookie, { _csrf: csrf, budget: '0' });
+  const csrf = await csrfOf(cookie);
+  const res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '10' });
+  assert.equal(res.status, 404, 'the old cap form is gone');
 });
 
 test("a customer's Settings say the plan: 40 suggestions, 10 redos, small changes free; never the budget or money", async () => {

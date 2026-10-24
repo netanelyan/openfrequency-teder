@@ -1,28 +1,49 @@
-# Costs: live on $20 a month
+# Costs: a plan per account, no cap
 
-2026-10-13, updated 2026-10-14. What the engine costs to run, what each service
-gives for free, what every phase 2 change did to the cost of a post, and the month
-at the planned volume. The current forecast is the section
-[The full pipeline, measured on real token counts](#the-full-pipeline-measured-on-real-token-counts-2026-10-14):
-**about $27 at 180 posts, expected, and $36 in the worst case.** The owner raised
-the cap from $15 to **$20** on 2026-10-15 ([The cap at $20](#the-cap-at-20-2026-10-15)).
-The planner cuts volume to fit, never a cheaper model or a shorter prompt: **about
-119 posts a month expected at $20**, 86 in the worst case (at $15 it was 86 and 71).
+2026-10-13, updated 2026-10-24. What the engine costs to run, what each service
+gives for free, what every phase 2 change did to the cost of a post, and what a
+month costs now.
 
-## The rule
+**There is no money cap since 2026-10-24.** The owner: "teder should remove its
+budget, each page gets 40 videos a month with 10 redos." Every account (a page) gets
+40 slideshows and 10 redos a month (`src/budget/quota.js`), and that plan is what
+bounds the spend. What each call costs is still recorded, for the operator to read
+(Settings: the month's cost, each account's cost by what it went to, the cost per
+post in developer mode), and nothing refuses a call for money
+([decisions.md](decisions.md), *The budget is gone, the plan is the limit*).
+
+## The month now
+
+At the measured **$0.15 a post made** (the stopped attempts paid for included, the
+section [The full pipeline, measured on real token counts](#the-full-pipeline-measured-on-real-token-counts-2026-10-14)):
+
+| | Posts a month | AI cost a month |
+|---|---|---|
+| One account, its whole plan (40 slideshows and 10 redos) | 50 | **about $7.50** ($5.75 at the best first round's $0.115, $10 at the worst's $0.20) |
+| One account, the slideshows only | 40 | about $6 |
+| Three accounts, every plan used | 150 | about $22.50 |
+
+Plus Zernio, per connected account ([below](#zernio-per-connected-account)), and
+fractions of a cent for onboarding (Brave) and trends (Haiku). A post our checks stop
+is not counted against the plan but is paid for: that is inside the $0.15. The day's
+slots are drafted once a day, so a stopped post waits for the next day's generation
+rather than being tried again in a loop, and inside a post the calls are bounded (at
+most 6 documents per format offered to the outline, one redraft, two repair rounds,
+two rewrite passes, a replacement tried twice at most).
+
+The sections below are the measurements as they were made. The ones that speak of a
+cap ($15, then $20), of shares and of the planner cutting volume describe the engine
+before 2026-10-24.
+
+## The rule until 2026-10-24
 
 **$15 a month, hard, for every metered service except Zernio** (Anthropic, Brave,
-image APIs, anything else that bills). The VPS is already paid for. Zernio is
-billed per connected account and is shown on its own line below.
+image APIs, anything else that bills); $20 from 2026-10-15. The VPS is already paid
+for. Zernio is billed per connected account and is shown on its own line below.
 
-The planned volume is 3 accounts at 2 posts a day: about **180 posts a month**,
+The planned volume was 3 accounts at 2 posts a day: about **180 posts a month**,
 so about **$0.083 a post** for AI and everything else. Before phase 2 a post was
 estimated at $0.08 to $0.13 on Claude Opus 5.5: it did not fit.
-
-The cap is `OF_BUDGET_MONTHLY_USD=15` in `private/.env`. How the code enforces it
-is in the README ([The budget](../README.md#the-budget)) and
-[decisions.md](decisions.md); in short, every paid call reserves its worst case
-before it is made, so nothing can spend past it.
 
 ## Every service the engine calls
 
@@ -31,7 +52,7 @@ Checked on 2026-10-13 on each provider's own pages.
 | Service | Free tier and limits | What the engine uses | Cost a month | Source |
 |---|---|---|---|---|
 | Anthropic API | none | drafting, review, rewrites, judging | the variable part: see below | [pricing](https://platform.claude.com/docs/en/about-claude/pricing) |
-| Brave Search API | $5 of credit every month (about 1,000 queries at $5 per 1,000); 50 queries a second. The old free plan ended in Feb 2026; a card is required | only when a new account is onboarded: 5 queries, cached 30 days | $0 (the ledger still counts each query at the list price, $0.005, so a cap can never be undercut by the credit) | [brave.com/search/api](https://brave.com/search/api/), [credit terms](https://api-dashboard.search.brave.com/terms-of-service/credit-terms) |
+| Brave Search API | $5 of credit every month (about 1,000 queries at $5 per 1,000); 50 queries a second. The old free plan ended in Feb 2026; a card is required | only when a new account is onboarded: 5 queries, cached 30 days | $0 (the ledger still records each query at the list price, $0.005, so the credit never hides a cost) | [brave.com/search/api](https://brave.com/search/api/), [credit terms](https://api-dashboard.search.brave.com/terms-of-service/credit-terms) |
 | YouTube Data API v3 | free, quota only: since 2026-06-01, 100 `search.list` calls a day in their own bucket, and 10,000 units for everything else (`videos.list` is 1) | weekly trend search: a handful of queries per account a week, cached 7 days | $0 | [quota costs](https://developers.google.com/youtube/v3/determine_quota_cost) |
 | Pexels | free; 200 requests an hour, 20,000 a month | cover photos when a theme asks for one | $0 | [docs](https://www.pexels.com/api/documentation/) |
 | Unsplash | free; 50 an hour (demo), 1,000 an hour (production) | same | $0 | [docs](https://unsplash.com/documentation) |
@@ -41,11 +62,11 @@ Checked on 2026-10-13 on each provider's own pages.
 | Bank of Israel (SDMX) | free; no documented limit; the terms page is behind bot protection and could not be read | the policy rate and exchange rates | $0 | [edge.boi.gov.il](https://edge.boi.gov.il/) |
 | CBS (Lamas) | free under a royalty-free licence that asks for a credit line; User-Agent required | the price indices and the average wage | $0 | [API](https://www.cbs.gov.il/en/Pages/API-interface.aspx), [licence](https://www.cbs.gov.il/en/Pages/Enduser-license.aspx) |
 
-**Fixed costs inside the $15: $0.** Every service but Anthropic is free at this
-volume. 5% of the cap ($0.75) is kept back for onboarding a new account, so the
-three accounts share **$14.25 a month for Claude**.
+**Fixed costs: $0.** Every service but Anthropic is free at this volume. (Until
+2026-10-24, 5% of the cap, $0.75, was kept back for onboarding a new account, so the
+three accounts shared $14.25 a month for Claude.)
 
-## Zernio, outside the cap
+## Zernio, per connected account
 
 Zernio bills per connected social account: **the first 2 are free, then $6 a
 month each** for accounts 3 to 10 (then $3, then $1), every feature and
@@ -70,7 +91,7 @@ band the total has reached: $6 each up to 10 accounts in all, $3 from the 11th, 
 from the 101st. So a customer with TikTok and Instagram on Zernio costs $12 a month
 early on and $6 past ten accounts. Zernio's own split of the bill per profile is read
 daily into the operator's ledger (Settings, "מכסות ועלות לפי לקוח", the Zernio column),
-next to the API spend and outside the cap.
+next to the API spend.
 
 ## Per post: before and after each change
 
@@ -312,9 +333,9 @@ the 5% engine reserve):
 for all three accounts on real calls, through the Message Batches API, into the
 live database in Approve mode, and prints what each post really cost, from the
 usage blocks the API returned (input, cache writes, cache reads, output). It
-spends a few tens of cents against the month's cap. It needs
+spends a few tens of cents on the project's key. It needs
 `ANTHROPIC_WORKSPACE_ID` in `private/.env`: the key there is not scoped to a
 workspace, and the API refuses it without one. The Default Workspace's ID (the ID
 column on the console's Workspaces page) is enough. After it, every call the engine
 makes is recorded the same way, and the Settings page shows the measured cost
-per post per account, which the planner uses instead of the estimate.
+per post per account (developer mode).

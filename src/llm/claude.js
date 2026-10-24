@@ -63,21 +63,6 @@ export function requestParams({ system, user, image = null, schema, model, effor
   };
 }
 
-/**
- * An upper bound on the prompt's tokens: its bytes (no token is shorter than a
- * byte), plus room for the framing and the schema instructions the API adds,
- * plus an image at its largest. The budget's ceiling for a call rests on this.
- */
-export function promptTokenBound(params) {
-  let bytes = Buffer.byteLength(JSON.stringify(params.system)) + Buffer.byteLength(JSON.stringify(params.output_config));
-  let images = 0;
-  for (const m of params.messages) {
-    if (typeof m.content === 'string') bytes += Buffer.byteLength(m.content);
-    else for (const c of m.content) c.type === 'image' ? images++ : (bytes += Buffer.byteLength(c.text || ''));
-  }
-  return bytes + 2000 + images * 6000;
-}
-
 /** A response to { data, usage, model }, or a ClaudeError that carries the usage it was billed for. */
 export function readMessage(res, model) {
   const served = res.model || model;
@@ -111,8 +96,6 @@ export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY, workspace
   return {
     kind: 'claude',
     backend: 'api',
-    /** Does a direct call on this model go out with server-side fallbacks (and so may be billed at another model's rates)? */
-    fallsBack: (model) => TAKES_FALLBACK.test(model) && !fallbackRefused,
     async json(req) {
       const body = req.params || requestParams(req);
       gate(`${req.task || 'a call'} on ${body.model}`);

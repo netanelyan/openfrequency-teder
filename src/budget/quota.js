@@ -1,8 +1,12 @@
 import { HOUR, monthKey, now, nowIso } from '../core/clock.js';
-import { customerCap, DEFAULT_CUSTOMER_CAP_USD, monthReserved, monthSpend } from './ledger.js';
+import { monthSpend } from './ledger.js';
 
 // A customer's month: how many slideshows it is suggested, how many rejected ones are written again, and what it
 // costs us. Every count is read from the posts themselves, never kept beside them, so nothing can drift.
+//
+// THE PLAN IS THE ONLY LIMIT. Every account (a page) gets 40 slideshows a month and 10 redos; no money cap blocks or
+// slows anything (docs/decisions.md, "The budget is gone, the plan is the limit"). The operator may give one account
+// another number of posts, never a sum of money.
 //
 //   suggestion   a post that passed every check and reached the customer for approval. It counts in the month it
 //                reached them, whatever they did with it after: approved, rejected or left to expire
@@ -14,13 +18,14 @@ import { customerCap, DEFAULT_CUSTOMER_CAP_USD, monthReserved, monthSpend } from
 // was lost to a restart), so a batch of the day's posts cannot together go past the quota. When the suggestions are
 // used up, nothing more is generated for the account until the next month (runner.js, buildPost).
 //
-// The money is the ledger's (ledger.js): the customer's cap is one more cap every paid call is refused against.
+// What the posts cost is recorded (ledger.js) and shown to the operator, by what it went to (ledger() below). It
+// never stops a post.
 
 export const DEFAULT_PLAN = { suggested: 40, redos: 10 };
 /** How long a draft in progress holds a place in the quota. */
 export const HOLD_MS = 24 * HOUR;
 /** The most the operator may set, so a typo cannot open an account to thousands of posts. */
-export const MAX_PLAN = { suggested: 1000, redos: 1000, capUsd: 500 };
+export const MAX_PLAN = { suggested: 1000, redos: 1000 };
 
 /** The reasons a customer rejects a post for, in the order the form lists them. */
 export const REDO_REASONS = ['topic', 'shorter', 'tone', 'photo', 'other'];
@@ -29,42 +34,41 @@ export const REJECT_REASON_HE = { topic: 'הנושא לא מתאים', shorter: 
 /** What the replacement is, said after "במקום הפוסט ההוא". */
 export const REDO_REASON_HE = { topic: 'עם נושא אחר', shorter: 'בגרסה קצרה יותר', tone: 'בטון אחר', photo: 'עם תמונות אחרות', other: 'עם השינוי שביקשתם' };
 
-/** An account's plan: { suggested, redos, capUsd }, each the operator's number or the default, and which ones are set. */
+/** An account's plan: { suggested, redos }, each the operator's number or the default (40, 10), and which ones are set. */
 export function planOf(db, accountId) {
-  const row = db.get('SELECT plan_suggested, plan_redos, cap_usd FROM accounts WHERE id = ?', accountId) || {};
+  const row = db.get('SELECT plan_suggested, plan_redos FROM accounts WHERE id = ?', accountId) || {};
   const int = (v, d) => (v == null ? d : Number.isInteger(Number(v)) && Number(v) >= 0 ? Number(v) : 0);
   return {
     suggested: int(row.plan_suggested, DEFAULT_PLAN.suggested),
     redos: int(row.plan_redos, DEFAULT_PLAN.redos),
-    capUsd: customerCap(db, accountId),
-    set: { suggested: row.plan_suggested != null, redos: row.plan_redos != null, capUsd: row.cap_usd != null },
+    set: { suggested: row.plan_suggested != null, redos: row.plan_redos != null },
   };
 }
 
 /**
- * The operator sets an account's plan. Each value is a whole number (dollars may have cents) from 0 to MAX_PLAN, or
- * '' / null for the default. Returns { problems } when a value is not one, else the plan as saved.
+ * The operator sets an account's plan. Each value is a whole number from 0 to MAX_PLAN, or '' / null for the default.
+ * Returns { problems } when a value is not one, else the plan as saved.
  */
-export function setPlan(db, accountId, { suggested, redos, capUsd }) {
+export function setPlan(db, accountId, { suggested, redos }) {
   const problems = [];
-  const read = (v, key, { cents = false } = {}) => {
+  const read = (v, key) => {
     if (v == null || String(v).trim() === '') return null;
     const n = Number(v);
-    if (!Number.isFinite(n) || n < 0 || n > MAX_PLAN[key] || (!cents && !Number.isInteger(n))) {
+    if (!Number.isFinite(n) || n < 0 || n > MAX_PLAN[key] || !Number.isInteger(n)) {
       problems.push(key);
       return undefined;
     }
-    return cents ? Math.round(n * 100) / 100 : n;
+    return n;
   };
-  const patch = { plan_suggested: read(suggested, 'suggested'), plan_redos: read(redos, 'redos'), cap_usd: read(capUsd, 'capUsd', { cents: true }) };
+  const patch = { plan_suggested: read(suggested, 'suggested'), plan_redos: read(redos, 'redos') };
   if (problems.length) return { problems };
   db.update('accounts', accountId, { ...patch, updated_at: nowIso() });
   return planOf(db, accountId);
 }
 
 /**
- * Where an account stands this month: suggestions and redos used, held by drafts in progress, and left; and its cost
- * against the customer's cap. `used + held` is what a new draft is weighed against.
+ * Where an account stands this month: suggestions and redos used, held by drafts in progress, and left; and what it
+ * has cost so far, for the operator's eyes. `used + held` is what a new draft is weighed against.
  */
 export function usage(db, accountId, t = now()) {
   const month = monthKey(t);
@@ -81,13 +85,11 @@ export function usage(db, accountId, t = now()) {
     const h = held[k] || 0;
     return { used: u, held: h, limit, left: Math.max(0, limit - u - h) };
   };
-  const spent = monthSpend(db, accountId, t).usd;
-  const reserved = monthReserved(db, accountId, t).usd;
   return {
     month,
     suggested: part('suggestion', plan.suggested),
     redos: part('redo', plan.redos),
-    cost: { spent, reserved, cap: plan.capUsd, left: Math.max(0, plan.capUsd - spent - reserved), reached: spent + reserved >= plan.capUsd - 1e-9 },
+    cost: { spent: monthSpend(db, accountId, t).usd },
     plan,
   };
 }
@@ -144,5 +146,3 @@ export function lastMonths(n = 3, t = now()) {
   }
   return out;
 }
-
-export { DEFAULT_CUSTOMER_CAP_USD };

@@ -9,7 +9,7 @@ import { buildPost } from '../src/pipeline/build.js';
 import { publishPost, PublishRefused } from '../src/publish/index.js';
 import { postBody, pickSound, AI_CAPTION_LINE } from '../src/publish/zernio.js';
 import { tick } from '../src/autonomy/runner.js';
-import { publishErrorStreak, pauseAccount, liftBudgetPauses } from '../src/autonomy/rails.js';
+import { publishErrorStreak, pauseAccount } from '../src/autonomy/rails.js';
 import { collectMetrics } from '../src/metrics/collect.js';
 import { credit, judge, pickFormat, ensureFormats } from '../src/formats/rotation.js';
 import { israelInstant } from '../src/schedule/israel.js';
@@ -143,17 +143,14 @@ test('the global kill switch stops publishing in every mode', async () => {
   }
 });
 
-test('a streak of publish errors is counted; a budget pause lifts itself next month', () => {
+test('a streak of publish errors is counted; a kill is never overwritten by an automatic pause', () => {
   const db = new Db(':memory:');
   const at = '2026-10-01T10:00:00Z';
   db.insert('accounts', { id: 'a', display_name: 'a', handle: 'a', created_at: at, updated_at: at });
   for (const [i, s] of ['published', 'failed', 'failed', 'failed'].entries()) db.insert('posts', { id: `p${i}`, account_id: 'a', status: s, created_at: at, updated_at: `2026-10-0${i + 1}T10:00:00Z` });
   assert.equal(publishErrorStreak(db, 'a'), 3);
-  pauseAccount(db, 'a', 'budget', 'cap');
-  db.run("UPDATE accounts SET paused_at = '2026-09-20T10:00:00Z'");
-  assert.deepEqual(liftBudgetPauses(db, Date.parse('2026-10-02T10:00:00Z')), ['a']);
   pauseAccount(db, 'a', 'kill');
-  pauseAccount(db, 'a', 'budget');
+  pauseAccount(db, 'a', 'publish_errors');
   assert.equal(db.get("SELECT paused_reason FROM accounts WHERE id = 'a'").paused_reason, 'kill', 'a kill is never overwritten');
 });
 

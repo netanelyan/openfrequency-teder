@@ -23,7 +23,7 @@ keys live in a private folder, `$OF_HOME`, that is never committed
 **Contents:** [Try it](#try-it) · [What it does](#what-it-does) · [Teder](#teder-the-website) ·
 [How a post is made](#how-a-post-is-made) · [Kinds of post](#kinds-of-post) ·
 [The hard rules](#the-hard-rules) · [Accounts](#accounts-packs) ·
-[Autonomy and learning](#autonomy-and-learning) · [The budget](#the-budget) ·
+[Autonomy and learning](#autonomy-and-learning) · [The plan](#the-plan-not-a-budget) ·
 [Publishing](#publishing) · [Commands](#commands) · [The private folder](#the-private-folder) ·
 [Deploying](#deploying) · [Layout](#layout)
 
@@ -64,7 +64,8 @@ Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
   a licensed photograph checked against its slide, or a graphic drawn from the
   slide's own numbers.
 - **Publishes carefully.** Never on Shabbat or a festival, never with engagement of
-  any kind, always with the platforms' AI label, within a hard monthly budget.
+  any kind, always with the platforms' AI label, within each account's monthly plan
+  of 40 slideshows and 10 redos.
 - **Learns.** It reads each post's numbers at 72 hours and moves the mix of formats
   and cover lines toward what works.
 
@@ -78,7 +79,7 @@ Five sections, the same on a phone and a desk:
 | **Accounts** | each account's mode, schedule, kill switch and week; the rivals you watch for it; a new account |
 | **Results** | this morning's feedback for each account (its last three days' posts in four boxes, and what each box changes in the next posts), each post's numbers, and what the engine learned from them, in plain words |
 | **Sources** | every source with why it is trusted, hand-checked facts, adding and removing |
-| **Settings** | the month's spend and forecast, which keys are set (never their values), your account and signing out |
+| **Settings** | the month's plan (a customer), what the month cost and each account's plan (the operator), which keys are set (never their values), your account and signing out |
 
 A post's own page shows the whole trace: every slide, its facts, their quotes, the
 stored document and the source. The site follows the system's light or dark setting,
@@ -160,7 +161,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 | 4. AI disclosure | TikTok's `video_made_with_ai` flag through Zernio; a caption line on Instagram |
 | 5. Rights | photographs from Pexels, Unsplash and Wikimedia Commons (licence stored, Commons licences on an allowlist, logos and crests refused); every photo screened for blood, injuries, weapons, watermarks; takedowns on notice; quotes short (4 to 40 words) |
 | 6. No investment advice | `src/rules/compliance.js`, required for any money niche |
-| 7. Cost caps | `src/budget/`: every paid call reserves its worst case before it is made |
+| 7. A plan per account, not a money cap | `src/budget/quota.js`: 40 slideshows and 10 redos a month per account, weighed before a post is started; what each call cost is recorded (`src/budget/ledger.js`), never capped |
 | 8. Hebrew, right to left | every slide and page is `lang="he" dir="rtl"` (tested) |
 | 9. Shabbat and the festivals | `src/schedule/`: from candle lighting to nightfall, from the real sunset and the Hebrew calendar; the scheduler never plans such a slot and every publisher refuses one |
 | 10. Secrets | `.gitignore`, `check:public` and its pre-commit hook; `.env.example` lists every variable (tested) |
@@ -175,7 +176,7 @@ and edit its files.
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, budget share, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, a closing slide that asks to follow; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
+| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, a closing slide that asks to follow; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
 | `voice.md` | who is talking, to whom, how it sounds, with `## שורות טובות` and `## שורות רעות` |
 | `theme.json` | a template and variant from the engine's library, colours, fonts, the graphics it draws (`visuals`), whether slides sit on a blurred photograph and the scenes searched for it (`backgroundQueries`) |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, why it is trusted, what its terms allow, when it was approved. A source taken out of the file is no longer read |
@@ -229,7 +230,7 @@ draws an account's last post from another database (a launch set) for that page.
 | **Auto** | posts go out; a daily summary is written to the website |
 
 In every mode there is a kill switch per account and a global one, and an automatic
-pause on a platform strike, a streak of publish errors or an exhausted budget. A
+pause on a platform strike, a streak of publish errors or repeated takedowns. A
 paused account says why. A failed fact check blocks that one post, and the account
 goes on. In Digest and Auto, a post the reviewer
 found a little machine-like waits for the owner anyway.
@@ -279,25 +280,37 @@ within 90 days pauses the account. Every photo is screened before use: words in 
 description, deep red, and with a live key a vision model; what none of them clears
 waits for a person.
 
-## The budget
+## The plan, not a budget
 
-`ANTHROPIC_MONTHLY_BUDGET_USD` ($20 by default) is a hard cap on the Anthropic API and
-the small metered services that share it; `ANTHROPIC_BUDGET_WARN_USD` ($15) is the
-warning level. Zernio is billed per connected account, outside it
-([docs/costs.md](docs/costs.md)).
+There is no money cap. Every account (a page) gets **40 slideshows a month and 10
+redos**, and that plan is the only limit (`src/budget/quota.js`). A slideshow counts
+when it reaches the customer for approval, whatever they do with it; a redo is a
+replacement written for a post they rejected with a reason; a post our checks stopped
+is ours and is not counted. When an account's 40 are used, nothing more is drafted for
+it until the next month. The operator can give one account another number of posts on
+Settings, never a sum of money.
 
+- **What bounds the spend.** 40 slideshows and 10 redos a month per account, and
+  inside each post a fixed number of calls: at most 6 documents per format offered to
+  the outline (`maxDocs`), one slide draft with one redraft, two repair rounds
+  (`REPAIR_ATTEMPTS`), two rewrite passes for what the review flags, and a replacement
+  our checks stop tried twice at most (`REDO_ATTEMPTS`). The day's slots are drafted
+  once a day: a stopped post waits for the next day's generation, never a loop. At the
+  measured $0.15 a post made (stopped attempts included) a full month of 50 is about
+  $7.50 an account ([docs/costs.md](docs/costs.md)).
 - **One door.** Every model call goes through `src/llm/index.js`, and only
-  `src/llm/claude.js` imports the SDK. Before each call the model must be in the
-  pricing table and the call's worst case must fit under the cap and the account's
-  share; after it, the real cost from the usage block is recorded.
-- **It fails closed.** Without the spend file every API call is blocked and the reason
-  logged. `npm run budget -- init` creates it once.
-- **Volume, never quality.** Each day the month is forecast at the measured cost per
-  post. If it does not fit, the weakest account comes down half a post a day at a
-  time. At 80% every page warns; at 100% nothing is drafted until next month.
+  `src/llm/claude.js` imports the SDK. After each call its real cost from the usage
+  block is recorded in the ledger (`src/budget/ledger.js`): for the operator's
+  Settings (the month's cost, each account's cost by what it went to, the cost per
+  post in developer mode), never to refuse a call.
 - **Cheap by design.** Drafting on Claude Sonnet through the Message Batches API a day
   ahead, the account's voice and rules as a cached prefix, documents narrowed to
   their content, one redraft at most, a rewrite only for what the review flags.
+- **The stops that remain** are not about money: the kill switch per account and the
+  global one, a platform strike, a streak of publish errors, repeated takedowns.
+
+Zernio is billed per connected account, and its share per account is in the
+operator's ledger beside the API cost ([docs/costs.md](docs/costs.md)).
 
 ## Publishing
 
@@ -367,7 +380,6 @@ fetches each slide from `MEDIA_PUBLIC_BASE_URL`, which must be live first.
 | `npm run init-private [-- --pack <id>] [-- --git]` | creates the private folder, optionally a blank pack |
 | `npm run workspace:assign -- --workspace <id> <account>... [--dry-run]` | puts accounts in an openfrequency-accounts workspace ([docs/workspace-move.md](docs/workspace-move.md)) |
 | `npm run backup` | a consistent copy of the database |
-| `npm run budget [-- init\|reconcile]` | the month's spend, the cap and the costliest jobs |
 | `npm run zernio:check`, `npm run instagram:check`, `npm run instagram:token` | the publishers' checks and Instagram's token ([Publishing](#publishing)) |
 | `npm run live-day -- --allow-api --confirm` | one real day of posts on the API, and what each cost |
 | `npm run compare -- next\|status\|score` | the cost and quality comparison behind [docs/costs.md](docs/costs.md) |
@@ -460,10 +472,9 @@ tested end to end in a clean container by `deploy/test/run.sh`.
 3. **`private/.env`**, mode 600: at least `SESSION_SECRET` (`openssl rand -hex 32`),
    `OF_INTERNAL_TOKEN` (the same value as openfrequency-accounts'; sign-in is that
    service's, see [docs/workspace-move.md](docs/workspace-move.md)), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
-   (Wikimedia rate-limits readers without one), the budget, and the keys you have.
+   (Wikimedia rate-limits readers without one), and the keys you have.
    For the WhatsApp assistant, `OF_ASSISTANT_SECRET` (the same value as openfrequency-toran's; see
    [docs/assistant-api.md](docs/assistant-api.md)).
-   Then once, as `openfrequency`: `npm run budget -- init`.
 4. **The service:** copy `deploy/openfrequency.service` to `/etc/systemd/system/`,
    `systemctl daemon-reload`, `systemctl enable --now openfrequency`. `/healthz` says `ok`.
 5. **Caddy:** append `deploy/Caddyfile.example` with your two names (the website, and
@@ -487,7 +498,7 @@ src/packs       loading, validating and syncing packs
 src/schedule    Israel's clock, sunset, Shabbat and the festivals, slots, fight week
 src/sources     feeds, pages, JSON, CSV, data.gov.il, Wikipedia and Wikidata, the topic bank, hand-checked facts, recordings
 src/llm         Claude (official SDK, through the network door), the CLI backend, batches, recordings
-src/budget      the monthly ledger, reservations, the month's plan
+src/budget      the plan (40 slideshows, 10 redos), the ledger of what each call cost, prices
 src/voice       Hebrew tells, honesty, the reviewer
 src/verify      facts against stored documents, the render gate
 src/rules       pack rules, cross-promotion, investment-advice compliance, the text on a slide, the caption's story and hashtags

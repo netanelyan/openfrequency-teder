@@ -156,7 +156,7 @@ Then, in the private window where `natikyan153+of@gmail.com` is signed in, open
 `https://teder.openfrequency.co.il`:
 
 - the three accounts are in the switcher, and nothing else;
-- Settings says you are signed in as `natikyan153+of@gmail.com`, in the `OpenFrequency` workspace. It has no kill switch, no budget cap form and no "when posts are written": those are the operator's;
+- Settings says you are signed in as `natikyan153+of@gmail.com`, in the `OpenFrequency` workspace. It has no kill switch and no "when posts are written": those are the operator's;
 - notifications: turn them on again on each phone and browser (Settings, then התראות). A browser that subscribed before the switch is kept as the operator's and still gets a push for every account. Turning notifications on again moves it into the workspace.
 
 In the superadmin's browser, the same address shows the operator's view: every workspace, the

@@ -114,46 +114,16 @@ test('a money post recommending a fund fails (investment advice, hard rule 6)', 
   }
 });
 
-test('a post over budget fails before anything is spent', async () => {
-  const { home, cleanup } = tempHome({ packs: {} });
-  try {
-    copyPack(home, 'demo', (f) => {
-      f.pack.budget.monthlyUsd = 0.01;
-    });
-    const ctx = contextFor(home);
-    const res = await buildPost(ctx, { pack: ctx.pack('demo') });
-    assert.equal(res.status, 'blocked');
-    assert.equal(res.kind, 'budget');
-    assert.equal(monthSpend(ctx.db, 'demo').usd, 0, 'nothing was paid for');
-  } finally {
-    cleanup();
-  }
-});
-
-test('a month that has spent its budget builds nothing more, and the cap is never crossed', async () => {
+test('no money cap stops a post: a month that has already cost hundreds of dollars still drafts, and what it costs is recorded', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
     const pack = ctx.pack('demo');
-    const first = await buildPost(ctx, { pack });
-    assert.equal(first.status, 'queued', first.reason);
-    record(ctx.db, { accountId: 'demo', api: 'claude', usd: pack.meta.budget.monthlyUsd - monthSpend(ctx.db, 'demo').usd - 0.01, tag: 'test' });
-    const second = await buildPost(ctx, { pack });
-    assert.equal(second.kind, 'budget');
-    assert.ok(monthSpend(ctx.db, 'demo').usd <= pack.meta.budget.monthlyUsd + 1e-9);
-  } finally {
-    cleanup();
-  }
-});
-
-test('the global budget stops every account', async () => {
-  const { home, cleanup } = tempHome();
-  try {
-    const ctx = contextFor(home);
-    setSetting(ctx.db, 'globalBudgetUsd', 0.001);
-    const res = await buildPost(ctx, { pack: ctx.pack('demo') });
-    assert.equal(res.kind, 'budget');
-    assert.match(res.reason, /global/);
+    record(ctx.db, { accountId: 'demo', api: 'claude', usd: 500, tag: 'test' });
+    const res = await buildPost(ctx, { pack });
+    assert.equal(res.status, 'queued', res.reason);
+    assert.ok(res.cost > 0, 'the post has its cost');
+    assert.ok(monthSpend(ctx.db, 'demo').usd > 500, 'recorded on top of the month');
   } finally {
     cleanup();
   }

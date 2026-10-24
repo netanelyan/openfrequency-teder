@@ -51,7 +51,7 @@ for (const a of accounts) say(null, `${a.platform.padEnd(10)} ${a.id}  @${a.user
 // ledger (src/publish/connect.js recordCosts); this is the list price, for a glance.
 const BANDS = [[2, 0], [10, 6], [100, 3], [Infinity, 1]];
 const monthly = (n) => BANDS.reduce((acc, [upTo, usd], i) => acc + Math.max(0, Math.min(n, upTo) - (i ? BANDS[i - 1][0] : 0)) * usd, 0);
-say(null, `Zernio: ${accounts.length} connected account(s): ${monthly(accounts.length)} a month at list price (outside the monthly cap)`);
+say(null, `Zernio: ${accounts.length} connected account(s): ${monthly(accounts.length)} a month at list price`);
 
 const packs = loadAll().filter((p) => !opt('pack') || p.id === opt('pack'));
 const live = existsSync(path.join(dataDir(), 'openfrequency.db')) ? openDb() : new Db(':memory:');

@@ -279,7 +279,6 @@ export function cliClient({ env = process.env, bin = claudeBin(env), run = spawn
   return {
     kind: 'claude',
     backend: 'claude-cli',
-    fallsBack: () => false,
     async json(req) {
       const params = req.params || requestParams(req);
       const mine = chain.then(() => call(params));

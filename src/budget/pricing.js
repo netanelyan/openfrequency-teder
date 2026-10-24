@@ -3,8 +3,8 @@
 //
 // $ per 1M tokens: input, output, cache read, 5-minute and 1-hour cache writes.
 // Claude Haiku 5.5 has a second tier for prompts over 100,000 tokens.
-// A model that is not here is refused before it is called (anthropic.js): a
-// guess at its price could let the month run past the cap.
+// A model that is not here is recorded at the dearest rate in the table
+// (ledger.js WORST): a cost overstated, never hidden.
 
 /** The day these were last read from platform.claude.com/docs/en/about-claude/pricing. */
 export const PRICES_VERIFIED = '2026-10-13';
@@ -21,5 +21,3 @@ export const MODEL_RATES = {
 
 /** The Message Batches API: half price on every token, cache reads and writes included. */
 export const BATCH_FACTOR = 0.5;
-
-export const isPriced = (model) => Object.hasOwn(MODEL_RATES, model);

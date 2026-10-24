@@ -4,7 +4,7 @@ import { newId, nowIso, now, DAY } from '../core/clock.js';
 import { mediaDir, packsDir } from '../core/paths.js';
 import { step, settings } from '../core/store.js';
 import { j } from '../db/index.js';
-import { BudgetError, guard, postSpend } from '../budget/ledger.js';
+import { postSpend } from '../budget/ledger.js';
 import { quotaMonth, room } from '../budget/quota.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
@@ -56,9 +56,8 @@ import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 // source, and a blocked post says exactly where and why it stopped.
 //
 // Returns { postId, status: 'queued'|'sample'|'blocked', reason, kind }. `kind`
-// names a blocked post's failure for the safety rails: 'fact_check' blocks that
-// post alone, 'budget' pauses the account until the money is there,
-// 'customer_cap' pauses it until the next month and tells the operator.
+// names a blocked post's failure: 'fact_check', 'review', 'render' and the rest
+// block that post alone. No money cap stops a post (src/budget/ledger.js).
 //
 // THE CUSTOMER'S MONTH (src/budget/quota.js). A post that is not a sample is
 // weighed against the account's quota before anything is spent: a QuotaError, and
@@ -849,7 +848,6 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   };
 
   try {
-    guard(db, { pack, estimateUsd: 0 });
     // The pack's prefix is cached for an hour in a batch, whose rounds can be more than five minutes apart.
     const ttl = ctx.llm.batch ? '1h' : '5m';
     step(db, postId, 'format', 'info', { format: format.id, name: format.name, kind: kindName(format), group: groupOf(format) });
@@ -1162,7 +1160,6 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         }
         step(db, postId, 'rewrite', 'ok', { flagged: flagged.length, kept: applied.length, refused: rejected.map((x) => ({ where: (texts[x.index] || visReviews.find((v) => v.index === x.index))?.where, text: x.text, problems: x.problems })) }, usd);
       } catch (e) {
-        if (e instanceof BudgetError) throw e;
         step(db, postId, 'rewrite', 'failed', { error: String(e.message).slice(0, 200), kept: applied.length });
       }
     }
@@ -1184,7 +1181,6 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         redone.forEach((i, k) => (review.reviews[i].after = again.reviews[k]));
         rescored = redone.map((i) => ({ where: now[i].where, before: review.reviews[i].botScore, after: review.reviews[i].after.botScore, tells: review.reviews[i].after.tells }));
       } catch (e) {
-        if (e instanceof BudgetError) throw e;
         rescored = { error: String(e.message).slice(0, 200) };
       }
     }
@@ -1245,7 +1241,6 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
-    if (e instanceof BudgetError) return block(e.scope === 'customer' ? 'customer_cap' : 'budget', e.message);
     step(db, postId, 'error', 'failed', { error: String(e.message).slice(0, 500) });
     return { ...finish('blocked', { reason: String(e.message).slice(0, 300) }), kind: e.code === 'overflow' || e.code === 'fonts' ? 'render' : 'error' };
   }

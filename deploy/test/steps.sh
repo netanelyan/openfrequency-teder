@@ -33,7 +33,6 @@ step "3. private/.env, mode 600"
   printf '%s=%s\n' OF_INTERNAL_TOKEN "$(openssl rand -hex 24)"
   printf '%s=%s\n' PUBLIC_HOST teder.test
   printf '%s=%s\n' MEDIA_PUBLIC_BASE_URL https://media.test
-  printf '%s=%s\n' OF_BUDGET_MONTHLY_USD 15
 } > private/.env
 chown openfrequency:openfrequency private/.env && chmod 600 private/.env
 

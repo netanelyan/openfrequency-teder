@@ -210,8 +210,8 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .nav a[aria-current='page'] { color: var(--ink); font-weight: 600; background: var(--seg-on); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 1px rgba(0, 0, 0, 0.04); }
 .nav .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 .top .tools { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
-/* The month's spend against the cap, on one line that never wraps: a ring that fills as the month is spent
-   (orange from 70%, red from 90%), the word, and the amount with the cap quieter. One tap to the budget. */
+/* The month's suggestions against the plan, on one line that never wraps: a ring that fills as they are used
+   (orange from 75%, red from 90%), the word, and the count with the plan quieter. One tap to the plan. */
 .spend { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--fill); white-space: nowrap; }
 .spend:hover { text-decoration: none; background: var(--fill-2); }
 .spend .lbl { font-size: 12px; color: var(--ink-2); }

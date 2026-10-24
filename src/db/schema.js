@@ -666,4 +666,14 @@ export const MIGRATIONS = [
     PRIMARY KEY (account_id, month)
   );
   `,
+  `
+  -- The budget is gone (docs/decisions.md, "The budget is gone, the plan is the limit"): no monthly cap, no share per
+  -- account, no cost cap per customer, and so no money held for calls in flight. What every call cost is still recorded
+  -- in spend. An account a cap paused writes again: a customer's month is its plan alone (40 suggestions, 10 redos).
+  DROP TABLE reservations;
+  ALTER TABLE accounts DROP COLUMN cap_usd;
+  DELETE FROM settings WHERE key = 'globalBudgetUsd' OR key LIKE 'budget:%';
+  UPDATE accounts SET status = 'active', paused_reason = NULL, paused_detail = NULL, paused_at = NULL
+    WHERE status = 'paused' AND paused_reason IN ('budget', 'customer_cap');
+  `,
 ];

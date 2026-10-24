@@ -30,8 +30,6 @@ export function step(db, postId, name, status, detail = null, costUsd = 0) {
 /** Global defaults, overridable from the website. */
 export const DEFAULT_SETTINGS = {
   globalKill: false,
-  // 0: the cap is OF_BUDGET_MONTHLY_USD. The website can set a lower one, never a higher one.
-  globalBudgetUsd: 0,
   publishErrorStreak: 3,
   generateAt: '07:00',
   // The morning's feedback (src/metrics/feedback.js), Israel time; never after generateAt.

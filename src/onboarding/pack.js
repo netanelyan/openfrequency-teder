@@ -126,7 +126,6 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     zernio: { tiktokMode: 'draft-now', tiktokPrivacy: 'SELF_ONLY' },
     schedule: { postsPerDay: 1, windows: [[12, 14], [19, 22]], slots: ['19:30'], slotsByDay: { 5: ['12:30'], 6: ['21:00'] } },
     autonomy: { mode: 'approve' },
-    budget: { monthlyUsd: 15 },
     compliance: FINANCIAL.test(about) ? ['il-investment-advice'] : [],
     imagery: { providers: ['pexels', 'unsplash', 'commons'] },
   };

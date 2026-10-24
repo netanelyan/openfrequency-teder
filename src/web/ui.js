@@ -89,28 +89,6 @@ export const NAV = [
 const SECTION_OF = { new: 'accounts', more: 'settings', topics: 'sources' };
 
 /**
- * The budget, said on every page when it matters: 80% of the month's cap spent,
- * all of it spent (nothing is written until the next month), or an account cut
- * to one post a day because the forecast did not fit. The operator's alone, in
- * dollars: a customer is promised posts (src/budget/quota.js), never money.
- */
-/** A posting rate in words: a cut can leave half a post a day. */
-export const rateText = (p) => (p === 0.5 ? 'פוסט כל יומיים' : p === 1 ? 'פוסט אחד ביום' : Number.isInteger(p) ? `${p} פוסטים ביום` : `${p * 2} פוסטים ביומיים`);
-
-export function budgetBanner(b) {
-  if (!b) return '';
-  const out = [];
-  const pctTxt = `${Math.round((b.share || 0) * 100)}%`;
-  const nm = b.nextMonth ? shortDate(`${b.nextMonth}T12:00:00Z`) : 'החודש הבא';
-  if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>פוסטים חדשים לא ייכתבו עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
-  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: ${usd(b.forecast)} מתוך ${usd(b.cap, 0)}. ב-100% פוסטים חדשים לא ייכתבו עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
-  if (b.cuts?.length) {
-    out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז חלק מהחשבונות מפרסמים פחות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: ${rateText(c.perDay)} במקום ${c.planned} ביום.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
-  }
-  return out.join('');
-}
-
-/**
  * The account the site shows, and the menu that switches it: every account with what waits in it, and a new one.
  * One account's pages at a time; the choice is a cookie (server.js), so a switch keeps the page it was made on. The
  * closed switcher counts what waits in the other accounts, so nothing waits unseen.
@@ -154,7 +132,7 @@ export function viewAsBanner(ctx) {
   return `<div class="banner info viewas" role="status">${icon('shield')}<div><b>${text}</b></div>${end}</div>`;
 }
 
-/** The page around a body. ctx: { title, active, csrf, quota: { used, limit }, budget, waiting, user, accounts, current } */
+/** The page around a body. ctx: { title, active, csrf, quota: { used, limit }, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
@@ -198,7 +176,6 @@ ${SPRITE}
 </div></header>
 <main class="wrap" id="main">
 ${viewAsBanner(ctx)}
-${ctx.operator ? budgetBanner(ctx.budget) : ''}
 ${body}
 <footer class="foot">${ofMark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>
 </main>

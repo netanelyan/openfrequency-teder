@@ -1,7 +1,7 @@
 import { isSet } from '../core/env.js';
 import { getJson, getText, isSocial } from '../core/net.js';
 import { DAY, now } from '../core/clock.js';
-import { API_PRICES, guard, record } from '../budget/ledger.js';
+import { API_PRICES, record } from '../budget/ledger.js';
 import { cachedLookup } from '../core/store.js';
 import { askJson } from '../llm/index.js';
 import { declaredFeeds, parseFeed } from '../sources/rss.js';
@@ -13,7 +13,7 @@ import { suggestApis } from './apis.js';
 // audience, and a few example sites.
 //
 //   1. Brave Search for authority sites: government, official docs, established
-//      publications (needs BRAVE_API_KEY; $5 per 1,000 queries, on the global budget)
+//      publications (needs BRAVE_API_KEY; $5 per 1,000 queries, recorded in the ledger)
 //   2. the feeds those sites and the example sites declare about themselves
 //      (<link rel="alternate">), read by fetching the home page
 //   3. structured APIs from a catalog, where the niche has one
@@ -85,7 +85,6 @@ For each candidate return:
 /** A Brave search, from the cache when the same query ran in the last 30 days; paid ($0.005) only when it did not. */
 async function brave(ctx, q, notes) {
   const { value } = await cachedLookup(ctx.db, `brave:${q}`, 30, async () => {
-    reserveFor(ctx, notes);
     const body = await getJson(`https://api.search.brave.com/res/v1/web/search?${new URLSearchParams({ q, count: '15', search_lang: 'he', safesearch: 'moderate' })}`, {
       headers: { 'x-subscription-token': String(process.env.BRAVE_API_KEY || '').trim(), 'accept-encoding': 'gzip' },
     });
@@ -93,11 +92,6 @@ async function brave(ctx, q, notes) {
     return (body?.web?.results || []).map((r) => ({ url: r.url, title: String(r.title || '').replace(/<[^>]+>/g, ''), description: String(r.description || '').replace(/<[^>]+>/g, '') }));
   }).catch((e) => (notes.push(e.message), { value: [] }));
   return value;
-}
-
-/** The global cap must have room for one more Brave query. */
-function reserveFor(ctx) {
-  guard(ctx.db, { pack: null, estimateUsd: API_PRICES.brave });
 }
 
 /** Read a site's home page for its declared feeds; returns feed candidates with their newest item. */

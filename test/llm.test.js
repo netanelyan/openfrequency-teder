@@ -163,7 +163,6 @@ test('a CLI call spends nothing and records its tokens with what the API would c
     const u = JSON.parse(row.usage_json);
     assert.equal(u.output_tokens, 120);
     assert.ok(u.listUsd >= row.api_usd);
-    assert.equal(db.get('SELECT COUNT(*) AS n FROM reservations').n, 0);
   } finally {
     cleanup();
   }

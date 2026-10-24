@@ -8,9 +8,8 @@ import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost, QuotaError } from '../src/pipeline/build.js';
 import { closeBrowser } from '../src/render/render.js';
 import { setNow } from '../src/core/clock.js';
-import { BudgetError, customerCap, DEFAULT_CUSTOMER_CAP_USD, guard, monthSpend } from '../src/budget/ledger.js';
+import { monthSpend } from '../src/budget/ledger.js';
 import { DEFAULT_PLAN, ledger, planOf, room, setPlan, usage } from '../src/budget/quota.js';
-import { capPause, liftBudgetPauses } from '../src/autonomy/rails.js';
 import { tick } from '../src/autonomy/runner.js';
 import { redoDirective } from '../src/pipeline/redo.js';
 import { steerLine } from '../src/pipeline/prompts.js';
@@ -23,12 +22,11 @@ import { accountsPage, postPage, quotasPanel } from '../src/web/pages.js';
 import { opened, tempHome } from './helpers.js';
 
 // A customer's month (src/budget/quota.js): 40 suggested slideshows and 10 redos by default, counted from the posts
-// themselves; what our checks block is ours; a cost cap per customer that fails closed, under the global one; and a
-// new month starts every count again.
+// themselves; what our checks block is ours; no money cap anywhere, what the posts cost only recorded; and a new month
+// starts every count again.
 
 after(() => closeBrowser());
 afterEach(() => {
-  delete process.env.OF_BUDGET_MONTHLY_USD;
   setNow(null);
 });
 
@@ -72,21 +70,21 @@ test('a suggestion counts once it reaches the customer, whatever they do with it
     assert.deepEqual(u.suggested, { used: 5, held: 1, limit: DEFAULT_PLAN.suggested, left: 34 });
     assert.deepEqual(u.redos, { used: 1, held: 1, limit: DEFAULT_PLAN.redos, left: 8 });
     // The default plan, and the operator's own.
-    assert.deepEqual([planOf(db, 'demo').suggested, planOf(db, 'demo').redos, planOf(db, 'demo').capUsd], [40, 10, 12]);
-    assert.deepEqual(setPlan(db, 'demo', { suggested: '6', redos: '2', capUsd: '7.5' }).capUsd, 7.5);
+    assert.deepEqual([planOf(db, 'demo').suggested, planOf(db, 'demo').redos], [40, 10]);
+    assert.deepEqual([setPlan(db, 'demo', { suggested: '6', redos: '2' }).suggested, planOf(db, 'demo').redos], [6, 2]);
     assert.deepEqual(usage(db, 'demo').suggested.left, 0, 'five used and one in progress of six');
     assert.equal(room(db, 'demo').ok, false);
     assert.equal(room(db, 'demo', { redo: true }).ok, false, 'one used and one in progress of two');
-    assert.deepEqual(setPlan(db, 'demo', { suggested: '2.5', redos: '-1', capUsd: 'lots' }).problems, ['suggested', 'redos', 'capUsd']);
+    assert.deepEqual(setPlan(db, 'demo', { suggested: '2.5', redos: '-1' }).problems, ['suggested', 'redos']);
     assert.equal(planOf(db, 'demo').suggested, 6, 'a refused plan changes nothing');
-    setPlan(db, 'demo', { suggested: '', redos: '', capUsd: '' });
+    setPlan(db, 'demo', { suggested: '', redos: '' });
     assert.equal(planOf(db, 'demo').suggested, 40, 'an empty field is the default again');
   } finally {
     cleanup();
   }
 });
 
-test('a new month starts every count again: suggestions, redos and the customer\'s spend', () => {
+test('a new month starts every count again: suggestions, redos and what the customer\'s posts cost', () => {
   const { home, cleanup } = tempHome();
   try {
     const { db } = contextFor(home);
@@ -97,14 +95,14 @@ test('a new month starts every count again: suggestions, redos and the customer\
     let u = usage(db, 'demo');
     assert.equal(u.suggested.left, 0);
     assert.equal(u.redos.left, 0);
-    assert.equal(u.cost.reached, true);
+    assert.equal(u.cost.spent, 12);
     // October's last evening is still October in Israel; November's first minutes are November.
     const lastMinute = israelInstant('2026-10-31', '23:59').getTime();
     assert.equal(usage(db, 'demo', lastMinute).suggested.left, 0);
     setNow(NOV);
     u = usage(db, 'demo');
     assert.equal(u.month, '2026-11');
-    assert.deepEqual([u.suggested.used, u.redos.used, u.cost.spent, u.cost.reached], [0, 0, 0, false]);
+    assert.deepEqual([u.suggested.used, u.redos.used, u.cost.spent], [0, 0, 0]);
     assert.equal(room(db, 'demo').ok, true);
     assert.equal(usage(db, 'demo', israelInstant('2026-11-01', '00:01').getTime()).suggested.used, 0);
   } finally {
@@ -164,75 +162,25 @@ test('the runner drafts no more than the month has left, and nothing once it is 
   }
 });
 
-test('the customer\'s cap fails closed and sits under the global one', () => {
-  const { home, cleanup } = tempHome();
-  try {
-    const ctx = contextFor(home);
-    const pack = ctx.pack('demo');
-    setNow(OCT);
-    assert.equal(customerCap(ctx.db, 'demo'), DEFAULT_CUSTOMER_CAP_USD);
-    assert.equal(customerCap(ctx.db, 'nobody'), 0, 'an account with no row may spend nothing');
-    // Under the demo pack's own share ($10 of the global cap), so the customer's cap is the one that binds.
-    setPlan(ctx.db, 'demo', { capUsd: '5' });
-    ctx.db.insert('spend', { account_id: 'demo', api: 'claude', usd: 4.99, month: '2026-10', at: new Date(OCT).toISOString() });
-    process.env.OF_BUDGET_MONTHLY_USD = '1000';
-    guard(ctx.db, { pack, estimateUsd: 0.01 });
-    assert.throws(() => guard(ctx.db, { pack, estimateUsd: 0.02 }), (e) => e instanceof BudgetError && e.scope === 'customer' && e.cap === 5);
-    // A cap that is not a number is no cap at all: nothing passes.
-    ctx.db.run("UPDATE accounts SET cap_usd = 'lots' WHERE id = 'demo'");
-    assert.throws(() => guard(ctx.db, { pack, estimateUsd: 0.0001 }), (e) => e.scope === 'customer' && e.cap === 0);
-    // The global cap stays on top: under it, a customer with room is still refused.
-    ctx.db.run("UPDATE accounts SET cap_usd = 500 WHERE id = 'demo'");
-    process.env.OF_BUDGET_MONTHLY_USD = '5';
-    assert.throws(() => guard(ctx.db, { pack, estimateUsd: 0.02 }), (e) => e.scope === 'global');
-  } finally {
-    cleanup();
-  }
-});
-
-test('hitting the cap mid-post blocks it as ours, pauses the account, tells the operator once, and lifts with a higher cap or the next month', async () => {
+test('no cost cap: a month that has cost $500 still drafts up to its plan, and the operator sets posts, never dollars', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
     const tuesday = israelInstant('2026-10-13', '07:05').getTime();
     setNow(tuesday);
-    setPlan(ctx.db, 'demo', { capUsd: '0.05' });
+    ctx.db.insert('spend', { account_id: 'demo', api: 'claude', usd: 500, month: '2026-10', at: new Date(tuesday).toISOString() });
     const r = await tick(ctx, { t: tuesday });
-    assert.equal(r.generated.length, 1, 'the account stops at its first refusal');
-    assert.equal(r.generated[0].status, 'blocked');
-    const post = ctx.db.get('SELECT * FROM posts WHERE id = ?', r.generated[0].post);
-    assert.equal(post.quota_kind, 'retry', 'a post the cap stopped is ours');
-    assert.ok(monthSpend(ctx.db, 'demo').usd <= 0.05 + 1e-9, 'the cap was never crossed');
-    const acc = ctx.db.get("SELECT status, paused_reason FROM accounts WHERE id = 'demo'");
-    assert.deepEqual({ ...acc }, { status: 'paused', paused_reason: 'customer_cap' });
-    const told = ctx.db.all("SELECT * FROM notifications WHERE kind = 'customer_cap'");
-    assert.equal(told.length, 1);
-    assert.equal(told[0].account_id, null, "the operator's alone: no customer browser is woken");
-    assert.match(told[0].body, /מתוך \$0\.05/);
-    assert.equal(await capPause(ctx, ctx.pack('demo')), false, 'already paused: no second notification');
-    // Within the month nothing lifts it but a higher cap.
-    assert.deepEqual(liftBudgetPauses(ctx.db, tuesday + 3_600_000), []);
-    assert.match(setQuota(ctx, owner, { id: 'demo' }, { cap: '0.06' }).message, /החשבון חזר לכתוב/);
-    assert.equal(ctx.db.get("SELECT status FROM accounts WHERE id = 'demo'").status, 'active');
-    // Paused again, and the month turns.
-    await capPause(ctx, ctx.pack('demo'));
-    assert.deepEqual(liftBudgetPauses(ctx.db, NOV), ['demo']);
+    assert.ok(r.generated.length >= 2, JSON.stringify(r.generated));
+    assert.ok(r.generated.every((g) => g.status === 'queued'), JSON.stringify(r.generated));
+    assert.equal(ctx.db.get("SELECT status FROM accounts WHERE id = 'demo'").status, 'active', 'money pauses nothing');
+    assert.ok(usage(ctx.db, 'demo').cost.spent > 500, 'what the posts cost is recorded on top, for the operator');
+    // The plan is posts only: a cap sent with it is not read, and nothing about money is kept.
+    const saved = setQuota(ctx, owner, { id: 'demo' }, { suggested: '45', redos: '', cap: '0.01' });
+    assert.equal(saved.message, 'נשמר: 45 הצעות ו-10 החלפות בחודש.');
+    assert.deepEqual(Object.keys(planOf(ctx.db, 'demo')).sort(), ['redos', 'set', 'suggested']);
+    assert.ok(!ctx.db.all('PRAGMA table_info(accounts)').some((c) => c.name === 'cap_usd'), 'the column is gone');
     // A customer cannot set their own plan.
-    assert.throws(() => setQuota(ctx, customer, { id: 'demo' }, { cap: '100' }), /רק מי שמפעיל את תדר/);
-  } finally {
-    cleanup();
-  }
-});
-
-test('the global cap still stops a customer under their own cap, as a budget stop, not a cap pause', async () => {
-  const { home, cleanup } = tempHome();
-  try {
-    const ctx = contextFor(home);
-    setNow(OCT);
-    process.env.OF_BUDGET_MONTHLY_USD = '0.05';
-    const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
-    assert.equal(res.status, 'blocked');
-    assert.equal(res.kind, 'budget');
+    assert.throws(() => setQuota(ctx, customer, { id: 'demo' }, { suggested: '100' }), /רק מי שמפעיל את תדר/);
   } finally {
     cleanup();
   }
@@ -466,7 +414,8 @@ test("the account page says 'X of 40 used, Y of 10 redos'; the operator sees eve
     assert.match(accountsPage({ csrf: 'x' }, rows), /נוצלו 3 מתוך 40 הצעות · 1 מתוך 10 החלפות/);
     const html = quotasPanel({ csrf: 'x' }, quotasData(ctx));
     assert.match(html, /3\/40/);
-    assert.match(html, /\$0\.50<\/span> \/ <span class="num ltr">\$12\.00/);
+    assert.match(html, /data-k="עלות"><span class="num ltr">\$0\.50<\/span><\/td>/);
+    assert.doesNotMatch(html, /name="cap"|תקרה/, 'no cap to set');
     assert.match(html, /action="\/accounts\/demo\/quota"/);
     assert.match(html, /placeholder="40"/);
     // Used up: the card says when it starts again.

@@ -1525,3 +1525,35 @@ engine can act on, and what changed:
     called TikTok directly. `src/publish/tiktok-app.js` names the interface and what
     building it takes. Until then such an account's TikTok posts are written to disk, as
     for any publisher without credentials.
+
+- **The budget is gone, the plan is the limit (2026-10-24, the owner's call).** "Teder
+  should remove its budget, each page gets 40 videos a month with 10 redos." Every
+  account gets 40 slideshows and 10 redos a month (`src/budget/quota.js`, counted from
+  the posts as before), and no sum of money blocks or slows anything any more. Gone:
+  the $20 server-wide cap on the Anthropic API with its $15 warning, its spend file
+  that failed closed (`$OF_HOME/data/anthropic-spend.json`, `npm run budget`), the 5%
+  held for onboarding, each account's share and the planner that cut the weakest
+  account's posts to fit the money (`src/budget/anthropic.js`, `src/budget/plan.js`),
+  the $12 cost cap per customer and its pause, the reservation of each call's worst
+  case, the lower cap the website could set, `budget` in `pack.json`, and the
+  variables `ANTHROPIC_MONTHLY_BUDGET_USD`, `ANTHROPIC_BUDGET_WARN_USD` and
+  `OF_BUDGET_MONTHLY_USD`. A migration drops the `reservations` table and
+  `accounts.cap_usd`, deletes the budget's settings, and lets an account a cap paused
+  write again (a kill switch stays on).
+  - *Why.* A customer buys posts, not tokens: the plan is what they were promised, and
+    a money cap could stop their month short of it for reasons that are ours. With the
+    plan fixed, the money follows from it.
+  - *What still bounds the spend.* The plan, per account; the day's slots drafted once
+    a day (a stopped post waits for the next day, never a loop); and inside a post a
+    fixed number of calls: at most 6 documents per format offered to the outline, one
+    redraft, two repair rounds (`REPAIR_ATTEMPTS`), two rewrite passes, and a
+    replacement our checks stop tried twice (`REDO_ATTEMPTS`). At the measured $0.15 a
+    post made, stopped attempts included, a full plan of 50 is about $7.50 an account
+    a month (docs/costs.md). A post our checks stop is still ours and is not counted.
+  - *What stays.* Every call's real cost is recorded after it, from the usage block
+    (`src/budget/ledger.js`), and shown to the operator: the month's cost on Settings,
+    each customer's ledger by what the money went to, the cost per post in developer
+    mode. A model missing from the pricing table is recorded at the dearest rate rather
+    than refused. The operator can still give one account another number of posts,
+    never dollars. The kill switches, the strike and publish-error pauses, the takedown
+    pause and development's refusal of the API without `--allow-api` are unchanged.

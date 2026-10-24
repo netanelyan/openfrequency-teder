@@ -7,7 +7,7 @@ import { examplesDir } from '../src/core/paths.js';
 
 // Every test runs against a throwaway OF_HOME built from the fictional demo
 // pack, never against ./private/ or any real pack. A test that wants a variant
-// (a tiny budget, a second account) copies the demo and edits the copy.
+// (a second account, another format) copies the demo and edits the copy.
 
 process.env.OF_MODE = 'recorded';
 delete process.env.ANTHROPIC_API_KEY;

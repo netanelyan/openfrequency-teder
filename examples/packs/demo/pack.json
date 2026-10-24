@@ -52,9 +52,6 @@
   "autonomy": {
     "mode": "approve"
   },
-  "budget": {
-    "monthlyUsd": 10
-  },
   "compliance": [],
   "imagery": {
     "providers": [

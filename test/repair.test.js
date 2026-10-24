@@ -145,7 +145,7 @@ test('a slide refused by the fact gate is repaired in place; a repair that swaps
     // Mended, not drafted again: no redraft of the whole post.
     assert.equal(stepsOf(ctx, res.postId, 'redraft').length, 0);
     assert.match(ctx.db.get('SELECT body FROM slides WHERE post_id = ? AND idx = 2', res.postId).body, /3 גבעולים/);
-    // Each repair call is reserved and recorded against the caps like any other call.
+    // Each repair call is recorded like any other call.
     assert.equal(ctx.db.get("SELECT COUNT(*) AS n FROM spend WHERE post_id = ? AND tag = 'repair'", res.postId).n, 2);
   } finally {
     cleanup();

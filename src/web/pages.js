@@ -7,7 +7,7 @@ import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
-import { DEFAULT_CUSTOMER_CAP_USD, DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
+import { DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { connectPanel, tiktokModePanel } from './connect.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
@@ -213,13 +213,12 @@ ${factsBlock(post)}
 // Home is the overview, like a shop's: four numbers, what needs you, one line per account. The posts themselves,
 // slides, captions and facts, are on Posts: the owner asked for a home page that is not a whole book.
 
-/** The banners that stop the engine: the kill switch, a paused account, an account out of its share of the budget. */
+/** The banners that stop the engine: the kill switch, a paused account, an account whose month's suggestions are used up. */
 function stopBanners(ctx, d) {
   const out = [];
   if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${ctx.operator ? postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } }) : ''}</div>`);
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
-    else if (g.reached && ctx.operator) out.push(`<div class="banner warn">${icon('alert')}<div><b>הנתח של ${esc(g.pack.meta.displayName)} מהתקציב נגמר.</b><p>פוסטים חדשים לא ייכתבו בו עד שהתוכנית החודשית תפנה לו כסף, או עד החודש הבא.</p></div></div>`);
     else if (g.quota && g.quota.suggested.used >= g.quota.suggested.limit) out.push(`<div class="banner info">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} ניצל את ${g.quota.suggested.limit} ההצעות של החודש.</b><p>פוסטים חדשים ייכתבו בו מתחילת החודש הבא.</p></div></div>`);
   }
   return out.join('');
@@ -352,7 +351,7 @@ ${stopBanners(ctx, d)}
 ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.acc?.mode || 'approve'];
-    return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}${g.plan?.cut ? `<span class="chip warn" title="התקציב קצר החודש">${g.plan.perDay} ביום</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
+    return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
 ${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעה שקבעתם בהגדרות.'}</div>`}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(b.reason)}</div></li>`).join('')}</ul></details>` : ''}
 </section>`;
@@ -484,7 +483,7 @@ ${takedownPanel}
 export function accountsPage(ctx, rows) {
   const body = `<div class="head"><h1>החשבון</h1><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
-    .map(({ pack, acc, spend, cap, plan, publishers, week, style, quota, connect }) => {
+    .map(({ pack, acc, spend, publishers, week, style, quota, connect }) => {
       const paused = acc.status === 'paused';
       const max = Math.max(1, ...week.days.map((x) => x.n));
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
@@ -494,7 +493,7 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
         .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${acc.mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
         .join('')}</div><noscript><button class="btn sm" type="submit">שמירה</button></noscript></form>
-${ctx.operator ? `<div><div class="row"><span>הנתח מהתקציב</span><b class="num">${usd(spend)} / ${usd(cap)}</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>` : ''}
+${ctx.operator ? `<div class="row"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}
 ${quota ? quotaRow(quota) : ''}
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
@@ -518,7 +517,7 @@ function quotaRow(q) {
 
 /**
  * The customer's plan on Settings: what a month gives (the suggestions, the redos, the small changes that are free) and
- * what each account has used of it. Never money: what the posts cost is the operator's (budgetPanel).
+ * what each account has used of it. Never money: what the posts cost is the operator's (costsPanel).
  */
 function planPanel(plans) {
   if (!plans.length) return '';
@@ -830,37 +829,24 @@ function publisherHe({ wants, via }) {
   return `${VIA_HE[via]} (מוגדר ל${VIA_HE[wants] === 'Zernio' ? '-Zernio' : `${VIA_HE[wants]}`}, ${why})`;
 }
 
-const BASIS_HE = { results: 'לפי התוצאות', approval: 'לפי שיעור האישורים', none: 'אין עוד נתונים' };
-const LEVEL_HE = { ok: ['בתוך התקציב', 'ok'], short: ['התחזית מעל התקציב גם אחרי צמצום', 'warn'], warn: ['מעל 80%', 'warn'], stop: ['נגמר: אין כתיבה עד החודש הבא', 'bad'] };
-
-/** The month against the cap: spent, held, forecast, posts left, and each account's share and volume. */
-export function budgetPanel(ctx, d, { dev = false } = {}) {
-  const p = d.plan;
-  const [lvl, cls] = LEVEL_HE[p.level] || [p.level, ''];
-  // Only a value that lowers the cap is in force (globalCap), so only that one is shown: an older, higher setting reads as 0.
-  const set = Number(d.settings.globalBudgetUsd) || 0;
-  const lower = set > 0 && set < d.envCap ? set : 0;
-  const capUsd = usd(d.envCap, Number.isInteger(d.envCap) ? 0 : 2);
-  const rows = p.accounts
-    .map(
-      (a) =>
-        `<tr><td class="title" data-k="">${accDot(a.id)} ${esc(a.name)}</td><td class="n" data-k="נתח">${usd(a.alloc)}</td><td class="n" data-k="הוצאה">${usd(a.spent, 3)}${a.reserved ? ` <span class="muted small">+${usd(a.reserved, 3)} שמור</span>` : ''}</td><td class="n" data-k="לפוסט">${usd(a.costPerPost, 3)}<span class="muted small"> ${a.measured ? 'נמדד' : 'הערכה'}</span></td><td class="n" data-k="ביום">${a.cut ? `<span class="chip warn">${a.perDay} במקום ${a.planned}</span>` : a.perDay}</td><td class="n" data-k="נשארו החודש">${a.remainingPosts}</td><td data-k="חוזק">${esc(BASIS_HE[a.basis])}${a.strength != null ? ` · ${a.strength.toFixed(2)}` : ''}</td></tr>`
-    )
+/**
+ * The month's cost, for the operator to read: every account's total, and in developer mode what each account's post
+ * costs. Nothing caps it; each account's plan (40 suggestions, 10 redos) is the limit (src/budget/quota.js).
+ */
+export function costsPanel(ctx, d, { dev = false } = {}) {
+  const rows = d.costs
+    .map((a) => `<tr><td class="title" data-k="">${accDot(a.id)} ${esc(a.name)}</td><td class="n" data-k="החודש">${usd(a.spent, 3)}</td><td class="n" data-k="לפוסט">${a.perPost == null ? '–' : usd(a.perPost, 3)}</td></tr>`)
     .join('');
-  return `<section class="panel" id="budget"><header><h2>תקציב חודשי</h2><span class="end"><span class="chip ${cls}">${esc(lvl)}</span></span></header>
-<div class="row spread"><span>הוצאה ב-<span class="ltr">${esc(p.month)}</span></span><b class="num">${usd(p.spent)} / ${usd(p.cap, 0)}</b></div>
-<meter min="0" max="${p.cap || 1}" low="${(p.cap || 1) * 0.7}" high="${(p.cap || 1) * 0.8}" optimum="0" value="${Math.min(p.spent, p.cap || 1)}"></meter>
-<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>נשאר</dt><dd>${usd(p.left)}, בערך ${p.postsLeft} פוסטים</dd></dl>
-<p class="muted small">כשהתקציב לא מספיק לכל החודש, החשבון החלש מפרסם פחות. ב-80% מופיעה אזהרה, וב-100% לא נכתבים פוסטים חדשים עד החודש הבא.</p>
-${dev ? `<dl class="kv mt12"><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>לפוסט</dt><dd>${usd(p.costPerPost, 3)}</dd></dl>
-<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
-<p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה.</p>` : ''}
-${ctx.operator ? `<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה, בדולרים <small>עד ${capUsd}, ו-0 מבטל אותה</small><input type="number" name="budget" min="0" max="${esc(d.envCap)}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמירה</button></form>` : ''}</section>`;
+  return `<section class="panel" id="costs"><header><h2>עלות החודש</h2><span class="end muted small ltr">${esc(d.month)}</span></header>
+<div class="row spread"><span>כל החשבונות</span><b class="num">${usd(d.spend.usd)}</b></div>
+<p class="muted small">אין תקרת הוצאה. כל חשבון מקבל ${DEFAULT_PLAN.suggested} הצעות ו-${DEFAULT_PLAN.redos} החלפות בחודש, וזה מה שעוצר את הכתיבה. הסכום כאן רק לידיעה.</p>
+${dev ? `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>החודש</th><th>לפוסט, 30 יום</th></tr></thead><tbody>${rows}</tbody></table></div>
+<p class="muted small">לפוסט: כל הקריאות של 30 הימים האחרונים, גם של פוסטים שהבדיקות עצרו, חלקי הפוסטים שנכתבו. מופיע מהפוסט הרביעי.</p>` : ''}</section>`;
 }
 
 /**
  * Settings. Everyone: notifications and who is signed in; a customer, the month's plan (suggestions and redos). The
- * operator alone (the server's settings): when the day's posts are written, the month's budget and its cap, and the stop for
+ * operator alone (the server's settings): when the day's posts are written, what the month cost, and the stop for
  * everything; and developer mode (keys, the engine, the publishers, the log), seven taps on the version line, kept
  * in a cookie on that browser (server.js). People and sign-in are accounts' (openfrequency-accounts).
  */
@@ -894,7 +880,7 @@ ${d.assistant ? assistantPanel(ctx, d.assistant) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 </div>
 <div>
-${ctx.operator ? budgetPanel(ctx, d, { dev }) : planPanel(d.plans)}
+${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
 ${d.quotas ? quotasPanel(ctx, d.quotas) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>` : ''}
 <section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
@@ -927,7 +913,7 @@ const LEDGER_COLS = [
   ['edit', 'בדיקת עריכות'],
 ];
 
-/** One month of every account: the plan used, the cost against the customer's cap, and what the money went to. */
+/** One month of every account: the plan used, what it cost, and what the money went to. */
 function ledgerTable(rows, month) {
   const body = rows
     .map(({ pack, usage: u, ledgers, zernio = {} }) => {
@@ -936,14 +922,14 @@ function ledgerTable(rows, month) {
       const by = Object.fromEntries(l.rows.map((r) => [r.kind, r]));
       const other = ['account', 'drafting', 'sample'].reduce((a, k2) => a + (by[k2]?.usd || 0), 0);
       const now = u.month === month;
-      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="הצעות">${u.suggested.used}/${u.suggested.limit}</td><td class="n" data-k="החלפות">${u.redos.used}/${u.redos.limit}</td><td class="n" data-k="עלות">${usd(l.total)} / ${usd(u.cost.cap)}${u.cost.reached ? ' <span class="chip warn">בתקרה</span>' : ''}</td>` : `<td class="n" data-k="הצעות">${by.suggestion?.posts ?? 0}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}<td class="n" data-k="Zernio">${z ? usd(z.usd) : '–'}</td>${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
+      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="הצעות">${u.suggested.used}/${u.suggested.limit}</td><td class="n" data-k="החלפות">${u.redos.used}/${u.redos.limit}</td><td class="n" data-k="עלות">${usd(l.total)}</td>` : `<td class="n" data-k="הצעות">${by.suggestion?.posts ?? 0}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}<td class="n" data-k="Zernio">${z ? usd(z.usd) : '–'}</td>${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
     })
     .join('');
   return `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>הצעות</th><th>החלפות</th><th>עלות</th><th>Zernio</th>${LEDGER_COLS.map(([, he]) => `<th>${esc(he)}</th>`).join('')}<th>אחר</th><th>לפוסט שהגיע</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /**
- * The operator's view of every customer's month (src/budget/quota.js): the plan used, the cost against the cap, the
+ * The operator's view of every customer's month (src/budget/quota.js): the plan used, what it cost, the
  * ledger by what the money went to, and the form that sets each account's plan.
  */
 export function quotasPanel(ctx, q) {
@@ -955,22 +941,21 @@ export function quotasPanel(ctx, q) {
       return `<form method="post" action="/accounts/${esc(pack.id)}/quota" class="formgrid mt12">${csrfField(ctx)}<b>${accDot(pack.id)} ${esc(pack.meta.displayName)}</b>
 <label class="f">הצעות בחודש<input type="number" name="suggested" min="0" max="${MAX_PLAN.suggested}" step="1" placeholder="${DEFAULT_PLAN.suggested}"${val(set.suggested, u.plan.suggested)}></label>
 <label class="f">החלפות בחודש<input type="number" name="redos" min="0" max="${MAX_PLAN.redos}" step="1" placeholder="${DEFAULT_PLAN.redos}"${val(set.redos, u.plan.redos)}></label>
-<label class="f">תקרת עלות בדולרים<input type="number" name="cap" min="0" max="${MAX_PLAN.capUsd}" step="0.5" placeholder="${DEFAULT_CUSTOMER_CAP_USD}"${val(set.capUsd, u.plan.capUsd)}></label>
 <button class="btn" type="submit">שמירה</button></form>`;
     })
     .join('');
   return `<section class="panel" id="quotas"><header><h2>מכסות ועלות לפי לקוח</h2><span class="end muted small ltr">${esc(month)}</span></header>
-<p class="muted small m0">הצעה היא פוסט שעבר את כל הבדיקות והגיע ללקוח, גם אם דחה אותו או שפג תוקפו. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים. בעמודת Zernio: כמה Zernio גובה על הפרופיל של החשבון, לפי החשבונית שלו. זה מנוי מחוץ לתקרה, והוא מתעדכן פעם ביום.</p>
+<p class="muted small m0">הצעה היא פוסט שעבר את כל הבדיקות והגיע ללקוח, גם אם דחה אותו או שפג תוקפו. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים. בעמודת Zernio: כמה Zernio גובה על הפרופיל של החשבון, לפי החשבונית שלו. זה מנוי, והוא מתעדכן פעם ביום.</p>
 ${ledgerTable(q.accounts, month)}
 ${before.length ? `<details class="mt12"><summary class="muted">החודשים הקודמים</summary>${before.map((m) => `<h3 class="lbl ltr">${esc(m)}</h3>${ledgerTable(q.accounts, m)}`).join('')}</details>` : ''}
-<details class="mt12"><summary class="muted">לשנות מכסה או תקרה</summary><p class="muted small">שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} הצעות, ${DEFAULT_PLAN.redos} החלפות ו-$${DEFAULT_CUSTOMER_CAP_USD} בחודש. חשבון שהגיע לתקרה מושהה, ונשלחת אליך התראה. הוא חוזר לכתוב בתחילת החודש, או מיד כשהתקרה עולה מעל מה שכבר הוצא. התקרה הכללית נשארת מעל כולם.</p>${forms}</details></section>`;
+<details class="mt12"><summary class="muted">לשנות מכסה</summary><p class="muted small">שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} הצעות ו-${DEFAULT_PLAN.redos} החלפות בחודש. חשבון שניצל את ההצעות שלו לא נכתב עד תחילת החודש הבא, או עד שמעלים לו את המכסה.</p>${forms}</details></section>`;
 }
 
 export function morePage(ctx) {
   const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;
   const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
 ${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד חמישה פוסטים לדוגמה')}
-${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, תקציב, מפתחות' : 'התראות, תקציב, החשבון שלך')}
+${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, מכסות, מפתחות' : 'התראות, החבילה החודשית, החשבון שלך')}
 ${ctx.operator ? row('/demos', 'accounts', 'דמואים לחנויות', 'חנויות שביקשו דמו באתר') : ''}
 <a class="danger" href="${esc(ctx.links?.logout || '#')}"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></a></nav>`;
   return layout({ ...ctx, title: 'עוד', active: 'more' }, body);

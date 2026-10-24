@@ -2,14 +2,14 @@ import { appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { isSet } from '../core/env.js';
 import { ensureDir, ofHome } from '../core/paths.js';
-import { apiEquivalent, ceilingUsd, claudeCost, MODEL_RATES, monthReserved, record, release, reserve, settle, WORST } from '../budget/ledger.js';
-import { checkCall, recordCall } from '../budget/anthropic.js';
-import { ClaudeError, claudeClient, requestParams, promptTokenBound } from './claude.js';
+import { apiEquivalent, claudeCost, MODEL_RATES, record, WORST } from '../budget/ledger.js';
+import { ClaudeError, claudeClient, requestParams } from './claude.js';
 import { cliClient, systemText } from './cli.js';
 import { recordedClient } from './recorded.js';
 
-// One entry point for every model call: the ceiling reserved before, the real
-// cost recorded after.
+// One entry point for every model call, and what each one cost recorded after it.
+// Nothing here refuses a call for money: there is no cap (docs/decisions.md, "The
+// budget is gone, the plan is the limit").
 //
 // Which model does which job (docs/costs.md has the measurements behind it):
 //   draft    the outline and the slides: Claude Sonnet 5.5
@@ -122,47 +122,29 @@ const textOf = (system) => (Array.isArray(system) ? system.map((b) => b?.text ||
  * Ask for JSON. ctx: { db, pack, postId, llm }. req: { task, system, user, schema,
  * role, effort, maxTokens, image, meta, tag }.
  *
- * Before the call, its ceiling is reserved against the caps (ledger.js): the
- * prompt's bytes and max_tokens at the dearest rate the call can be billed at.
- * After it, the reservation is replaced by the real cost from the usage block,
- * at the batch rate when it went through a batch. A recorded answer has no usage
- * block; it is recorded as the estimate of what that exact prompt and answer
- * would have cost, and flagged as an estimate.
+ * After the call, its real cost from the usage block is recorded (ledger.js), at
+ * the batch rate when it went through a batch (the batcher records its own, and
+ * says so with `settled`). A recorded answer has no usage block; it is recorded
+ * as the estimate of what that exact prompt and answer would have cost, and
+ * flagged as an estimate.
  */
 export async function askJson(ctx, req) {
   const model = req.model || ROLES[req.role || 'draft']();
   const params = requestParams({ ...req, model });
   if (ctx.llm.backend === 'claude-cli') return askCli(ctx, req, { model, params });
   const batch = Boolean(ctx.llm.batch);
-  const fallback = Boolean(ctx.llm.fallsBack?.(model));
   const tag = req.tag || req.task;
-  const ceiling = ceilingUsd({ model, promptTokens: promptTokenBound(params), maxTokens: params.max_tokens, batch, fallback });
-  // A real API call answers to the Anthropic spend file first (budget/anthropic.js): a priced model, a readable file,
-  // and room under the monthly cap for its ceiling. A refusal is a BudgetError, which skips the job.
-  const live = ctx.llm.backend === 'api';
-  if (live) checkCall({ model, ceilingUsd: ceiling, inFlightUsd: monthReserved(ctx.db).usd });
-  const paid = (m, usage, usd) => live && usage && recordCall({ model: m, usage, usd, job: tag, batch, log: ctx.log });
-  const reservation = reserve(ctx.db, { pack: ctx.pack, postId: ctx.postId, usd: ceiling, tag });
   const row = { accountId: ctx.pack?.id ?? null, postId: ctx.postId, api: 'claude', tag, batch };
 
   let res;
   try {
-    res = await ctx.llm.json({ ...req, model, params, reservation, meta: { ...(req.meta || {}), model, postId: ctx.postId, accountId: ctx.pack?.id ?? null } });
+    res = await ctx.llm.json({ ...req, model, params, meta: { ...(req.meta || {}), model, postId: ctx.postId, accountId: ctx.pack?.id ?? null } });
   } catch (e) {
-    // A failed call that was billed (a refusal, a cut-off answer) still costs money.
-    if (!e.settled) {
-      if (e.usage) {
-        const usd = claudeCost(e.usage, e.model || model, { batch });
-        settle(ctx.db, reservation, { ...row, model: e.model || model, usd, usage: e.usage });
-        paid(e.model || model, e.usage, usd);
-      } else release(ctx.db, reservation);
-    } else if (e.usage) paid(e.model || model, e.usage, e.usd ?? claudeCost(e.usage, e.model || model, { batch }));
+    // A failed call that was billed (a refusal, a cut-off answer) still cost money.
+    if (!e.settled && e.usage) record(ctx.db, { ...row, model: e.model || model, usd: claudeCost(e.usage, e.model || model, { batch }), usage: e.usage });
     throw e;
   }
-  if (res.settled) {
-    paid(res.model || model, res.usage, res.usd ?? claudeCost(res.usage || {}, res.model || model, { batch }));
-    return { data: res.data, usd: res.usd, estimated: false, model: res.model || model, usage: res.usage };
-  }
+  if (res.settled) return { data: res.data, usd: res.usd, estimated: false, model: res.model || model, usage: res.usage };
   let usd;
   if (res.usage) usd = claudeCost(res.usage, res.model || model, { batch });
   else {
@@ -170,13 +152,12 @@ export async function askJson(ctx, req) {
     const inTokens = estimateTokens(textOf(req.system)) + estimateTokens(req.user) + estimateTokens(JSON.stringify(req.schema)) / 3 + (req.image ? 1600 : 0);
     usd = estimateUsd(model, inTokens, estimateTokens(JSON.stringify(res.data)) * 2.5);
   }
-  settle(ctx.db, reservation, { ...row, model: res.model || model, usd, estimated: res.estimated, usage: res.usage || null });
-  paid(res.model || model, res.usage, usd);
+  record(ctx.db, { ...row, model: res.model || model, usd, estimated: res.estimated, usage: res.usage || null });
   return { data: res.data, usd, estimated: res.estimated, model: res.model || model, usage: res.usage || null };
 }
 
 /**
- * A call answered by the Claude Code CLI: nothing is reserved or spent (the
+ * A call answered by the Claude Code CLI: nothing is spent (the
  * subscription pays), and the row records its tokens and what it would cost
  * through the API, for the forecast. The share of the prompt that production
  * reads from the cache is the system prefix's share of the request's bytes.

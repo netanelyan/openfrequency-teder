@@ -18,7 +18,7 @@ export function inWindows(t, windows = []) {
 
 /**
  * How many posts a day's rate allows on one Israel date, or null for no limit. A whole rate is that many every day;
- * a budget cut can leave a fraction (1.5 is two posts one day and one the next, 0.5 a post every other day), spread
+ * a pack can set a fraction (1.5 is two posts one day and one the next, 0.5 a post every other day), spread
  * evenly over the calendar.
  */
 export function postsOn(date, perDay) {

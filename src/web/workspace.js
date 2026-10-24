@@ -8,7 +8,7 @@
 // too, before it is shown or changed (ownPost and the like, in actions.js and data.js).
 //
 // The operator (the superadmin outside view-as) gets the context as it is: every account, every workspace, and the
-// settings that are the whole server's (the API budget, the kill switch, when posts are written).
+// settings that are the whole server's (the kill switch, when posts are written, each account's plan).
 
 export const workspaceOfAccount = (db, accountId) => db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null;
 

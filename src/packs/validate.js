@@ -68,9 +68,6 @@ export function validatePack(pack) {
     if (!/^[0-6]$/.test(d) || !Array.isArray(list) || list.some((x) => !HHMM.test(x))) p.push(`pack.json: schedule.slotsByDay.${d} must be a list of "HH:MM"`);
   }
   if (!MODES.includes(meta.autonomy?.mode || 'approve')) p.push(`pack.json: autonomy.mode must be one of ${MODES.join(', ')}`);
-  // The money is the global cap's (OF_BUDGET_MONTHLY_USD); a pack only weighs its share, and may cap itself lower.
-  if (meta.budget?.monthlyUsd != null && !(Number(meta.budget.monthlyUsd) > 0 && Number(meta.budget.monthlyUsd) <= 2000)) p.push('pack.json: budget.monthlyUsd, when set, must be a number between 0 and 2000');
-  if (meta.budget?.share != null && !(Number(meta.budget.share) > 0 && Number(meta.budget.share) <= 10)) p.push('pack.json: budget.share, when set, must be a weight between 0 and 10');
   for (const c of meta.compliance || []) if (!isCompliance(c)) p.push(`pack.json: unknown compliance check "${c}" (have: ${Object.keys(COMPLIANCE).join(', ')})`);
   const about = [meta.displayName, meta.audience, meta.description, ...(meta.topics || [])].join(' ');
   if (FINANCIAL.test(about) && !(meta.compliance || []).includes('il-investment-advice')) {
