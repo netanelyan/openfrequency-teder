@@ -24,7 +24,7 @@ import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js'
 // Publishing one approved post, through the rails, to each of its pack's
 // platforms, each by the publisher the pack names for it:
 //
-//   "publishers": { "tiktok": "zernio", "instagram": "auto" }
+//   "publishers": { "tiktok": "zernio", "instagram": "zernio" }
 //
 // zernio      through Zernio, to the account the customer connected into the
 //             account's Zernio profile (src/publish/connect.js)

@@ -339,8 +339,10 @@ still works, from Zernio after a connect and once an hour. An expired token show
 "צריך לחבר מחדש", and the assistant is told once with a fresh link. Only
 `ZERNIO_API_KEY` lives in `$OF_HOME/.env`; the profile and account ids live in the
 database. What Zernio bills each profile is read daily into the operator's ledger, next
-to the API spend. `"instagram": "auto"` (new packs' default) publishes Instagram
-through our own Meta app when the account has it, and otherwise through Zernio.
+to the API spend. Zernio publishes both platforms: `"instagram": "zernio"` is new
+packs' default, as `"tiktok": "zernio"` is. `"instagram": "auto"` (our own Meta app
+when the account has it, otherwise Zernio) and `"instagram"` (Meta only) are kept for
+a pack that asks for them.
 `"tiktok": "own-app"` is kept for our own TikTok app, which is not built yet
 (`src/publish/tiktok-app.js`); until it is, those posts are written to disk.
 
