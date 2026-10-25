@@ -4,7 +4,8 @@
 // An account run by an engine has not been anywhere, tried anything or bought
 // anything, and it has no numbers it may boast about. So:
 //
-//   EXPERIENCE  first-person past ("ניסיתי", "קניתי", "כשהייתי") is refused, while
+//   EXPERIENCE  first-person past ("ניסיתי", "קניתי", "כשהייתי", the "הלוואי וידעתי קודם"
+//               of a cover that says the account once did not know) is refused, while
 //               the explainer's present and conditional ("ככה בונים את זה", "היינו
 //               ממליצים לבדוק") stays allowed, because it claims nothing happened.
 //   PROOF       claims about the account's own popularity or status: follower or
@@ -26,7 +27,7 @@ const EXPERIENCE = [
   edge(
     'ניסיתי|ניסינו|קניתי|קנינו|השתמשתי|השתמשנו|בדקתי|בדקנו|גיליתי|גילינו|טסנו|טסתי|נסעתי|נסענו|ביקרתי|ביקרנו|אכלתי|אכלנו|' +
       'שילמתי|שילמנו|חסכתי|חסכנו|הרווחתי|הרווחנו|השקעתי|השקענו|ראיתי|ראינו|צפיתי|צפינו|שיחקתי|שיחקנו|גידלתי|גידלנו|שתלתי|שתלנו|' +
-      'הצלחתי|הצלחנו|עבדתי|למדתי|קיבלתי|קיבלנו'
+      'הצלחתי|הצלחנו|עבדתי|למדתי|קיבלתי|קיבלנו|ידעתי|ידענו'
   ),
   edge('מ(?:ה)?ניסיון\\s+(?:שלי|שלנו|אישי)'),
   edge('אצלי\\s+בבית|אצלנו\\s+בבית|במקרה\\s+שלי|במקרה\\s+שלנו'),

@@ -55,6 +55,9 @@ const ROLE_NOTE = {
   verdict: "the account's opinion, labelled as one",
   ask: 'a question to the reader',
   visual: "a graphic's labels and values: check only that its names and numbers are in the facts; botScore 1",
+  // A cover from one of the account's hook templates (src/formats/hooks.js): the frame is a proven opener the code
+  // checked the slides pay off, so only the words in its slots are the writer's.
+  template: "a cover written from one of the account's hook templates: its fixed opening is the account's own, held back on purpose and paid off by the slides; judge the words that fill it, and flag a promise the facts do not keep",
 };
 
 export const REVIEW_SCHEMA = {
@@ -136,7 +139,7 @@ export function heuristicReview(texts, pack, facts = []) {
   const extra = pack?.rules?.bannedPhrases || [];
   const hints = hintsFor(texts, facts);
   return texts.map((t, i) => {
-    const tells = tellsIn(t.text, { kind: t.kind, extra, pack }).map((x) => x.msg);
+    const tells = tellsIn(t.text, { kind: t.kind, extra, pack, frame: t.frame || [] }).map((x) => x.msg);
     const hard = tells.length;
     let score = 1 + Math.min(6, hard * 2);
     const sentences = sentencesOf(t.text);
@@ -145,7 +148,8 @@ export function heuristicReview(texts, pack, facts = []) {
       score += 1;
       tells.push('long sentences');
     }
-    if (/^(?:הנה|האם ידעתם|ידעתם ש|בואו|היום נדבר)/.test(normHe(t.text))) {
+    // A template's opener is the account's own ("הנה האמת האמיתית על..."), not a stock one.
+    if (t.role !== 'template' && /^(?:הנה|האם ידעתם|ידעתם ש|בואו|היום נדבר)/.test(normHe(t.text))) {
       score += 2;
       tells.push('stock opening');
     }

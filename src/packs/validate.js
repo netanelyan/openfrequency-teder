@@ -7,6 +7,7 @@ import { ctasOf, hookPatterns, isKind, KINDS, MIX } from '../formats/kinds.js';
 import { overlayConfigProblems } from '../rules/overlay.js';
 import { resolveStyle, styleConfigProblems } from '../render/styles/tokens.js';
 import { MAX_HASHTAGS } from '../rules/caption.js';
+import { templateConfigProblems } from '../formats/hooks.js';
 import { FLOOR } from '../voice/tells.js';
 
 // What a pack must be, checked in code. Every problem is one line of English the
@@ -147,6 +148,8 @@ export function validatePack(pack) {
     // A post carries five hashtags at most (src/rules/caption.js), and the format's own come first.
     if (f.hashtags != null && !(Array.isArray(f.hashtags) && f.hashtags.length <= MAX_HASHTAGS && f.hashtags.every((t) => /^#[\p{L}\p{N}_]+$/u.test(t)))) p.push(`${where}: hashtags is a list of at most ${MAX_HASHTAGS} tags like #מילה`);
   }
+  // The cover's hook templates: the pack's own, the ones it turns off, its voice and its authorities (src/formats/hooks.js).
+  p.push(...templateConfigProblems(formats.hookTemplates));
   if (formats.mix != null) {
     const e = Number(formats.mix?.entertaining);
     if (!(e >= MIX.min && e <= MIX.max)) p.push(`formats.json: mix.entertaining must be between ${MIX.min} and ${MIX.max}`);

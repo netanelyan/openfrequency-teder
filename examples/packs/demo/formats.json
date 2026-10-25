@@ -329,6 +329,14 @@
       ]
     }
   ],
+  "hookTemplates": {
+    "speaker": "m",
+    "who": [
+      { "name": "המוכר במשתלה", "gender": "m" },
+      { "name": "סבתא", "gender": "f" }
+    ],
+    "disable": ["told-wrong"]
+  },
   "caption": {
     "questions": [
       "מה גדל אצלכם במרפסת?",

@@ -2,6 +2,7 @@ import { DAY, now } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { getSetting, setSetting } from '../core/store.js';
 import { groupOf, hookPatterns, MIX } from './kinds.js';
+import { TPL, templatesFor } from './hooks.js';
 
 // Which format the next post gets, and what the account's own numbers say about
 // each one.
@@ -22,6 +23,10 @@ import { groupOf, hookPatterns, MIX } from './kinds.js';
 //   - a dropped format of the pack's own rests 14 days and returns as a trial.
 //   - the cover pattern is chosen the same way inside a format: the less tried
 //     patterns get their turns, the rest by their results.
+//   - the cover templates (src/formats/hooks.js) are the engine's, not one
+//     format's, so their results are pooled over all the account's formats: the
+//     less tried get their turns, the rest by their results, and one whose last 3
+//     results all sat under 70% of the median rests 14 days, like a format.
 
 export const RULES = { provenShare: 0.7, dropAfter: 3, lossBelow: 0.7, minPosts: 3, keepProven: 2, restDays: 14, windowDays: 30 };
 
@@ -292,4 +297,71 @@ export function pickHook(db, accountId, format, { rand = Math.random, t = now(),
     if (x <= 0) return h;
   }
   return list[list.length - 1];
+}
+
+/**
+ * Each cover template's results over all the account's formats: { [template id]: { n, avg, last: [rel] } }, where
+ * avg is the mean score over its platform's median (1 = typical) and last the results in time order. A post that
+ * opened with a template stores "tpl:<id>" as its hook_pattern.
+ */
+export function templateStats(db, accountId, { t = now() } = {}) {
+  const rel = relative(rowsOf(db, accountId), { t });
+  const tplOf = new Map(db.all("SELECT id, hook_pattern FROM posts WHERE account_id = ? AND hook_pattern LIKE 'tpl:%'", accountId).map((r) => [r.id, r.hook_pattern.slice(TPL.length)]));
+  const out = {};
+  for (const r of Object.values(rel).flat().sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
+    const id = tplOf.get(r.post);
+    if (!id) continue;
+    const cell = (out[id] ??= { n: 0, sum: 0, last: [], lastAt: null });
+    cell.n++;
+    cell.sum += r.rel;
+    cell.last.push(r.rel);
+    cell.lastAt = r.at;
+  }
+  for (const c of Object.values(out)) c.avg = c.sum / c.n;
+  return out;
+}
+
+/** A template that keeps losing rests: its last `dropAfter` results all under `lossBelow`, the last within `restDays`. */
+export function resting(cell, { t = now(), ...opts } = {}) {
+  const R = { ...RULES, ...opts };
+  const last = (cell?.last || []).slice(-R.dropAfter);
+  return last.length === R.dropAfter && last.every((x) => x < R.lossBelow) && t - Date.parse(cell.lastAt) < R.restDays * DAY;
+}
+
+/**
+ * The cover templates to offer the writer for the next post of a format, best first: up to `n`, each of another
+ * mechanism where there are enough. As pickHook does for patterns: a template used fewer than `minTries` times gets
+ * its turn first (the least used), then one pick in three is the least used and the rest are weighted by results
+ * (clamped 0.5 to 2). A resting template is left out while anything else is there. `avoid`: a template id
+ * ("tpl:<id>" or "<id>") whose cover did not pull, left out with its whole mechanism. Returns templates.
+ */
+export function pickTemplates(db, pack, format, { rand = Math.random, t = now(), n = 3, minTries = 2, avoid = null } = {}) {
+  const avoidId = String(avoid || '').replace(/^tpl:/, '');
+  const all = templatesFor(pack, format);
+  const away = all.find((x) => x.id === avoidId)?.mechanism;
+  let list = all.filter((x) => x.id !== avoidId && x.mechanism !== away);
+  if (!list.length) return [];
+  const stats = templateStats(db, pack.id, { t });
+  const rested = list.filter((x) => !resting(stats[x.id], { t }));
+  if (rested.length) list = rested;
+  const used = new Map(db.all("SELECT hook_pattern AS h, COUNT(*) AS n FROM posts WHERE account_id = ? AND hook_pattern LIKE 'tpl:%' AND status NOT IN ('blocked') GROUP BY hook_pattern", pack.id).map((r) => [r.h.slice(TPL.length), r.n]));
+  const u = (x) => used.get(x.id) || 0;
+  const w = (x) => (stats[x.id] ? Math.min(2, Math.max(0.5, stats[x.id].avg)) : 1);
+  const out = [];
+  while (out.length < n) {
+    const left = list.filter((x) => !out.includes(x));
+    if (!left.length) break;
+    // Another mechanism first: three ways to open, not three wordings of one.
+    const fresh = left.filter((x) => !out.some((o) => o.mechanism === x.mechanism));
+    const pool = fresh.length ? fresh : left;
+    const least = pool.slice().sort((a, b) => u(a) - u(b))[0];
+    if (u(least) < minTries || rand() < 0.3) {
+      out.push(least);
+      continue;
+    }
+    const total = pool.reduce((s, x) => s + w(x), 0);
+    let r = rand() * total;
+    out.push(pool.find((x) => (r -= w(x)) <= 0) || pool[pool.length - 1]);
+  }
+  return out;
 }

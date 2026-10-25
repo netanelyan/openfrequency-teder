@@ -10,7 +10,8 @@ import { lastMonths, ledger, usage } from '../budget/quota.js';
 import { loadPost } from '../pipeline/build.js';
 import { photoChoices } from '../pipeline/light.js';
 import { israelDate, israelInstant, addDays } from '../schedule/israel.js';
-import { groupsOf, hookStats, mixOf, relative, postScore } from '../formats/rotation.js';
+import { groupsOf, hookStats, mixOf, relative, postScore, resting, templateStats } from '../formats/rotation.js';
+import { MECHANISMS, speakerOf, templatesFor, voiced } from '../formats/hooks.js';
 import { hookPatterns, kindOf } from '../formats/kinds.js';
 import { takedowns } from '../publish/takedown.js';
 import { engineMode } from '../engine.js';
@@ -182,6 +183,13 @@ export function results(ctx, t = now()) {
     const hooks = (pack.formats.formats || []).flatMap((f) =>
       hookPatterns(f).map((h) => ({ format: f.name, kind: kindOf(f).name, id: h.id, pattern: h.pattern, n: stats[f.id]?.[h.id]?.n || 0, avg: stats[f.id]?.[h.id]?.avg ?? null, used: ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND format_id = ? AND hook_pattern = ? AND status NOT IN ('blocked')", pack.id, f.id, h.id).n }))
     );
+    // The cover templates are the engine's, learned over every format of the account (src/formats/rotation.js).
+    const tstats = templateStats(ctx.db, pack.id, { t });
+    const tpls = [...new Map((pack.formats.formats || []).flatMap((f) => templatesFor(pack, f)).map((x) => [x.id, x])).values()];
+    for (const x of tpls) {
+      const used = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND hook_pattern = ? AND status NOT IN ('blocked')", pack.id, `tpl:${x.id}`).n;
+      hooks.push({ format: `תבנית שער: ${MECHANISMS[x.mechanism]?.he || x.mechanism}`, kind: '', id: `tpl:${x.id}`, pattern: voiced(x, speakerOf(pack)), n: tstats[x.id]?.n || 0, avg: tstats[x.id]?.avg ?? null, used, resting: resting(tstats[x.id], { t }), template: true });
+    }
     const groups = groupsOf(pack);
     const recent = ctx.db.all("SELECT format_id, grp FROM posts WHERE account_id = ? AND status IN ('published', 'approved', 'queued') ORDER BY created_at DESC LIMIT 30", pack.id);
     const ent = recent.filter((p) => (p.grp || groups[p.format_id]) === 'entertaining').length;
