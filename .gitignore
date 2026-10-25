@@ -41,3 +41,6 @@ node_modules/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# AI coding tools: settings and worktrees, local to this machine
+.claude/
