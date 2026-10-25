@@ -9,7 +9,8 @@ import { quotaMonth, room } from '../budget/quota.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
-import { ensureFormats, groupsOf, mixOf, pickFormat, pickHook } from '../formats/rotation.js';
+import { ensureFormats, groupsOf, mixOf, pickFormat, pickHook, pickTemplates } from '../formats/rotation.js';
+import { coverCredit, coverFrame, fillTemplate, hookProblems, isTemplateId, speakerOf, templateById, templateOnCover, whoGender } from '../formats/hooks.js';
 import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, structureNumbers } from '../formats/kinds.js';
 import { resolveFormat } from '../trends/index.js';
 import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
@@ -49,7 +50,10 @@ import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 // The format's kind (src/formats/kinds.js) is the post's shape: a story, a
 // head-to-head, a guess-who. The code picks the format (by the account's mix of
 // entertaining and number posts and by results), the cover pattern and the call
-// to action; the model writes inside that shape.
+// to action; the model writes inside that shape. The cover is written from one
+// of the hook templates the code offers, best first (src/formats/hooks.js), when
+// the post's facts can keep its promise, and after the format's pattern when
+// none can; the code fills the template, and the post is credited to it.
 //
 // Every step writes a row to `steps` as it happens, so any post can be traced
 // from a slide back to the fact, the quote, the stored document and the approved
@@ -236,10 +240,13 @@ export function mentionsDay(text, day) {
   return res.some((re) => re.test(s));
 }
 
-/** Every text of a post, labelled, for the checks. */
-export function textsOf({ hook, sub, slides, caption, captionShort }) {
+/**
+ * Every text of a post, labelled, for the checks. `frame`: the fixed words of the cover's hook template, when it
+ * has one (src/formats/hooks.js coverFrame): the voice check and the review read the cover knowing it.
+ */
+export function textsOf({ hook, sub, slides, caption, captionShort }, { frame = [] } = {}) {
   const out = [
-    { where: 'cover', kind: 'cover', text: hook },
+    { where: 'cover', kind: 'cover', text: hook, ...(frame.length ? { role: 'template', frame } : {}) },
     { where: 'cover line 2', kind: 'sub', text: sub },
   ];
   slides.forEach((s, i) => {
@@ -283,8 +290,12 @@ const LATIN = /[A-Za-z]/;
 export function checkPost(ctx, pack, draft, facts, format = null) {
   const problems = [];
   const f = format || { kind: 'list' };
-  for (const t of textsOf(draft)) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [], pack })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
+  // A cover written from a hook template: its frame is no teaser there, and its promise is checked below.
+  const frame = coverFrame(pack, f, draft);
+  for (const t of textsOf(draft, { frame })) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [], pack, frame: t.frame })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
   for (const x of checkRules({ pack, others: ctx.packs || [], texts: textsOf(draft) })) problems.push(x);
+  // The hook templates: on the cover only, from the template the draft declared, and paid off by the slides.
+  for (const x of hookProblems(pack, f, draft, facts)) problems.push(x);
   // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
   for (const x of overlayProblems(draft, pack)) problems.push(x);
   // The account's slide style (src/render/styles): every text fits it at the style's smallest size, and every
@@ -449,13 +460,22 @@ export function keepItems(format, items, good) {
  */
 export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, facts, closer = null, hook = null, cta = null, attempt = 0, style = null }) {
   const legacy = kindName(format) === 'list';
+  // A cover from a hook template is written by the code from the writer's slots, in the account's voice: the
+  // gendered forms are never the model's to get wrong. Any template this format may use is taken, offered or not.
+  const tpl = legacy ? null : templateById(pack, format, d.hookTemplate);
+  const slots = d.hookSlots || {};
+  const gender = tpl && slots.who ? whoGender(pack, slots.who, String(slots.whoGender || '')) : 'm';
+  const filled = tpl ? fillTemplate(tpl, slots, { speaker: speakerOf(pack), who: gender }) : null;
+  const fromTemplate = Boolean(filled && !filled.missing.length);
   const draft = {
     // The slide style the post is drawn in, when it is not the account's own (a style test): its texts must fit it.
     ...(style ? { style } : {}),
-    hook: String(d.hook || '').trim(),
+    hook: fromTemplate ? filled.text : String(d.hook || '').trim(),
     sub: String(d.sub || '').trim(),
-    // The code chose the pattern, so the results are credited to it whatever the answer says.
-    hookPattern: hook?.id || null,
+    // The code chose the pattern (or offered the templates), so the results are credited to what the cover is.
+    hookPattern: fromTemplate ? `tpl:${tpl.id}` : hook?.id || null,
+    hookFallback: hook?.id || null,
+    ...(fromTemplate ? { hookTemplate: { id: tpl.id, mechanism: tpl.mechanism, facts: (d.hookFacts || []).map(String), slots: Object.fromEntries(Object.entries(slots).filter(([, v]) => String(v || '').trim())), ...(slots.who ? { whoGender: gender } : {}) } } : {}),
     subject: { a: '', b: '', answer: '', date: '', ...(outline.subject || {}), ...Object.fromEntries(Object.entries(d.subject || {}).filter(([, v]) => String(v || '').trim())) },
     keywords: (d.keywords || []).map((k) => String(k).trim()).filter(Boolean).slice(0, 6),
     question: String(d.question || '').trim(),
@@ -776,6 +796,7 @@ export function postDraft(post) {
   const d = {
     hook: post.hook || '', sub: post.sub || '', caption: post.caption || '', captionShort: data.captionShort || '', question: data.question || '',
     subject: data.subject || {}, keywords: data.keywords || [], cta: data.cta || null, hookPattern: post.hook_pattern || '',
+    ...(data.hookTemplate ? { hookTemplate: data.hookTemplate } : {}),
     slides: post.slides.map((s) => ({
       kind: s.kind, role: s.role || (s.kind === 'item' ? 'item' : s.kind), title: s.title || '', body: s.body || '', a: s.data?.a || '', b: s.data?.b || '', factKeys: s.factKeys,
       ...(s.data?.visual !== undefined || s.data?.imageQuery !== undefined ? { visual: s.data?.visual || null, imageQuery: s.data?.imageQuery || '' } : {}),
@@ -1004,10 +1025,15 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const legacy = kindName(format) === 'list';
     const closer = legacy ? pickBy(format.closers, postId) : null;
     // A pattern and a call to action can be fixed in advance (the launch set does, so the text drafted for them and the post agree).
-    const fixedHook = hookId ? hookPatterns(format).find((h) => h.id === hookId) : null;
-    // Feedback that says the cover did not pull asks for another pattern than that post's.
+    // So can a cover template (the morning's feedback does, to keep or vary a cover that worked).
+    const fixedTemplate = isTemplateId(hookId) ? templateById(pack, format, hookId) : null;
+    const fixedHook = hookId && !fixedTemplate ? hookPatterns(format).find((h) => h.id === hookId) : null;
+    // Feedback that says the cover did not pull asks for another pattern than that post's, and another mechanism
+    // than its template's.
     const otherHooks = dv.avoidHook ? hookPatterns(format).filter((h) => h.id !== dv.avoidHook) : [];
     const hook = legacy ? null : fixedHook || (otherHooks.length ? pickBy(otherHooks, postId) : null) || pickHook(db, pack.id, format);
+    // The templates the writer may open with, best first; a fixed pattern takes none, a fixed template only itself.
+    const templates = legacy || fixedHook ? [] : fixedTemplate ? [fixedTemplate] : pickTemplates(db, pack, format, { avoid: dv.avoidHook || null });
     const ctas = ctasOf(pack, format);
     const lastCta = db.get("SELECT json_extract(data_json, '$.cta.text') AS t FROM posts WHERE account_id = ? AND data_json IS NOT NULL AND status NOT IN ('blocked') ORDER BY created_at DESC LIMIT 1", pack.id)?.t;
     const fixedCta = ctaText ? ctas.find((c) => c.text === ctaText) : null;
@@ -1022,7 +1048,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals), style: postStyle }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, templates, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals), style: postStyle }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
@@ -1061,7 +1087,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     }
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
-      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay|fit)$/.test(p.code) ? 2 : 3);
+      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay|fit|hook)$/.test(p.code) ? 2 : 3);
       const sorted = checked.problems.slice().sort((a, b) => rank(a) - rank(b));
       const kind = rank(sorted[0]) === 0 ? 'rules' : rank(sorted[0]) === 1 ? 'fact_check' : rank(sorted[0]) === 2 ? 'shape' : 'voice';
       return block(kind, `${sorted.slice(0, 3).map(say).join(' · ')}${repairs ? ` (${repairs === 1 ? 'אחרי תיקון אחד' : `אחרי ${repairs} תיקונים`})` : ''}`, { problems: sorted.map(say), checks: checksOf(sorted), repairs });
@@ -1073,7 +1099,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // it passes every check. A fact problem that is not fixed blocks the post:
     // the code gate proves every number is quoted, not that the sentence around
     // it is true to the quote.
-    const texts = textsOf(draft);
+    const texts = textsOf(draft, { frame: coverFrame(pack, format, draft) });
     // A slide's graphic is read too: its names and numbers must be in the facts. A graphic
     // the reviewer doubts is dropped, not rewritten: it is data, not a sentence.
     const shown = draft.slides.map((s, i) => (s.visual ? { where: `slide ${i} visual`, kind: 'visual', role: 'visual', text: visualText(s.visual), idx: i } : null)).filter(Boolean);
@@ -1235,8 +1261,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const status = sample ? 'sample' : 'queued';
     step(db, postId, 'queue', 'ok', { status, slot: slotAt });
     return finish(status, {
-      hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: draft.hookPattern,
-      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual },
+      // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
+      hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
+      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined },
       checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });

@@ -6,6 +6,7 @@ import { AD, BUREAUCRATIC, CALQUES, CONNECTIVES, FILLER, FORMAL, LIMITS, TEASER,
 import { focusText } from '../sources/text.js';
 import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
 import { VISUAL_SCHEMA, visualsOf, visualsPrompt } from '../render/visuals.js';
+import { SLOTS, SPEAKER_EN, speakerOf, templatesPrompt } from '../formats/hooks.js';
 
 // The drafting calls' prompts and schemas, built from the pack.
 //
@@ -88,6 +89,15 @@ export const SLIDES_SCHEMA = {
     hook: { type: 'string' },
     sub: { type: 'string' },
     hookPattern: { type: 'string' },
+    // A cover from a hook template (src/formats/hooks.js): its id, what fills its slots, and the facts it promises.
+    hookTemplate: { type: 'string' },
+    hookSlots: {
+      type: 'object',
+      properties: Object.fromEntries([...Object.keys(SLOTS), 'whoGender'].map((k) => [k, { type: 'string' }])),
+      required: [...Object.keys(SLOTS), 'whoGender'],
+      additionalProperties: false,
+    },
+    hookFacts: { type: 'array', items: { type: 'string' } },
     hookHighlight: { type: 'string' },
     subject: SUBJECT,
     slides: {
@@ -121,7 +131,7 @@ export const SLIDES_SCHEMA = {
     keywords: { type: 'array', items: { type: 'string' } },
     coverVisual: VISUAL_SCHEMA,
   },
-  required: ['hook', 'sub', 'hookPattern', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual'],
+  required: ['hook', 'sub', 'hookPattern', 'hookTemplate', 'hookSlots', 'hookFacts', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual'],
   additionalProperties: false,
 };
 
@@ -172,7 +182,7 @@ NEVER, because each one reads as an ad or a bot. When a draft has one, rewrite t
 - "פחות X, יותר Y", a triad of adjectives, two perfectly balanced sentences.
 - A one-word sentence for emphasis ("פשוט.", "זהו.", "נקודה.").
 - A colon in a heading, or a label before a sentence ("דעה לא פופולרית:", "עובדה:", "14 באוקטובר 2018: ..."): one sentence, or one question ("ב-14 באוקטובר 2018 מרפסת אחת שינתה עיר"). A score stays a score ("0:3").
-- A teaser that hides the point ("זה מה שקרה כש", "הנה למה", "והראשון מפתיע", "לא תאמינו", a hyphen before the payoff). A cover may ask a real question about a named subject; it never hides who or what the post is about.
+- A teaser that hides the point ("זה מה שקרה כש", "הנה למה", "והראשון מפתיע", "לא תאמינו", a hyphen before the payoff). A cover may ask a real question about a named subject; it never hides who or what the post is about. The one exception is a cover written from one of the account's COVER TEMPLATES, whose slides deliver what it holds back; a template's words are for the cover alone.
 - Big words with nothing behind them ("מהפכה", "אגדי", "משנה את כללי המשחק"), abstract nouns where a thing can be named ("חוויה", "פתרון", "פלטפורמה").
 - English translated word for word ("בסופו של יום", "עושה את ההבדל", "כשזה מגיע ל", "מה שהופך את") and the Hebrew of forms ("הננו", "בגין", "יש לציין").
 - Exclamation marks, long dashes (— or –), semicolons, an ellipsis, stacked question marks, more than one emoji on a slide.
@@ -270,6 +280,7 @@ ${visualsPrompt(pack)}
 - coverVisual: the cover's graphic when no photograph is used: the most striking number or match-up of the post, as one visual of the types above (a stat, a compare...), or type "none" to let the design draw the kind's own art. A date is the cover's graphic only on a post about that day (this day in history, a fight's date): a past date as the biggest thing on a cover reads as old news.
 `
 }
+${legacy ? '' : templatesPrompt(pack)}
 ${HEBREW}
 - Never claim to have tried, bought, used, visited or seen anything. The account explains; it does not have experiences.
 - Never mention another account, a follower count, views, a badge or "official".
@@ -313,7 +324,8 @@ const SLIDES_TASK = {
   text: `TASK: WRITE ONE POST'S TEXT.
 
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
-- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a real question or a concrete fact that only the slides explain ("איך ברצלונה הפכה 4:0 ל-6:1 בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). It names what the post is about, as one sentence or one question: no colon, no label, no teaser that hides the subject. Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
+- hookTemplate, hookSlots, hookFacts: when the request offers COVER TEMPLATES, the cover is written from the first of them, in the order given, whose promise this post's facts keep (COVER TEMPLATES above): its id, the words for its slots, the ids of the facts it promises. When none does, hookTemplate is "", every slot "" and hookFacts [], and the hook follows the cover pattern.
+- hook: the cover line. 3 to 11 words. From a template, it is the template with its slots filled (the code writes it again from hookSlots, in the account's voice). Otherwise after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a real question or a concrete fact that only the slides explain ("איך ברצלונה הפכה 4:0 ל-6:1 בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). It names what the post is about, as one sentence or one question: no colon, no label, no teaser that hides the subject. Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
 - sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request).
 - hookHighlight, and each slide's highlight: the one word or short phrase (up to 3 words) of the cover line, or of that slide's title, that the design marks in the account's colour: the number, the name or the word the line turns on, copied exactly as it is written there; or "" when nothing in it stands out. One a slide at most, never the whole line.
 - subject: as in the outline (you may shorten a name).
@@ -328,7 +340,7 @@ const REWRITE_TASK = {
   cache: '5m',
   text: `TASK: REWRITE FLAGGED TEXTS.
 
-A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: say it the way you would say it out loud to a friend, then write that down. A tell is in a sentence's shape as often as in a word, so rebuild the sentence around what it says; never swap one word for a synonym and keep the shape. Follow HEBREW THAT SOUNDS LIKE A PERSON, and keep the rhythm uneven: a rewritten slide does not end on a punch line because the others do. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. A TikTok caption ("caption") is a story in four lines, hook, problem, discovery and result: rewrite it as four lines again, one beat a line. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
+A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: say it the way you would say it out loud to a friend, then write that down. A tell is in a sentence's shape as often as in a word, so rebuild the sentence around what it says; never swap one word for a synonym and keep the shape. Follow HEBREW THAT SOUNDS LIKE A PERSON, and keep the rhythm uneven: a rewritten slide does not end on a punch line because the others do. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. A TikTok caption ("caption") is a story in four lines, hook, problem, discovery and result: rewrite it as four lines again, one beat a line. A cover written from a cover template keeps the template's own words: change only the words in its slots. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
 };
 
 const REPAIR_TASK = {
@@ -337,7 +349,7 @@ const REPAIR_TASK = {
 
 The code checks refused some texts of one post. The request gives each of those texts (its target), what it may use, and the checks' exact messages. Rewrite only those texts so that every message is answered, and keep the rest of each text: its point, its facts, the account's voice, the line breaks the LINES rule asks for. The other texts of the post are not yours to change.
 - A slide (target "slide N"): return title, body, a and b (a stat slide's two values, "" otherwise) and facts: the ids of the facts the slide states.
-- The cover ("cover"), the line under it ("cover line 2") and the Instagram caption ("caption short"): return the text in "text".
+- The cover ("cover"), the line under it ("cover line 2") and the Instagram caption ("caption short"): return the text in "text". A cover written from a cover template keeps the template's own words and changes only what fills its slots, or, when its promise cannot be kept, becomes a plain line with none of the template's words.
 - The TikTok caption ("caption"): "text" holds four lines, hook, problem, discovery and result, one a line, the closing question at the end of the last.
 - The keywords ("keywords"): "text", separated by commas, at least one in Hebrew and one in English letters.
 A NUMBER THE QUOTES DO NOT HOLD is repaired one of two ways, never a third: remove the number, or cite (in facts) a listed fact whose quote holds it. Never a new fact, a new source or a different number: the code refuses a repair that states a number its text did not, or that cites an id that is not listed.
@@ -480,7 +492,7 @@ function redoLine(steer, was) {
   return `${head} and asked for it again with a change.${said} Keep the facts; change what they asked for, and nothing they did not.`;
 }
 
-export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null, niche = '', style = null }) {
+export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, templates = [], cta = null, day = null, pack = null, steer = null, niche = '', style = null }) {
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
@@ -491,7 +503,9 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     // ordered wrong when one place wrote "8,200" over "מיליון דולר" and the next "25 מיליון".
     kindName(format) === 'ranking' ? rankRules(pack) : '',
     day ? `TODAY: ${day}.` : '',
-    hook ? `COVER PATTERN: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
+    // The templates first, the format's pattern for a post no template fits (src/formats/hooks.js).
+    templates.length ? `COVER TEMPLATES FOR THIS POST, best first: ${templates.map((t) => `[${t.id}]`).join(', ')}. The cover is written from the first whose promise these facts keep, speaking ${SPEAKER_EN[speakerOf(pack)]}; "" when none does.` : '',
+    hook ? `COVER PATTERN${templates.length ? ' (when no template fits)' : ''}: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
     end && !legacy ? 'The design adds a closing slide that asks them to follow the account: no slide asks to save, send, follow or comment.' : cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
     body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',

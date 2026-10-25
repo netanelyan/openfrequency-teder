@@ -1596,3 +1596,63 @@ engine can act on, and what changed:
     things built in the service. For the catalogue that is now simply true of the demo
     itself, and the page says so: the demo was made from the products on the store's
     own site, and a store on Shopify, WooCommerce or Wix is read by Teder on its own.
+
+- **The cover is written from hook templates (2026-10-25, the owner's call: "first slide
+  hooks templates").** The owner brought a Hebrew carousel, "הוקים שהעלו את העוקבים
+  ל-10k שאני עדיין חורשת עליהם", whose slides are first-slide lines that work: "במקרה
+  שאף אחד עדיין לא סיפר לך", "הלוואי וידעתי קודם ש", "הנה האמת האמיתית על", "תנו לי
+  לחסוך לכם זמן". They are now an engine-level library (`src/formats/hooks.js`), ten
+  templates in four mechanisms (the secret nobody told you, I wish you had known, the
+  real truth, I'll save you time), each a line with slots ({topic}, {fact}, {who}, {x},
+  {thing}, {moment}, {skill}) and the account's gendered forms.
+  - *Templates first, the pattern behind them.* A format's own cover patterns were the
+    only source, one picked by the code. Templates could have replaced them, or been one
+    more pattern in each format. They are offered first instead, up to three a post, each
+    of another mechanism, and the writer takes the first whose promise the post's facts
+    can keep; the format's pattern stays for the post no template fits (a guess-who
+    always, a story whose twist a fact on the cover would give away). A template is a
+    way to open any post, so it is not copied into every format, and a pack that has
+    written good patterns keeps them.
+  - *The code writes the line.* The writer returns the template's id, the words for its
+    slots and the facts it promises (`hookTemplate`, `hookSlots`, `hookFacts`); the code
+    fills the template in the account's voice (formats.json `hookTemplates.speaker`:
+    חוסך, חוסכת or חוסכים, אני עומדת or אנחנו עומדים, plural by default) and makes the
+    verb agree with {who} (המאמן לא אמר, המאפרת לא אמרה), from the pack's list of the
+    niche's authorities or the writer's word for one it names itself. A model gets a
+    gender wrong now and then; a lookup does not.
+  - *Plural, and no invented experience.* The owner's lines speak to "you" in the
+    singular ("לך", "אותך"), and every post addresses its audience in the plural, so the
+    library says "לכם". "הלוואי וידעתי קודם" and "הלוואי והייתם מגלים את זה לפניי" say the
+    account once did not know, or found it first: an experience an engine never had (hard
+    rule 3). The wish is said to the reader instead ("הלוואי שהייתם יודעים את זה לפני
+    שקניתם"), or as a wish ("החלום שלי שכולם ידעו ש"), and `src/voice/honesty.js` now
+    refuses "ידעתי" and "ידענו" like "גיליתי"; a pack's own template that claims one is
+    refused by validation.
+  - *A teaser, on the cover only, and only when it is paid off.* The voice rules refuse
+    a line that holds the point back, and these lines do exactly that. The exception is
+    narrow and checked in code (`hookProblems`): the cover must have been written from
+    the template (declared, for a kind the template lists); every fact it promises is
+    verified and stated on a slide; every number on the cover is in those facts' quotes
+    (stricter than the fact gate, which still holds it to every quote of the post), and
+    an {x} is such a number, never "הרבה זמן"; the words in {topic}, {skill} and {thing}
+    are what the slides are about, and a {fact} is what the promised facts say. The
+    teaser checks read the template's fixed words as the account's own on that cover
+    alone (`tellsIn`'s `frame`), and the words in its slots are checked as always. The
+    same frame on a slide, under the cover, in a caption, or on a cover that did not
+    declare it is refused. A rewrite or a repair keeps the template's words and changes
+    only its slots; one that drops them makes a plain cover, credited to the format's
+    pattern. The owner's edit is checked the same way.
+  - *Learning.* A post stores `tpl:<id>` as its `hook_pattern`, so the 72-hour results,
+    the Results page and the morning's feedback credit the template. Its results are
+    pooled over the account's formats (a template is not one format's), each template
+    gets two turns, then one offer in three goes to the least used and the rest follow
+    the results, clamped 0.5 to 2, as the patterns do; one whose last three results all
+    sat under 70% of the median rests 14 days, as a format does. The feedback's three
+    variations of a winner try its mechanism's other templates first; a cover kept for a
+    new call to action keeps its template; a cover that did not pull is not tried again,
+    and neither is its mechanism.
+  - *What a pack configures, without code.* `hookTemplates` in formats.json: `speaker`,
+    `who` (the niche's authorities and their gender), `disable` (template ids or whole
+    mechanisms), `add` (its own templates, in the same syntax, validated for their slots,
+    the plural, and no invented experience) and `off`. The demo speaks in the masculine,
+    names "המוכר במשתלה" and "סבתא", and turns off "told-wrong".

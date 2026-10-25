@@ -2,6 +2,7 @@
   "formats": [
     { "id": "explainer", "name": "הסבר", "about": "One idea explained in a few steps, a fact per slide.", "weight": 2, "items": [3, 5], "hooks": ["{n} דברים שכדאי להכיר על {x}"], "closers": [{ "title": "שמרו את זה", "body": "ותשלחו למי שזה רלוונטי בשבילו" }] }
   ],
+  "hookTemplates": { "speaker": "p", "who": [{ "name": "המאמן", "gender": "m" }], "disable": [], "add": [] },
   "caption": { "questions": ["מה עוד הייתם רוצים לדעת על זה?"] },
   "hashtags": { "broad": ["#טיפים"], "niche": ["#נושא", "#עוד_נושא"] },
   "trends": { "queries": { "he": [], "en": [] }, "minViews": { "he": 1000, "en": 20000 } }

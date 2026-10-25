@@ -681,8 +681,9 @@ ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="
 ${l.hooks.some((h) => h.used) ? `<table class="table stack"><thead><tr><th>תבנית שער</th><th>פורמט</th><th>שימושים</th><th>ממוצע מול החציון</th></tr></thead><tbody>${l.hooks
   .filter((h) => h.used)
   .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
-  .map((h) => `<tr><td data-k="">${esc(h.pattern)}</td><td data-k="פורמט">${esc(h.format)}</td><td class="n" data-k="שימושים">${h.used}</td><td class="n" data-k="ממוצע">${h.avg != null ? `${h.avg.toFixed(2)}× (${h.n})` : 'אין עוד מספרים'}</td></tr>`)
-  .join('')}</tbody></table>` : '<p class="muted small">אין עדיין פוסטים לפי תבניות השער: כל תבנית מקבלת קודם שני תורות, ואז נבחרת לפי התוצאות.</p>'}</section>`).join('')}
+  .map((h) => `<tr><td data-k="">${esc(h.pattern)}${h.resting ? ' <span class="chip warn">במנוחה</span>' : ''}</td><td data-k="פורמט">${esc(h.format)}</td><td class="n" data-k="שימושים">${h.used}</td><td class="n" data-k="ממוצע">${h.avg != null ? `${h.avg.toFixed(2)}× (${h.n})` : 'אין עוד מספרים'}</td></tr>`)
+  .join('')}</tbody></table>` : '<p class="muted small">אין עדיין פוסטים לפי תבניות השער: כל תבנית מקבלת קודם שני תורות, ואז נבחרת לפי התוצאות.</p>'}
+${l.hooks.some((h) => h.template) ? '<p class="muted small">תבניות השער, כמו "הנה האמת האמיתית על" או "במקרה שהמאמן שלכם לא אמר לכם", נלמדות מכל הפורמטים של החשבון יחד. תבנית ששלוש התוצאות האחרונות שלה מתחת ל-70% מהחציון נחה 14 יום.</p>' : ''}</section>`).join('')}
 <section class="panel"><header><h2>מה נושר ולמה</h2></header>${dropped.length ? `<ul class="factlist">${dropped.map((r) => `<li>${accDot(r.pack.id)} <b>${esc(r.name)}</b> ${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : '<span class="chip warn">בסכנה</span>'}<div class="muted small">${esc(r.dropped_why || 'שתי התוצאות האחרונות מתחת ל-70% מהחציון: עוד אחת והוא נושר')}</div></li>`).join('')}</ul>` : '<p class="muted">אף פורמט לא נשר ואף אחד לא בסכנה.</p>'}</section>
 ${d.formats
   .map(

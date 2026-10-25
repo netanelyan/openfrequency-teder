@@ -2,6 +2,7 @@ import { DAY, HOUR, now, nowIso } from '../core/clock.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
 import { j } from '../db/index.js';
 import { hookPatterns } from '../formats/kinds.js';
+import { TPL, isTemplateId, templatesFor } from '../formats/hooks.js';
 import { israelDate } from '../schedule/israel.js';
 import { resolveFormat } from '../trends/index.js';
 import { collectMetrics } from './collect.js';
@@ -30,6 +31,11 @@ import { chooseStyle } from '../render/style.js';
 //   lh  low views, high conversions     keep the call to action, try a
 //                                       radically different hook and first slide
 //   ll  low views, low conversions      a new format or angle
+//
+// A cover is a format's pattern or one of the hook templates (src/formats/hooks.js,
+// "tpl:<id>"): a variation of a template's winner tries its mechanism's other
+// templates first, then the rest; keeping a cover keeps its template; a cover
+// that did not pull is not tried again, and neither is its template's mechanism.
 //
 // A plan is a directive: a row the runner hands to the next free slot of the
 // account (src/autonomy/runner.js), and buildPost follows (its format, hook,
@@ -147,7 +153,7 @@ export function plansFor(db, pack, entry) {
   const steer = { hook: post.hook, topic: post.topic };
   switch (entry.box) {
     case 'hh': {
-      const others = hookPatterns(format).filter((h) => h.id !== post.hook_pattern);
+      const others = coverOptions(pack, format, post.hook_pattern);
       const docKey = docKeyOf(db, post.id);
       return Array.from({ length: FEEDBACK.variations }, (_, k) => ({
         formatKey: post.format_id, docKey, reuseDocs: true, hookId: others.length ? others[k % others.length].id : null,
@@ -161,6 +167,20 @@ export function plansFor(db, pack, entry) {
     default:
       return [{ avoidFormats: [post.format_id], steer: { kind: 'new-angle', ...steer, format: format?.name || post.format_id } }];
   }
+}
+
+/**
+ * The covers a variation of a winner can take, in the order it tries them, never the winner's own: after a template,
+ * the other templates of its mechanism, then the format's patterns, then the other templates; after a pattern, the
+ * format's other patterns, then the templates.
+ */
+export function coverOptions(pack, format, won) {
+  const tpls = templatesFor(pack, format);
+  const mech = isTemplateId(won) ? tpls.find((t) => `${TPL}${t.id}` === won)?.mechanism : null;
+  const ids = (list) => list.map((t) => `${TPL}${t.id}`);
+  const patterns = hookPatterns(format).map((h) => h.id);
+  const order = mech ? [...ids(tpls.filter((t) => t.mechanism === mech)), ...patterns, ...ids(tpls.filter((t) => t.mechanism !== mech))] : [...patterns, ...ids(tpls)];
+  return order.filter((id) => id !== won).map((id) => ({ id }));
 }
 
 /** The report in a sentence, in Hebrew, for the summary and the audit log. */

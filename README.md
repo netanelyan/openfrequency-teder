@@ -55,7 +55,8 @@ Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
   everyday words, a long sentence beside a short one, and a read-aloud pass before it
   answers. Code refuses what is always ad copy or machine text ("זה לא X, זה Y",
   "בלי X ובלי Y", fragments in a row, a colon in a heading, teasers, form and translated
-  Hebrew, stock phrases, long dashes, lists of four). What is only usually a tell
+  Hebrew, stock phrases, long dashes, lists of four). The one teaser it lets through is a
+  cover written from a proven hook template, and only when the slides keep its promise. What is only usually a tell
   ("לא X אלא Y", "כ-80", a passive "על ידי"), and what shows only across a post (every
   sentence the same length, every slide ending on a punch line, one word everywhere),
   goes to the reviewer as a hint beside the line. The reviewer scores each line, and
@@ -100,8 +101,11 @@ format (by the mix and results)
   -> documents from the format's approved sources (the topic bank first)
   -> outline: the angle, the facts with their quotes, the articles to read next
   -> research: those articles read, the details a fan would want, each verified
-  -> slides, captions and graphics, in the account's voice
-  -> checks in code: voice, honesty, the kind's shape, lengths, the fact gate
+  -> the cover from a hook template the code offers, best first (or the format's
+     pattern when none fits the facts); slides, captions and graphics, in the
+     account's voice
+  -> checks in code: voice, honesty, the kind's shape, lengths, the fact gate, the
+     cover's promise kept by the slides
   -> one redraft if needed -> review -> rewrite of the flagged lines only
   -> photographs, screened and checked against their slides -> render
   -> approval (by the account's mode) -> publish at the slot -> numbers at 72h -> learn
@@ -143,6 +147,50 @@ instead (`writing` in `pack.json`), and still gets the four lines. No caption ho
 hashtag: the engine adds the post's own, five at most, and the publisher refuses a
 caption with more.
 
+**The cover.** The first slide is written from a library of hook templates, lines that
+already took an account to 10k followers, filled for the post in hand
+(`src/formats/hooks.js`). They come in four mechanisms:
+
+| Mechanism | Templates (the account speaking in the feminine) |
+|---|---|
+| the secret nobody told you | "במקרה שאף אחד עוד לא סיפר לכם, {fact}", "במקרה ש{who} שלכם לא אמר/אמרה לכם, {fact}", "במקרה ש{who} שלכם לא לימד/לימדה אתכם {skill}" |
+| I wish you had known | "הלוואי שהייתם יודעים את זה לפני {moment}", "החלום שלי שכולם ידעו ש{fact}" |
+| the real truth | "הנה האמת האמיתית על {topic}", "האמת היא שמה שסיפרו לכם על {topic} לא נכון", "אני עומדת לחשוף את האמת על {topic}" |
+| I'll save you time | "תנו לי לחסוך לכם זמן עם {topic}", "חוסכת לכם {x} רק בזכות {thing}" |
+
+The code offers the writer up to three for each post, each of another mechanism, best
+first; the writer picks the first whose promise the facts keep and fills its slots
+({who} is an authority of the niche: המאמן, הסוכן, השופט), and the code writes the line
+in the account's voice: חוסך, חוסכת or חוסכים, עומד or עומדת, and the verb agreeing with
+{who}. When no template fits, the cover follows the format's own pattern, as before. The
+audience is addressed in the plural ("לכם", never "לך"), and "הלוואי וידעתי קודם" is not
+in the library: it says the account once did not know, an experience it never had.
+
+A template holds the point back, so it is allowed on the cover only, and only when the
+post pays it off: the writer names the facts the cover promises, each one verified and
+stated on a slide; every number on the cover is in their quotes ("חוסכת לכם 3 שעות"
+needs a quote that says 3 hours); what a slot promises ("האמת על השקיה") is what the
+slides are about; and the kind allows it (a fact on the cover would give a story's twist
+or a ranking's number one away, and no template fits a guess-who). The same words on a
+slide, under the cover, in a caption or on a cover that did not declare them are refused
+like any teaser. A pack configures it in `formats.json` without code:
+
+```json
+"hookTemplates": {
+  "speaker": "f",
+  "who": [{ "name": "המאמן", "gender": "m" }, { "name": "המאפרת", "gender": "f" }],
+  "disable": ["told-wrong", "save"],
+  "add": [{ "id": "coach-secret", "mechanism": "secret", "text": "מה ש{who} לא {w:אמר|אמרה|אמרו} לכם על {topic}", "kinds": ["myth-fact"] }]
+}
+```
+
+`speaker` is `m`, `f` or `p` (plural, the default); `who` names the niche's authorities
+and their gender; `disable` takes template ids or whole mechanisms; `add` writes new ones
+with the slots `{topic}`, `{fact}`, `{who}`, `{x}`, `{thing}`, `{moment}` and `{skill}`,
+the account's forms as `{s:m|f|p}` and {who}'s as `{w:m|f|p}` (validation refuses an
+unknown slot, the singular "you", and an invented experience); `"off": true` turns the
+library off.
+
 **Pictures.** The engine draws its graphics from data the model writes on a slide: a
 timeline, stat bars, a head-to-head card, one big number, a calendar page, a pitch
 with players, a fight record, a weight-class ladder, price cards, a mock screen, the
@@ -180,7 +228,7 @@ and edit its files.
 | `voice.md` | who is talking, to whom, how it sounds, with `## שורות טובות` and `## שורות רעות` |
 | `theme.json` | a template and variant from the engine's library, colours, fonts, the graphics it draws (`visuals`), whether slides sit on a blurred photograph and the scenes searched for it (`backgroundQueries`) |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, why it is trusted, what its terms allow, when it was approved. A source taken out of the file is no longer read |
-| `formats.json` | the account's formats, each of one kind, with a name, weight, angle (`about`), the sources it draws from, cover patterns and calls to action; the mix of entertaining formats; caption questions, hashtags, trend queries |
+| `formats.json` | the account's formats, each of one kind, with a name, weight, angle (`about`), the sources it draws from, cover patterns and calls to action; the mix of entertaining formats; the cover's hook templates (`hookTemplates`: who the account speaks as, the niche's authorities, templates turned off or added, [The cover](#kinds-of-post)); caption questions, hashtags, trend queries |
 | `topics.json` (optional) | the topic bank: chosen topics, each with its kind (or one `format` of that kind), its angle, and the pages that document it, drafted from exactly those pages |
 | `rules.json` | banned phrases, regex checks, words that refuse an image search, the longest quote |
 | `photos/`, `facts/` (optional) | photos the owner cleared for the account, and hand-checked facts with the day they expire |
@@ -242,15 +290,25 @@ keeps 70% of posts on proven formats and 30% on trials, drops a format after thr
 weak results in a row, favours the cover patterns that work, and once a week looks at
 formats that do well on YouTube Shorts, copying the format, never the content.
 
+A post that opened with a hook template is credited to it (`tpl:<id>` in its
+`hook_pattern`), and its results are pooled over all the account's formats, since a
+template is the engine's and not one format's. Each template gets two turns, then one
+offer in three goes to the least used and the rest follow the results (clamped 0.5 to
+2), and one whose last three results all sat under 70% of the median rests 14 days, as a
+format does. Results lists the templates beside the format patterns, with their uses and
+their average against the median.
+
 **The morning's feedback.** Each morning before anything is drafted (`feedbackAt`,
 06:30), the last three days' posts are read again and each one goes in a box:
 views against the account's own median, read at the same age, by what it led
 people to do per view (taps on the bio link where Instagram reports them for every
 post compared, otherwise likes, comments, shares and saves; never messages).
-High and high: three variations of the cover, from the same story. High views, low
-action: the same cover pattern, another call to action and caption. Low views, high
-action: the same call to action, a radically different cover and first slide. Low
-and low: another format or angle. Each answer becomes a plan the day's first free
+High and high: three variations of the cover, from the same story (after a template,
+its mechanism's other templates first, then the format's patterns and the rest). High
+views, low action: the same cover pattern or template, another call to action and
+caption. Low views, high action: the same call to action, a radically different cover
+and first slide (never that template's mechanism again). Low and low: another format or
+angle. Each answer becomes a plan the day's first free
 slots take, and the writer is told why. Results shows the report and what became of
 each plan (`src/metrics/feedback.js`).
 
@@ -509,7 +567,7 @@ src/render      fonts, templates and their variants, the graphics, Chromium
 src/pipeline    one post from topic to queue, the rivals typed in by hand; export to disk
 src/publish     dry, Zernio (TikTok), Instagram, takedowns
 src/metrics     reading numbers, crediting formats, the morning's feedback
-src/formats     the kinds of post, rotation, the mix, cover patterns
+src/formats     the kinds of post, rotation, the mix, cover patterns, the cover's hook templates
 src/trends      formats that work on YouTube Shorts
 src/autonomy    the runner and its rails
 src/onboarding  source discovery, the API catalogue, writing a new pack

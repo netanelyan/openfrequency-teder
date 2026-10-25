@@ -50,7 +50,9 @@ export const AD = group('ad copy', [
   'הצוות שלנו', 'אנחנו כאן בשבילכם', 'אנחנו כאן כדי',
 ]);
 
-// A twist kept back to make them read on: the slides answer a question, they do not hide the subject.
+// A twist kept back to make them read on: the slides answer a question, they do not hide the subject. The one
+// exception is a cover written from a hook template (src/formats/hooks.js), whose promise the slides were checked
+// to keep: its fixed words are passed in as `frame` and are not read as a teaser; the words in its slots still are.
 export const TEASER = group('a teaser that withholds the point', [
   'לא תאמינו', 'והנה הקטע', 'הנה הקטע', 'הנה הסיבה', 'הנה למה', 'לא מה שאתם חושבים', 'משהו גדול בדרך', 'תתפלאו', 'התשובה תפתיע',
   'הראשון מפתיע', 'המקום הראשון מפתיע', 'זה סיפור אמיתי', 'שאף אחד לא אומר לכם', 'שאף אחד לא מספר לכם', 'תראו מה קרה', 'ואז קרה משהו',
@@ -193,6 +195,8 @@ export const FLOOR = { captionLong: { sentences: 5, maxChars: 160 } };
  * Every tell in one text, as { code, msg }. Empty means it reads like a person.
  * kind: 'cover' | 'sub' | 'slideTitle' | 'slideBody' | 'slideLines' | 'caption' | 'captionLong' | 'captionShort'
  * extra: the pack's own banned phrases (rules.json bannedPhrases)
+ * frame: on a cover written from a hook template, the template's fixed words (src/formats/hooks.js coverFrame),
+ *   which the teaser checks let through. Ignored on any other kind of text.
  */
 const ON_SLIDE = new Set(['cover', 'sub', 'slideTitle', 'slideBody']);
 // The texts a reader takes as a heading: no colon in them, and no payoff held back.
@@ -208,7 +212,10 @@ export const ownWords = (text) => String(text || '').replace(QUOTED, ' ').replac
 /** Words a reader counts in a sentence: a number is one, a dash on its own is none. */
 const wordCount = (s) => String(s || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 
-export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = {}) {
+// The checks a cover template's frame is let through (tellsIn, frame).
+const TEASERS = new Set([...TEASER, ...HEADLINE_TEASER, ...GLUED.filter((t) => /teaser/.test(t.label))]);
+
+export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null, frame = [] } = {}) {
   const out = [];
   const add = (code, msg) => out.push({ code, msg });
   const raw = String(text || '').trim();
@@ -222,7 +229,9 @@ export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = 
   // voice's own structures are checked on the rest.
   const own = ownWords(raw);
   const ownNorm = normHe(own);
-  for (const t of [...BUREAUCRATIC, ...AD, ...TEASER, ...BOT, ...CALQUES, ...GLUED, ...(headline ? HEADLINE_TEASER : [])]) if (t.re.test(ownNorm)) add('phrase', `${t.label}: "${t.p}"`);
+  // A template's frame is held back on purpose, and only on the cover: its own words are not a teaser there.
+  const teaserNorm = kind === 'cover' && frame.length ? frame.reduce((t, f) => t.replace(normHe(f), ' '), ownNorm).replace(/\s+/g, ' ').trim() : ownNorm;
+  for (const t of [...BUREAUCRATIC, ...AD, ...TEASER, ...BOT, ...CALQUES, ...GLUED, ...(headline ? HEADLINE_TEASER : [])]) if (t.re.test(TEASERS.has(t) ? teaserNorm : ownNorm)) add('phrase', `${t.label}: "${t.p}"`);
   for (const p of extra) if (phrase(p).test(norm)) add('banned', `banned by the pack: "${p}"`);
 
   // The structures are rewritten as a sentence, never patched by swapping a word.
