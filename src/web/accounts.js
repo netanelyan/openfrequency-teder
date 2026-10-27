@@ -34,7 +34,7 @@ export function sessionIdFrom(jar, { https }) {
   return /^[A-Za-z0-9_-]{16,256}$/.test(String(v || '')) ? v : null;
 }
 
-/** Where the browser goes: the login (with where it was going), the sign-out page, the operator's console. */
+/** Where the browser goes: the login (with where it was going), the sign-out page, the operator's console, the setup page. */
 export function accountsLinks(env = process.env) {
   const base = String(env.OF_ACCOUNTS_URL || 'https://accounts.openfrequency.co.il').trim().replace(/\/+$/, '');
   return {
@@ -42,6 +42,8 @@ export function accountsLinks(env = process.env) {
     login: (next) => `${base}/login?next=${encodeURIComponent(next)}`,
     logout: `${base}/logout`,
     admin: `${base}/admin`,
+    // Where a customer pays for Teder and sets it up: the paywall's button.
+    setup: `${base}/setup`,
   };
 }
 

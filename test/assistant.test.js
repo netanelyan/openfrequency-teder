@@ -14,7 +14,7 @@ import { israelInstant } from '../src/schedule/israel.js';
 import { DIR, signature, verify, mediaLink } from '../src/assistant/sign.js';
 import { prefsOf, setPrefs } from '../src/assistant/data.js';
 import { assistantTick, deliver, detect, quietUntil, UNPOSTED_MIN } from '../src/assistant/events.js';
-import { fakeAccounts, opened, tempHome } from './helpers.js';
+import { fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // The WhatsApp assistant's door (src/assistant): signed requests and nothing else, each once; one customer never
 // reaches another's posts; the quota and the redos counted as the website counts them; and the events, found once,
@@ -53,6 +53,8 @@ before(async () => {
   ctx.mediaRoot = home.home;
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'alpha'");
   db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'bravo'");
+  // Both customers have paid (src/billing/entitlement.js): the assistant's approvals reach the engine.
+  paidWorkspaces(db, [1, 2]);
   A.post = (await buildPost(ctx, { pack: ctx.pack('alpha'), formatKey: 'care-guide' })).postId;
   B.post = (await buildPost(ctx, { pack: ctx.pack('bravo'), formatKey: 'care-guide' })).postId;
   assert.equal(loadPost(db, A.post).status, 'queued');

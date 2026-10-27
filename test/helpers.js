@@ -100,15 +100,59 @@ export const INTERNAL_TOKEN = 'test-internal-token-000000000000000000000';
  */
 export async function fakeAccounts() {
   const answers = new Map();
-  const state = { calls: 0, last: null };
-  const server = http.createServer((req, res) => {
-    state.calls++;
+  // GET /internal/entitlement: each workspace paid unless told otherwise. POST /internal/notify: every email kept.
+  const entitlements = new Map();
+  const notified = [];
+  const state = { calls: 0, last: null, entitlementCalls: 0, notifyStatus: 202, sentOf: {} };
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://internal');
-    state.last = { path: url.pathname, product: url.searchParams.get('product'), auth: req.headers.authorization, session: req.headers['x-of-session'] };
     const out = (status, body) => {
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
       res.end(JSON.stringify(body));
     };
+    if (url.pathname === '/internal/entitlement') {
+      state.entitlementCalls++;
+      if (req.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`) return out(401, { error: 'bad_token' });
+      const ws = Number(url.searchParams.get('workspace'));
+      const a = entitlements.get(ws) ?? 'paid';
+      if (typeof a === 'function') return a(req, res);
+      if (a && typeof a === 'object' && a.status) return out(a.status, a.body);
+      const access = typeof a === 'string' ? a : a.access || 'paid';
+      // As accounts answers: paidThrough the last millisecond of an Israel day, in UTC.
+      const paid = ['paid', 'comp'].includes(access);
+      return out(200, { workspace: ws, product: url.searchParams.get('product'), enabled: access !== 'off', access, allowed: paid, paidThrough: paid ? '2026-11-30T21:59:59.999Z' : null, cancelAt: null, ...(typeof a === 'object' ? a : {}) });
+    }
+    if (url.pathname === '/internal/notify') {
+      if (req.method !== 'POST') return out(405, { error: 'method' });
+      if (req.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`) return out(401, { error: 'bad_token' });
+      const chunks = [];
+      for await (const ch of req) chunks.push(ch);
+      if (state.notifyStatus >= 300) return out(state.notifyStatus, { error: 'down' });
+      const raw = Buffer.concat(chunks);
+      if (raw.length > 256 * 1024) return out(413, { error: 'too_large' });
+      const b = JSON.parse(raw.toString('utf8'));
+      // The checks accounts makes, a code per bad field.
+      if (typeof b.workspace !== 'number') return out(400, { error: 'bad_workspace' });
+      if (!['posts_waiting', 'weekly', 'monthly', 'connect_needed', 'publish_failed'].includes(b.kind)) return out(400, { error: 'bad_kind' });
+      if (typeof b.subject !== 'string' || !b.subject || b.subject.length > 200) return out(400, { error: 'bad_subject' });
+      if (typeof b.text !== 'string' || !b.text || b.text.length > 5000) return out(400, { error: 'bad_text' });
+      let link;
+      try {
+        link = new URL(b.link);
+      } catch {
+        return out(400, { error: 'bad_link' });
+      }
+      if (link.protocol !== 'https:' || link.port || !/^([a-z0-9-]+\.)*openfrequency\.co\.il$/.test(link.hostname)) return out(400, { error: 'bad_link' });
+      // Three of a kind per workspace and product in a rolling day.
+      const k = `${b.workspace}:${b.product}:${b.kind}`;
+      const n = (state.sentOf[k] || 0) + 1;
+      if (n > 3) return out(429, { error: 'rate_limited' });
+      state.sentOf[k] = n;
+      notified.push(b);
+      return out(202, { ok: true, sent: 1 });
+    }
+    state.calls++;
+    state.last = { path: url.pathname, product: url.searchParams.get('product'), auth: req.headers.authorization, session: req.headers['x-of-session'] };
     if (url.pathname !== '/internal/session') return out(404, { error: 'not_found' });
     if (req.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`) return out(401, { error: 'bad_token' });
     const a = answers.get(req.headers['x-of-session']);
@@ -139,8 +183,36 @@ export async function fakeAccounts() {
       if (answer == null) answers.delete(sid);
       else answers.set(sid, answer);
     },
+    /** What /internal/entitlement answers for a workspace: an access ('paid', 'unpaid', ...), a body to merge, { status, body }, or a handler. */
+    entitlement(workspaceId, answer) {
+      if (answer == null) entitlements.delete(workspaceId);
+      else entitlements.set(workspaceId, answer);
+    },
+    get entitlementCalls() {
+      return state.entitlementCalls;
+    },
+    /** The emails accounts was asked to send, in order. */
+    notified,
+    /** What /internal/notify answers from now on (a 5xx: accounts is down). */
+    notifyStatus(status) {
+      state.notifyStatus = status;
+    },
+    /** Forget the emails sent and the day's limits (a new day, as far as the fake knows). */
+    resetNotify() {
+      notified.length = 0;
+      state.sentOf = {};
+      state.notifyStatus = 202;
+    },
     close: () => new Promise((resolve) => server.close(resolve)),
   };
+}
+
+/**
+ * Mark workspaces paid in the database, as the entitlement client keeps accounts' answer (src/billing/entitlement.js):
+ * for a test that runs the engine for a workspace's accounts without a website request having asked first.
+ */
+export function paidWorkspaces(db, ids, { at = new Date().toISOString() } = {}) {
+  for (const ws of ids) db.run('INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)', `entitlement:${ws}`, JSON.stringify({ allowed: true, access: 'paid', paidThrough: null, cancelAt: null, checkedAt: at }), at);
 }
 
 const LATER = '2099-01-01T00:00:00.000Z';

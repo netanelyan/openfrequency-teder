@@ -1,11 +1,11 @@
-import { getJson, postJson } from '../core/net.js';
+import { deleteJson, getJson, postJson } from '../core/net.js';
 import { isSet } from '../core/env.js';
 
 // Posting through Zernio: one Zernio profile per account (a customer's), with its TikTok and Instagram connected into
 // it by the customer themselves (src/publish/connect.js).
 //
 // What it can do to an account: create a post on it. Besides that it creates a profile (an empty folder on our own
-// Zernio team) and reads: the connect link, the connected accounts and their health, analytics, and the bill. Nothing
+// Zernio team), disconnects a deleted customer's accounts from our team and removes their profile, and reads: the connect link, the connected accounts and their health, analytics, and the bill. Nothing
 // here reads an inbox, comments, likes, follows or messages anyone; the network door refuses those Zernio paths by
 // name (src/core/net.js), so this file could not if it tried.
 //
@@ -349,4 +349,31 @@ export async function profileSpend({ from, to }) {
   if (body?.supported === false) return { supported: false, byProfile: {}, total: 0 };
   const groups = body?.attribution?.groups || [];
   return { supported: true, byProfile: Object.fromEntries(groups.filter((g) => g?.key).map((g) => [String(g.key), num(g.totalUsd) ?? 0])), total: num(body?.attribution?.totals?.totalUsd ?? body?.totals?.total) ?? 0 };
+}
+
+/* ------------------------------------------------------------------ a customer who left */
+
+/**
+ * Disconnect one connected account from our Zernio team, so Zernio stops billing for it: the customer deleted their
+ * workspace (src/web/workspace-delete.js). One that is gone already (404) is fine.
+ */
+export async function disconnectAccount(accountId) {
+  try {
+    await deleteJson(`${BASE()}/accounts/${encodeURIComponent(accountId)}`, { headers: auth(), timeoutMs: 15_000 });
+    return { ok: true, gone: false };
+  } catch (e) {
+    if (e.status === 404) return { ok: true, gone: true };
+    throw new ZernioError(e.message, { step: 'disconnect', code: e.code, status: e.status });
+  }
+}
+
+/** Remove a deleted customer's profile from our team, after its accounts. One that is gone already (404) is fine. */
+export async function deleteProfile(profileId) {
+  try {
+    await deleteJson(`${BASE()}/profiles/${encodeURIComponent(profileId)}`, { headers: auth(), timeoutMs: 15_000 });
+    return { ok: true, gone: false };
+  } catch (e) {
+    if (e.status === 404) return { ok: true, gone: true };
+    throw new ZernioError(e.message, { step: 'profile delete', code: e.code, status: e.status });
+  }
 }
