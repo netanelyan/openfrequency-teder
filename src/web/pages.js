@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { connectPanel, tiktokModePanel } from './connect.js';
+import { connectLine } from '../publish/hold.js';
+import { EMAIL_HE } from '../notify/email.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -220,6 +222,11 @@ function stopBanners(ctx, d) {
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     else if (g.quota && g.quota.suggested.used >= g.quota.suggested.limit) out.push(`<div class="banner info">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} ניצל את ${g.quota.suggested.limit} ההצעות של החודש.</b><p>פוסטים חדשים ייכתבו בו מתחילת החודש הבא.</p></div></div>`);
+    // Nothing connected where the posts go (src/publish/hold.js): what is held, and the way to connect.
+    if (g.unconnected?.length) {
+      const held = g.held?.length || 0;
+      out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(connectLine(g.unconnected))}</b><p>${held ? (held === 1 ? 'מצגת מאושרת אחת מחכה לחיבור, ותעלה בשעה הפנויה הבאה אחרי שתחברו.' : `${held} מצגות מאושרות מחכות לחיבור, ויעלו בשעות הפנויות הבאות אחרי שתחברו.`) :'עד שמחברים, מצגות מאושרות מחכות ולא עולות.'}</p></div><a class="btn sm primary" href="/accounts?account=${esc(g.pack.id)}#connect-${esc(g.pack.id)}">לחבר</a></div>`);
+    }
   }
   return out.join('');
 }
@@ -877,6 +884,7 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
+${d.email ? emailPanel(ctx, d.email) : ''}
 ${d.assistant ? assistantPanel(ctx, d.assistant) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 </div>
@@ -893,6 +901,16 @@ ${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש
 ${devPanels}
 ${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.operator ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
   return layout({ ...ctx, title: 'הגדרות', active: 'settings' }, body);
+}
+
+/** Which emails the workspace's owners get (src/notify/email.js). Accounts sends them, to the account's owners. */
+function emailPanel(ctx, prefs) {
+  const box = (k) => `<label class="check"><input type="checkbox" name="em_${esc(k)}" value="1"${prefs[k] ? ' checked' : ''}> ${esc(EMAIL_HE[k])}</label>`;
+  return `<section class="panel" id="email"><header><h2>מיילים</h2></header>
+<p class="muted">תדר שולח מייל לבעלי החשבון רק על מה שמסומן כאן.</p>
+<form method="post" action="/settings/email" class="prefs">${csrfField(ctx)}
+<fieldset><legend>מה לשלוח</legend>${Object.keys(EMAIL_HE).map(box).join('')}</fieldset>
+<button class="btn" type="submit">שמירה</button></form></section>`;
 }
 
 /** The customer's choices for the WhatsApp assistant: which messages reach them, and their quiet hours. */
@@ -970,6 +988,8 @@ export const GATE = {
   closed: { title: 'החשבון סגור', text: 'החשבון הזה סגור, ואי אפשר להיכנס דרכו לתדר.' },
   not_in_plan: { title: 'תדר לא מופעל בחשבון שלכם', text: 'החשבון שלכם פתוח, אבל תדר לא כלול בו.' },
   error: { title: 'אי אפשר לבדוק כרגע מי נכנס', text: 'שירות הכניסה לא ענה. נסו שוב בעוד דקה.' },
+  // The paywall (src/billing/entitlement.js): signed in, but the workspace has not paid for Teder.
+  unpaid: { title: 'תדר מחכה לתשלום', text: 'כדי להתחיל או להמשיך עם תדר, משלמים בחשבון שלכם. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
 };
 
 export function gatePage({ kind, links, v = 1 }) {
@@ -977,6 +997,8 @@ export function gatePage({ kind, links, v = 1 }) {
   const actions =
     kind === 'error'
       ? '<a class="btn primary" href="">לנסות שוב</a>'
+      : kind === 'unpaid'
+        ? `<a class="btn primary" href="${esc(links.setup)}">לתשלום בחשבון</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'not_in_plan'
         ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
         : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;

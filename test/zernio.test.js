@@ -33,7 +33,7 @@ import {
   zernioCost,
   zernioTick,
 } from '../src/publish/connect.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // Zernio as the publisher of customer accounts (src/publish/connect.js, src/publish/zernio.js): one profile per
 // account, the customer's own connect, its health, TikTok drafts and Instagram carousels to the connected accounts,
@@ -119,6 +119,7 @@ before(async () => {
   ctx.mediaRoot = home.home;
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'alpha'");
   db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'bravo'");
+  paidWorkspaces(db, [1, 2]);
   globalThis.fetch = async (url, init) => (new URL(String(url)).hostname === 'zernio.com' ? Z.handle(url, init) : realFetch(url, init));
   fake = await fakeAccounts();
   const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
@@ -149,7 +150,7 @@ after(async () => {
 /** A connected account in the fake, in a profile. */
 const connected = (profileId, platform, id, username, extra = {}) => Z.accounts.push({ _id: id, platform, profileId, username, isActive: true, needsReconnection: false, ...extra });
 
-test('the door opens exactly a profile create, the connect link, the accounts and their health, and the bill: never an inbox, never a disconnect', () => {
+test('the door opens exactly a profile create, the connect link, the accounts and their health, the bill, and a deleted customer\'s disconnect: never an inbox', () => {
   assert.ok(WRITE_RULES.some((r) => r.host === 'zernio.com' && r.path.test('/api/v1/profiles')));
   for (const [m, u] of [
     ['POST', 'https://zernio.com/api/v1/profiles'],
@@ -158,10 +159,13 @@ test('the door opens exactly a profile create, the connect link, the accounts an
     ['GET', 'https://zernio.com/api/v1/connect/instagram?profileId=p'],
     ['GET', 'https://zernio.com/api/v1/accounts/health?profileId=p'],
     ['GET', 'https://zernio.com/api/v1/usage?range=custom'],
-  ]) assert.ok(assertAllowed(m, u), `${m} ${u}`);
-  for (const [m, u] of [
+    // A customer who deleted their workspace (src/web/workspace-delete.js): their accounts and profile leave our team.
     ['DELETE', 'https://zernio.com/api/v1/accounts/abc'],
     ['DELETE', 'https://zernio.com/api/v1/profiles/abc'],
+  ]) assert.ok(assertAllowed(m, u), `${m} ${u}`);
+  for (const [m, u] of [
+    ['DELETE', 'https://zernio.com/api/v1/accounts/abc/posts'],
+    ['DELETE', 'https://zernio.com/api/v1/posts/abc'],
     ['PUT', 'https://zernio.com/api/v1/profiles/abc'],
     ['GET', 'https://zernio.com/api/v1/connect/twitter'],
     ['GET', 'https://zernio.com/api/v1/inbox/conversations'],

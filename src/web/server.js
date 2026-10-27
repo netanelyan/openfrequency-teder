@@ -23,6 +23,8 @@ import { assistantApi, isAssistantPath } from '../assistant/api.js';
 import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
 import { connectRoutes, goPage, publicConnect } from './connect.js';
 import { setupFeed } from './setup.js';
+import { workspaceDeleteRoute } from './workspace-delete.js';
+import { entitlementClient } from '../billing/entitlement.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -40,8 +42,11 @@ import { setupFeed } from './setup.js';
 //   - every POST carries the CSRF token derived from its session, and an Origin
 //     that is ours; a read-only session (the operator viewing as a customer)
 //     changes nothing
-// /internal/lead, /internal/demos and /internal/setup are for services on this machine with OF_INTERNAL_TOKEN
-// (src/web/demos.js fromWebsite, src/web/setup.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
+//   - a customer's workspace that has not paid for Teder (accounts' /internal/entitlement, src/billing/entitlement.js)
+//     gets the paywall page instead of the product, its onboarding included; the operator, and the operator viewing
+//     as a customer, never do
+// /internal/lead, /internal/demos, /internal/setup and /internal/workspaces/<id>/delete are for services on this machine
+// with OF_INTERNAL_TOKEN (src/web/demos.js fromWebsite, src/web/setup.js, src/web/workspace-delete.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
 // API (src/assistant/api.js): this machine only, never through the proxy, every
 // request signed. /m/... is one rendered slide behind a signed link that expires,
 // handed out by that API for WhatsApp to fetch. /connect/<account>/<platform> is the
@@ -103,10 +108,13 @@ const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.'
  * `accounts` (src/web/accounts.js) answers who a session is; the tests give one that talks to a fake accounts.
  * `ctx` is the engine's: every account. Each request works on its workspace's view of it.
  */
-export function createHandler(ctx, { port, env = process.env, accounts = null } = {}) {
+export function createHandler(ctx, { port, env = process.env, accounts = null, entitlements = null } = {}) {
   const secret = sessionSecret(env);
   const links = accountsLinks(env);
   const who = accounts || accountsClient({ env, log: (m) => ctx.log?.(m) });
+  // Whether a workspace has paid: the answers are kept in the database, which the runner reads too (canRun).
+  const paid = entitlements || entitlementClient({ db: ctx.db, env, log: (m) => ctx.log?.(m) });
+  ctx.entitlements ||= paid;
   const publicHost = String(env.PUBLIC_HOST || '').trim().toLowerCase() || null;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
   const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
@@ -170,6 +178,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/sounds\/save$/, (c, u, m, f) => act.saveSoundAction(c, u, {}, f)],
     ['POST', /^\/sounds\/remove$/, (c, u, m, f) => act.removeSoundAction(c, u, {}, f)],
     ['POST', /^\/settings\/whatsapp$/, (c, u, m, f) => act.setAssistantPrefs(c, u, {}, f)],
+    ['POST', /^\/settings\/email$/, (c, u, m, f) => act.setEmailPrefsAction(c, u, {}, f)],
     ['POST', /^\/push\/subscribe$/, (c, u, m, f) => act.subscribePush(c, u, {}, f)],
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
@@ -253,6 +262,12 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         const [status, body] = setupFeed(ctx, req, env, { base: publicHost ? `https://${publicHost}` : `http://${host}`, query: url.searchParams });
         return json(req, res, status, body);
       }
+      // A customer deleted their workspace in accounts: its accounts and their data go (src/web/workspace-delete.js).
+      const wd = req.method === 'POST' && /^\/internal\/workspaces\/([^/]+)\/delete$/.exec(p);
+      if (wd) {
+        const [status, body] = await workspaceDeleteRoute(ctx, req, env, wd[1]);
+        return json(req, res, status, body);
+      }
 
       // ---- everything else needs a session that accounts vouches for (src/web/accounts.js). A page may use an answer
       // up to a minute old; anything else (every POST) asks afresh, so no change acts on a session that has ended.
@@ -274,6 +289,15 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
       // workspace viewed, read-only, like everyone with a workspace.
       const operator = a.role === 'superadmin' && !a.workspace;
       const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
+      // The paywall: a customer whose workspace has not paid sees where to pay, not the product. With no answer to go by
+      // (accounts has not answered for a day, or never), the page says the check failed rather than ask them to pay. The
+      // operator viewing as the customer (read-only) sees what is there.
+      const ent = !operator && !user.viewAs && a.workspace ? await paid.check(a.workspace.id) : null;
+      if (ent && !ent.allowed) {
+        const kind = ent.known ? 'unpaid' : 'error';
+        if (!reading) return json(req, res, ent.known ? 402 : 503, { ok: false, message: pages.GATE[kind].text, ...(ent.known ? { pay: links.setup } : {}) });
+        return send(req, res, ent.known ? 402 : 503, pages.gatePage({ v: V, kind, links }));
+      }
       const c = operator ? ctx : forWorkspace(ctx, a.workspace.id);
       const csrf = csrfFor(sid, secret);
 
@@ -446,14 +470,14 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
   return handler;
 }
 
-export function listen(ctx, { port = Number(process.env.PORT) || 4700, env = process.env, accounts = null } = {}) {
+export function listen(ctx, { port = Number(process.env.PORT) || 4700, env = process.env, accounts = null, entitlements = null } = {}) {
   let inner = null;
   const server = createServer((req, res) => inner(req, res));
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, HOST, () => {
       const actual = server.address().port;
-      inner = createHandler(ctx, { port: actual, env, accounts });
+      inner = createHandler(ctx, { port: actual, env, accounts, entitlements });
       resolve({ server, port: actual, handler: inner });
     });
   });

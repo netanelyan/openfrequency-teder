@@ -1735,3 +1735,54 @@ Seven changes, each where the engine was wrong, not where the posts were:
 
 What did not change: every fact is still quoted from an approved source, every photograph licensed. The fact accounts
 that spread use press photographs they have no licence for; the engine finds more licensed ones instead.
+
+### Sold self-serve: a paywall, posts that wait for a connection, emails through accounts, and a workspace that can leave (2026-10-27)
+
+An audit of Teder as a self-serve product found five holes. Teder checked only that the product was enabled for the
+workspace, never that it was paid for, and the runner had no notion of a workspace: an unpaid or cancelled customer
+kept getting posts drafted and published. A customer who had not connected TikTok or Instagram had every approved post
+fail in English ("no Zernio tiktok account id in pack.json"), and the third failure paused the account. Nobody was told
+that posts were waiting: the daily posts and the weekly summary reached only the WhatsApp assistant, which is not
+running, while unapproved posts expire at the end of their day and still count toward the month. The website promises
+"דוח תוצאות בכל חודש", and there was none. And /setup could say done with nothing connected. Five changes:
+
+1. *A paywall that fails closed, slowly.* Accounts owns subscriptions; Teder asks `GET /internal/entitlement` and acts on
+   `allowed` alone (`src/billing/entitlement.js`). The answer is kept in the database, so the website and the runner
+   read the same one and a restart keeps it: fresh for 5 minutes, and the last answer standing 24 hours while accounts
+   cannot answer, so a paying customer is never stopped by a hiccup; never answered for, or older than a day, is not
+   allowed. A workspace not allowed sees a paywall page (402, a link to accounts' /setup) instead of every page, its
+   onboarding included; the operator and view-as never do. In the engine the check is in `canRun`, the one rail every
+   generation, TikTok draft, publish and fallback already passes, so nothing that writes or publishes can miss it; the
+   morning feedback and topic scoring, which spend on Claude, skip it too. The account is not paused and nothing is
+   deleted: paying again needs no resume. An account in no workspace is the operator's and never asks.
+2. *Held, not failed.* A post approved where nothing is connected is `held` (`src/publish/hold.js`): nothing is sent,
+   it is not a failure and not in the streak, and the home page says "כדי שהמצגות יעלו, מחברים את ..." with the
+   connect link. When a platform is connected the runner gives each held post the account's next free slot, rather
+   than sending a backlog in one burst. One of two platforms connected is enough: the post goes there and the other is
+   marked skipped, since a customer may want TikTok alone, and the setup step asks for at least one. TikTok stays on
+   drafts (the owner's choice: they add a popular sound), and the connect panel now says so before the button, with
+   what Instagram needs (a professional account, business or creator). Every failure and every connect error the
+   customer reads is Hebrew (`src/publish/errors.js`); Zernio's codes are matched by what they say, since they are not
+   one fixed list, and kept in the audit and the post's steps.
+3. *Emails, written here and sent by accounts.* Accounts owns the owners' addresses and their opt-out; Teder writes the
+   words and posts them to `/internal/notify` (`src/notify/email.js`): posts waiting (once a day, after the day's posts
+   are written), the week (Sunday 09:00), the month's results (the 1st, 09:00: what the Results page counts, which makes
+   the website's promise true), a connection missing (at most daily) and a post that did not go out (once). Like the
+   assistant's events, each is found from the database at a tick, so nothing in the pipeline has to remember it and an
+   email missed while the server was down is found when it is back. Sent once, retried three times when accounts is
+   down, given up at once when accounts will refuse it again (its limit of three of a kind a day, Teder off for the
+   workspace, a bad field), never thrown into the runner. Accounts builds the email from the text alone, so the text
+   carries the link. Each kind is the customer's to turn off in Settings. They live in the settings table rather than a new
+   table, so no migration was needed beside the other work on the repository.
+4. *A setup that cannot say done with nothing to publish to.* `/internal/setup` gains a required `connect` step, done
+   once one platform works; the per-platform steps stay after it, optional, so the checklist keeps its detail.
+5. *A customer can leave.* `POST /internal/workspaces/<id>/delete` (accounts calls it when a workspace is deleted, waits
+   10 seconds, and aborts the whole deletion on any failure) pauses the accounts and deletes their rows and pack folders
+   before it answers, and only then removes the rendered files and, on Zernio, disconnects their TikTok and Instagram
+   from our team and removes their profiles: Zernio's own pace must not fail the customer's deletion. The audit log and
+   what was spent stay, by account id. Asked again, or for a workspace never seen, it answers 200 with zeros.
+   This opens the network door to two more writes, `DELETE /api/v1/accounts/<id>` and `DELETE /api/v1/profiles/<id>` on
+   zernio.com, where before the door asserted "never a disconnect": Zernio bills every connected account, and an account
+   left connected after its customer is gone is a bill for nothing and a customer's account still reachable from our
+   team. They reach our own Zernio team only, never a social platform, and only for a workspace accounts says is
+   deleted. An account id typed into a pack by hand is not disconnected: it may be the operator's own.

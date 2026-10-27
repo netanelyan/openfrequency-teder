@@ -21,6 +21,9 @@ import { refreshSource } from '../sources/index.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 import { assistantTick } from '../assistant/events.js';
 import { zernioTick } from '../publish/connect.js';
+import { accountAllowed, refreshEntitlements } from '../billing/entitlement.js';
+import { releaseHeld } from '../publish/hold.js';
+import { emailTick } from '../notify/email.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -56,8 +59,10 @@ import { zernioTick } from '../publish/connect.js';
 //   5. read metrics, credit them to formats at 72 hours, judge the formats
 //   6. write yesterday's summary
 //
-// The rails (kill switches, pauses) are checked before every generation and
-// every publish.
+// The rails (kill switches, pauses, and a workspace that has not paid: src/billing/entitlement.js, asked at the start
+// of every tick and kept 5 minutes) are checked before every generation and every publish. A post approved where
+// nothing is connected waits, and goes out at its account's next free slot once something is (src/publish/hold.js).
+// What the owner hears by email goes through accounts (src/notify/email.js, 4d).
 
 /** Batches draft in minutes to hours: today's empty slots are filled only when this far away. */
 export const CATCH_UP_LEAD_MS = 3 * 3_600_000;
@@ -176,6 +181,9 @@ export async function tick(ctx, { t = now() } = {}) {
   const cfg = settings(db);
   const report = { at: new Date(t).toISOString(), generated: [], published: [], expired: [], approved: [], errors: [] };
 
+  // ---- 0a. which workspaces have paid: canRun reads the answers kept here
+  await refreshEntitlements(ctx).catch((e) => report.errors.push({ step: 'entitlement', error: e.message }));
+
   // ---- 0. a batch a restart left behind is recorded, so no paid call goes unbilled
   if (ctx.batchApi && db.get("SELECT id FROM batches WHERE status != 'recorded' LIMIT 1")) {
     const last = getSetting(db, 'batches:recovered');
@@ -194,7 +202,7 @@ export async function tick(ctx, { t = now() } = {}) {
     for (const pack of ctx.packs) {
       const key = `feedback:${pack.id}:${today}`;
       const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
-      if (!acc || acc.status === 'onboarding' || getSetting(db, key)) continue;
+      if (!acc || acc.status === 'onboarding' || getSetting(db, key) || !accountAllowed(db, pack.id, t)) continue;
       setSetting(db, key, new Date(t).toISOString());
       try {
         const fb = await morningFeedback(ctx, pack, { t });
@@ -211,7 +219,7 @@ export async function tick(ctx, { t = now() } = {}) {
     for (const pack of ctx.packs) {
       const key = `topics:${pack.id}:${today}`;
       const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
-      if (!acc || acc.status === 'onboarding' || getSetting(db, key)) continue;
+      if (!acc || acc.status === 'onboarding' || getSetting(db, key) || !accountAllowed(db, pack.id, t)) continue;
       setSetting(db, key, new Date(t).toISOString());
       try {
         const found = ctx.mode === 'live' ? await collectSignals(ctx, pack, { t }) : null;
@@ -280,7 +288,13 @@ export async function tick(ctx, { t = now() } = {}) {
       report.approved.push(p.id);
     }
 
-    // ---- 3a. draft-now: an approved post's TikTok draft goes to the app as soon as the rails let it (the owner's
+    // ---- 3a. posts held for a platform that was not connected, once one is: each to the account's next free slot
+    if (run.ok) {
+      const back = releaseHeld(db, pack, { t });
+      if (back.length) report.released = [...(report.released || []), ...back.map((x) => ({ account: pack.id, ...x }))];
+    }
+
+    // ---- 3b. draft-now: an approved post's TikTok draft goes to the app as soon as the rails let it (the owner's
     // approval sends it at once; this catches the engine's approvals, and drafts held by Shabbat, a pause or a picture)
     try {
       const sent = await sendWaitingDrafts({ ...ctx, packs: [pack] }, { t });
@@ -326,6 +340,14 @@ export async function tick(ctx, { t = now() } = {}) {
     }
   } catch (e) {
     report.errors.push({ step: 'zernio', error: e.message });
+  }
+
+  // ---- 4d. what the owner hears by email, through accounts: posts waiting, the week, the month, a connection, a failure
+  try {
+    const sent = await emailTick(ctx, { t });
+    if (sent) report.emails = sent;
+  } catch (e) {
+    report.errors.push({ step: 'email', error: e.message });
   }
 
   // ---- 5. metrics and learning, every few hours

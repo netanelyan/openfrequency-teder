@@ -20,6 +20,8 @@ import { notify } from '../notify/index.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
 import { zernioAccountId } from './connect.js';
 import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
+import { heldReason, needsConnection } from './hold.js';
+import { publishErrorHe } from './errors.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
 // platforms, each by the publisher the pack names for it:
@@ -54,6 +56,9 @@ import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js'
 //     still approved, and the text still hashing to the token the gate issued.
 //     A failure here is a failed fact check: the post is blocked and the account
 //     paused.
+//
+// A post with nothing connected to send it to is held, not failed (src/publish/hold.js). What a failure says to the
+// customer is Hebrew (src/publish/errors.js); the publisher's own words go to the post's steps and the log.
 
 /** What the pack asks for on a platform, whether or not it can be done now. */
 export const wantedPublisher = (pack, platform) => pack.meta.publishers?.[platform] || pack.meta.publisher || 'dry';
@@ -217,15 +222,31 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
   const captionFor = (platform) => captionOf(db, post, platform);
 
+  // Nothing connected anywhere the post has to go, and nothing of it out yet: held until the customer connects.
+  const pending = pack.meta.platforms.filter((p) => !done(post.publish?.[p]));
+  const missing = pending.filter((p) => needsConnection(db, pack, p));
+  if (missing.length && missing.length === pack.meta.platforms.length) {
+    db.update('posts', postId, { status: 'held', reason: heldReason(missing), updated_at: nowIso() });
+    step(db, postId, 'publish', 'info', { held: missing });
+    audit(db, { action: 'publish_held', accountId: pack.id, postId, detail: { platforms: missing } });
+    return { postId, ok: false, held: true, via: 'none', results: post.publish || {}, retry: false, reminded: false };
+  }
+
   db.update('posts', postId, { status: 'publishing', updated_at: nowIso() });
   const results = { ...(post.publish || {}) };
   const attempts = (Number(results._attempts) || 0) + 1;
   delete results._attempts;
   let drafted = null;
   let failed = null;
+  let failedOn = null;
   const vias = {};
   for (const platform of pack.meta.platforms) {
     if (done(results[platform])) continue; // out already: never twice
+    // Not connected while the post's other platform is: that one goes, this one is skipped.
+    if (missing.includes(platform)) {
+      results[platform] = { via: 'zernio', skipped: 'not_connected', at: new Date(t).toISOString() };
+      continue;
+    }
     const via = publisherFor(pack, platform, { db });
     vias[platform] = via;
     // A TikTok draft (draft-now, or draft-fallback): the post goes to the app's inbox with a sound from the account's
@@ -267,6 +288,8 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     } catch (e) {
       results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null };
       failed = e;
+      failedOn = platform;
+      ctx.log?.(`[publish] ${postId} ${platform} via ${via}: ${e.message}`);
       break; // a platform that might have half-posted is never retried blind; stop here and report
     }
     if (asDraft && mode === 'draft-fallback') drafted = flow;
@@ -291,7 +314,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   const status = ok ? 'published' : retry ? 'approved' : 'failed';
   db.update('posts', postId, {
     status,
-    reason: ok ? null : `${retry ? 'ינסה שוב: ' : ''}${String(failed.message).slice(0, 300)}`,
+    reason: ok ? null : `${retry ? 'ננסה שוב: ' : ''}${publishErrorHe(failed, failedOn)}`,
     publish_json: { ...results, ...(retry ? { _attempts: attempts } : {}) },
     published_at: ok ? new Date(t).toISOString() : null,
     updated_at: nowIso(),
@@ -300,9 +323,11 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   audit(db, { action: ok ? 'published' : retry ? 'publish_retry' : 'publish_failed', accountId: pack.id, postId, detail: { via: vias } });
 
   if (failed && !retry) {
-    if (isStrike(failed) || isRefusal(failed)) pauseAccount(db, pack.id, 'strike', failed.message);
-    else if (isTokenProblem(failed)) pauseAccount(db, pack.id, 'publish_errors', `האסימון של אינסטגרם פג או נפסל: ${failed.message}`);
-    else if (publishErrorStreak(db, pack.id) >= Number(settings(db).publishErrorStreak || 3)) pauseAccount(db, pack.id, 'publish_errors', failed.message);
+    // What the customer reads on the paused account is Hebrew; the publisher's own words are in the post's steps.
+    const he = publishErrorHe(failed, failedOn);
+    if (isStrike(failed) || isRefusal(failed)) pauseAccount(db, pack.id, 'strike', he);
+    else if (isTokenProblem(failed)) pauseAccount(db, pack.id, 'publish_errors', he);
+    else if (publishErrorStreak(db, pack.id) >= Number(settings(db).publishErrorStreak || 3)) pauseAccount(db, pack.id, 'publish_errors', he);
   }
   // The owner is told the draft is waiting, and which sound to add.
   if (drafted) {
@@ -376,6 +401,8 @@ export async function sendDraft(ctx, postId, { t = now() } = {}) {
     if (!(e instanceof PublishRefused)) throw e;
     return { state: e.code === 'fact_check' ? 'blocked' : 'held', why: e.message, code: e.code };
   }
+  // Nothing connected on TikTok: no draft is tried (it could only fail); the post waits for the connection.
+  if (needsConnection(db, pack, 'tiktok')) return { state: 'held', why: heldReason(['tiktok']), code: 'not_connected' };
 
   // Written before anything is sent, and before the first await: a tick or a click that comes while the draft is on
   // its way sends no other. One cut off mid-send is sent again after UPLOAD_STUCK_MS, so the inbox may then hold two
@@ -393,7 +420,7 @@ export async function sendDraft(ctx, postId, { t = now() } = {}) {
     saveTiktok(tk);
     step(db, postId, 'tiktok', 'failed', { flow: 'draft', via, error: tk.error, attempt: tries + 1 });
     if (tries + 1 >= DRAFT_TRIES) {
-      await notify(ctx, { accountId: pack.id, postId, kind: 'draft_failed', title: `${pack.meta.displayName}: הטיוטה לא הגיעה לטיקטוק`, body: `${oneLine(post.hook)}\n${tk.error}`, url: `/post/${postId}` }).catch((x) => ctx.log?.(`notify ${postId}: ${x.message}`));
+      await notify(ctx, { accountId: pack.id, postId, kind: 'draft_failed', title: `${pack.meta.displayName}: הטיוטה לא הגיעה לטיקטוק`, body: `${oneLine(post.hook)}\n${publishErrorHe(e, 'tiktok')}`, url: `/post/${postId}` }).catch((x) => ctx.log?.(`notify ${postId}: ${x.message}`));
     }
     return { state: 'failed', why: tk.error };
   }
@@ -416,7 +443,7 @@ export async function sendWaitingDrafts(ctx, { t = now(), perAccount = 3 } = {})
     for (const r of want.slice(0, perAccount)) {
       const res = await sendDraft(ctx, r.id, { t });
       if (res.state !== 'skip') out.push({ post: r.id, ...res });
-      if (res.code === 'shabbat' || res.code === 'paused') break; // the same answer for the account's other posts
+      if (['shabbat', 'paused', 'not_connected'].includes(res.code)) break; // the same answer for the account's other posts
     }
   }
   return out;

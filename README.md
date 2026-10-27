@@ -90,7 +90,7 @@ wave on violet; the footer carries the company's, OpenFrequency's halftone on bl
 
 ### For the services on this machine
 
-Three routes answer the other OpenFrequency services on the VPS, never a browser: a
+Four routes answer the other OpenFrequency services on the VPS, never a browser: a
 loopback socket only, `Authorization: Bearer $OF_INTERNAL_TOKEN` (the value
 openfrequency-accounts has, 32 characters or more), and no `X-Forwarded-For`, so Caddy
 never passes them on. Anything else is `403 {"ok":false,"error":"forbidden"}`, and no
@@ -102,6 +102,7 @@ answer is cached. The WhatsApp assistant's own API is apart, signed with
 | `POST /internal/lead` | the website's lead service | a store asked for a demo (`src/web/demos.js`) |
 | `GET /internal/demos` | Toran's dashboard | every demo and its opens |
 | `GET /internal/setup?workspace=<id>` | accounts' `/setup` page | the workspace's setup steps in Teder (`src/web/setup.js`) |
+| `POST /internal/workspaces/<id>/delete` | accounts, when a customer deletes their workspace | that workspace's accounts and their data go (`src/web/workspace-delete.js`) |
 
 `/internal/setup` answers the contract accounts and Toran share:
 
@@ -111,6 +112,7 @@ answer is cached. The WhatsApp assistant's own API is apart, signed with
   { "key": "sources", "title": "בוחרים מקורות", "status": "done", "detail": "4 מקורות מאושרים.", "href": null, "required": true },
   { "key": "samples", "title": "עוברים על פוסטים לדוגמה", "status": "todo", "detail": "חמשת הפוסטים מוכנים ומחכים שתעברו עליהם.", "href": "https://teder.openfrequency.co.il/new/o_123", "required": true },
   { "key": "live", "title": "מעלים לאוויר", "status": "todo", "detail": "", "href": null, "required": true },
+  { "key": "connect", "title": "מחברים את טיקטוק או אינסטגרם", "status": "todo", "detail": "...", "href": "https://teder.openfrequency.co.il/new/o_123#connect-green-kitchen", "required": true },
   { "key": "tiktok", "title": "מחברים את טיקטוק", "status": "todo", "detail": "...", "href": "https://teder.openfrequency.co.il/new/o_123#connect-green-kitchen", "required": false },
   { "key": "instagram", "title": "מחברים את אינסטגרם", "status": "soon", "detail": "...", "href": null, "required": false } ] }
 ```
@@ -124,14 +126,75 @@ sources are searched for, `attention` when the search failed, and done once the 
 written; **sources** is `todo` on the onboarding page while the sources wait to be picked;
 **samples** is `working` while the five samples are written, `todo` while they wait to be
 made or looked over, done once reviewed; **live** is done when the account is active, and
-`attention` when it is paused. **tiktok** and **instagram** are optional, one for each
-platform the account publishes to: done when connected (or Instagram through Teder's own
-Meta app), `attention` when Zernio says reconnect, `todo` with a link to the connect panel
-(the onboarding page while the account is in onboarding, then the account page), and
-`soon` while `ZERNIO_API_KEY` is not set. A workspace with several accounts is reported
-on one: its newest account on air (active, else paused), and without one its newest
-onboarding still under way. A workspace id Teder has never seen is a new workspace with
-nothing; one that is not a positive integer is `400 bad_workspace`.
+`attention` when it is paused. **connect** is required, so the checklist never says
+ready with nothing to publish to: done once at least one platform the account publishes
+to is connected (or Instagram through Teder's own Meta app), `attention` when the only
+connection stopped working, `todo` with a link to the connect panel (the onboarding page
+while the account is in onboarding, then the account page), and `soon` while
+`ZERNIO_API_KEY` is not set. **tiktok** and **instagram** follow it, optional, one for each
+platform the account publishes to, with the same states. A workspace with several
+accounts is reported on one: its newest account on air (active, else paused), and
+without one its newest onboarding still under way. A workspace id Teder has never seen is
+a new workspace with nothing; one that is not a positive integer is `400 bad_workspace`.
+
+`/internal/workspaces/<id>/delete` (accounts sends `{}` and waits 10 seconds, and any
+failure aborts its whole deletion) answers from what is fast and certain: the
+workspace's accounts paused, then in one transaction their posts and everything under
+them, the sources and their documents, the topics, rivals, sounds and formats, the
+notifications, the new-account flows, the browsers subscribed in that workspace, the
+WhatsApp assistant's queue and choices, the email choices and the per-account settings;
+then the pack folders. The rendered files and their public copies follow the answer, and
+so does Zernio: each TikTok and Instagram connected into the account's own profile is
+disconnected from our team and the profile removed (a 404 there is gone already; an
+account typed into `pack.json` by hand is left alone, it may be the operator's). What
+Zernio did not do is in the audit (`workspace_cleaned`) and the log. The audit log, what
+the calls cost (`spend`) and what Zernio billed stay: they are the operator's books, by
+account id alone. It answers
+`200 {"ok":true,"deleted":{"accounts":2,"posts":40,"sources":6,"documents":90,"onboarding":1,"connections":2},"after":{"files":45,"zernio":3}}`
+(`after` is what was left to do once the answer went); asked again, or for a workspace
+Teder never saw, the same with zeros.
+
+#### What Teder asks accounts
+
+Teder asks accounts two more things, on `OF_ACCOUNTS_INTERNAL` (default
+`http://127.0.0.1:4741`) with the same bearer:
+
+- **Has the workspace paid?** `GET /internal/entitlement?workspace=<id>&product=teder` →
+  `{ workspace, product, enabled, access, allowed, paidThrough, cancelAt }`; only `allowed`
+  is acted on (`src/billing/entitlement.js`). `404 no_workspace` (an id accounts never had)
+  is an answer, not allowed; a deleted workspace is a 200 with access `off`; a 401, 405 or
+  5xx is accounts' trouble. The answer is kept in the settings table
+  (`entitlement:<id>`), where the website and the runner both read it: used as it is for
+  5 minutes, and while accounts does not answer (down, a timeout, a 5xx, a shape that is
+  not the contract's) the last answer stands for 24 hours, so a paying customer is never
+  stopped by a hiccup. A workspace never answered for, or whose answer is older than
+  that, is not allowed. A customer of a workspace that is not allowed sees a paywall page
+  (402, a link to accounts' `/setup`) instead of every page, onboarding included, and
+  every button answers 402; the operator, and the operator viewing as the customer, never
+  do. The runner writes, drafts and publishes nothing for its accounts (`canRun` says
+  `unpaid`); nothing is paused or deleted, and the first tick after it pays goes on. An
+  account in no workspace is the operator's and never asks. A change is logged and
+  audited once.
+- **Send an email.** `POST /internal/notify` with
+  `{ workspace, product: "teder", kind, subject, text, html, link }`, `202 {ok:true,sent}`;
+  accounts sends it to the workspace's owners and keeps their own opt-out
+  (`src/notify/email.js`). It builds the email from `text` alone, so the text carries
+  everything, the link last; the subject is cut to 150 characters here, the text to
+  5,000; the link must be https on openfrequency.co.il, so `PUBLIC_HOST` has to be one.
+  What accounts will refuse again (400, 404, 409 Teder off, 413, 429 three of a kind a
+  day) is given up at once, 409 and 429 without a log line. The kinds: `posts_waiting` once a day after the day's posts
+  are written (a batch still running is waited for), how many wait and that one not
+  approved by the end of its day does not go out; `weekly` on Sunday at 09:00, the week's
+  posts out and their views, what waits, what is scheduled; `monthly` on the 1st at
+  09:00, last month's results as the Results page counts them (posts out, views and likes
+  where the platforms gave them, the most viewed post), which is the website's "דוח
+  תוצאות בכל חודש"; `connect_needed` at most once a day while posts are held for a
+  missing connection; `publish_failed` once per post that failed for good. Each is found
+  from the database at a tick and sent once (`email:sent:<key>`); a send that fails is
+  tried again at 15, 60 and 180 minutes and then given up, and nothing of it stops the
+  runner. A workspace that has not paid gets none, and the customer turns each kind off
+  under Settings, Emails (`email:prefs:<id>`). Links are to `https://<PUBLIC_HOST>`;
+  without a `PUBLIC_HOST` on openfrequency.co.il (a laptop) no email is sent.
 
 ## How a post is made
 
@@ -265,7 +328,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 
 | Rule | Where it is enforced |
 |---|---|
-| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post and create-profile (a customer account's folder on our own Zernio team), Meta's two publishing endpoints, deleting our own Instagram post after a takedown notice, and an empty Web Push to the owner's own browser (no words in it; never Telegram, a social host). It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
+| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post and create-profile (a customer account's folder on our own Zernio team) and, once a customer deleted their workspace, disconnecting their accounts and removing that profile from our team, Meta's two publishing endpoints, deleting our own Instagram post after a takedown notice, and an empty Web Push to the owner's own browser (no words in it; never Telegram, a social host). It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
 | 2. Each account a distinct brand | `src/packs/validate.js`: no two packs share a template, a display face, a handle, a name or a palette too close to tell apart; under the slide styles, two accounts may share a style but never a style and a close accent; a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of that account's approved source, every number in its quotes, the render gate's token. `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
 | 4. AI disclosure | TikTok's `video_made_with_ai` flag through Zernio; a caption line on Instagram |
@@ -478,6 +541,20 @@ when the account has it, otherwise Zernio) and `"instagram"` (Meta only) are kep
 a pack that asks for them.
 `"tiktok": "own-app"` is kept for our own TikTok app, which is not built yet
 (`src/publish/tiktok-app.js`); until it is, those posts are written to disk.
+
+**Nothing connected yet.** Before the connect buttons the panel says what each
+platform needs: Instagram only as a professional account (business or creator), as
+Zernio requires; TikTok the account the posts go to, and in draft-now that the posts land
+in TikTok's drafts on purpose, for the owner to add a popular sound, with Teder's
+reminder at the hour. A post approved where nothing is connected is **held**
+(`status = 'held'`, `src/publish/hold.js`): not sent, not failed, not counted in the
+publish-error streak, and the home page shows "כדי שהמצגות יעלו, מחברים את ..." with
+the connect link. With one platform connected and the other not, the post goes to the
+connected one and the other is marked `skipped: not_connected`. Once something is
+connected, the runner gives each held post the account's next free slot, earliest
+first, and it goes out there. A failure the customer reads is Hebrew
+(`src/publish/errors.js`), as is what Zernio's connect screen sent back; the publisher's
+own words stay in the post's steps and the log.
 
 **Instagram** goes directly through Meta's Graph API as a carousel, free. Two logins
 are supported:

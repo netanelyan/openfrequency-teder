@@ -10,7 +10,8 @@
 //     create-profile endpoint (an empty folder on our own Zernio team, one per
 //     customer account, that the customer connects their own accounts into),
 //     Meta's two publishing endpoints for an Instagram account (create a media container,
-//     publish it), deleting a post of ours after a takedown notice, and an empty
+//     publish it), deleting a post of ours after a takedown notice, disconnecting a
+//     deleted customer's accounts and profile from our own Zernio team, and an empty
 //     Web Push to the owner's own browser through the browsers' push services
 //     (src/notify: it carries no words). Nothing else.
 //   - READS from a social platform are allowed only through the official read
@@ -66,6 +67,8 @@ export const WRITE_RULES = [
   { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages\/batches$/, why: "Claude: the day's drafts as one batch, at half price" },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts$/, why: 'Zernio: create a post on our own account' },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/profiles$/, why: "Zernio: a customer account's profile, the folder its TikTok and Instagram are connected into" },
+  { method: 'DELETE', host: 'zernio.com', path: /^\/api\/v1\/accounts\/[A-Za-z0-9_-]+$/, why: 'Zernio: disconnecting a TikTok or Instagram from our own team, once its customer deleted their workspace' },
+  { method: 'DELETE', host: 'zernio.com', path: /^\/api\/v1\/profiles\/[A-Za-z0-9_-]+$/, why: "Zernio: removing a deleted customer's emptied profile from our own team" },
   { method: 'POST', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Facebook Login): a media container on our own account, and publishing it' },
   { method: 'POST', host: 'graph.instagram.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Instagram Login): a media container on our own account, and publishing it' },
   { method: 'DELETE', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+$`), why: 'Instagram (Facebook Login): deleting our own post after a takedown notice' },
