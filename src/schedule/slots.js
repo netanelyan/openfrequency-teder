@@ -1,5 +1,5 @@
 import { israelInstant, israelHour, weekday } from './israel.js';
-import { restAt } from './shabbat.js';
+import { restAt, rulesOf } from './shabbat.js';
 
 // The day's posting slots for one account.
 //
@@ -8,7 +8,8 @@ import { restAt } from './shabbat.js';
 // can post early and Saturday after nightfall). A slot inside Shabbat, a yom tov or outside
 // the pack's posting windows is dropped AND named, because a configured slot that
 // can never post is a mistake in the file and the website should say so rather
-// than quietly posting less.
+// than quietly posting less. A schedule with `shabbat: true` (or `holidays: true`) posts on
+// Shabbat (or the festivals) too: the account's owner chose it (src/schedule/choice.js).
 
 export function inWindows(t, windows = []) {
   if (!windows.length) return true;
@@ -36,11 +37,12 @@ export function postsOn(date, perDay) {
 export function slotsFor(date, schedule = {}, { notBefore = null } = {}) {
   const day = schedule.slotsByDay?.[String(weekday(date))] || schedule.slots || [];
   const kept = schedule.perMonth != null ? new Set(monthSlots(date.slice(0, 7), schedule).slots.map((s) => s.getTime())) : null;
+  const rules = rulesOf(schedule);
   const dropped = [];
   const slots = [];
   for (const hhmm of day) {
     const at = israelInstant(date, hhmm);
-    const rest = restAt(at);
+    const rest = restAt(at, rules);
     if (rest) dropped.push({ at: hhmm, why: rest });
     else if (!inWindows(at, schedule.windows)) dropped.push({ at: hhmm, why: 'מחוץ לשעות הפרסום' });
     else if (kept && !kept.has(at.getTime())) dropped.push({ at: hhmm, why: 'מעבר לחבילה החודשית' });
@@ -63,8 +65,8 @@ const thinned = new Map();
 /**
  * A month's slots, thinned to a plan: { slots: Date[] (the ones kept), all: how many before thinning }. A schedule with
  * more slots in a month than `perMonth` drops the extra ones evenly over the month, a day's second slot first, so a
- * plan of 40 posts lasts the whole month instead of running out in its third week. Shabbat and the festivals are
- * dropped before any of this, and a month with fewer slots than the plan keeps them all.
+ * plan of 40 posts lasts the whole month instead of running out in its third week. Shabbat and the festivals (unless
+ * the schedule posts on them) are dropped before any of this, and a month with fewer slots than the plan keeps them all.
  */
 export function monthSlots(month, schedule = {}, perMonth = schedule.perMonth) {
   const plain = { ...schedule, perMonth: null };

@@ -214,7 +214,7 @@ const shelf = (demo, base) => {
 
 // What Teder does for a store that turns it on: the four lines of /teder on openfrequency.co.il, the last one saying
 // the days and times are the customer's own (src/schedule/choice.js).
-const INCLUDES = ['מצגות בעברית שתדר כותב ומעצב בשבילכם', 'כל מצגת בגודל של טיקטוק ובגודל של אינסטגרם', 'כל מצגת מחכה לאישור שלכם לפני שהיא עולה', 'פרסום בימים ובשעות שאתם בוחרים. בשבת ובחג לא מפרסמים'];
+const INCLUDES = ['מצגות בעברית שתדר כותב ומעצב בשבילכם', 'כל מצגת בגודל של טיקטוק ובגודל של אינסטגרם', 'כל מצגת מחכה לאישור שלכם לפני שהיא עולה', 'פרסום בימים ובשעות שאתם בוחרים. בשבת ובחג לא מפרסמים, אלא אם תבחרו אחרת'];
 const JOIN = 'https://openfrequency.co.il/join?p=teder';
 export const SIGNUP_DEFAULT = 'https://accounts.openfrequency.co.il/signup';
 
@@ -295,7 +295,7 @@ ${shelfHtml}
 <div class="tabs" role="presentation"><label for="d-tt">טיקטוק</label><label for="d-ig">אינסטגרם</label></div>
 <div class="stage tiktok">${strip(demo, 'tiktok', base)}</div>
 <div class="stage instagram">${strip(demo, 'instagram', base)}</div>
-<div class="cap"><b>הכיתוב</b><p>${esc(demo.post?.caption || '')}</p></div>
+<div class="cap"><b>הטקסט שעולה עם המצגת</b><p>${esc(demo.post?.caption || '')}</p></div>
 </section>
 <p class="caption">את הנושא בחר תדר, ואת המצגת הוא כתב ועיצב. לא שינינו בה מילה.${(demo.post?.photos || []).length ? ' התמונות מ־<a href="https://www.pexels.com" rel="noopener noreferrer">Pexels</a>.' : ''}</p>
 ${facts.length ? `<details class="glass facts"><summary>מאיפה כל עובדה</summary><ul>${facts.map((f) => `<li><b>${esc(f.claim)}</b><q>${esc(f.quote)}</q>${f.url ? `<a href="${esc(f.url)}" rel="noopener noreferrer">${esc(articleName(f.source) || f.url)}</a>` : ''}</li>`).join('')}</ul></details>` : ''}

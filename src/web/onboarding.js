@@ -1,13 +1,16 @@
 import { newId, nowIso } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
-import { discover } from '../onboarding/discover.js';
+import { FEW, discover, offered, strong } from '../onboarding/discover.js';
 import { createPack } from '../onboarding/pack.js';
-import { buildPost, loadPost } from '../pipeline/build.js';
-import { DEFAULT_CHOICE, saveChoice } from '../schedule/choice.js';
+import { NAME_HE, checkName, handleFromUsername, saveSetup, setupOf } from '../onboarding/setup.js';
+import { buildPost, candidateDocs, loadPost } from '../pipeline/build.js';
+import { carryOnboardingZernio, doneLink, onboardingDoneLink, onboardingStates, refreshOnboardingConnections, startConnect, startOnboardingConnect } from '../publish/connect.js';
+import { zernioConfigured } from '../publish/zernio.js';
+import { DEFAULT_CHOICE, readChoice, saveChoice } from '../schedule/choice.js';
 import { ActionError } from './actions.js';
 import { postCard } from './pages.js';
-import { connectData, connectPanel } from './connect.js';
+import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp } from './ui.js';
 
@@ -19,6 +22,14 @@ import { accDot, csrfField, esc, icon, k, layout, postButton, stamp } from './ui
 //
 // Nothing goes live before five samples exist and the owner has looked at them.
 //
+// WHILE THE SOURCES ARE SEARCHED the owner does the rest of the setup on the same page, and each part is kept on the
+// onboarding (setup_json, src/onboarding/setup.js) until the account exists: the name and the handle (offered again on
+// the sources step), the days and times (written to schedule:<account> at create), and TikTok and Instagram, connected
+// into a Zernio profile made for the onboarding that the account takes over at create (src/publish/connect.js). The
+// page never reloads itself: a small script asks GET /new/<id>/status and changes only the progress line, and when the
+// search ends it moves on to the sources, or, when the owner is typing, says the sources are ready and waits. Without
+// the script there is a link to look again.
+//
 // A new account is its workspace's: the one of the session that started it (src/web/workspace.js). Every route gets
 // the request's context; the engine's work in the background (discovery, the pack, the samples) gets the engine's
 // whole context, so a new account's look and handle are checked against every account on the server.
@@ -29,25 +40,38 @@ import { accDot, csrfField, esc, icon, k, layout, postButton, stamp } from './ui
 //   restart   the server restarted while it ran: at boot (recoverOnboarding) or when its page is opened, a row still
 //             'discovering' with no job in this process is one
 //   error     anything else
-// Each is retryable: POST /new/<id>/retry runs the discovery again on the same seed.
+// Each is retryable: POST /new/<id>/retry runs the discovery again on the same seed. Too few good sources found, and
+// POST /new/<id>/more searches again with more example sites.
+//
+// THE SAMPLES. The approved sources are read first ("קוראים את המקורות שבחרתם"), then the samples are written one by
+// one, each shown as it is ready; a refused one is followed by another (on another document) up to SAMPLE_ATTEMPTS,
+// and an error is tried once more. Fewer than SAMPLE_ENOUGH, and the customer is told what happened and what helps
+// (candidates_json.samples.failure: nofacts | unreadable | error | refused). Every refusal and error goes to the log.
 //
 // WHAT THE CUSTOMER READS IS PLAIN HEBREW. The discovery's own notes (a missing key, a site that did not answer, a
 // fallback ranking) are the operator's: notes_json, shown only to the operator, and explained in docs/operator-notes.md.
-// The customer is told only what they can act on (candidates_json.said).
+// The customer is told only what they can act on (candidates_json.said). A source's scores and terms are the
+// operator's too: the customer is offered only the sources worth offering (src/onboarding/discover.js offered).
 
 const STATUS_HE = { discovering: 'מחפשים מקורות', review: 'בוחרים מקורות', failed: 'החיפוש נעצר', samples: 'פוסטים לדוגמה', ready: 'מוכן לעלות', live: 'באוויר' };
+/** The operator's alone: the customer never reads a source's terms (docs/operator-notes.md). */
 const TERMS_HE = { ok: 'תנאים בסדר', check: 'לבדוק תנאי שימוש', no: 'אסור לשימוש' };
 const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'נתונים' };
 const FAILURE_HE = { timeout: 'החיפוש לקח יותר מדי זמן ונעצר.', restart: 'החיפוש נקטע באמצע.', error: 'משהו השתבש בחיפוש.' };
 /** The most a discovery may run before it is stopped and marked failed (retryable). */
 export const DISCOVERY_TIMEOUT_MS = 3 * 60_000;
+/** The samples one press asks for, the fewest that count as done, and the most tries to get there. */
+export const SAMPLE_TARGET = 5;
+export const SAMPLE_ENOUGH = 3;
+export const SAMPLE_ATTEMPTS = 9;
 const running = new Map();
-/** What a running discovery is doing now: { step, done, total } (src/onboarding/discover.js onProgress). */
+/** What a running job is doing now: { step, done, total } (src/onboarding/discover.js onProgress, and the samples). */
 const progress = new Map();
 
 const engine = (ctx) => ctx.global || ctx;
 
 const RESTARTED = 'the server restarted while the discovery ran';
+const RECORDED_NOTE = 'המנוע במצב הקלטות: בלי ANTHROPIC_API_KEY אין מי שיכתוב פוסטים מהמקורות החדשים. עם מפתח, או עם הקלטות (npm run record), הפוסטים ייכתבו כאן.';
 
 /** Every discovery a restart left 'discovering' is failed, retryable. Called at boot (scripts/web.js). */
 export function recoverOnboarding(db) {
@@ -62,7 +86,7 @@ const row = (ctx, id, { recover = true } = {}) => {
     ctx.db.update('onboarding', id, { status: 'failed', candidates_json: { failure: 'restart' }, notes_json: [RESTARTED], updated_at: nowIso() });
     r = ctx.db.get('SELECT * FROM onboarding WHERE id = ?', id);
   }
-  return { ...r, seed: j(r.seed_json, {}), found: j(r.candidates_json, {}), notes: j(r.notes_json, []) };
+  return { ...r, seed: j(r.seed_json, {}), found: j(r.candidates_json, {}), notes: j(r.notes_json, []), setup: j(r.setup_json, {}) || {} };
 };
 
 function startDiscovery(ctx, id) {
@@ -96,25 +120,93 @@ function startDiscovery(ctx, id) {
   running.set(id, job);
 }
 
+/** Read the account's approved sources before a sample is written: { docs, sources, failed: [{ name, error }] }. */
+async function readSources(ctx, pack) {
+  const pctx = { ...ctx, pack, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources };
+  const docs = await candidateDocs(pctx, pack);
+  const srcs = ctx.db.all("SELECT name, last_error FROM sources WHERE account_id = ? AND status = 'approved'", pack.id);
+  return { docs: docs.length, sources: srcs.length, failed: srcs.filter((s) => s.last_error).map((s) => ({ name: s.name, error: s.last_error })) };
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The samples, in the background: the sources read first, then one sample at a time. `ctx.samplesOpts` ({ build, read,
+ * retryMs }) stands in for buildPost and the read in the tests.
+ */
 function startSamples(ctx, id) {
   if (running.has(id)) return;
   const r = row(ctx, id);
   ctx = engine(ctx);
+  const opts = ctx.samplesOpts || {};
+  const build = opts.build || buildPost;
+  const read = opts.read || readSources;
   const pack = ctx.pack(r.pack_id);
+  const say = (m) => ctx.log?.(`[onboarding] ${id} (${pack.id}): ${m}`);
   const count = () => ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", pack.id).n;
+  const notes = [];
+  const save = (samples) => {
+    const now = row(ctx, id, { recover: false });
+    ctx.db.update('onboarding', id, { status: now.status === 'ready' || now.status === 'live' ? now.status : 'samples', candidates_json: { ...now.found, samplesFailed: Boolean(samples.failure), samples }, notes_json: [...now.notes, ...notes], updated_at: nowIso() });
+  };
   const job = (async () => {
-    const notes = [];
     const before = count();
-    for (let i = 0; i < 5; i++) {
-      const res = await buildPost(ctx, { pack, sample: true });
-      if (res.status !== 'sample') notes.push(`פוסט ${i + 1}: ${res.reason}`);
+    progress.set(id, { step: 'read' });
+    const got = await read(ctx, pack);
+    if (got.failed.length) notes.push(...got.failed.map((s) => `${s.name}: ${s.error}`));
+    say(`read ${got.sources} source(s): ${got.docs} document(s)${got.failed.length ? `, ${got.failed.length} failed (${got.failed.map((s) => `${s.name}: ${s.error}`).join(' · ')})` : ''}`);
+    if (!got.docs) {
+      const failure = got.sources && got.failed.length === got.sources ? 'unreadable' : 'nofacts';
+      notes.push(failure === 'unreadable' ? 'אף מקור מאושר לא נקרא' : 'המקורות נקראו, ואין בהם מסמך לכתוב ממנו');
+      if (ctx.mode === 'recorded') notes.push(RECORDED_NOTE);
+      say(`no samples written: ${failure}`);
+      return save({ made: 0, failure, at: nowIso() });
     }
-    const n = count();
-    if (n < 5 && ctx.mode === 'recorded') notes.push('המנוע במצב הקלטות: בלי ANTHROPIC_API_KEY אין מי שיכתוב פוסטים מהמקורות החדשים. עם מפתח, או עם הקלטות (npm run record), הפוסטים ייכתבו כאן.');
-    ctx.db.update('onboarding', id, { status: 'samples', candidates_json: { ...r.found, samplesFailed: n === before }, notes_json: [...r.notes, ...notes], updated_at: nowIso() });
+    let tries = 0;
+    let errors = 0;
+    let empty = 0;
+    progress.set(id, { step: 'write', done: 0, total: SAMPLE_TARGET });
+    while (count() - before < SAMPLE_TARGET && tries < SAMPLE_ATTEMPTS) {
+      tries++;
+      let res;
+      try {
+        res = await build(ctx, { pack, sample: true });
+      } catch (e) {
+        res = { status: 'blocked', kind: 'error', reason: String(e.message).slice(0, 300) };
+      }
+      if (res.status === 'sample') {
+        errors = 0;
+        empty = 0;
+        progress.set(id, { step: 'write', done: count() - before, total: SAMPLE_TARGET });
+        continue;
+      }
+      const kind = res.kind || 'error';
+      notes.push(`ניסיון ${tries}: ${res.reason || res.status}`);
+      say(`sample try ${tries} refused (${kind}): ${res.reason || res.status}`);
+      if (kind === 'error') {
+        // Once more after a moment: a model that did not answer usually answers the second time.
+        if (++errors >= 2) break;
+        await sleep(opts.retryMs ?? 5000);
+      } else if (kind === 'no_source') {
+        // Nothing new left to write from.
+        if (++empty >= 2) break;
+      }
+    }
+    const made = count() - before;
+    const failure = made >= SAMPLE_ENOUGH ? null : errors >= 2 ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
+    if (made < SAMPLE_TARGET && ctx.mode === 'recorded') notes.push(RECORDED_NOTE);
+    say(`${made} sample(s) in ${tries} tries${failure ? `, failed: ${failure}` : ''}`);
+    return save({ made, failure, at: nowIso() });
   })()
-    .catch((e) => ctx.db.update('onboarding', id, { candidates_json: { ...r.found, samplesFailed: true }, notes_json: [...r.notes, String(e.message)], status: 'samples', updated_at: nowIso() }))
-    .finally(() => running.delete(id));
+    .catch((e) => {
+      say(`the samples stopped: ${e.stack || e.message}`);
+      notes.push(String(e.message));
+      return save({ made: 0, failure: 'error', at: nowIso() });
+    })
+    .finally(() => {
+      running.delete(id);
+      progress.delete(id);
+    });
   running.set(id, job);
 }
 
@@ -127,11 +219,100 @@ const saidBanner = (lines) => (lines?.length ? `<div class="banner info">${icon(
 
 function progressLine(p) {
   if (!p) return '';
-  if (p.step === 'sites' && p.total) return ` עכשיו בודקים אתרים, ${p.done} מתוך ${p.total}.`;
-  if (p.step === 'formats') return ' עכשיו בודקים מה עובד בתחום שלכם.';
-  if (p.step === 'score') return ' כמעט סיימנו, נותנים ציון לכל מקור.';
-  return ' עכשיו מחפשים אתרים.';
+  if (p.step === 'sites' && p.total) return `עכשיו בודקים אתרים, ${p.done} מתוך ${p.total}.`;
+  if (p.step === 'formats') return 'עכשיו בודקים מה עובד בתחום שלכם.';
+  if (p.step === 'score') return 'כמעט סיימנו, בודקים כל מקור.';
+  if (p.step === 'read') return 'קוראים את המקורות שבחרתם.';
+  if (p.step === 'write') return `כותבים פוסטים לדוגמה, ${p.done} מתוך ${p.total} מוכנים.`;
+  return 'עכשיו מחפשים אתרים.';
 }
+
+/* ------------------------------------------------------------------ the status the page polls */
+
+const sampleCount = (db, packId) => (packId ? db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND sample = 1 AND status = 'sample'", packId).n : 0);
+
+/**
+ * GET /new/<id>/status: { status, busy, key, line, ready, go }. `key` changes whenever the page would show something
+ * else (the search ended, a sample is ready); `line` is the progress line; `ready` and `go` the call shown when the
+ * page waits for the customer to finish typing.
+ */
+export function statusOf(ctx, r) {
+  const busy = running.has(r.id);
+  const n = sampleCount(ctx.db, r.pack_id);
+  const key = `${r.status}:${busy ? 'busy' : 'idle'}:${n}`;
+  const line = busy ? progressLine(progress.get(r.id)) : '';
+  const ready = r.status === 'review' || r.status === 'discovering' ? 'המקורות מוכנים, אפשר לבחור.' : r.status === 'failed' ? 'החיפוש נעצר.' : busy ? 'פוסט לדוגמה חדש מוכן.' : 'הפוסטים לדוגמה מוכנים.';
+  const go = r.status === 'review' || r.status === 'discovering' ? 'לבחור מקורות' : 'להמשיך';
+  return { status: r.status, busy, key, line, ready, go };
+}
+
+/** The progress line and the call to move on, polled by the page's script (src/web/static/app.js data-poll). */
+function pollBox(ctx, r, { href }) {
+  const s = statusOf(ctx, r);
+  return `<div class="pollbox" data-poll="/new/${esc(r.id)}/status" data-key="${esc(s.key)}" data-href="${esc(href)}">
+<p class="m0" data-progress aria-live="polite">${esc(s.line)}</p>
+<div class="banner info mt12" data-ready hidden>${icon('check')}<div><b data-ready-text>${esc(s.ready)}</b><p>מה שכתבתם כאן נשמר רק אחרי שלוחצים על שמירה.</p></div><a class="btn sm primary" href="${esc(href)}" data-ready-go>${esc(s.go)}</a></div>
+<p class="small m6 js-hide"><a href="/new/${esc(r.id)}">לבדוק שוב</a></p></div>`;
+}
+
+/* ------------------------------------------------------------------ the parts done while waiting */
+
+/** A name to start from: the one saved, else the workspace's (the business), else the site the owner gave. */
+function nameOf(pc, r) {
+  if (r.setup.displayName) return r.setup.displayName;
+  if (pc.workspace?.name) return String(pc.workspace.name).slice(0, 40);
+  const site = (r.found.candidates || []).find((c) => c.origin === 'example' && c.name);
+  return site ? String(site.name).split(/\s[|·\-–]\s/)[0].trim().slice(0, 40) : '';
+}
+
+/** A handle to start from: the one saved, else the username of a TikTok or Instagram connected already. */
+function handleOf(r) {
+  if (r.setup.handle) return r.setup.handle;
+  const c = r.setup.zernio?.connections || {};
+  return handleFromUsername(c.tiktok?.username) || handleFromUsername(c.instagram?.username) || '';
+}
+
+/** The name and handle fields, the same wherever they are asked. */
+function nameFields(pc, r) {
+  return `<p class="muted m0">שם המשתמש מופיע על כל מצגת, כדי שמי שרואה אותה יידע איפה למצוא אתכם. השם של העסק מופיע כאן באתר, ובחלק מהעיצובים גם על המצגות.</p>
+<label class="f">השם של העסק <small>כמו שהלקוחות מכירים אתכם</small><input type="text" name="displayName" required maxlength="40" value="${esc(nameOf(pc, r))}"></label>
+<label class="f">שם המשתמש שלכם בטיקטוק ובאינסטגרם <small>באותיות באנגלית, למשל cafe.yafo</small><span class="atfield" dir="ltr"><span aria-hidden="true">@</span><input type="text" name="handle" required maxlength="31" dir="ltr" autocapitalize="off" spellcheck="false" pattern="@?[A-Za-z0-9._\\-]{2,30}" value="${esc(handleOf(r))}"></span></label>`;
+}
+
+const NAME_TITLE = 'השם שלכם על המצגות';
+
+function namePanel(pc, r) {
+  return `<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header>
+<form method="post" action="/new/${esc(r.id)}/name" class="formgrid">${csrfField(pc)}${nameFields(pc, r)}
+<p class="muted small m0">אפשר לשנות את זה גם בשלב הבא, כשבוחרים מקורות.</p>
+<div><button class="btn" type="submit">שמירה</button></div></form></section>`;
+}
+
+/** What the connect panel reads for an onboarding with no account yet. */
+const obConnectData = (ctx, r) => ({
+  pack: { id: r.id, meta: { platforms: ['tiktok', 'instagram'] } },
+  configured: zernioConfigured(),
+  hasProfile: Boolean(r.setup.zernio?.profileId),
+  platforms: onboardingStates(ctx.db, r.id),
+  mode: 'draft-now',
+  via: 'zernio',
+  zernio: null,
+});
+
+function connectSection(ctx, pc, r) {
+  return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק ולאינסטגרם</h2></header>
+<p class="muted">אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. כשהחשבון ייווצר החיבור יעבור אליו, ולא תצטרכו לחבר שוב.</p>
+${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`;
+}
+
+/** The days and times, before the account exists: the onboarding's choice, else the one a new account starts with. */
+function scheduleSection(ctx, pc, r) {
+  const pseudo = { id: r.id, meta: { displayName: r.setup.displayName || r.seed.niche, schedule: {} } };
+  const d = scheduleData(ctx.db, pseudo, { choice: r.setup.choice?.byDay ? r.setup.choice : { byDay: DEFAULT_CHOICE } });
+  return schedulePanel(pc, d, { action: `/new/${r.id}/schedule`, back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${d.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` });
+}
+
+/* ------------------------------------------------------------------ the pages */
 
 function listPage(ctx, pc) {
   const rows = (ctx.workspaceId == null ? ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20') : ctx.db.all('SELECT * FROM onboarding WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 20', ctx.workspaceId)).map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
@@ -139,7 +320,7 @@ function listPage(ctx, pc) {
     { ...pc, title: 'חשבון חדש', active: 'new' },
     `<div class="head"><h1>חשבון חדש</h1><span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים חמישה פוסטים לדוגמה.</span></div>
 <div class="cols"><section class="panel"><header><h2>מתחילים מכאן</h2></header>
-<p class="muted">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ונותן לכל אחד ציון עם הסבר. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
+<p class="muted">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
 <label class="f">במה החשבון יעסוק <small>כמו שהייתם מספרים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">למי הוא מיועד<input type="text" name="audience" maxlength="160" placeholder="למשל: סטודנטים שמבשלים בתקציב קטן"></label>
@@ -150,19 +331,66 @@ function listPage(ctx, pc) {
   );
 }
 
+const DAY_MS = 86_400_000;
+
+/** A source as the customer sees it: its name, its address, a plain word where one helps. The operator: every score. */
+function sourceCard(pc, c) {
+  const s = c.score || {};
+  const fresh = c.newest && Date.now() - Date.parse(c.newest) < 2 * DAY_MS;
+  const chips = pc.operator
+    ? `<span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${s.authority >= 7 ? 'ok' : s.authority >= 5 ? '' : 'warn'}">סמכות ${s.authority}/10</span><span class="chip">עדכניות ${s.freshness}/10</span>${s.relevance != null ? `<span class="chip ${s.relevance >= 6 ? '' : 'warn'}">רלוונטיות ${s.relevance}/10</span>` : ''}<span class="chip ${s.terms === 'ok' ? 'ok' : s.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[s.terms] || s.terms)}</span>`
+    : `${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`;
+  const reason = pc.operator ? `${s.reason || ''}${s.relevanceReason ? ` · ${s.relevanceReason}` : ''}${s.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}` : c.origin === 'example' ? 'האתר שנתתם לנו.' : s.reason || '';
+  return `<article class="card srccard"><div class="meta p0"><label class="chip ghost"><input type="checkbox" name="approve_${esc(c.id)}"${strong(c) ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}> לאשר</label>${chips}</div>
+<h3 class="srcname" dir="auto">${esc(c.name)}</h3><a class="small ltr" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.url)}</a>
+<p class="muted small m6" dir="auto">${esc(reason)}</p>
+<label class="f mt12">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(c.why || s.reason)}" maxlength="300"></label></article>`;
+}
+
+/** Too few good sources: said plainly, with a search again with more of the owner's own sites. */
+function fewPanel(pc, r, n) {
+  return `<section class="panel" id="more"><header><h2>מצאנו מעט מקורות טובים לנושא הזה</h2></header>
+<p class="muted">${n ? `יש כאן ${n === 1 ? 'מקור אחד' : `${n} מקורות`} שאפשר לעבוד איתם.` : 'לא מצאנו מקור שבאמת עוסק בנושא.'} עדיף להוסיף אתרים שאתם סומכים עליהם ולחפש שוב, במקום למלא את החשבון במקורות חלשים.</p>
+<form method="post" action="/new/${esc(r.id)}/more" class="formgrid">${csrfField(pc)}
+<label class="f">אתרים שאתם סומכים עליהם <small>כתובת אחת בכל שורה</small><textarea name="examples" rows="3" dir="ltr" required></textarea></label>
+<div><button class="btn" type="submit">${icon('spark')}לחפש שוב</button></div></form></section>`;
+}
+
+const SAMPLES_HE = {
+  nofacts: 'במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן. אפשר להוסיף מקורות או לבחור אחרים, ואז לנסות שוב.',
+  unreadable: 'לא הצלחנו לקרוא את המקורות שבחרתם. אפשר להוסיף מקורות או לבחור אחרים, או לנסות שוב בעוד כמה דקות.',
+  error: 'משהו נתקע אצלנו באמצע הכתיבה. אפשר לנסות שוב.',
+  refused: 'הפוסטים שכתבנו לא עברו את הבדיקות שלנו, ולכן לא הראינו אותם. אפשר לנסות שוב, או להוסיף מקורות עם יותר עובדות.',
+};
+
+/** The samples' outcome, said with what helps. */
+function samplesSaid(pc, r, pack, { busy }) {
+  const s = r.found.samples;
+  const failed = busy ? null : s ? s.failure : r.found.samplesFailed ? 'error' : null;
+  if (!failed) return '';
+  const made = s?.made || 0;
+  const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
+  const toSources = failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
+  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b></div><div class="actions p0">${toSources}${postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' })}</div></div>`;
+}
+
 function detailPage(ctx, pc, r) {
   const head = `<div class="head"><div><a class="muted small back" href="/new">${icon('chev')}חשבון חדש</a><h1>${esc(r.seed.niche)}</h1></div><span class="end"><span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span></span></div>`;
   const ops = operatorNotes(pc, r.notes);
   if (r.status === 'discovering') {
     return layout(
       { ...pc, title: 'מחפשים מקורות', active: 'new' },
-      `${head}<div class="empty">${icon('spark')}<b>מחפשים מקורות</b>זה לוקח בדרך כלל כמה דקות.${esc(progressLine(progress.get(r.id)))} הדף מתעדכן לבד, ואפשר גם לסגור אותו ולחזור אחר כך.</div><meta http-equiv="refresh" content="5">`
+      `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
+<p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
+${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
+<p class="muted mt12">בינתיים אפשר לסדר כאן את השם, את הימים והשעות ואת החיבור לטיקטוק ולאינסטגרם. מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
+<div class="cols"><div class="grid12">${namePanel(pc, r)}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
     );
   }
   if (r.status === 'failed') {
     return layout(
       { ...pc, title: 'החיפוש נעצר', active: 'new' },
-      `${head}<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>אפשר לנסות שוב עם אותם פרטים. אם זה חוזר, כתבו לנו ונבדוק.</div>
+      `${head}<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.</div>
 <div class="actions">${postButton(pc, `/new/${r.id}/retry`, `${icon('spark')}לנסות שוב`, { cls: 'btn primary' })}<a class="btn" href="/new">להתחיל מחדש</a></div>${ops}`
     );
   }
@@ -174,24 +402,21 @@ function detailPage(ctx, pc, r) {
       : pc.operator
         ? '<section class="panel"><header><h2>פורמטים שעובדים בנישה</h2></header><p class="muted small">לא נבדק (בלי YOUTUBE_API_KEY). למפעיל בלבד.</p></section>'
         : '';
+    // The customer is offered the good ones only; the operator sees the rest too, folded away.
+    const shown = cands.filter(offered);
+    const hidden = cands.filter((c) => !offered(c));
+    const hiddenPanel = pc.operator && hidden.length ? `<details class="mt12"><summary class="muted small">מקורות שלא הוצגו ללקוח (${hidden.length})</summary><div class="grid12">${hidden.map((c) => sourceCard(pc, c)).join('')}</div></details>` : '';
     return layout(
       { ...pc, title: 'בחירת מקורות', active: 'new' },
-      `${head}${saidBanner(r.found.said)}
-<form method="post" action="/new/${esc(r.id)}/create">${csrfField(pc)}
-<div class="cols"><div class="grid12">${cands
-        .map(
-          (c) => `<article class="card srccard"><div class="meta p0"><label class="chip ghost"><input type="checkbox" name="approve_${esc(c.id)}"${c.score.authority >= 7 && c.score.terms !== 'no' ? ' checked' : ''}> לאשר</label><span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${c.score.authority >= 7 ? 'ok' : c.score.authority >= 5 ? '' : 'warn'}">סמכות ${c.score.authority}/10</span><span class="chip">עדכניות ${c.score.freshness}/10</span><span class="chip ${c.score.terms === 'ok' ? 'ok' : c.score.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[c.score.terms])}</span></div>
-<h3 class="srcname" dir="auto">${esc(c.name)}</h3><a class="small ltr" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.url)}</a>
-<p class="muted small m6">${esc(c.score.reason)}${pc.operator && c.score.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}</p>
-<label class="f mt12">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(c.why || c.score.reason)}" maxlength="300"></label></article>`
-        )
-        .join('') || `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר <a href="/new">להתחיל שוב</a> עם כתובות של אתרים שאתם סומכים עליהם.</div>`}</div>
-<div class="grid12"><section class="panel"><header><h2>שם לחשבון</h2></header><div class="formgrid">
-<label class="f">שם החשבון<input type="text" name="displayName" required maxlength="40"></label>
-<label class="f">שם המשתמש <small>באותיות לועזיות, כמו בטיקטוק ובאינסטגרם</small><input type="text" name="handle" required maxlength="30" dir="ltr" pattern="@?[A-Za-z0-9._-]{2,30}"></label>
-<p class="muted small">העיצוב, הצבעים והגופן נבחרים לבד, כך שהחשבון לא ייראה כמו אף חשבון אחר. אפשר לשנות אותם אחר כך.</p>
+      `${head}${saidBanner(r.found.said)}${shown.length < FEW ? fewPanel(pc, r, shown.length) : ''}
+<form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
+<div class="cols"><div class="grid12">${shown.map((c) => sourceCard(pc, c)).join('') || `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}${hiddenPanel}</div>
+<div class="grid12"><section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
+${nameFields(pc, r)}
+<p class="muted small m0">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
 <button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button></div></section>
-${formatsPanel}</div></div></form>${ops}`
+${formatsPanel}</div></div></form>
+<div class="cols"><div class="grid12">${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>${ops}`
     );
   }
   const pack = ctx.pack(r.pack_id);
@@ -199,20 +424,20 @@ ${formatsPanel}</div></div></form>${ops}`
   const good = samples.filter((p) => p.status === 'sample').length;
   const busy = running.has(r.id);
   const reviewed = r.status === 'ready';
-  const said = !busy && r.found.samplesFailed ? ['לא הצלחנו לכתוב דוגמאות הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו לנו.'] : [];
   const sched = pack && r.status !== 'live' ? scheduleData(ctx.db, pack) : null;
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `${head}${saidBanner(said)}
+    `${head}${samplesSaid(pc, r, pack, { busy })}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
-<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה, הדף מתעדכן לבד</span><meta http-equiv="refresh" content="4">` : postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' })}
+<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' })}
 ${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
 ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
+${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
 <p class="muted small mt12">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p>
-${pack ? `<p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק ולאינסטגרם, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}` : ''}</section>
-${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות. בשבת ובחג לא מפרסמים.` }) : ''}
+${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק ולאינסטגרם, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
+${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
 ${ops}
 <div class="posts mt16">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>`
   );
@@ -221,18 +446,31 @@ ${ops}
 /** A pack that could not be written, said to the customer: what they can fix, else that it failed on our side. */
 function createError(ctx, e) {
   // Pack ids are the server's, so a handle another workspace has is refused without naming whose it is.
-  if (/already exists/.test(e.message)) return new ActionError('שם המשתמש הזה כבר תפוס. בחרו שם אחר.');
-  if (/handle must be latin/.test(e.message)) return new ActionError('שם המשתמש צריך להיות באותיות לועזיות ובמספרים, לפחות שני תווים.');
+  if (/already exists/.test(e.message)) return new ActionError(NAME_HE.taken);
+  if (/handle must be latin/.test(e.message)) return new ActionError(NAME_HE.badHandle);
   if (/approve at least one source/.test(e.message)) return new ActionError('צריך לאשר לפחות מקור אחד.');
   ctx.log?.(`[onboarding] the pack was not written: ${[e.message, ...(e.problems || [])].join(' · ')}`);
   return new ActionError('לא הצלחנו ליצור את החשבון הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו לנו.', 500);
 }
 
-/** The routes, each (ctx, user, match, form or query, page context) with the request's context. */
-export function onboardingRoutes() {
+/** Before the account exists: the parts that wait for it. After, they are the account's own pages. */
+const beforeAccount = (r) => {
+  if (r.pack_id) throw new ActionError('החשבון כבר נוצר, ואת זה משנים עכשיו בדף שלו.', 409);
+};
+
+/** The name and handle as typed, kept so a form that will not do comes back with them. */
+const typed = (f) => ({ displayName: String(f.displayName || '').trim().slice(0, 40), handle: String(f.handle || '').trim().replace(/^@+/, '').slice(0, 30) });
+
+/**
+ * The routes, each (ctx, user, match, form or query, page context) with the request's context. `links()` is
+ * { base, secret }: where Zernio sends the browser back after a connect, and what that address is signed with.
+ */
+export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
   return [
     ['GET', /^\/new$/, (ctx, _u, _m, _q, pc) => listPage(ctx, pc)],
     ['GET', /^\/new\/([\w-]+)$/, (ctx, _u, m, _q, pc) => detailPage(ctx, pc, row(ctx, m[1]))],
+    // What the waiting page's script asks for (JSON): the progress line, and whether there is something new to show.
+    ['GET', /^\/new\/([\w-]+)\/status$/, (ctx, _u, m) => ({ json: statusOf(ctx, row(ctx, m[1])) })],
     [
       'POST',
       /^\/new$/,
@@ -262,21 +500,111 @@ export function onboardingRoutes() {
     ],
     [
       'POST',
+      /^\/new\/([\w-]+)\/more$/,
+      (ctx, user, m, f) => {
+        const r = row(ctx, m[1]);
+        if (r.status !== 'review') throw new ActionError('אפשר לחפש שוב רק לפני שהחשבון נוצר.', 409);
+        const added = String(f.examples || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+        if (!added.length) throw new ActionError('צריך לכתוב לפחות כתובת אחת של אתר.');
+        const seed = { ...r.seed, examples: [...new Set([...(r.seed.examples || []), ...added])].slice(0, 10) };
+        ctx.db.update('onboarding', r.id, { status: 'discovering', seed_json: seed, candidates_json: {}, notes_json: [], updated_at: nowIso() });
+        audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, more: added.length } });
+        startDiscovery(ctx, r.id);
+        return { ok: true, message: 'מחפשים שוב, עם האתרים שהוספתם.', redirect: `/new/${r.id}` };
+      },
+    ],
+    [
+      'POST',
+      /^\/new\/([\w-]+)\/name$/,
+      (ctx, user, m, f) => {
+        const r = row(ctx, m[1]);
+        beforeAccount(r);
+        saveSetup(ctx.db, r.id, typed(f));
+        const n = checkName(f, { packs: engine(ctx).packs });
+        if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
+        saveSetup(ctx.db, r.id, { displayName: n.displayName, handle: n.handle });
+        audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, name: true } });
+        return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#name` };
+      },
+    ],
+    [
+      'POST',
+      /^\/new\/([\w-]+)\/schedule$/,
+      (ctx, user, m, f) => {
+        const r = row(ctx, m[1]);
+        beforeAccount(r);
+        const c = readChoice(f);
+        if (c.problems) throw new ActionError(c.problems.join('. '), 422, { problems: c.problems });
+        saveSetup(ctx.db, r.id, { choice: { ...c, at: nowIso() } });
+        audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, schedule: c.byDay } });
+        return { ok: true, message: 'נשמר. החשבון יפרסם בימים ובשעות שבחרתם.', redirect: `/new/${r.id}#schedule` };
+      },
+    ],
+    [
+      'POST',
+      /^\/new\/([\w-]+)\/connect\/(tiktok|instagram)$/,
+      async (ctx, user, m) => {
+        const r = row(ctx, m[1]);
+        if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');
+        const { base, secret } = links();
+        const pack = r.pack_id ? ctx.pack(r.pack_id) : null;
+        let url;
+        try {
+          url = pack
+            ? await startConnect(ctx.db, pack, m[2], { doneUrl: doneLink(secret, { base, accountId: pack.id, platform: m[2] }), actor: user.name })
+            : await startOnboardingConnect(ctx.db, r.id, m[2], { doneUrl: onboardingDoneLink(secret, { base, onboardingId: r.id, platform: m[2] }), name: r.setup.displayName || r.seed.niche, actor: user.name });
+        } catch (e) {
+          if (e.code === 'not_connectable') throw new ActionError(`${PLATFORM_NAME[m[2]]} לא צריך חיבור בחשבון הזה.`);
+          ctx.log?.(`[connect] onboarding ${r.id} ${m[2]}: ${e.message}`);
+          throw new ActionError('אי אפשר לפתוח עכשיו את מסך החיבור. נסו שוב בעוד כמה דקות.', 502);
+        }
+        return { ok: true, message: `עוברים ל${PLATFORM_NAME[m[2]]}`, go: url, goName: PLATFORM_NAME[m[2]] };
+      },
+    ],
+    [
+      'POST',
+      /^\/new\/([\w-]+)\/connections$/,
+      async (ctx, _user, m) => {
+        const r = row(ctx, m[1]);
+        beforeAccount(r);
+        if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');
+        try {
+          await refreshOnboardingConnections(ctx.db, r.id);
+        } catch (e) {
+          ctx.log?.(`[connect] onboarding ${r.id}: ${e.message}`);
+          throw new ActionError('לא הצלחנו לבדוק עכשיו. נסו שוב בעוד כמה דקות.', 502);
+        }
+        return { ok: true, message: 'החיבורים עודכנו.', redirect: `/new/${r.id}#connect` };
+      },
+    ],
+    [
+      'POST',
       /^\/new\/([\w-]+)\/create$/,
       async (ctx, user, m, f) => {
         const r = row(ctx, m[1]);
         if (r.status !== 'review') throw new ActionError('החשבון הזה כבר נוצר, או שהחיפוש עוד לא הסתיים.', 409);
-        const candidates = (r.found.candidates || []).map((c) => ({ ...c, approved: f[`approve_${c.id}`] === 'on', why: String(f[`why_${c.id}`] || c.why || c.score?.reason || '').trim() }));
+        // A source the customer was not offered is not theirs to approve (the operator may); one whose terms forbid
+        // reuse is nobody's.
+        const may = (c) => c.score?.terms !== 'no' && (offered(c) || user.operator);
+        const candidates = (r.found.candidates || []).map((c) => ({ ...c, approved: f[`approve_${c.id}`] === 'on' && may(c), why: String(f[`why_${c.id}`] || c.why || c.score?.reason || '').trim() }));
+        saveSetup(ctx.db, r.id, typed(f));
+        const n = checkName(f, { packs: engine(ctx).packs });
+        if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
         let made;
         try {
-          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: f.displayName, handle: f.handle, examplesFromOwner: r.seed.examples });
+          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples });
         } catch (e) {
           throw createError(ctx, e);
         }
         // The account starts in onboarding: the runner leaves it alone until it goes live.
         ctx.db.insert('accounts', { id: made.id, display_name: made.pack.meta.displayName, handle: made.pack.meta.handle, mode: 'approve', status: 'onboarding', workspace_id: r.workspace_id ?? null, created_at: nowIso(), updated_at: nowIso() });
-        // Its days and times start at the default, which reaches the month's plan; the owner may change them before it goes live.
-        saveChoice(ctx.db, made.id, DEFAULT_CHOICE, { actor: user.name });
+        // Its days and times: what the owner chose while the sources were searched, else the default, which reaches
+        // the month's plan. The owner may change them before it goes live.
+        const choice = setupOf(ctx.db, r.id).choice;
+        if (choice?.byDay) saveChoice(ctx.db, made.id, choice.byDay, { actor: user.name, shabbat: Boolean(choice.shabbat), holidays: Boolean(choice.holidays) });
+        else saveChoice(ctx.db, made.id, DEFAULT_CHOICE, { actor: user.name });
+        // TikTok and Instagram connected before the account existed: the account takes the profile over.
+        carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
         ctx.reloadPacks();
         ctx.db.update('onboarding', r.id, { status: 'samples', pack_id: made.id, candidates_json: { ...r.found, candidates }, updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: made.id, detail: { sources: candidates.filter((c) => c.approved).length } });

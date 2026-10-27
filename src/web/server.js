@@ -21,7 +21,7 @@ import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
 import { assistantApi, isAssistantPath } from '../assistant/api.js';
 import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
-import { connectRoutes, goPage, publicConnect } from './connect.js';
+import { connectRoutes, goPage, publicConnect, publicOnboardingConnect, publicPick } from './connect.js';
 import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
@@ -52,7 +52,8 @@ import { entitlementClient } from '../billing/entitlement.js';
 // request signed. /m/... is one rendered slide behind a signed link that expires,
 // handed out by that API for WhatsApp to fetch. /connect/<account>/<platform> is the
 // link that API hands on to connect a TikTok or Instagram, and where Zernio sends the
-// browser back (src/web/connect.js): its signature is the permission.
+// browser back (src/web/connect.js): its signature is the permission. /new/<onboarding>/connect/<platform>/done is
+// where Zernio sends it back after a connect made before the account existed, on the same terms.
 // Server-rendered HTML with one small script; everything works without it.
 
 export const HOST = '127.0.0.1';
@@ -183,7 +184,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/push\/subscribe$/, (c, u, m, f) => act.subscribePush(c, u, {}, f)],
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
-    ...onboardingRoutes(),
+    ...onboardingRoutes(connectLinks),
     ...scheduleRoutes(),
     ...stylesRoutes(),
     ...demosRoutes(),
@@ -229,6 +230,18 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             res.writeHead(302, { location, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
             return res.end();
           }
+          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
+        }
+        // The Instagram account picked on our own page, after a headless connect that offered several (src/web/connect.js).
+        const pk = /^\/connect\/pick\/([0-9a-f]{32})$/.exec(p);
+        if (pk) {
+          const [status, html] = await publicPick(ctx, { id: pk[1], pageId: url.searchParams.get('page') });
+          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
+        }
+        // Back from Zernio after a connect made while a new account's sources were searched, before the account existed.
+        const oc = /^\/new\/([\w-]+)\/connect\/(tiktok|instagram)\/done$/.exec(p);
+        if (oc) {
+          const [status, html] = await publicOnboardingConnect(ctx, { onboardingId: oc[1], platform: oc[2], query: url.searchParams, links: connectLinks() });
           return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
         }
         // The service worker, from the root so its scope is the whole site.
@@ -456,7 +469,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (/^\/demos(\/|$)/.test(p) && !user.operator) return page(pages.notFoundPage(pc), 404);
       for (const [method, re, fn] of ROUTES) {
         const m = method === 'GET' && re.exec(p);
-        if (m) return page(await fn(c, user, m, Object.fromEntries(url.searchParams), pc));
+        if (!m) continue;
+        const out = await fn(c, user, m, Object.fromEntries(url.searchParams), pc);
+        // A route that answers a page's script: JSON, never cached (src/web/onboarding.js status).
+        return out && typeof out === 'object' && 'json' in out ? json(req, res, 200, out.json) : page(out);
       }
       return page(pages.notFoundPage(pc), 404);
     } catch (e) {

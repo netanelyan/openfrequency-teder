@@ -107,7 +107,12 @@ test('a discovery that runs too long is stopped and failed; the page says so in 
     const id = r1.headers.get('location').split('/').pop();
     const waiting = await (await fetch(`${base}/new/${id}`, { headers: { cookie } })).text();
     assert.match(waiting, /זה לוקח בדרך כלל כמה דקות/, 'honest about the wait');
-    assert.match(waiting, /http-equiv="refresh"/);
+    assert.doesNotMatch(waiting, /http-equiv="refresh"/, 'the page never reloads itself under someone typing');
+    assert.match(waiting, new RegExp(`data-poll="/new/${id}/status"`), 'a script asks how it goes instead');
+    assert.match(waiting, new RegExp(`href="/new/${id}">לבדוק שוב</a>`), 'and without the script, a link to look again');
+    const st = await fetch(`${base}/new/${id}/status`, { headers: { cookie } });
+    assert.match(st.headers.get('content-type'), /application\/json/);
+    assert.ok(['discovering', 'failed'].includes((await st.json()).status));
     await Promise.all([...__onboarding.running.values()]);
     const failed = ctx.db.get('SELECT status, candidates_json, notes_json FROM onboarding WHERE id = ?', id);
     assert.equal(failed.status, 'failed');
@@ -248,7 +253,9 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
       return m ? visible(html).slice(Math.max(0, m.index - 80), m.index + 40) : null;
     };
     assert.equal(around(samplesPage), null, 'the samples page has no developer text');
-    assert.match(samplesPage, /לא הצלחנו לכתוב דוגמאות הפעם/, 'samples that could not be written are said plainly');
+    assert.match(samplesPage, /במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן/, 'samples that could not be written are said plainly, with what helps');
+    assert.match(samplesPage, /href="\/sources\?account=demo-green-kitchen">לבחור מקורות/, 'and a way to the sources');
+    assert.doesNotMatch(samplesPage, /כתבו לנו/);
     assert.match(samplesPage, /id="schedule"/, 'the days and times are offered before going live');
     assert.match(samplesPage, /name="back" value="\/new\//, 'and the form comes back here');
     assert.ok(choiceOf(ctx.db, row.pack_id), 'the new account starts with the default days and times');

@@ -2,7 +2,7 @@ import { now, nowIso } from '../core/clock.js';
 import { audit, getSetting, setSetting, settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { israelDate, israelInstant, addDays, hhmm } from '../schedule/israel.js';
-import { inRest } from '../schedule/shabbat.js';
+import { inRest, rulesOf } from '../schedule/shabbat.js';
 import { inWindows, slotsFor, postsOn } from '../schedule/slots.js';
 import { scheduleOf } from '../schedule/choice.js';
 import { buildPost, PausedError } from '../pipeline/build.js';
@@ -36,7 +36,8 @@ import { emailTick } from '../notify/email.js';
 //   2. generate, a day ahead: once a day, at settings.generateAt (Israel time),
 //      each running account gets a post for each of tomorrow's slots (Shabbat,
 //      the festivals and out-of-window slots are dropped by slotsFor and never
-//      planned), plus any of today's slots that have none and are far enough
+//      planned, unless the account's owner chose to post on Shabbat or the
+//      festivals: src/schedule/choice.js), plus any of today's slots that have none and are far enough
 //      away. With Claude live, the whole day's posts are drafted together through
 //      the Message Batches API at half price, in the background, while the ticks
 //      go on publishing. No more posts than the account's month has left
@@ -53,7 +54,7 @@ import { emailTick } from '../notify/email.js';
 //      In digest and auto, a post the reviewer scored as sounding a little like
 //      a bot (4 or 5) waits for the owner instead.
 //   4. publish what is approved and due, inside the account's windows, outside
-//      Shabbat and the festivals
+//      Shabbat and the festivals (those the account does not post on)
 //   4b. tell the WhatsApp assistant what happened (src/assistant/events.js): a post
 //      that waits, the slot, a post out or still not out an hour on, the month's
 //      last suggestions, Sunday's summary; held through the customer's quiet hours
@@ -306,7 +307,8 @@ export async function tick(ctx, { t = now() } = {}) {
     }
 
     // ---- 4. publish what is approved and due
-    if (!run.ok || inRest(t) || !inWindows(t, scheduleOf(db, pack).windows)) continue;
+    const sched = scheduleOf(db, pack);
+    if (!run.ok || inRest(t, rulesOf(sched)) || !inWindows(t, sched.windows)) continue;
     const ready = db.all("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' AND (slot_at IS NULL OR slot_at <= ?) ORDER BY slot_at", pack.id, new Date(t).toISOString());
     for (const p of ready.slice(0, 1)) {
       try {

@@ -5,7 +5,7 @@ import { API_PRICES, record } from '../budget/ledger.js';
 import { cachedLookup } from '../core/store.js';
 import { askJson } from '../llm/index.js';
 import { declaredFeeds, parseFeed } from '../sources/rss.js';
-import { titleOf } from '../sources/text.js';
+import { decodeEntities, titleOf } from '../sources/text.js';
 import { youtubeClient, youtubeConfigured } from '../trends/index.js';
 import { suggestApis } from './apis.js';
 
@@ -18,11 +18,19 @@ import { suggestApis } from './apis.js';
 //      (<link rel="alternate">), read by fetching the home page
 //   3. structured APIs from a catalog, where the niche has one
 //   4. formats that work in the niche on YouTube Shorts, with their real numbers
-//   5. a score for each candidate: authority, freshness, terms of use, and a
-//      one-line reason. Claude when there is a key; a transparent heuristic
-//      otherwise, labelled as such
+//   5. a score for each candidate: authority, freshness, terms of use, relevance
+//      to the seed, and a one-line reason. Claude when there is a key; a
+//      transparent heuristic otherwise, labelled as such
 //
-// Nothing found here is approved. The owner approves each source on the website.
+// Nothing found here is approved. The owner approves each source on the website, and is offered only the sources
+// worth offering (offered below): about the niche (relevance 6 or more), of decent authority (5 or more), with terms
+// that do not forbid reuse. The rest stay in the data, for the operator.
+//
+// WHY RELEVANCE. A seed "football" brought in sites with nothing about football: the Brave queries ("<niche> רשמי",
+// "<niche> site:gov.il") return pages that only mention the word, and step 2 swaps each such page for its site's home
+// page and site-wide feed, which is about everything that site covers. Nothing scored whether a source is about the
+// niche: authority is who publishes, freshness how current. Relevance is scored from the site's own title, its
+// description and a sample of its latest items.
 
 const AUTHORITY = [
   [/\.gov\.il$|\.gov$|\.gov\.[a-z]{2}$|\.mil\.il$|europa\.eu$|\.int$/, 9, 'אתר ממשלתי או בינלאומי רשמי'],
@@ -32,8 +40,74 @@ const AUTHORITY = [
   [/reuters\.com$|apnews\.com$|bbc\.co\.uk$|bbc\.com$|nytimes\.com$|theguardian\.com$|haaretz\.co\.il$|ynet\.co\.il$|calcalist\.co\.il$|globes\.co\.il$|themarker\.com$|geektime\.co\.il$|theverge\.com$|wired\.com$|espn\.com$|uefa\.com$|fifa\.com$/, 7, 'גוף תקשורת מבוסס'],
 ];
 
-/** The heuristic score, used when there is no model to ask. */
-export function heuristicScore(c, t = now()) {
+/** Offered to the customer: relevant (6+), of decent authority (5+), terms that allow reuse. */
+export const RELEVANT = 6;
+export const DECENT = 5;
+/** Fewer offered than this, and the customer is told plainly and offered a search with more sites. */
+export const FEW = 3;
+
+/**
+ * Whether the customer is offered this candidate. A site the customer typed in as an example is theirs to judge and is
+ * always offered (unless its terms forbid reuse). A candidate scored before relevance existed passes on authority.
+ */
+export function offered(c) {
+  const s = c.score || {};
+  if (s.terms === 'no') return false;
+  if (c.origin === 'example') return true;
+  return (s.relevance == null || s.relevance >= RELEVANT) && s.authority >= DECENT;
+}
+
+/** Ticked on the sources step before the customer touches it: offered, and strong on both counts. */
+export const strong = (c) => offered(c) && c.score.authority >= 7 && (c.score.relevance ?? 10) >= 7;
+
+const STOP = new Set(['של', 'על', 'את', 'עם', 'או', 'גם', 'כל', 'לא', 'זה', 'מה', 'איך', 'למה', 'כמו', 'בלי', 'and', 'the', 'for', 'with', 'from', 'tips', 'guide', 'official', 'how', 'about']);
+
+/** The words of a phrase to look for: Hebrew of 3 letters or more (and without a one-letter prefix), English of 4 or more. */
+function keywordsOf(text) {
+  const out = new Set();
+  for (const w of String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
+    if (!w || STOP.has(w)) continue;
+    if (/[\u0590-\u05FF]/.test(w)) {
+      if (w.length < 3) continue;
+      out.add(w);
+      if (w.length >= 5 && /^[הובלמשכ]/.test(w)) out.add(w.slice(1));
+    } else if (w.length >= 4) {
+      out.add(w);
+      if (w.length > 5 && w.endsWith('s')) out.add(w.slice(0, -1));
+    }
+  }
+  return [...out];
+}
+
+/**
+ * How much a candidate is about the seed, 0-10, by its own words: the niche (Hebrew and English) in its name or
+ * address, else in its description or its latest items, else one of the topics. Strict: a word must be there.
+ * Returns { relevance, relevanceReason } (the reason is the operator's).
+ */
+export function relevanceOf(c, seed = {}) {
+  if (c.origin === 'api') return c.general ? { relevance: 6, relevanceReason: 'מאגר עובדות כללי, מתאים לכל נושא' } : { relevance: 8, relevanceReason: 'מאגר נתונים שנבחר לנושא הזה' };
+  let where = '';
+  try {
+    const u = new URL(c.url);
+    where = `${u.hostname} ${decodeURIComponent(u.pathname)}`;
+  } catch {
+    /* no address to read */
+  }
+  const head = `${c.name || ''} ${where}`.toLowerCase();
+  const body = `${c.snippet || ''} ${c.about || ''} ${(c.sample || []).join(' ')}`.toLowerCase();
+  const niche = keywordsOf(`${seed.niche || ''} ${seed.nicheEn || ''}`);
+  const topics = keywordsOf((seed.topics || []).join(' '));
+  const inHead = niche.find((w) => head.includes(w));
+  if (inHead) return { relevance: 9, relevanceReason: `"${inHead}" בשם או בכתובת` };
+  const inBody = niche.find((w) => body.includes(w));
+  if (inBody) return { relevance: 7, relevanceReason: `"${inBody}" בתיאור או בפריטים האחרונים` };
+  const topic = topics.find((w) => head.includes(w) || body.includes(w));
+  if (topic) return { relevance: 6, relevanceReason: `הנושא "${topic}" מופיע במקור` };
+  return { relevance: 1, relevanceReason: 'אין במקור אף מילה מהנושא' };
+}
+
+/** The heuristic score, used when there is no model to ask. With the seed, its relevance too. */
+export function heuristicScore(c, t = now(), seed = null) {
   let host = '';
   try {
     host = new URL(c.url).hostname.replace(/^www\./, '');
@@ -46,7 +120,7 @@ export function heuristicScore(c, t = now()) {
   const freshness = age == null ? (c.type === 'api' ? 7 : 4) : age < 7 ? 9 : age < 30 ? 7 : age < 120 ? 5 : 2;
   const terms = c.terms || (c.origin === 'api' ? 'ok' : 'check');
   const reason = [a ? a[2] : c.origin === 'api' ? 'מקור נתונים מובנה ופתוח' : 'מקור לא מוכר: לבדוק מי עומד מאחוריו', age != null ? `עדכון אחרון לפני ${Math.round(age)} ימים` : null].filter(Boolean).join(', ');
-  return { authority, freshness, terms, reason, by: 'heuristic' };
+  return { authority, freshness, terms, reason, by: 'heuristic', ...(seed ? relevanceOf(c, seed) : {}) };
 }
 
 const SCORE_SCHEMA = {
@@ -56,8 +130,8 @@ const SCORE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { i: { type: 'integer' }, authority: { type: 'integer' }, freshness: { type: 'integer' }, terms: { type: 'string', enum: ['ok', 'check', 'no'] }, reason: { type: 'string' } },
-        required: ['i', 'authority', 'freshness', 'terms', 'reason'],
+        properties: { i: { type: 'integer' }, authority: { type: 'integer' }, freshness: { type: 'integer' }, terms: { type: 'string', enum: ['ok', 'check', 'no'] }, reason: { type: 'string' }, relevance: { type: 'integer' }, relevance_reason: { type: 'string' } },
+        required: ['i', 'authority', 'freshness', 'terms', 'reason', 'relevance', 'relevance_reason'],
         additionalProperties: false,
       },
     },
@@ -73,12 +147,14 @@ For each candidate return:
 - authority 0-10: who publishes it. Government, regulators, official documentation and the subject's own governing bodies score high; established publications next; anonymous blogs, content farms, affiliate and SEO sites low.
 - freshness 0-10: how current it is likely to be for this niche.
 - terms: "ok" if quoting short facts from it is clearly fine, "check" if its terms are unknown or restrictive, "no" if it forbids reuse or is a social platform.
-- reason: one short Hebrew line, the deciding fact.`;
-  const user = list.map((c, i) => `[${i}] ${c.type} ${c.url} | ${c.name}${c.snippet ? ` | ${c.snippet.slice(0, 200)}` : ''}${c.newest ? ` | newest item ${c.newest}` : ''}`).join('\n');
+- reason: one short Hebrew line, the deciding fact.
+- relevance 0-10: how much of what it publishes is about this account's subject: "${seed.niche}"${seed.nicheEn ? ` ("${seed.nicheEn}")` : ''}${seed.topics?.length ? `, topics: ${seed.topics.join(', ')}` : ''}. Judge by its title, its description and its latest items, not by its name alone. A site about the subject scores 8-10; a general site whose latest items are mostly about something else 3-5; a site about another subject 0-2. A general open-data catalog (Wikidata) is 6.
+- relevance_reason: one short Hebrew line, why.`;
+  const user = list.map((c, i) => `[${i}] ${c.type} ${c.url} | ${c.name}${c.snippet ? ` | ${c.snippet.slice(0, 200)}` : ''}${c.about ? ` | about: ${c.about.slice(0, 200)}` : ''}${c.sample?.length ? ` | latest: ${c.sample.slice(0, 5).join(' ; ').slice(0, 300)}` : ''}${c.newest ? ` | newest item ${c.newest}` : ''}`).join('\n');
   const { data } = await askJson(ctx, { task: 'score_sources', role: 'judge', system, user, schema: SCORE_SCHEMA, effort: 'low', maxTokens: 8000, expectOut: 2500, tag: 'onboarding' });
   return list.map((c, i) => {
     const s = (data.scores || []).find((x) => x.i === i);
-    return s ? { authority: s.authority, freshness: s.freshness, terms: s.terms, reason: s.reason, by: 'claude' } : heuristicScore(c);
+    return s ? { authority: s.authority, freshness: s.freshness, terms: s.terms, reason: s.reason, by: 'claude', ...(Number.isInteger(s.relevance) ? { relevance: Math.max(0, Math.min(10, s.relevance)), relevanceReason: String(s.relevance_reason || '') } : relevanceOf(c, seed)) } : heuristicScore(c, now(), seed);
   });
 }
 
@@ -94,11 +170,26 @@ async function brave(ctx, q, notes) {
   return value;
 }
 
-/** Read a site's home page for its declared feeds; returns feed candidates with their newest item. */
+/** A page's own description (<meta name="description"> or og:description), '' when it has none. */
+export function descriptionOf(html) {
+  const tags = String(html || '').match(/<meta\b[^>]*>/gi) || [];
+  for (const t of tags) {
+    if (!/(?:name|property)\s*=\s*["'](?:description|og:description)["']/i.test(t)) continue;
+    const m = /content\s*=\s*"([^"]*)"|content\s*=\s*'([^']*)'/i.exec(t);
+    if (m) return decodeEntities(m[1] ?? m[2] ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  }
+  return '';
+}
+
+/**
+ * Read a site's home page for its declared feeds; returns feed candidates with their newest item, the page's
+ * description and the titles of the latest items (what relevance is judged by).
+ */
 async function feedsOf(url, notes) {
   const out = [];
   try {
     const page = await getText(url, { timeoutMs: 12_000 });
+    const about = descriptionOf(page.body);
     // The site's two feeds at once, kept in the order the page declares them.
     const feeds = await Promise.all(
       declaredFeeds(page.body, page.finalUrl)
@@ -107,7 +198,7 @@ async function feedsOf(url, notes) {
           try {
             const items = parseFeed((await getText(f.url, { timeoutMs: 12_000 })).body);
             const newest = items.map((x) => x.publishedAt).filter(Boolean).sort().pop() || null;
-            return { type: 'rss', url: f.url, name: f.title || titleOf(page.body) || new URL(url).hostname, newest, items: items.length };
+            return { type: 'rss', url: f.url, name: f.title || titleOf(page.body) || new URL(url).hostname, newest, items: items.length, about, sample: items.slice(0, 6).map((x) => x.title).filter(Boolean) };
           } catch (e) {
             notes.push(`${f.url}: ${e.message}`);
             return null;
@@ -115,7 +206,7 @@ async function feedsOf(url, notes) {
         })
     );
     out.push(...feeds.filter(Boolean));
-    if (!out.length) out.push({ type: 'web', url: page.finalUrl, name: titleOf(page.body) || new URL(url).hostname, newest: null });
+    if (!out.length) out.push({ type: 'web', url: page.finalUrl, name: titleOf(page.body) || new URL(url).hostname, newest: null, about });
   } catch (e) {
     notes.push(`${url}: ${e.message}`);
   }
@@ -268,12 +359,13 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   let scores;
   if (ctx.llm?.kind === 'claude' && list.length) {
     try {
-      scores = await scoreWithClaude(ctx, seed, list);
+      scores = await scoreWithClaude(ctx, { ...seed, nicheEn }, list);
     } catch (e) {
       notes.push(`הדירוג עם Claude נכשל (${e.message}), הדירוג הוא היוריסטי`);
     }
   }
-  scores ??= list.map((c) => heuristicScore(c, t));
-  const candidates = list.map((c, i) => ({ id: `c${i + 1}`, ...c, score: scores[i], approved: false })).sort((a, b) => b.score.authority - a.score.authority || b.score.freshness - a.score.freshness);
+  scores ??= list.map((c) => heuristicScore(c, t, { ...seed, nicheEn }));
+  // The ones the customer is offered first, then by authority and freshness.
+  const candidates = list.map((c, i) => ({ id: `c${i + 1}`, ...c, score: scores[i], approved: false })).sort((a, b) => offered(b) - offered(a) || b.score.authority - a.score.authority || b.score.freshness - a.score.freshness);
   return { candidates, formats: formats.slice(0, 8), notes, said, nicheEn };
 }

@@ -1,6 +1,7 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { HOUR, monthKey, now, nowIso } from '../core/clock.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
+import { saveSetup, setupOf } from '../onboarding/setup.js';
 import { CONNECT_PLATFORMS, connectUrl, createProfile, profileConnections, profileSpend, teamAccountIds, zernioConfigured } from './zernio.js';
 import { instagramConfigured } from './instagram.js';
 
@@ -22,6 +23,12 @@ import { instagramConfigured } from './instagram.js';
 //
 // pack.json's zernio.profileId and zernio.accounts, typed in by hand before this, are read when there is no row and
 // copied in the first time the account is checked.
+//
+// BEFORE THE ACCOUNT EXISTS. A new account's owner may connect while its sources are still searched (src/web/onboarding.js):
+// the profile is then the onboarding's (externalId the onboarding id, kept in its setup_json, src/onboarding/setup.js),
+// what is connected into it is read from Zernio the same way and kept there too, and when the account is created it
+// takes the profile over with its connections (carryOnboardingZernio): nothing is connected twice. Zernio's profile
+// keeps the onboarding's name and externalId; Teder finds it by the id it keeps, never by the externalId.
 
 export const CONNECT_LINK_TTL_S = 72 * 3600;
 /** How long the return address handed to Zernio is good for: the connect itself, with room for a slow consent screen. */
@@ -163,6 +170,125 @@ export async function startConnect(db, pack, platform, { doneUrl, actor = 'engin
   return url;
 }
 
+/* ------------------------------------------------------------------ before the account exists: the onboarding's profile */
+
+/** The pick refreshConnections makes, from a profile's list: the one Zernio named, else the one kept, else the first connected. */
+const pickOf = (mine, prefer, had) => mine.find((a) => a.id === prefer) || mine.find((a) => a.id === had?.id) || mine.find((a) => a.status === 'connected') || mine[0] || null;
+
+/** An onboarding's connections as connectState gives them: [{ platform, state, username, issue, checkedAt }]. */
+export function onboardingStates(db, onboardingId) {
+  const z = setupOf(db, onboardingId).zernio || {};
+  return CONNECT_PLATFORMS.map((platform) => {
+    const c = z.connections?.[platform];
+    return { platform, state: c ? c.status : 'none', username: c?.username || '', issue: c?.issue || null, checkedAt: c?.checkedAt || null };
+  });
+}
+
+/**
+ * Zernio's link to connect one platform for an onboarding: its profile made first if there is none. `name` names the
+ * profile on Zernio (the account's name, else its niche).
+ */
+export async function startOnboardingConnect(db, onboardingId, platform, { doneUrl, name, actor = 'engine' }) {
+  if (!CONNECT_PLATFORMS.includes(platform)) throw Object.assign(new Error(`${platform} is not a platform to connect`), { code: 'not_connectable' });
+  let z = setupOf(db, onboardingId).zernio || {};
+  if (!z.profileId) {
+    const p = await createProfile({ name: `${name || onboardingId} · ${onboardingId}`, externalId: onboardingId });
+    z = saveSetup(db, onboardingId, { zernio: { ...z, profileId: p.id, connections: z.connections || {} } }).zernio;
+    audit(db, { actor, action: 'zernio_profile', detail: { onboarding: onboardingId, profile: p.id } });
+  }
+  const c = z.connections?.[platform];
+  const url = await connectUrl(platform, { profileId: z.profileId, redirectUrl: doneUrl, reconnectAccountId: c?.status === 'reconnect' && c.issue !== GONE ? c.id : null });
+  audit(db, { actor, action: 'zernio_connect', detail: { onboarding: onboardingId, platform, reconnect: c?.status === 'reconnect' } });
+  return url;
+}
+
+/**
+ * Read the onboarding's profile from Zernio and keep what is connected, as refreshConnections does for an account.
+ * Returns the connections kept.
+ */
+export async function refreshOnboardingConnections(db, onboardingId, { t = now(), prefer = {} } = {}) {
+  const z = setupOf(db, onboardingId).zernio || {};
+  if (!z.profileId) return {};
+  const list = await profileConnections(z.profileId);
+  const at = new Date(t).toISOString();
+  const next = {};
+  for (const platform of CONNECT_PLATFORMS) {
+    const had = z.connections?.[platform] || null;
+    const pick = pickOf(list.filter((a) => a.platform === platform), prefer[platform], had);
+    if (pick) next[platform] = { id: pick.id, username: pick.username, status: pick.status, issue: pick.issue, checkedAt: at, connectedAt: had?.id === pick.id ? had.connectedAt || at : at };
+    else if (had) next[platform] = { ...had, status: 'reconnect', issue: GONE, checkedAt: at };
+  }
+  // The newest setup: the customer may have saved something else while Zernio answered.
+  saveSetup(db, onboardingId, { zernio: { ...(setupOf(db, onboardingId).zernio || {}), connections: next } });
+  return next;
+}
+
+/**
+ * The new account takes the onboarding's profile over, with what was connected into it: accounts.zernio_profile_id and a
+ * zernio_connections row per platform, as if it had been connected from the account page. An account with a profile
+ * of its own keeps it. Returns the platforms carried.
+ */
+export function carryOnboardingZernio(db, onboardingId, accountId, { actor = 'engine' } = {}) {
+  const z = setupOf(db, onboardingId).zernio || {};
+  if (!z.profileId) return [];
+  const acc = db.get('SELECT zernio_profile_id AS id FROM accounts WHERE id = ?', accountId);
+  if (!acc || (acc.id && acc.id !== z.profileId)) return [];
+  const carried = [];
+  db.tx(() => {
+    db.update('accounts', accountId, { zernio_profile_id: z.profileId, updated_at: nowIso() });
+    for (const [platform, c] of Object.entries(z.connections || {})) {
+      if (!CONNECT_PLATFORMS.includes(platform) || !c?.id) continue;
+      if (db.get('SELECT 1 AS x FROM zernio_connections WHERE account_id = ? AND platform = ?', accountId, platform)) continue;
+      const at = c.checkedAt || nowIso();
+      db.insert('zernio_connections', { account_id: accountId, platform, zernio_account_id: c.id, username: c.username || '', status: c.status === 'reconnect' ? 'reconnect' : 'connected', issue: c.issue || null, checked_at: at, broken_at: c.status === 'reconnect' ? at : null, connected_at: c.connectedAt || at });
+      carried.push(platform);
+    }
+  });
+  audit(db, { actor, action: 'zernio_profile', accountId, detail: { profile: z.profileId, from: onboardingId, connections: carried } });
+  return carried;
+}
+
+/* ------------------------------------------------------------------ headless: a pick on our own page */
+
+/** How long a pick waits for the customer's tap. */
+export const PICK_TTL_MS = 15 * 60_000;
+
+/**
+ * A headless return that still needs an account picked (Instagram through Facebook Login: step=select_account), as
+ * { profileId, tempToken, connectToken, userProfile }, else null. userProfile is JSON encoded twice on the wire: the
+ * query string is decoded once already, so it is decoded once more and parsed.
+ */
+export function selectionOf(query) {
+  if (query.get('step') !== 'select_account' || !query.get('tempToken')) return null;
+  let userProfile = null;
+  try {
+    userProfile = JSON.parse(decodeURIComponent(query.get('userProfile') || ''));
+  } catch {
+    /* only for showing whose sign-in it was */
+  }
+  return { profileId: query.get('profileId') || null, tempToken: query.get('tempToken'), connectToken: query.get('connect_token') || null, userProfile };
+}
+
+/**
+ * Keep a pick on the server while the customer chooses: the token Zernio returned never goes back to the browser. The
+ * page's links carry only a random id, good once and for PICK_TTL_MS. Returns the id.
+ */
+export function holdPick(db, pick, { t = now() } = {}) {
+  const id = randomBytes(16).toString('hex');
+  setSetting(db, `zernio:pick:${id}`, { ...pick, exp: t + PICK_TTL_MS });
+  return id;
+}
+
+/** The pick an id names, taken (once: it is removed), or null when there is none or it expired. */
+export function takePick(db, id, { t = now() } = {}) {
+  if (!/^[0-9a-f]{32}$/.test(String(id || ''))) return null;
+  const key = `zernio:pick:${id}`;
+  const pick = getSetting(db, key, null);
+  if (!pick) return null;
+  db.run('DELETE FROM settings WHERE key = ?', key);
+  return pick.exp >= t ? pick : null;
+}
+
 /* ------------------------------------------------------------------ signed links */
 
 const hmac = (secret, text) => createHmac('sha256', secret).update(text).digest('hex');
@@ -185,6 +311,13 @@ const signedOk = (secret, kind, { accountId, platform, e, s, t }) => {
 /** The link the assistant sends: open it, and Teder asks Zernio for a fresh connect link. */
 export const connectLink = (secret, { base, accountId, platform, t = now(), ttlS = CONNECT_LINK_TTL_S }) => signed(secret, 'zernio-connect', { base, accountId, platform, t, ttlS });
 export const connectLinkOk = (secret, { accountId, platform, e, s, t = now() }) => signedOk(secret, 'zernio-connect', { accountId, platform, e, s, t });
+
+/** Where Zernio sends the browser back after a connect made for an onboarding, before its account exists. */
+export const onboardingDoneLink = (secret, { base, onboardingId, platform, t = now(), ttlS = DONE_TTL_S }) => {
+  const exp = Math.floor(t / 1000) + ttlS;
+  return `${base}/new/${encodeURIComponent(onboardingId)}/connect/${platform}/done?e=${exp}&s=${sigOf(secret, 'onboarding-connect-done', { accountId: onboardingId, platform, exp })}`;
+};
+export const onboardingDoneLinkOk = (secret, { onboardingId, platform, e, s, t = now() }) => signedOk(secret, 'onboarding-connect-done', { accountId: onboardingId, platform, e, s, t });
 
 /** Where Zernio sends the browser back after a connect. */
 export const doneLink = (secret, { base, accountId, platform, t = now(), ttlS = DONE_TTL_S }) => signed(secret, 'zernio-connect-done', { base, accountId, platform, t, ttlS, suffix: '/done' });

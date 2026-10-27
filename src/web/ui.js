@@ -197,17 +197,18 @@ export function postButton(ctx, action, label, { cls = 'btn', ajax = null, confi
 }
 
 export const MODE_HE = { approve: ['אישור', 'כל פוסט מחכה לך'], digest: ['תקציר', 'יוצא אם לא דחית'], auto: ['אוטומטי', 'יוצא, וסיכום יומי'] };
+// A post's state on its chip, in the words of the cards (src/web/pages.js postCard): "בכתיבה" as "מצגת חדשה בכתיבה".
 export const STATUS_HE = {
   drafting: ['בכתיבה', ''],
-  queued: ['ממתין', 'sig'],
+  queued: ['מחכה לאישור', 'sig'],
   approved: ['אושר', 'ok'],
-  publishing: ['מתפרסם', 'ok'],
+  publishing: ['עולה עכשיו', 'ok'],
   published: ['פורסם', 'ok'],
   rejected: ['נדחה', 'ghost'],
-  blocked: ['נחסם', 'bad'],
-  failed: ['נכשל', 'bad'],
+  blocked: ['נעצר בבדיקות', 'bad'],
+  failed: ['לא עלה', 'bad'],
   held: ['מחכה לחיבור', 'warn'],
-  expired: ['פג תוקף', 'ghost'],
+  expired: ['לא אושר בזמן', 'ghost'],
   sample: ['דוגמה', 'warn'],
   taken_down: ['הוסר אחרי הודעה', 'bad'],
 };

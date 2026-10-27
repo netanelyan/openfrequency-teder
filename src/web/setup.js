@@ -1,4 +1,4 @@
-import { connectState } from '../publish/connect.js';
+import { connectState, onboardingStates } from '../publish/connect.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { fromWebsite } from './demos.js';
 import { PLATFORM_NAME } from './connect.js';
@@ -19,6 +19,11 @@ import { forWorkspace } from './workspace.js';
 // to publish to), then the tiktok and instagram connections one by one, optional. A workspace with several accounts is reported on one:
 // its newest live account (active, else paused), and without one its newest onboarding still under way. Once a
 // workspace has an account on air its setup is done; a second account being added does not undo it.
+//
+// While the onboarding is still before its account (the sources searched or chosen), connecting is already doable: the
+// connect steps link to the onboarding page's panel (/new/<id>#connect) and report what was connected into the
+// onboarding's own Zernio profile (src/publish/connect.js onboardingStates), which the account takes over at create.
+// The days and times are not a step of their own: a new account always has them (the default, or what was chosen).
 
 export const STEP_KEYS = ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram'];
 const STAGE = { none: 0, discovering: 1, failed: 1, review: 2, samples: 3, ready: 4, live: 5 };
@@ -50,7 +55,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
 
   // The account: the seed, the search for sources, and the pack written once its name is picked.
   if (stage === 'none') steps.push(step('account', 'פותחים חשבון', 'todo', { detail: 'כותבים במה החשבון יעסוק, ותדר מחפש לו מקורות.', href: at('/new') }));
-  else if (stage === 'discovering') steps.push(step('account', 'פותחים חשבון', 'working', { detail: 'מחפשים מקורות לחשבון. זה לוקח בדרך כלל כמה דקות.', href: obPage }));
+  else if (stage === 'discovering') steps.push(step('account', 'פותחים חשבון', 'working', { detail: 'מחפשים מקורות לחשבון. בינתיים אפשר לבחור שם, ימים ושעות ולחבר את טיקטוק ואינסטגרם.', href: obPage }));
   else if (stage === 'failed') steps.push(step('account', 'פותחים חשבון', 'attention', { detail: 'החיפוש נעצר באמצע. בדף אפשר לנסות שוב עם אותם פרטים.', href: obPage }));
   else if (stage === 'review') steps.push(step('account', 'פותחים חשבון', 'todo', { detail: 'בוחרים שם לחשבון, באותו דף של המקורות.', href: obPage }));
   else steps.push(step('account', 'פותחים חשבון', 'done', { detail: pack?.meta.displayName || account?.display_name || '' }));
@@ -81,15 +86,17 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
 
   // Connected: required, done once at least one platform the account publishes to is connected (nothing goes out
   // before). The connect panel is on the onboarding page while the account is in onboarding, then on the account page.
-  const panel = account && pack ? at(account.status === 'onboarding' && ob ? `/new/${encodeURIComponent(ob.id)}#connect-${pack.id}` : `/accounts?account=${encodeURIComponent(pack.id)}#connect-${pack.id}`) : null;
-  const states = pack ? pack.meta.platforms.filter((p) => ['tiktok', 'instagram'].includes(p)).map((p) => connectState(c.db, pack, p, env)) : [];
+  // Before the account exists: the onboarding's own panel and what was connected into its profile.
+  const early = !pack && ob && ['discovering', 'failed', 'review'].includes(ob.status);
+  const panel = account && pack ? at(account.status === 'onboarding' && ob ? `/new/${encodeURIComponent(ob.id)}#connect-${pack.id}` : `/accounts?account=${encodeURIComponent(pack.id)}#connect-${pack.id}`) : early ? at(`/new/${encodeURIComponent(ob.id)}#connect`) : null;
+  const states = pack ? pack.meta.platforms.filter((p) => ['tiktok', 'instagram'].includes(p)).map((p) => connectState(c.db, pack, p, env)) : early ? onboardingStates(c.db, ob.id) : [];
   const on = states.filter((s) => s.state === 'connected' || s.state === 'meta');
   const CONNECT = 'מחברים את טיקטוק או אינסטגרם';
   if (on.length) steps.push(step('connect', CONNECT, 'done', { detail: on.map((s) => `${PLATFORM_NAME[s.platform]} מחובר${s.username ? ` (@${s.username})` : ''}.`).join(' ') }));
   else if (!zernioConfigured()) steps.push(step('connect', CONNECT, 'soon', { detail: 'החיבור עוד לא זמין בשרת הזה.' }));
-  else if (!pack) steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים אחרי שהחשבון נוצר. בלי חיבור המצגות לא עולות.' }));
+  else if (!pack && !early) steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים אחרי שהחשבון נוצר. בלי חיבור המצגות לא עולות.' }));
   else if (states.some((s) => s.state === 'reconnect')) steps.push(step('connect', CONNECT, 'attention', { detail: 'החיבור הפסיק לעבוד, ומצגות לא עולות עד שמחברים מחדש.', href: panel }));
-  else steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים לפחות אחד מהשניים כדי שהמצגות יעלו. אינסטגרם צריך חשבון מקצועי, עסקי או יוצר.', href: panel }));
+  else steps.push(step('connect', CONNECT, 'todo', { detail: `${early ? 'אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. ' : ''}מחברים לפחות אחד מהשניים כדי שהמצגות יעלו. אינסטגרם צריך חשבון מקצועי, עסקי או יוצר.`, href: panel }));
 
   // TikTok and Instagram, each on its own and optional: each platform the account publishes to (both, before there is
   // an account).
@@ -97,7 +104,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
     if (pack && !pack.meta.platforms.includes(platform)) continue;
     const name = PLATFORM_NAME[platform];
     const title = `מחברים את ${name}`;
-    const s = pack ? connectState(c.db, pack, platform, env) : null;
+    const s = pack ? connectState(c.db, pack, platform, env) : early ? states.find((x) => x.platform === platform) : null;
     const opt = { required: false };
     if (s?.state === 'meta') steps.push(step(platform, title, 'done', { ...opt, detail: 'מחובר דרך Meta.' }));
     else if (!zernioConfigured()) steps.push(step(platform, title, 'soon', { ...opt, detail: 'החיבור עוד לא זמין בשרת הזה.' }));

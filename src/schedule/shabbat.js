@@ -8,6 +8,12 @@ import { yomTovOn } from './hebrew.js';
 // the Hebrew calendar, computed (hebrew.js). A run of rest days (a yom tov next
 // to Shabbat, the two days of Rosh Hashana) is one window.
 //
+// That is the default, and it stays the default. An account's owner may choose to post on Shabbat, on the festivals,
+// or on both (src/schedule/choice.js; an operator's pack.json says it as schedule.shabbat / schedule.holidays). The
+// choice reaches every function here as two options, { shabbat: true } and { holidays: true }, each meaning "posting
+// is allowed then": a day the account posts on is no rest day for it. Without them, nothing changes. A yom tov on a
+// Saturday is a rest day unless both are allowed.
+//
 // The window is computed from the real sunset for that week rather than fixed
 // hours, with a margin on both sides:
 //
@@ -41,10 +47,16 @@ export function shabbatWindow(t, { candle = CANDLE_MINUTES, havdalah = HAVDALAH_
   };
 }
 
-/** Why an Israel date (YYYY-MM-DD) is a rest day: the festival's name, "שבת", or null. */
-export function restDay(date) {
-  return yomTovOn(date) || (weekday(date) === 6 ? 'שבת' : null);
+/**
+ * Why an Israel date (YYYY-MM-DD) is a rest day: the festival's name, "שבת", or null. `shabbat` / `holidays` true:
+ * the account posts then, so that day is no rest day for it.
+ */
+export function restDay(date, { shabbat = false, holidays = false } = {}) {
+  return (!holidays && yomTovOn(date)) || (!shabbat && weekday(date) === 6 ? 'שבת' : null);
 }
+
+/** The two options a schedule carries to the functions here: { shabbat, holidays }, true where it posts anyway. */
+export const rulesOf = (schedule = {}) => ({ shabbat: schedule?.shabbat === true, holidays: schedule?.holidays === true });
 
 const margins = ({ candle = CANDLE_MINUTES, havdalah = HAVDALAH_MINUTES } = {}) => ({
   c: Math.max(MIN_CANDLE, Number(candle) || CANDLE_MINUTES) * 60_000,
@@ -61,9 +73,9 @@ export function restAt(t, { place = JERUSALEM, ...opts } = {}) {
   const at = new Date(t).getTime();
   const { c, h } = margins(opts);
   const date = israelDate(at);
-  const today = restDay(date);
+  const today = restDay(date, opts);
   if (today && at < sunset(date, place).getTime() + h) return today;
-  const tomorrow = restDay(addDays(date, 1));
+  const tomorrow = restDay(addDays(date, 1), opts);
   if (tomorrow && at >= sunset(date, place).getTime() - c) return tomorrow;
   return null;
 }
@@ -76,12 +88,12 @@ export function restWindow(t, { place = JERUSALEM, ...opts } = {}) {
   if (!inRest(t, { place, ...opts })) return null;
   const { c, h } = margins(opts);
   const date = israelDate(t);
-  let first = restDay(date) && new Date(t).getTime() < sunset(date, place).getTime() + h ? date : addDays(date, 1);
-  while (restDay(addDays(first, -1))) first = addDays(first, -1);
+  let first = restDay(date, opts) && new Date(t).getTime() < sunset(date, place).getTime() + h ? date : addDays(date, 1);
+  while (restDay(addDays(first, -1), opts)) first = addDays(first, -1);
   let last = first;
-  while (restDay(addDays(last, 1))) last = addDays(last, 1);
+  while (restDay(addDays(last, 1), opts)) last = addDays(last, 1);
   const days = [];
-  for (let d = first; d <= last; d = addDays(d, 1)) days.push(restDay(d));
+  for (let d = first; d <= last; d = addDays(d, 1)) days.push(restDay(d, opts));
   return { from: new Date(sunset(addDays(first, -1), place).getTime() - c), to: new Date(sunset(last, place).getTime() + h), days: [...new Set(days)] };
 }
 
@@ -100,7 +112,7 @@ export class ShabbatError extends Error {
   }
 }
 
-/** Throw if a post would go out on Shabbat or a yom tov. Called by the scheduler and again by every publisher. */
+/** Throw if a post would go out on Shabbat or a yom tov (unless `opts` allows it: rulesOf above). */
 export function assertNotShabbat(t, opts) {
   const day = restAt(t, opts);
   if (day) throw new ShabbatError(t, day);

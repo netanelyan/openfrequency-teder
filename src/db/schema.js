@@ -676,4 +676,10 @@ export const MIGRATIONS = [
   UPDATE accounts SET status = 'active', paused_reason = NULL, paused_detail = NULL, paused_at = NULL
     WHERE status = 'paused' AND paused_reason IN ('budget', 'customer_cap');
   `,
+  `
+  -- What a new account's owner set up while its sources were searched (src/onboarding/setup.js): the name and handle,
+  -- the days and times, and the Zernio profile made for the onboarding with what was connected into it. Applied to the
+  -- account when it is created: the choice to schedule:<account>, the profile and connections to the account's own.
+  ALTER TABLE onboarding ADD COLUMN setup_json TEXT NOT NULL DEFAULT '{}';
+  `,
 ];

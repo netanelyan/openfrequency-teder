@@ -9,6 +9,7 @@ import { askJson } from '../llm/index.js';
 import { HEBREW } from '../pipeline/prompts.js';
 import { loadPack, readPack } from '../packs/load.js';
 import { validateAll } from '../packs/validate.js';
+import { packIdOf } from './setup.js';
 import { suggestStyle } from './style.js';
 
 // A new pack, written from an onboarding: the owner's seed, the sources they
@@ -101,7 +102,7 @@ const VOICE_SCHEMA = { type: 'object', properties: { voice: { type: 'string' } }
 
 /** Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. */
 export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [] }) {
-  const id = String(handle || '').toLowerCase().replace(/^@/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  const id = packIdOf(handle);
   if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id)) throw new Error('the handle must be latin letters and digits, so the pack id can be made from it');
   const dir = path.join(packsDir(), id);
   if (existsSync(dir)) throw new Error(`a pack named ${id} already exists`);

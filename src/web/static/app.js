@@ -202,6 +202,48 @@
   };
   document.addEventListener('click', closeSwitch);
   document.addEventListener('keydown', closeSwitch);
+  // A page waiting on work in the background (a new account's search for sources, its sample posts) asks how it goes
+  // and changes only its progress line: never a reload under someone typing. When there is something new to show, the
+  // page moves on by itself if nothing was typed, else it says so and waits for a tap.
+  const poll = document.querySelector('[data-poll]');
+  if (poll) {
+    let typed = false;
+    document.addEventListener('input', (e) => {
+      if (e.target.closest('form')) typed = true;
+    });
+    const busyTyping = () => typed || Boolean(document.activeElement?.matches('input, textarea, select'));
+    const tick = async () => {
+      try {
+        const res = await fetch(poll.dataset.poll, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+        if (res.ok) {
+          const s = await res.json();
+          const line = poll.querySelector('[data-progress]');
+          if (line && s.line && line.textContent !== s.line) line.textContent = s.line;
+          if (s.key && s.key !== poll.dataset.key) {
+            if (!busyTyping()) {
+              const to = new URL(poll.dataset.href, location.href);
+              if (to.pathname !== location.pathname) return location.assign(to.href);
+              if (to.hash) history.replaceState(null, '', to.hash);
+              return location.reload();
+            }
+            const box = poll.querySelector('[data-ready]');
+            if (box) {
+              box.querySelector('[data-ready-text]').textContent = s.ready || '';
+              box.querySelector('[data-ready-go]').textContent = s.go || '';
+              box.hidden = false;
+            }
+            if (!s.busy) return;
+            poll.dataset.key = s.key;
+          }
+        }
+      } catch {
+        /* the next tick asks again */
+      }
+      setTimeout(tick, 4000);
+    };
+    setTimeout(tick, 4000);
+  }
+
   // Developer mode opens from the settings' version line, tapped seven times in a row: not a button anyone finds.
   let taps = 0;
   let lastTap = 0;

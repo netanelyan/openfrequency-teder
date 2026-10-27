@@ -124,6 +124,64 @@ const AUDIT_HE = {
 const media = (post, platform, i) => `/media/${encodeURIComponent(post.id)}/${platform}/${i}?v=${encodeURIComponent(String(post.updated_at || '').replace(/D/g, '').slice(-10))}`;
 const formatName = (pack, id) => pack?.formats.formats.find((f) => f.id === id)?.name || id;
 
+// What kind of slideshow a post is, in the words a business owner uses. A format's own name is the pack's ("איך זה
+// עובד", "המאמן"), which reads like a heading on a card, so customers see this instead: by the format's id first (the
+// starter formats, src/onboarding/pack.js STARTER_FORMATS, and the demo's), then by its kind (src/formats/kinds.js).
+// Anything else shows nothing.
+const TYPE_BY_FORMAT = {
+  explainer: 'הסבר בכמה שלבים',
+  'n-facts': 'כמה עובדות קצרות',
+  'quick-facts': 'כמה עובדות קצרות',
+  'whats-new': 'מה השתנה לאחרונה',
+  'care-guide': 'מדריך טיפול',
+  mistakes: 'טעויות נפוצות',
+};
+const TYPE_BY_KIND = {
+  story: 'סיפור אמיתי',
+  'what-happened': 'מה קרה למישהו מוכר',
+  'on-this-day': 'מה קרה בתאריך הזה',
+  'guess-who': 'חידה, נחשו מי',
+  'head-to-head': 'השוואה בין שניים',
+  ranking: 'דירוג',
+  iceberg: 'מהמוכר אל הפחות מוכר',
+  'hot-take': 'דעה, עם עובדות',
+  'myth-fact': 'מיתוס מול עובדה',
+  meme: 'הומור מהתחום',
+  'do-dont': 'מה עושים ומה לא',
+  facts: 'עובדות שלא ידעתם',
+  tips: 'טיפים לשמור',
+  'owner-story': 'הסיפור של העסק',
+  list: 'רשימה',
+};
+export const typeHe = (post) => TYPE_BY_FORMAT[post.format_id] || TYPE_BY_KIND[post.kind] || '';
+/** The kind on a card: the pack's format name for the operator, the plain words (or nothing) for a customer. */
+const typeLabel = (ctx, pack, post) => (ctx.operator ? formatName(pack, post.format_id) : typeHe(post) ? `סוג: ${typeHe(post)}` : '');
+
+/** A post still being written: no slides yet, nothing to read, edit or approve. One stopped by the checks is not. */
+export const building = (post) => post.status === 'drafting' || (!post.slides?.length && !['blocked', 'failed', 'rejected', 'expired', 'taken_down', 'published'].includes(post.status));
+
+/** The statuses whose text can still be changed (the rule src/web/actions.js edit() enforces). */
+export const EDITABLE = ['queued', 'approved', 'sample'];
+
+/** A time, with its date when it is not today's. */
+const atHe = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
+
+/**
+ * When the post goes up, in a line that says so: "תעלה ב-12:30" on a slot, the next free hour without one, when it
+ * went up once it did. A sample never goes up, and a post that was stopped or turned down has no time: both show nothing.
+ */
+export function whenHe(post) {
+  if (post.status === 'published' && post.published_at) return `עלתה ב-${atHe(post.published_at)}`;
+  if (post.sample || !['queued', 'approved', 'held', 'publishing'].includes(post.status)) return '';
+  if (post.slot_at) return `תעלה ב-${atHe(post.slot_at)}`;
+  return post.status === 'queued' ? 'תעלה בשעה הפנויה הבאה אחרי שתאשרו' : 'תעלה בשעה הפנויה הבאה';
+}
+
+/** The card of a post still being written: a blank slide and one line. The page shows the real card once it is ready. */
+const buildingCard = (post) => `<article class="card acc acc-${esc(post.account_id)} post building" id="post-${esc(post.id)}" data-post>
+<div class="pending"><span class="ph" aria-hidden="true"></span><div><h3 class="hook">מצגת חדשה בכתיבה</h3><p class="subline">תהיה מוכנה בעוד כמה דקות</p></div></div>
+</article>`;
+
 /**
  * TikTok's own furniture drawn over a slide (the post page's "TikTok view"): the tabs on top, the button rail (on the
  * left, as TikTok mirrors it in Hebrew), the slide dots, the account and the caption, the bar at the bottom, and the
@@ -145,10 +203,18 @@ function strip(post, platform = 'tiktok', { mock = null } = {}) {
     .join('')}</div><div class="dots" aria-hidden="true">${files.map((_, i) => `<i${i === 0 ? ' class="on"' : ''}></i>`).join('')}</div>`;
 }
 
-function factsBlock(post, { open = false } = {}) {
+/** How many facts the post's slides stand on, each with its source. */
+const factCount = (post) => {
   const items = post.slides.filter((s) => s.kind === 'item');
-  const n = post.facts.filter((f) => items.some((s) => s.factKeys.includes(f.key))).length;
-  return `<details class="facts"${open ? ' open' : ''}><summary>${icon('shield')}עובדות ומקורות <span class="chip">${n}</span><span class="chev">${icon('chev')}</span></summary>
+  return post.facts.filter((f) => items.some((s) => s.factKeys.includes(f.key))).length;
+};
+
+/** Where the facts come from, slide by slide. A customer sees it only when there is a fact to show. */
+function factsBlock(ctx, post, { open = false } = {}) {
+  const items = post.slides.filter((s) => s.kind === 'item');
+  const n = factCount(post);
+  if (!n && !ctx.operator) return '';
+  return `<details class="facts"${open ? ' open' : ''}><summary>${icon('shield')}מאיפה העובדות (${n})<span class="chev">${icon('chev')}</span></summary>
 <ol class="factlist">${items
     .map((s, i) => {
       const facts = s.factKeys.map((key) => post.facts.find((f) => f.key === key)).filter(Boolean);
@@ -186,28 +252,40 @@ function trustLine(post) {
 
 /** The captions, folded: they go out with the post, so they are one tap away, not in the way of the decision. */
 function captionDetails(post) {
-  return `<details class="facts"><summary>${icon('text')}הכיתוב<span class="chev">${icon('chev')}</span></summary>${captionBlock(post)}</details>`;
+  if (!post.caption && !post.caption_ig) return '';
+  return `<details class="facts"><summary>${icon('text')}הטקסט שעולה עם המצגת<span class="chev">${icon('chev')}</span></summary>${captionBlock(post)}</details>`;
 }
+
+/** A customer's card of a post the checks stopped before it had slides: what it was, and that it stopped. */
+const stoppedCard = (post) => `<article class="card acc acc-${esc(post.account_id)} post" id="post-${esc(post.id)}" data-post>
+<div class="meta"><span class="end">${statusChip(post.status)}</span></div>
+<h3 class="hook">${esc(post.hook || post.topic || 'מצגת שלא הושלמה')}</h3>
+<p class="subline">הבדיקות שלנו עצרו אותה באמצע הכתיבה, ולכן אין בה שקפים.</p>
+</article>`;
 
 /** One post as a card, decision first: when and what, the headline, the slides, what the checks found, the buttons. */
 export function postCard(ctx, post, pack) {
-  const when = post.slot_at ? timeHe(post.slot_at) : 'בלי שעה';
+  // A customer sees a post still being written as one line, and the real card once the page reloads with it ready.
+  if (!ctx.operator && building(post)) return buildingCard(post);
+  if (!ctx.operator && !post.slides?.length) return stoppedCard(post);
+  const when = whenHe(post);
+  const kind = typeLabel(ctx, pack, post);
   const decide = post.status === 'queued';
   return `<article class="card acc acc-${esc(post.account_id)} post" id="post-${esc(post.id)}" data-post>
-<div class="meta"><span class="when num">${esc(when)}</span><span class="fmt">${esc(formatName(pack, post.format_id))}</span><span class="end">${statusChip(post.status)}</span></div>
+<div class="meta">${when ? `<span class="when num">${esc(when)}</span>` : ''}${kind ? `<span class="fmt">${esc(kind)}</span>` : ''}<span class="end">${statusChip(post.status)}</span></div>
 <h3 class="hook">${esc(post.hook)}</h3>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${strip(post)}
 ${trustLine(post)}
 <div class="actions">
 ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary', ajax: 'remove' }) : ''}
-<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}עריכה</a>
+${EDITABLE.includes(post.status) ? `<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}לערוך</a>` : ''}
 ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button>` : ''}
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 </div>
 ${decide ? rejectForm(ctx, post, { ajax: 'remove' }) : ''}
 ${captionDetails(post)}
-${factsBlock(post)}
+${factsBlock(ctx, post)}
 </article>`;
 }
 
@@ -237,7 +315,7 @@ const TONE = { waiting: 'sig', scheduled: '', published: 'ok' };
 const n = (count, tone) => `<b class="cnt num${count && tone ? ` ${tone}` : ''}${count ? '' : ' zero'}">${count}</b>`;
 
 /** What needs the owner, most urgent first: a takedown to delete by hand, a picture to look at, the posts waiting. */
-export function needsYou(d, max = 6) {
+export function needsYou(d, max = 6, ctx = {}) {
   const rows = [];
   // A TikTok post that went out twice, or whose automatic post failed, comes first; then a draft waiting for you.
   for (const g of d.groups) {
@@ -252,8 +330,13 @@ export function needsYou(d, max = 6) {
   }
   for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
   for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `צריך לבדוק את התמונה בעין${im.screen?.why ? `: ${im.screen.why}` : ''}` });
-  for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${formatName(g.pack, p.format_id)} · ${p.slot_at ? timeHe(p.slot_at) : 'בלי שעה'}` });
+  for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true }) });
   return { rows: rows.slice(0, max), more: Math.max(0, rows.length - max), total: rows.length };
+}
+
+/** A post's line under its title in a list: the account (when asked), the kind, when it goes up. Empty parts are left out. */
+function postSub(ctx, pack, p, { name = false, kind = true } = {}) {
+  return [name ? pack.meta.displayName : '', kind ? typeLabel(ctx, pack, p) : '', whenHe(p)].filter(Boolean).join(' · ');
 }
 
 /** A short list of posts, one line each, every line a link. */
@@ -293,7 +376,7 @@ function tiktokPanel(d) {
 
 export function todayPage(ctx, d) {
   const count = (k) => d.groups.reduce((s, g) => s + g[k].length, 0);
-  const todo = needsYou(d);
+  const todo = needsYou(d, 6, ctx);
   // One number leads: what went out today, with the latest of it. What waits for the owner and what is scheduled sit
   // beside it. What the checks stopped is not on home: it is on Posts and Results.
   const out = count('published');
@@ -324,14 +407,14 @@ ${d.summary ? summaryPanel(ctx, d) : ''}`;
 export function allPage(ctx, d) {
   const waiting = d.groups.flatMap((g) => g.waiting);
   const ids = (posts) => posts.map((p) => p.id).join(',');
-  const others = needsYou(d, 100).rows.filter((r) => !r.acc);
+  const others = needsYou(d, 100, ctx).rows.filter((r) => !r.acc);
   const accounts = `<div class="acctab" role="table" aria-label="היום בכל חשבון">
 <div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
 ${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.acc?.mode || 'approve'][0])} · ${g.quota ? `${g.quota.suggested.used}/${g.quota.suggested.limit} הצעות` : ''}</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
 </div>`;
   const row = (p, g) => {
     const cover = p.media?.tiktok?.length ? `<img class="thumb" src="${media(p, 'tiktok', 0)}" alt="" width="36" height="64" loading="lazy" decoding="async">` : '<span class="thumb"></span>';
-    return `<div class="qrow" id="all-${esc(p.id)}" data-post>${cover}<a class="tx" href="/post/${esc(p.id)}"><b>${esc(p.hook)}</b><span class="muted small">${esc(formatName(g.pack, p.format_id))} · ${esc(p.slot_at ? timeHe(p.slot_at) : 'בלי שעה')}</span></a>${postButton(ctx, `/post/${p.id}/approve`, `${icon('check')}אישור`, { cls: 'btn sm', ajax: 'remove' })}</div>`;
+    return `<div class="qrow" id="all-${esc(p.id)}" data-post>${cover}<a class="tx" href="/post/${esc(p.id)}"><b>${esc(p.hook)}</b><span class="muted small">${esc(postSub(ctx, g.pack, p))}</span></a>${postButton(ctx, `/post/${p.id}/approve`, `${icon('check')}אישור`, { cls: 'btn sm', ajax: 'remove' })}</div>`;
   };
   const several = d.groups.filter((g) => g.waiting.length).length > 1;
   const queue = d.groups
@@ -352,7 +435,7 @@ ${others.length ? `<section class="panel home-panel"><header><h2>עוד דברי
 
 /** Every post of the day, account by account, in full: the cards to approve and what was blocked, then what is scheduled and out. */
 export function postsPage(ctx, d) {
-  const sched = d.groups.flatMap((g) => g.scheduled.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${p.slot_at ? timeHe(p.slot_at) : 'בלי שעה'}` })));
+  const sched = d.groups.flatMap((g) => g.scheduled.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true, kind: false }) })));
   const pub = d.groups.flatMap((g) => g.published.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}` })));
   const body = `<div class="head"><h1>פוסטים</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${stopBanners(ctx, d)}
@@ -389,8 +472,16 @@ function tiktokDraftBanners(ctx, post) {
 
 export function postPage(ctx, d, { problems = [], values = null } = {}) {
   const { post, pack } = d;
+  // Still being written: the customer gets the one line the card shows, and the whole page once it is ready.
+  if (!ctx.operator && building(post)) {
+    return layout({ ...ctx, title: 'מצגת חדשה בכתיבה', active: 'posts' }, `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">מצגת חדשה בכתיבה</h1></div></div>
+<div class="posts">${buildingCard(post)}</div>`);
+  }
   const v = values || post;
   const items = post.slides.filter((s) => s.kind === 'item');
+  const kind = typeLabel(ctx, pack, post);
+  const when = ctx.operator ? (post.slot_at ? stamp(post.slot_at) : '') : whenHe(post);
+  const facts = factsBlock(ctx, post, { open: true });
   const trace = d.steps
     .map((s) => {
       const det = s.detail || {};
@@ -449,22 +540,22 @@ ${redoBanners(d)}
 ${tiktokDraftBanners(ctx, post)}
 <div class="cols">
 <div>
-<section class="card acc acc-${esc(post.account_id)} post"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span><span class="chip">${esc(formatName(pack, post.format_id))}</span>${post.slot_at ? `<span class="chip">${icon('clock')}${esc(stamp(post.slot_at))}</span>` : ''}</div>
+<section class="card acc acc-${esc(post.account_id)} post"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 <h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}
 ${post.media?.instagram ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
 ${trustLine(post)}
 <div class="capwrap">${captionBlock(post)}</div>
 </section>
-${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}עריכה</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
+${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
 ${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}
 ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
-${['queued', 'approved', 'sample'].includes(post.status) && d.photos ? lightPanel(ctx, d) : ''}
-${['queued', 'approved', 'sample'].includes(post.status) ? edit : ''}
+${EDITABLE.includes(post.status) && d.photos ? lightPanel(ctx, d) : ''}
+${EDITABLE.includes(post.status) ? edit : ''}
 </div>
 <div>
 ${topicPanel(d.topic)}
-<section class="panel">${factsBlock(post, { open: true })}</section>
+${facts ? `<section class="panel">${facts}</section>` : ''}
 <section class="panel"><header><h2>בדיקות</h2></header>
 <dl class="kv"><dt>שער העובדות</dt><dd>${post.checks?.token ? '<span class="chip ok">עבר</span>' : '<span class="chip">לא הגיע</span>'}</dd>
 ${ctx.operator ? `<dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין (בלי מפתח API)'}</dd>` : ''}
@@ -1094,7 +1185,7 @@ export function rivalsPage(ctx, { packs, current, rivals, times, form = {}, prob
   const fewer = rivals.length < RIVALS.min ? `<p class="small"><span class="chip warn">${rivals.length ? `עוד ${RIVALS.min - rivals.length}` : `${RIVALS.min} לפחות`}</span> שלושה עד חמישה חשבונות נותנים תמונה של הנישה. חשבון אחד מראה רק את הטעם שלו.</p>` : '';
   const slots = times.own.length
     ? `<section class="panel"><header><h2>שעות</h2></header><dl class="kv">${times.own.map((x) => `<dt class="ltr">${esc(x.at)}</dt><dd>${x.near ? `${x.near === 1 ? 'מתחרה אחד מפרסם' : `${x.near} מתחרים מפרסמים`} בטווח שעה` : 'אף מתחרה לא מפרסם בטווח שעה'}</dd>`).join('')}${times.theirs.length ? `<dt>הם</dt><dd><bdi dir="ltr">${esc(times.theirs.map((x) => x.at).join(' · '))}</bdi></dd>` : ''}</dl>
-<p class="muted small m6">את שעות הפרסום של החשבון בוחרים <a href="/settings#schedule">בהגדרות</a>, ובשבת ובחג לא מפרסמים. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
+<p class="muted small m6">את שעות הפרסום של החשבון, וגם אם מפרסמים בשבת ובחגים, בוחרים <a href="/settings#schedule">בהגדרות</a>. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
     : '';
   const adding = !editing && problems.length;
   const body = `<div class="head"><h1>מתחרים</h1><span class="sub">מה שראיתם אצלם, בשביל הכתיבה</span></div>

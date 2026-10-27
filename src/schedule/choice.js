@@ -3,15 +3,23 @@ import { nowIso } from '../core/clock.js';
 import { planOf } from '../budget/quota.js';
 import { addDays, israelDate } from './israel.js';
 import { datesOf, monthSlots, slotsFor } from './slots.js';
+import { rulesOf } from './shabbat.js';
 
 // The days and times an account posts on, as its owner chooses them (Settings, and the new-account flow before it
-// goes live). The choice is kept in settings under schedule:<account id>, one list of up to two "HH:MM" a weekday
-// (0 Sunday ... 6 Saturday), and it is laid over the pack's schedule (pack.json): it replaces the slots, the posting
-// windows and the posts a day, and keeps the rest of the pack's (a fight week, say).
+// goes live). The choice is kept in settings under schedule:<account id>, { byDay, shabbat, holidays, at }: one list
+// of up to two "HH:MM" a weekday (0 Sunday ... 6 Saturday), and whether the account posts on Shabbat and on the
+// festivals too. It is laid over the pack's schedule (pack.json): it replaces the slots, the posting windows, the posts
+// a day and the two flags, and keeps the rest of the pack's (a fight week, say).
 //
-// Two rules the choice cannot change:
-//   - Shabbat and the festivals never post. A time inside them is kept in the choice (a Saturday at 12:30 is a
-//     Saturday after nightfall in no season) and dropped by slotsFor on the day itself, as every pack's is.
+// Shabbat and the festivals:
+//   - by default nothing posts on them. A time inside them is kept in the choice (a Saturday at 12:30 is a Saturday
+//     after nightfall in no season) and dropped by slotsFor on the day itself, as every pack's is.
+//   - an owner who ticks "posting on Shabbat too" (shabbat) or "on the festivals too" (holidays) posts then like any
+//     other day: every rail that keeps Shabbat (slots, the publish path, TikTok drafts, the runner) reads the account's
+//     choice through scheduleOf / rulesFor below. An operator's pack says it as schedule.shabbat / schedule.holidays
+//     in pack.json; a saved choice wins over the pack. A choice saved before the flags existed keeps the pack's.
+//
+// One rule the choice cannot change:
 //   - The month's plan (src/budget/quota.js, 40 posts) is the most a month gets. A choice with more slots than that is
 //     thinned evenly over the month, a day's second time first (monthSlots), so the posts last the whole month.
 //
@@ -42,6 +50,17 @@ export function choiceOf(db, accountId) {
   return v?.byDay ? normal(v.byDay) : null;
 }
 
+const flag = (v) => (typeof v === 'boolean' ? v : null);
+
+/**
+ * Whether an account's saved choice posts on Shabbat and on the festivals: { shabbat, holidays }, each true, false, or
+ * null when the choice does not say (no choice, or one saved before the flags existed: the pack's then).
+ */
+export function choiceRules(db, accountId) {
+  const v = getSetting(db, key(accountId), null);
+  return { shabbat: flag(v?.shabbat), holidays: flag(v?.holidays) };
+}
+
 const normal = (byDay) => Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, [...(byDay[d] || byDay[String(d)] || [])].sort()]));
 
 /**
@@ -51,16 +70,26 @@ const normal = (byDay) => Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d
 export function scheduleOf(db, pack) {
   const base = pack.meta?.schedule || {};
   const choice = choiceOf(db, pack.id);
-  if (!choice) return base;
-  return { ...base, slots: [], slotsByDay: Object.fromEntries(Object.entries(choice).map(([d, list]) => [d, list])), windows: [], postsPerDay: MAX_PER_DAY, perMonth: planOf(db, pack.id).suggested, chosen: true };
+  const r = choiceRules(db, pack.id);
+  if (!choice) return r.shabbat == null && r.holidays == null ? base : { ...base, ...withRules(base, r) };
+  return { ...base, slots: [], slotsByDay: Object.fromEntries(Object.entries(choice).map(([d, list]) => [d, list])), windows: [], postsPerDay: MAX_PER_DAY, perMonth: planOf(db, pack.id).suggested, chosen: true, ...withRules(base, r) };
 }
+
+/** The pack's two flags with the choice's over them: { shabbat, holidays }, booleans. */
+const withRules = (base, r) => ({ shabbat: r.shabbat ?? base.shabbat === true, holidays: r.holidays ?? base.holidays === true });
+
+/**
+ * Does this account post on Shabbat, on the festivals: { shabbat, holidays }, what every Shabbat rail is handed
+ * (restAt(t, rulesFor(db, pack)), src/schedule/shabbat.js). The pack's, with the owner's choice over it.
+ */
+export const rulesFor = (db, pack) => rulesOf(scheduleOf(db, pack));
 
 /** Every time of day an account's schedule posts at, sorted: the pack's slots, or every time the customer chose. */
 export const timesOf = (sched = {}) => (sched.chosen ? [...new Set(Object.values(sched.slotsByDay || {}).flat())].sort() : sched.slots || []);
 
 /**
- * Read a choice from the form: day_<d> on, t1_<d> and t2_<d> the times. Returns { byDay } or { problems } (Hebrew,
- * for the customer).
+ * Read a choice from the form: day_<d> on, t1_<d> and t2_<d> the times, and the boxes shabbat and holidays (post on
+ * Shabbat, on the festivals, too). Returns { byDay, shabbat, holidays } or { problems } (Hebrew, for the customer).
  */
 export function readChoice(form) {
   const problems = [];
@@ -92,30 +121,37 @@ export function readChoice(form) {
     byDay[d] = sorted.slice(0, MAX_PER_DAY);
   }
   if (!problems.length && !Object.values(byDay).some((l) => l.length)) problems.push('צריך לבחור לפחות יום אחד');
-  return problems.length ? { problems } : { byDay };
+  return problems.length ? { problems } : { byDay, shabbat: ticked(form.shabbat), holidays: ticked(form.holidays) };
 }
 
-/** Save an account's choice. */
-export function saveChoice(db, accountId, byDay, { actor = 'engine' } = {}) {
+const ticked = (v) => v === 'on' || v === '1' || v === true;
+
+/** Save an account's choice: the days and times, and whether it posts on Shabbat and on the festivals too. */
+export function saveChoice(db, accountId, byDay, { actor = 'engine', shabbat = false, holidays = false } = {}) {
   const clean = normal(byDay);
-  setSetting(db, key(accountId), { byDay: clean, at: nowIso() });
-  audit(db, { actor, action: 'schedule', accountId, detail: { byDay: clean } });
+  const rules = { shabbat: shabbat === true, holidays: holidays === true };
+  setSetting(db, key(accountId), { byDay: clean, ...rules, at: nowIso() });
+  audit(db, { actor, action: 'schedule', accountId, detail: { byDay: clean, ...rules } });
   return clean;
 }
 
 /**
  * What a choice gives in a month, for the page to say: { month, slots (kept), all (before the plan), plan, rest (how
- * many of the chosen times fall on Shabbat or a festival) }.
+ * many of the chosen times fall on Shabbat or a festival the account does not post on), restBy: { shabbat, holidays }
+ * (the same, split), rules: { shabbat, holidays } (whether it posts on them) }. `byDay`, `shabbat` and `holidays` stand
+ * in for the saved choice (a flag left out is the account's).
  */
-export function monthOf(db, pack, { t = Date.now(), byDay = null } = {}) {
-  const sched = byDay ? { ...scheduleOf(db, pack), slots: [], slotsByDay: normal(byDay), windows: [], postsPerDay: MAX_PER_DAY, perMonth: planOf(db, pack.id).suggested } : scheduleOf(db, pack);
+export function monthOf(db, pack, { t = Date.now(), byDay = null, shabbat = null, holidays = null } = {}) {
+  const own = scheduleOf(db, pack);
+  const base = byDay ? { ...own, slots: [], slotsByDay: normal(byDay), windows: [], postsPerDay: MAX_PER_DAY, perMonth: planOf(db, pack.id).suggested } : own;
+  const sched = { ...base, ...withRules(base, { shabbat: flag(shabbat), holidays: flag(holidays) }) };
   // Next month, a whole one: this month is partly gone already.
   const today = israelDate(t);
   const month = addDays(`${today.slice(0, 7)}-28`, 7).slice(0, 7);
   const plain = { ...sched, perMonth: null };
   const all = monthSlots(month, plain).all;
   const kept = sched.perMonth != null ? monthSlots(month, sched).slots.length : all;
-  let rest = 0;
-  for (const d of datesOf(month)) rest += slotsFor(d, plain).dropped.filter((x) => x.why !== 'מחוץ לשעות הפרסום').length;
-  return { month, slots: kept, all, plan: planOf(db, pack.id).suggested, rest };
+  const restBy = { shabbat: 0, holidays: 0 };
+  for (const d of datesOf(month)) for (const x of slotsFor(d, plain).dropped) if (x.why !== 'מחוץ לשעות הפרסום') restBy[x.why === 'שבת' ? 'shabbat' : 'holidays']++;
+  return { month, slots: kept, all, plan: planOf(db, pack.id).suggested, rest: restBy.shabbat + restBy.holidays, restBy, rules: rulesOf(sched) };
 }
