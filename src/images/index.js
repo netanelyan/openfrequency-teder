@@ -45,6 +45,20 @@ export const once = (s) => {
   const half = w.length / 2;
   return w.length % 2 === 0 && half > 0 && w.slice(0, half).join(' ') === w.slice(half).join(' ') ? w.slice(0, half).join(' ') : String(s || '');
 };
+/**
+ * A credit's name, as a caption can carry it: Commons' Artist field is free text, and one file's held its whole licence
+ * ("Kolforn ( Kolforn ) I'd appreciate if you could mail me (...) ... This file is licensed under ..."), which went into a
+ * post's caption word for word. The name is what comes before a licence's or a request's words, an address or a link,
+ * cut at a word to 60 characters.
+ */
+export function creditName(s) {
+  let t = once(String(s || '')).replace(/\s+/g, ' ').trim();
+  t = t.split(/\s*(?:This file is licensed|is licensed under|I'd appreciate|I would appreciate|Please (?:credit|contact|mail)|You are free|Creative Commons|https?:\/\/|\S+@\S+)/i)[0].trim();
+  t = t.replace(/\s*\(\s*([^()]*)\s*\)\s*$/, (m, inner) => (t.startsWith(inner.trim()) ? '' : m)).replace(/[\s,;:(-]+$/, '').trim();
+  if (t.length > 60) t = `${t.slice(0, 60).replace(/\s+\S*$/, '')}`;
+  return t || null;
+}
+
 const describes = (text, words) => {
   const t = ` ${String(text || '').toLowerCase().replace(/[^a-z0-9֐-׿]+/g, ' ')} `;
   return words.find((w) => t.includes(` ${String(w).toLowerCase()} `)) || null;
@@ -91,7 +105,7 @@ const commons = {
           height: ii?.thumbheight || ii?.height,
           license: plain(md.LicenseShortName?.value),
           licenseUrl: md.LicenseUrl?.value || null,
-          author: once(plain(md.Artist?.value)) || null,
+          author: creditName(plain(md.Artist?.value)),
           authorUrl: null,
           sourceUrl: ii?.descriptionurl || null,
           alt: `${p.title} ${plain(md.ImageDescription?.value)}`.slice(0, 400),

@@ -6,7 +6,7 @@ command) moved here. The operator (the superadmin outside view-as) still sees ea
 or folded under "הערות למפעיל"; a customer never does.
 
 Each section: what the note is, where it shows up, what to do, and whether it is needed now. The live server is
-Teder at `/opt/open-frequency` on `tiyul-vps` (systemd); its `.env` is where a key goes, and a restart of the service
+Teder at `/opt/open-frequency` on the VPS (systemd; its SSH alias is in private/DEPLOY.md); its `.env` is where a key goes, and a restart of the service
 picks it up. Nothing here is set by a customer.
 
 When asked "what should I do about Teder's setup", read this file top to bottom and report, for each section, whether

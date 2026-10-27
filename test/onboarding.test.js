@@ -246,7 +246,8 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     // The customer reads none of it: no key, no command, no file or package; the operator does, folded away.
     // "החבילה" alone is the customer's monthly plan; the pack (files in a folder) is never named.
     const DEV = /[A-Z]{3,}_[A-Z_]{3,}|npm run|היוריסט|ליצור את החבילה|החבילה נכתבה|מזהה החבילה|התיקייה|באנגלית|YouTube|Brave/;
-    const visible = (html) => html.replace(/<script[\s\S]*?<\/script>|<svg[\s\S]*?<\/svg>/g, '');
+    // A hidden field is not read either: its random CSRF token once held "HVE_AQCNGG", and the test failed one run in many.
+    const visible = (html) => html.replace(/<script[\s\S]*?<\/script>|<svg[\s\S]*?<\/svg>|<input[^>]*type="hidden"[^>]*>/g, '');
     const samplesPage = await (await fetch(`${base}/new/${id}`, { headers: { cookie } })).text();
     const around = (html) => {
       const m = DEV.exec(visible(html));

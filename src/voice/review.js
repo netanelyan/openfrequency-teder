@@ -37,6 +37,7 @@ What gives a Hebrew text away (each one raises the score):
 - Ad structures: "זה לא X, זה Y", "לא עוד X", "בלי X ובלי Y", "פחות X, יותר Y", a triad of adjectives or a perfectly balanced pair of sentences, three short fragments in a row for drama ("מהיר. קל. זול."), a one-word sentence for emphasis, a label with a colon ("עובדה:", "דעה לא פופולרית:", a date and a colon).
 - On a slide or a caption, teasers that hold back the point: "זה מה שקרה כש...", "הנה למה", "והראשון מפתיע", "לא תאמינו", a hyphen before the payoff. A real question about a named, concrete subject is fine; a hidden subject is not.
 - The COVER is different: its one job is to stop a thumb, and the covers that spread open a gap the slides close: "7 דברים שלא ידעתם על חיפה של 2002", "מספר 1 עדיין לא נשבר", "טעויות שעשיתי בשנה הראשונה", a count, a name and a promise. A cover that names its subject and promises what the slides pay off is no tell, however much it holds back: never mark a cover down for "teaser", "hidden answer" or "question". Mark it down only for the empty ones ("לא תאמינו מה קרה", "זה ישנה לכם את החיים") or for a promise the slides do not keep.
+- A countdown's or a list's CAPTION that says its cover line again (with a question or without) is what the viral ones do ("5 facts about UFC you may didn't know !"): no tell.
 - Every slide ending on the same short punch line ("אף אחד לא קרוב.", "ואז הכול השתנה."), every slide opening the same way, every sentence the same length, every title the same template.
 - Claims with nothing behind them: a superlative with no number, "מהפכה", "משנה את כללי המשחק", abstract nouns ("חוויה", "פתרון", "פלטפורמה") where a thing could be named.
 - Form or brochure Hebrew: "ניתן", "על מנת", "במידה ו", "בגין", "נדרש", "באמצעות", a passive with "על ידי", "כ-80" where a person says "בערך 80". Translated Hebrew: "בסופו של יום", "עושה את ההבדל", "כשזה מגיע ל", English word order or idioms in Hebrew letters.
@@ -122,6 +123,10 @@ export function reviewUser(pack, texts, facts = []) {
   ].join('\n');
 }
 
+// A note that concludes there is nothing wrong is no fact problem, whatever the flag beside it says: a reviewer marked
+// factIssue true and wrote "... minor. No real unsupported claim.", and an AI story was blocked for it.
+export const CLEARED = /\b(?:no real (?:unsupported claim|problem|issue|fact problem)|no (?:actual |real )?(?:fact|factual) (?:problem|issue|error)|not an? (?:real |actual )?(?:fact )?(?:problem|issue)|nothing (?:here )?(?:is )?unsupported)\b/i;
+
 /**
  * texts: [{ where, kind, text }]. facts: the post's facts, for factProblem.
  * Returns { reviewer, reviews: [{ botScore, tells, factProblem }] }.
@@ -134,7 +139,7 @@ export async function reviewTexts(ctx, { pack, texts, facts = [], tag = 'review'
     reviews: texts.map((_, i) => {
       const r = (data.reviews || []).find((x) => x.index === i) || {};
       // A reviewer once filled factProblem with "...so this is fine", and it blocked the post: the boolean decides.
-      return { botScore: clamp(r.botScore), tells: (r.tells || []).map(String).slice(0, 5), factProblem: r.factIssue === false ? '' : String(r.factProblem || '') };
+      return { botScore: clamp(r.botScore), tells: (r.tells || []).map(String).slice(0, 5), factProblem: r.factIssue === false || CLEARED.test(String(r.factProblem || '')) ? '' : String(r.factProblem || '') };
     }),
   };
 }

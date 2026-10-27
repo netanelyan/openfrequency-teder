@@ -5,7 +5,7 @@ import { VISUAL_CSS, visualHtml } from '../visuals.js';
 import { zonesFor } from '../../rules/overlay.js';
 import { familiesOf, resolveStyle, STYLES, themeColors } from './tokens.js';
 import { displayText, slideModel, sourcesOf, textHtml } from './model.js';
-import { BODY_FLOOR, STEP } from './fit.js';
+import { BODY_FLOOR, sidesOf, STEP } from './fit.js';
 
 // The five slide styles, drawn (tokens.js has what each one sets, model.js what each slide shows).
 //
@@ -38,10 +38,10 @@ export function themeOf(pack, name = null) {
 export const styleNameOf = (pack) => (pack?.meta?.style?.name && STYLES[pack.meta.style.name] ? pack.meta.style.name : null);
 
 /** The geometry of one platform: its height, its bands, and how the design's px (TikTok's) are scaled to it. */
-export function geo(size, overlay = null) {
+export function geo(size, overlay = null, style = null) {
   const ig = size === 'instagram';
   const h = ig ? 1350 : 1920;
-  const z = zonesFor(size, overlay, h);
+  const z = sidesOf(zonesFor(size, overlay, h), STYLES[style], size);
   return { size, ig, w: 1080, h, z, limit: h - z.bottom, y: (v) => Math.round(ig ? v * 0.7 : v), hs: (px) => Math.round(ig ? px * 0.85 : px) };
 }
 
@@ -57,7 +57,7 @@ function txt(tag, cls, S, field, text, g, { highlight = '', pre = '' } = {}) {
   if (!String(text || '').trim()) return '';
   const breaks = spec.breaks !== false;
   const px = HEADS.has(field) ? g.hs(spec.px) : spec.px;
-  const floor = Math.round(HEADS.has(field) ? g.hs(spec.floor || spec.px * BODY_FLOOR) : spec.px * BODY_FLOOR);
+  const floor = Math.round(HEADS.has(field) ? g.hs(spec.floor || spec.px * BODY_FLOOR) : spec.floor || spec.px * BODY_FLOOR);
   const writer = displayText(text, { breaks }).split('\n').length;
   const max = spec.lines || 99;
   const want = breaks ? Math.min(writer, max) : max;
@@ -336,19 +336,52 @@ ${BAND}
 // photograph stands on the solid ground, its graphic drawn there as every style draws it. The source is a line in
 // small type at the foot of the room the text has, faint: the account's credit, not a part of the design.
 
-// The room E's text has, top and bottom in px: the middle band of the slide (the safe zones, and the source's line at
-// its foot), or, when the photograph's screen found a face, the part of the band below the face or above it, whichever
-// is larger, so the words do not cover the eyes. object-position aligns the same point of the photograph and of the
-// slide, so the face's place on the slide is its place in the photograph (focusOf: "x% y%").
-function roomE(slide, g) {
+// How E shows a slide's photograph: over the whole slide when it is close to the slide's shape (a crop keeps at least
+// four fifths of its width), else whole, the slide's width, in the middle of a black slide, as TikTok shows a photo
+// uploaded at its own shape. A landscape press photograph cut to 9:16 kept a third of itself, blown up three times:
+// soft, and often the wrong third. `slide.photoSize` is the photograph's own { w, h } (render.js).
+export function fitE(slide, g) {
+  const sz = slide.photoSize;
+  if (!slide.photo || !sz?.w || !sz?.h) return { mode: 'cover' };
+  const a = sz.w / sz.h;
+  const frame = 1080 / g.h;
+  // A small photograph (Commons keeps today's fighters at 400 to 900 pixels) is shown whole rather than blown up past
+  // twice its size to fill the slide: soft either way, but whole it is less so, and nothing of it is cut.
+  const grow = Math.max(1080 / sz.w, g.h / sz.h);
+  if (a <= frame / 0.8 && grow <= 2.2) return { mode: 'cover' };
+  const ph = Math.min(g.h, Math.round(1080 / a));
+  return { mode: 'contain', top: Math.round((g.h - ph) / 2), ph };
+}
+
+// The room E's text has, top and bottom in px, and whether it hugs the photograph from above (`hug`). The middle of
+// the slide, as the app's text tool sets it, unless the photograph's screen found a face there: then the part of the
+// slide above the face or below it, whichever is larger, so the words never cover the eyes. A photograph shown whole
+// on black whose face (or whose unknown face) is in the middle takes its text on the black above it, close to its top
+// edge, when the black has the room. object-position aligns the same point of the photograph and of the slide, so on
+// a full slide the face's place on the slide is its place in the photograph (focusOf: "x% y%").
+function roomE(slide, g, fit) {
   const top = g.z.top;
-  const bottom = g.h - g.z.bottom - g.y(48);
+  const bottom = g.h - g.z.bottom;
+  const need = g.y(560);
   const fy = slide.photo ? Number(/\s(\d+(?:\.\d+)?)%\s*$/.exec(String(slide.photoPos || ''))?.[1]) : NaN;
-  if (!Number.isFinite(fy)) return { top, bottom };
-  const face = (fy / 100) * g.h;
+  const known = Number.isFinite(fy);
+  // A block too tall for the black around the photograph (render.js tries this before it gives the photograph up).
+  if (slide.textOver) return { top, bottom };
+  if (fit.mode === 'contain') {
+    const face = known ? fit.top + (fy / 100) * fit.ph : null;
+    const clear = Math.round(fit.ph * 0.22);
+    const mid = (top + bottom) / 2;
+    // The face is clear of the middle: the text stays there, over the photograph.
+    if (known && Math.abs(face - mid) > clear + need / 2) return { top, bottom };
+    const above = { top, bottom: fit.top - g.y(28), hug: true };
+    if (above.bottom - above.top >= g.y(300)) return above;
+    const below = { top: fit.top + fit.ph + g.y(28), bottom };
+    if (below.bottom - below.top >= g.y(300)) return below;
+    if (!known) return { top, bottom };
+  } else if (!known) return { top, bottom };
+  const face = fit.mode === 'contain' ? fit.top + (fy / 100) * fit.ph : (fy / 100) * g.h;
   // About half a face's height on a portrait drawn to fill the slide: what is kept clear above or below its centre.
-  const clear = g.y(260);
-  const need = g.y(620);
+  const clear = fit.mode === 'contain' ? Math.round(fit.ph * 0.22) : g.y(260);
   const below = { top: Math.max(top, Math.min(bottom - need, face + clear)), bottom };
   const above = { top, bottom: Math.min(bottom, Math.max(top + need, face - clear)) };
   return below.bottom - below.top >= above.bottom - above.top ? below : above;
@@ -356,26 +389,33 @@ function roomE(slide, g) {
 
 function drawE(m, slide, g, S) {
   const photo = hasPhoto(slide);
-  const room = roomE(slide, g);
+  const fit = fitE(slide, g);
+  const room = roomE(slide, g, fit);
   // A soft shade behind the text only, so white text reads on a bright photograph: its depth is measured on the
-  // photograph by the renderer (render.js, data-scrim) between these bounds, so a dark picture keeps all of its colour,
-  // and is the least of them where it cannot be measured (a head-to-head's two halves). A box carries its own ground:
-  // under it the shade is the faintest.
+  // photograph by the renderer (render.js, data-scrim) between these bounds, so a dark picture keeps all of its colour.
+  // Text on the black around a photograph shown whole needs none. A box carries its own ground: under it the shade is
+  // the faintest.
   const box = slide.textLook !== 'shadow';
-  const [lo, hi] = box ? [0.06, 0.14] : [0.22, 0.5];
+  const onBlack = fit.mode === 'contain' && (room.bottom <= fit.top || room.top >= fit.top + fit.ph);
+  const [lo, hi] = onBlack ? [0, 0] : box ? [0.06, 0.14] : [0.12, 0.42];
   const mid = Math.round((room.top + room.bottom) / 2);
-  const under = photo ? `${photoHtml(slide, 'ph full')}<div class="ov" data-scrim data-min="${lo}" data-max="${hi}" style="--mid:${mid}px;--scrim:${lo}"></div>` : '';
-  const blk = (cls, inner) => `<div class="blk${cls}" style="bottom:${g.h - room.bottom}px">${inner}</div>`;
+  const img = fit.mode === 'contain'
+    ? `<img class="ph fit" src="${slide.photo}" alt="" style="top:${fit.top}px;height:${fit.ph}px">`
+    : photoHtml(slide, 'ph full');
+  const under = photo ? `${img}<div class="ov" data-scrim data-min="${lo}" data-max="${hi}" style="--mid:${mid}px;--scrim:${lo}"></div>` : '';
+  const blk = (cls, inner) => `<div class="blk${cls}${room.hug ? ' hug' : ''}" style="bottom:${g.h - room.bottom}px">${inner}</div>`;
+  // The native look marks nothing: no highlighter, no coloured word. A box look keeps its highlight.
+  const mark = (h) => (box ? h : '');
   if (m.kind === 'cover') {
     return {
       bt: room.top,
-      html: `${under}${blk(' cov', `${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}`)}`,
+      html: `${under}${blk(' cov', `${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: mark(m.highlight) })}${txt('p', 'sub', S, 'sub', m.sub, g)}`)}`,
     };
   }
   // The closing slide stands in the middle of the band, as every other slide of E does.
   if (m.kind === 'end') return { ...endHtml(m, g, S), bt: g.z.top };
   const rank = S.rank && m.rank ? `<span class="rk">${he(m.rank)}.</span> ` : '';
-  const head = txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight, pre: rank });
+  const head = txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: mark(m.highlight), pre: rank });
   // A number's line is one row that never breaks (the renderer sets a long one smaller), on a box of its own.
   const unit = (u) => (u ? `<span class="unit">${he(u)}</span>` : '');
   const num = m.kind === 'number'
@@ -385,9 +425,12 @@ function drawE(m, slide, g, S) {
     : '';
   const body = m.kind === 'number' ? txt('p', 'bd', S, 'body', m.body, g) : m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g);
   const cta = m.cta ? `<div class="cta">${ln(he(m.cta))}</div>` : '';
+  // The native look draws no source line: no viral slideshow had one, and the post's sources are in its caption. A
+  // do-dont's rules, whose licences ask for credit on the slide, keep theirs.
+  const src = box || slide.postKind === 'do-dont' ? srcHtml(slide) : '';
   return {
     bt: room.top,
-    html: `${under}${blk('', `${head}${num}${m.kind === 'text' && !photo ? gfx(m) : ''}${body}${cta}`)}${srcHtml(slide)}`,
+    html: `${under}${blk('', `${head}${num}${m.kind === 'text' && !photo ? gfx(m) : ''}${body}${cta}`)}${src}`,
   };
 }
 
@@ -396,6 +439,8 @@ const CSS_E = (g, S) => {
   return `
 :root{--box:${t.box};--box-ink:${t.ink}}
 .ph.full{height:100%}
+.ph.fit{object-fit:cover;object-position:50% 50%}
+.blk.hug{justify-content:flex-end}
 /* Darkest behind the middle of the text's room (--mid, drawE), fading out to every side: a soft shade behind the
    words, not a band across the photograph. */
 .ov{position:absolute;inset:0;background:radial-gradient(ellipse 78% ${g.y(460)}px at 50% var(--mid),rgba(0,0,0,var(--scrim,.3)) 0%,rgba(0,0,0,calc(var(--scrim,.3) * .7)) 50%,rgba(0,0,0,0) 100%)}
@@ -421,7 +466,7 @@ const CSS_E = (g, S) => {
 .tx-box .nrow{background:var(--accent);color:var(--on-accent)}
 /* White with a thin dark edge (drawn under the letters, so half of it shows) and a soft shadow: the app's plain text.
    On E's own lines only, past the rule that no other letter has one (base, .st *). */
-.st.st-E.tx-shadow .ln,.st.st-E.tx-shadow .ln *,.st.st-E.tx-shadow .nrow,.st.st-E.tx-shadow .nrow *{color:#fff;text-shadow:0 0 .1em rgba(0,0,0,.45),0 .03em .12em rgba(0,0,0,.55)!important;-webkit-text-stroke:.05em rgba(0,0,0,.6)!important;paint-order:stroke fill}
+.st.st-E.tx-shadow .ln,.st.st-E.tx-shadow .ln *,.st.st-E.tx-shadow .nrow,.st.st-E.tx-shadow .nrow *{color:#fff;text-shadow:0 0 .08em rgba(0,0,0,.5),0 .02em .1em rgba(0,0,0,.6)!important;-webkit-text-stroke:.03em rgba(0,0,0,.55)!important;paint-order:stroke fill}
 /* The highlight's words in the accent; a number stays white, large enough to stand out by its size alone (an accent
    of the account's own, set over any photograph, read badly on a dark one). */
 .st.st-E.tx-shadow .ln mark.hi,.st.st-E.tx-shadow .ln mark.hi *{color:var(--accent)}
@@ -489,12 +534,17 @@ export function stylePage({ theme, size, slide: given, overlay = null }) {
   const st = theme.style;
   const slide0 = theme.options?.fullPhoto && st.name === 'A' ? { ...given, fullPhoto: true } : given;
   // E's text look (resolveStyle: "box" unless the pack asks for "shadow").
-  const look = st.name === 'E' ? (st.text === 'shadow' ? 'shadow' : 'box') : null;
+  const look = st.name === 'E' ? (st.text === 'box' ? 'box' : 'shadow') : null;
   const slide = look ? { ...slide0, textLook: look } : slide0;
   const S = STYLES[st.name];
-  const g = geo(size, overlay);
+  const g = geo(size, overlay, st.name);
   const m = slideModel(slide);
-  const d = DRAW[st.name](m, slide, g, S);
+  const d0 = DRAW[st.name](m, slide, g, S);
+  // The closing slide on a photograph of the post, under a veil of the style's own ground, so its words read as they do
+  // on the ground: no slide of a post is a bare dark ground (the owner's call).
+  const d = m.kind === 'end' && slide.photo
+    ? { ...d0, html: `<img src="${slide.photo}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(var(--bg-rgb),.78)"></div>${d0.html}` }
+    : d0;
   const families = familiesOf(st.name);
   const karantina = families.includes('Karantina');
   const z = g.z;

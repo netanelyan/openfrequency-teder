@@ -136,3 +136,18 @@ test('digits inside a product name are part of the name, not a number to quote',
   assert.equal(n('Claude 3.5'), '3.5');
   assert.equal(n('UFC 193'), '193');
 });
+
+test("a fighter's infobox row is evidence however short, once in the document and as whole words", () => {
+  const { db } = setup();
+  const at = new Date().toISOString();
+  const src = db.get("SELECT id FROM sources WHERE key = 's'").id;
+  const text = 'Ilia Topuria\nReach | 69 in (175 cm)\nMixed martial arts record\nTotal | 18\nWins | 17\nBy knockout | 7\nBy submission | 8\nLosses | 1\nBy knockout | 1\nRanked | 170';
+  const doc = db.insert('documents', { source_id: src, url: 'https://en.wikipedia.org/wiki/Ilia_Topuria', text, sha256: 'row', fetched_at: at });
+  const check = (claim, quote) => verifyFact(db, { claim, quote, document_id: doc }, { accountId: 'demo' });
+  assert.equal(check('לטופוריה 17 ניצחונות', 'Wins | 17').ok, true);
+  assert.equal(check('7 ניצחונות בנוקאאוט', 'By knockout | 7').ok, true);
+  assert.equal(check('טווח ידיים של 175 ס"מ', 'Reach | 69 in (175 cm)').ok, true);
+  assert.match(check('הפסד אחד בנוקאאוט', 'By knockout | 1').error || 'ok', /ok/, 'the losses row is once in the text');
+  assert.match(check('17 ניצחונות', 'Wins 17').error, /too short/, 'two words that are no table row are no evidence');
+  assert.match(check('דירוג 17', 'Ranked | 17').error, /only inside a longer one/, '"Ranked | 17" is not in "Ranked | 170"');
+});

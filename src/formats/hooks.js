@@ -52,7 +52,7 @@ export const MECHANISMS = {
 
 /** The slots a template can hold, as the writer is told to fill them. */
 export const SLOTS = {
-  topic: 'what the post is about, a short noun phrase the way the slides name it ("השקיה של פוטוס")',
+  topic: 'what the post is about, a short noun phrase of 1 to 4 words the way the slides name it ("השקיה של פוטוס", "כוכבי ה-UFC"): never a list of names',
   fact: "the post's most surprising fact, a short clause said the way the slides say it, from one of hookFacts",
   who: 'the one who should have told them, an authority of the niche with its article ("המאמן", "הסוכן", "השופט")',
   x: 'a real number or time from the quotes of hookFacts, with its unit ("3 שעות בשבוע"): never estimated',
@@ -116,7 +116,17 @@ export function templatesOf(pack) {
 }
 
 /** The templates a post of this format may open with. A phase 1 list post has none. */
-export const templatesFor = (pack, format) => (kindName(format) === 'list' ? [] : templatesOf(pack).filter((t) => t.kinds.includes(kindName(format))));
+// A facts or tips cover is its count and its subject (kindProblems asks for the count): of the countdowns and lists
+// that spread, every cover opened on its number ("8 Fact about the UFC you probably didn't know", "5 ChatGPT prompts I
+// use every week"). A secret or a wish template put the count under the cover, in small type, where nobody read it.
+// The same holds for every list (a do-and-don't, a ranking, an iceberg): a list opens on its count or on its own
+// pattern, never on a secret ("במקרה שאף אחד עוד לא סיפר לכם, בשגיאה כותבים 'סיסמה שגויה'" read as forced to the owner).
+// A hot take opens on its opinion, the format's own pattern, and on no template: "במקרה שאף אחד עוד לא סיפר לכם, סיטי
+// כבשה 106 שערים" hid the take until the last slide.
+const COUNT_ONLY = new Set(['facts', 'tips', 'do-dont', 'ranking', 'iceberg']);
+const OWN_PATTERN = new Set(['hot-take']);
+export const templatesFor = (pack, format) =>
+  kindName(format) === 'list' || OWN_PATTERN.has(kindName(format)) ? [] : templatesOf(pack).filter((t) => t.kinds.includes(kindName(format)) && (!COUNT_ONLY.has(kindName(format)) || /\{n\}/.test(t.text)));
 
 /** A template by its id ("save-x" or "tpl:save-x"), among those this format may use, or null. */
 export function templateById(pack, format, id) {
@@ -272,6 +282,9 @@ export function hookProblems(pack, format, draft, facts = []) {
   ];
   for (const [where, text] of others) {
     const t = lib.find((x) => matchFrame(x, text || ''));
+    // A caption may say the cover's count again: the viral countdowns' captions are their cover line ("5 facts about
+    // UFC you may didn't know !"), and a count promises nothing the slides do not hold.
+    if (t && t.mechanism === 'count' && where.startsWith('caption')) continue;
     if (t) add(where, `"${voiced(t, speakerOf(pack))}" is a cover template [${t.id}]: it opens the cover and nowhere else. Say what it holds back as a plain sentence here`);
   }
   const on = templateOnCover(pack, format, draft);

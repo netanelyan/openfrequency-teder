@@ -294,7 +294,9 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   // A cover written from a hook template: its frame is no teaser there, and its promise is checked below.
   const frame = coverFrame(pack, f, draft);
   for (const t of textsOf(draft, { frame })) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [], pack, frame: t.frame })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
-  for (const x of checkRules({ pack, others: ctx.packs || [], texts: ownerTexts(ctx.db, f, draft, facts) })) problems.push(x);
+  // A count the post's own verified facts give ("90,000 צפיות" for UFC 1's pay-per-view) is a fact, not the account's proof.
+  const sourced = new Set(facts.filter((x) => x.verified).flatMap((x) => [...numbersIn(x.quote || '', { words: true })]));
+  for (const x of checkRules({ pack, others: ctx.packs || [], texts: ownerTexts(ctx.db, f, draft, facts), sourced })) problems.push(x);
   // The hook templates: on the cover only, from the template the draft declared, and paid off by the slides.
   for (const x of hookProblems(pack, f, draft, facts)) problems.push(x);
   // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
@@ -543,6 +545,10 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
     ],
   };
   if (!legacy) draft.coverVisual = normVisual(d.coverVisual);
+  // A countdown's or a list's short caption is its cover line, as every viral one's is ("5 facts about UFC you may
+  // didn't know !"), with its question when it has one: told to give nothing away, the writer still put the best fact
+  // in it, run after run.
+  if (ONE_LINE_KINDS.has(kindName(format)) && captionStyleOf(pack) === 'short' && draft.hook) draft.caption = joinCaption(draft.hook.replace(/\s*\n\s*/g, ' '), d.question);
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
   const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
@@ -554,11 +560,15 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
  * Every check on a written draft: checkPost, and what the slides owe the plan (its details, its roles in order).
  * Returns { problems, gate }.
  */
+const ONE_LINE_KINDS = new Set(['facts', 'tips']);
+
 export function checkDraft(ctx, pack, { draft, format, facts, items, attempt = 0 }) {
   const checked = checkPost(ctx, pack, draft, facts, format);
   // The details the research found are what makes a post worth finishing: at least three of them on the slides.
   const details = facts.filter((f) => f.verified && f.detail).map((f) => f.key);
-  if (details.length) {
+  // A facts or tips slide is one line: a detail may be its fact, never a second line under it. Asked for three, the
+  // writer wrote them under the titles of a countdown, and two rounds of repair could not take them off again.
+  if (details.length && !ONE_LINE_KINDS.has(kindName(format))) {
     const cited = new Set(draft.slides.flatMap((s) => s.factKeys || []));
     const used = details.filter((k) => cited.has(k)).length;
     // A first draft is asked for three; a redraft that kept two still tells the post's moments, and passes.
@@ -1168,7 +1178,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const flagged = [
       ...review.reviews
         .map((r, i) => ({ ...r, index: i, where: texts[i].where, text: texts[i].text, limits: limitsFor(texts[i].kind, pack), uses: factsFor(texts[i]).map((f) => f.key) }))
-        .filter((r) => r.botScore >= REWRITE_AT || r.factProblem),
+        // A countdown's short caption is its cover line by design (draftFromAnswer): rewritten for sounding like the cover,
+        // it came back with the post's best facts in it.
+        .filter((r) => (r.botScore >= REWRITE_AT && !(r.where === 'caption' && ONE_LINE_KINDS.has(kindName(format)) && captionStyleOf(pack) === 'short')) || r.factProblem),
       ...visReviews.filter((v) => v.factProblem).map((v) => ({ ...v, botScore: 1, text: JSON.stringify(draft.slides[v.idx].visual), uses: factsFor(v).map((f) => f.key) })),
     ];
     const rejected = [];
@@ -1244,6 +1256,22 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       draft.slides[v.idx].visual = null;
       dropped.push({ where: v.where, why: v.factProblem });
     }
+    // So is a doubted line under a slide's title, when the post holds without it: a guess-who was blocked because the
+    // rewrite that fixed its fact came out a line too long for the slide. Taking a sentence away adds no claim; the
+    // post is checked again without it, and a slide it leaves without a fact keeps it (and the post is blocked).
+    review.reviews.forEach((r, i) => {
+      const t = texts[i];
+      if (!r.factProblem || r.rewritten || t?.field !== 'body' || t.idx == null || !draft.slides[t.idx]?.body) return;
+      const next = structuredClone(draft);
+      next.slides[t.idx].body = '';
+      lineDraft(next, pack);
+      next.captionIg = igCaption(next);
+      const before = new Set(checkPost(pctx, pack, draft, facts, format).problems.map(say));
+      if (checkPost(pctx, pack, next, facts, format).problems.map(say).some((p) => !before.has(p))) return;
+      draft = next;
+      r.rewritten = true;
+      dropped.push({ where: t.where, why: r.factProblem });
+    });
     // A rewritten text is scored again, as it now reads. It used to be put down as REWRITE_AT - 1 unread, so every
     // approved post with one rewrite showed 3/10: a number nobody measured. A rescore that fails keeps that floor,
     // and the step says so.
@@ -1313,7 +1341,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(postStyle ? { styleName: postStyle } : {}) },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
@@ -1366,7 +1394,10 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // A post on a photograph a slide (a facts, tips or owner-story post, or the native style) looks for one for every
   // slide, the cover included, whatever the theme says about covers: of 25 slideshows that spread, 20 did that.
   const each = everyPhoto(pack, format, draft.style || null);
-  const photoOn = each ? 'every' : kindOf(format).photo;
+  // A styled account (A to E) shows a photograph on every slide too: the owner refused a slide on a dark ground, in
+  // any style. A guess-who keeps its answer's photograph for the reveal; its other slides stand on scenes.
+  const styledAll = each || Boolean(draft.style || pack.meta?.style?.name);
+  const photoOn = each ? 'every' : styledAll && kind !== 'guess-who' ? 'every' : kindOf(format).photo;
   const last = draft.slides.length - 1;
   const wants = [];
   // The post's topic goes with every photograph's check: the cover line alone did not tell the check that a post about
@@ -1382,13 +1413,16 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       out.set('cb', sides.cb);
     }
   }
-  if ((pack.theme.options?.coverPhoto || each) && photoOn && outline.imageQuery && kind !== 'head-to-head') {
+  if ((pack.theme.options?.coverPhoto || styledAll) && photoOn && outline.imageQuery && kind !== 'head-to-head') {
     const idx = photoOn === 'last' ? last : 0;
     const s = draft.slides[idx];
     // A guess-who's answer is a face, blurred on the cover and shown at the reveal: checked against the reveal's fight,
     // every free portrait of McGregor (a press conference, a suit) was refused and the post had no cover.
+    // A countdown's cover is a famous face (Dana White, Bruce Buffer, Messi on every one that spread): a plaque of
+    // Ronaldo's footprints passed as "Ronaldo" and stood where his face should have been.
     const claim = kind === 'guess-who' && draft.subject?.answer
       ? `a portrait of ${draft.subject.answer}, the answer of a guess-who: the reveal shows their face${about}`
+      : idx === 0 && ['facts', 'tips'].includes(kind) ? `${outline.imageQuery} in person, the face clearly visible (never a statue, a plaque, a poster, a mural or a crowd): the famous face on the cover of "${draft.hook}"${about}`
       : idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}` : `${s.title} ${s.body}${about}`;
     wants.push({ idx, query: outline.imageQuery, claim });
   }
@@ -1396,14 +1430,17 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   if (photoOn && kind !== 'meme') {
     draft.slides.forEach((s, i) => {
       if (s.kind !== 'item' || !s.imageQuery || s.role === 'clue' || (photoOn === 'last' && i === last && wants.length)) return;
-      wants.push({ idx: i, query: s.imageQuery, claim: `${s.title} ${s.body}` });
+      // A facts slide stands on its photograph alone, over the whole screen: "Martínez made 11 saves in the final" went
+      // out on a stadium seen from the stands, the keeper a dot in it, and Spain's World Cup on a team of the 1920s.
+      const own = kind === 'facts' ? ` It must show ${s.imageQuery} large, as its clear main subject (a person: them, their face visible, in the years the fact is about; never a far shot of a pitch, a stadium or a crowd where they are a dot, never an old photograph of others)` : '';
+      wants.push({ idx: i, query: s.imageQuery, claim: `${s.title} ${s.body}${own}` });
     });
   }
   const seen = new Set();
   for (const w of wants) {
     const key = w.query.toLowerCase().trim();
     // At most four searches a post, or one a slide when every slide stands on its own photograph.
-    if (seen.has(key) || seen.size >= (each ? SLIDES.max : 4)) continue;
+    if (seen.has(key) || seen.size >= (styledAll ? SLIDES.max : 4)) continue;
     seen.add(key);
     const why = {};
     // A cover fills the frame; a content slide's photograph sits in one (the last slide of a guess-who fills it too).
@@ -1444,22 +1481,31 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // Behind the slides: the post's own subject (its cover photograph) and its scene, in turn. Every account that asks
   // for backgrounds gets a scene, so a post never repeats one face on every slide or shows a slide's other person (Messi
   // behind a post about Ronaldinho).
-  if (pack.theme.options?.backgroundPhoto) {
+  // A styled post finds up to three scenes ('bg', 'bg2', 'bg3'): what a slide with no photograph of its own stands on,
+  // so that no one photograph has to stand behind every slide (render.js plans them, two slides each at most).
+  if (pack.theme.options?.backgroundPhoto || styledAll) {
     const scenes = pack.theme.backgroundQueries || [];
     const start = [...String(postId)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % Math.max(1, scenes.length);
     // The subject first only when no cover shows it already (and never a guess-who's answer or one of a head-to-head's two).
-    const subjectFirst = !out.has(0) && !['guess-who', 'head-to-head'].includes(kind) ? [outline.imageQuery] : [];
-    const queries = [...subjectFirst, ...scenes.slice(start), ...scenes.slice(0, start)].filter(Boolean);
-    for (const query of [...new Set(queries)].slice(0, 4)) {
+    const subjectFirst = !styledAll && !out.has(0) && !['guess-who', 'head-to-head'].includes(kind) ? [outline.imageQuery] : [];
+    // A post on a photograph a slide may stand a slide on its scene: a scene with no place's name in it first.
+    const turn = [...scenes.slice(start), ...scenes.slice(0, start)];
+    const ordered = styledAll ? [...turn.filter((q) => !/(?:^|\s)\p{Lu}\p{Ll}/u.test(q)), ...turn.filter((q) => /(?:^|\s)\p{Lu}\p{Ll}/u.test(q))] : turn;
+    const queries = [...subjectFirst, ...ordered].filter(Boolean);
+    const keys = styledAll ? ['bg', 'bg2', 'bg3'] : ['bg'];
+    const got = new Set([...out.values()].map((x) => x.id));
+    for (const query of [...new Set(queries)].slice(0, styledAll ? 6 : 4)) {
+      if (keys.every((k) => out.has(k))) break;
       // Checked like a slide's photograph, against the scene it stands for: a basketball arena came back for "football
       // stadium night" and sat behind a football post.
       // A person in it reads as a stranger behind someone else's story: the scene is a place or a thing.
       const claim = `the blurred background of a post about ${outline.topic || pack.meta.displayName}: it must show ${query}, the sport or the setting of the post, never another sport, with no person as the main subject or standing out (an empty arena, a pitch, a cage, gloves, a desk)`;
       const img = await findImage(ctx, { pack, query, postId, claim, minSide: MIN_SIDE.ground }).catch((e) => (ctx.log?.(`background: ${e.message}`), null));
-      if (img) {
-        out.set('bg', img);
-        step(ctx.db, postId, 'image', 'ok', { slide: 'background', query });
-        break;
+      if (img && !got.has(img.id)) {
+        const k = keys.find((x) => !out.has(x));
+        out.set(k, img);
+        got.add(img.id);
+        step(ctx.db, postId, 'image', 'ok', { slide: k === 'bg' ? 'background' : k, query });
       }
     }
   }

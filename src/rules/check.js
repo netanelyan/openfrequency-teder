@@ -1,6 +1,7 @@
 import { COMPLIANCE } from './compliance.js';
 import { badgeNextTo, experienceIn, fakeProofIn } from '../voice/honesty.js';
 import { normHe } from '../voice/tells.js';
+import { numbersIn } from '../verify/claims.js';
 
 // The checks a post's text runs through besides the voice: the pack's own niche
 // rules, the engine's compliance checks, honesty (no invented experience, no fake
@@ -9,7 +10,7 @@ import { normHe } from '../voice/tells.js';
 // texts: [{ where, text, owner }]. Returns [{ where, code, msg }]. A text marked `owner` says what the business
 // owner wrote down as their own story (src/sources/facts.js "owner"): the first person is theirs there, and only there.
 
-export function checkRules({ pack, others = [], texts }) {
+export function checkRules({ pack, others = [], texts, sourced = null }) {
   const out = [];
   const rules = pack.rules || {};
   const patterns = (rules.patterns || []).map((r) => ({ ...r, re: new RegExp(r.regex, 'iu') }));
@@ -27,7 +28,9 @@ export function checkRules({ pack, others = [], texts }) {
     const exp = owner ? null : experienceIn(s);
     if (exp) out.push({ where, code: 'honesty:experience', msg: `claims an experience nobody had: "${exp}"` });
     const proof = fakeProofIn(s);
-    if (proof) out.push({ where, code: 'honesty:proof', msg: `a badge or a metric about the account: "${proof}"` });
+    // A count of views or followers the post's verified facts give is about what the post is about, not the account.
+    const fromFacts = proof && sourced?.size && [...numbersIn(proof)].some((n) => sourced.has(n));
+    if (proof && !fromFacts) out.push({ where, code: 'honesty:proof', msg: `a badge or a metric about the account: "${proof}"` });
     const badge = badgeNextTo(s, pack.meta.displayName);
     if (badge) out.push({ where, code: 'honesty:badge', msg: `a verification mark next to the account's name: "${badge}"` });
     const norm = normHe(s).toLowerCase();

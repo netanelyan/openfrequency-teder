@@ -27,7 +27,7 @@ const SLOT_LEAD_MS = 30 * 60_000;
 
 /** The photographs a post was drawn with, as `${provider}:${provider_id}`, for findImage to skip. */
 export function photosOf(db, post) {
-  const ids = new Set([...(post.checks?.images || []), post.checks?.image, post.checks?.bgImage, ...(post.checks?.coverImages || []), ...(post.slides || []).map((s) => s.image_id)].filter(Boolean));
+  const ids = new Set([...(post.checks?.images || []), post.checks?.image, post.checks?.bgImage, ...(post.checks?.sceneImages || []), ...(post.checks?.coverImages || []), ...(post.slides || []).map((s) => s.image_id)].filter(Boolean));
   return [...ids].map((id) => db.get('SELECT provider, provider_id FROM images WHERE id = ?', id)).filter(Boolean).map((i) => `${i.provider}:${i.provider_id}`);
 }
 
