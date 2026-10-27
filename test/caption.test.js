@@ -126,7 +126,7 @@ test('a pack whose caption limits are raised to fit the story is named in a visi
   cpSync(DEMO, dir, { recursive: true });
   const file = path.join(dir, 'pack.json');
   const meta = JSON.parse(readFileSync(file, 'utf8'));
-  meta.writing = { ...meta.writing, captionLong: { maxChars: 120, sentences: 3 } };
+  meta.writing = { ...meta.writing, captionStyle: 'story', captionLong: { maxChars: 120, sentences: 3 } };
   writeFileSync(file, JSON.stringify(meta, null, 2));
   const seen = [];
   const pack = loadPack(dir, { warn: (m) => seen.push(m) });
@@ -173,11 +173,35 @@ const writerWith = (ctx, edit) => ({ ...ctx.llm, async json(req) {
   return { ...r, data };
 } });
 
+/** The demo account told to caption its posts as the four-beat story (pack.json writing.captionStyle). */
+function storyCaptions(home) {
+  const file = path.join(home, 'packs', 'demo', 'pack.json');
+  const meta = JSON.parse(readFileSync(file, 'utf8'));
+  meta.writing = { ...meta.writing, captionStyle: 'story' };
+  writeFileSync(file, JSON.stringify(meta, null, 2));
+}
+
 const build = (ctx, llm = ctx.llm) => buildPost({ ...ctx, llm }, { pack: ctx.pack('demo'), formatKey: 'plant-story', sample: true, docKey: 'pothos-story' });
+
+test('by default a TikTok caption is one short line, the hook, and the story beats the writer gave are not used', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const res = await build(ctx);
+    assert.equal(res.status, 'sample', res.reason);
+    const post = ctx.db.get('SELECT caption FROM posts WHERE id = ?', res.postId);
+    const lines = beatsOf(post.caption);
+    assert.ok(lines.length <= 2, post.caption);
+    assert.ok(post.caption.startsWith('פוטוס אחד נשאר לבד במשרד סגור 81 יום.'), post.caption);
+  } finally {
+    cleanup();
+  }
+});
 
 test("a post's TikTok caption is its story, with the closing question at the end of the result", async () => {
   const { home, cleanup } = tempHome();
   try {
+    storyCaptions(home);
     const ctx = contextFor(home);
     const res = await build(ctx);
     assert.equal(res.status, 'sample', res.reason);
@@ -197,6 +221,7 @@ test("a post's TikTok caption is its story, with the closing question at the end
 test('a writer that returns one paragraph, or a hashtag in a beat, is refused before the post is drafted', async () => {
   const { home, cleanup } = tempHome();
   try {
+    storyCaptions(home);
     const ctx = contextFor(home);
     // An older answer, one caption of one paragraph: the redraft is told, and without a second recording the post stops.
     const flat = await build(ctx, writerWith(ctx, (d) => {

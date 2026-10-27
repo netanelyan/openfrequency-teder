@@ -12,6 +12,12 @@ import { j } from '../db/index.js';
 
 export const SOUNDS = { min: 3, max: 5, staleDays: 7, recent: 5, chars: 80 };
 
+// A business account (pack.json "business": true, a shop or a brand) may only use TikTok's Commercial Music Library:
+// a trending song from the For You feed is licensed for personal accounts, and a business that posts one can have the
+// sound muted or the post taken down. 24 of 25 slideshows that spread had a sound, so the list still matters; for a
+// business every sound on it is one the owner confirmed is in the library.
+export const isBusiness = (pack) => pack?.meta?.business === true;
+
 const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
 /** A sound as the form sent it, made into a row's fields, and what is wrong with it. Pure. */
@@ -38,8 +44,9 @@ export function soundsOf(db, accountId, { t = now() } = {}) {
 }
 
 /** Add a sound from the form. Returns { id } or { problems }. A sixth, or one already on the list, is refused. */
-export function saveSound(db, accountId, form, { by = null } = {}) {
+export function saveSound(db, accountId, form, { by = null, business = false } = {}) {
   const { sound, problems } = readSound(form);
+  if (business && form.commercial !== '1') problems.push('בחשבון עסקי רק סאונד מהספרייה המסחרית של טיקטוק (Commercial Music Library): סמנו שהוא משם');
   const have = db.all('SELECT name, artist FROM sounds WHERE account_id = ?', accountId);
   if (have.length >= SOUNDS.max) problems.push(`עד ${SOUNDS.max} סאונדים לחשבון: הסירו אחד ישן`);
   const key = (x) => `${x.name}|${x.artist}`.toLowerCase();

@@ -41,6 +41,7 @@ export const API_PRICES = {
   pexels: 0,
   unsplash: 0,
   commons: 0,
+  openverse: 0,
 };
 
 /** This month's spend: one account's, or everything when accountId is undefined. */

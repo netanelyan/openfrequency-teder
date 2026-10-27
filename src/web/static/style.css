@@ -967,7 +967,8 @@ details.more[open] > summary { background: var(--fill-2); }
 .tt-bar { left: 0; right: 0; bottom: 0; height: 6.4%; background: #000; }
 
 /* ---- the slide styles page */
-.stylegrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 12px 0; }
+.stylegrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin: 12px 0; }
+@media (max-width: 1500px) { .stylegrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .stylegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .stylegrid { grid-template-columns: minmax(0, 1fr); } }
 .stylecol { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 14px; background: var(--inset); min-width: 0; }

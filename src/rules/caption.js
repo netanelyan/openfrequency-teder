@@ -27,12 +27,22 @@ import { LIMITS, normHe, sentencesOf } from '../voice/tells.js';
 export const STORY = ['hook', 'problem', 'discovery', 'result'];
 export const MAX_HASHTAGS = 5;
 
+// Short, the default. Of 25 slideshows that spread on TikTok, 21 had a caption of one line or hashtags alone: the
+// slides carry the post, and the line under it is the hook again in other words. A short caption is the story's hook
+// beat alone (with the closing question when there is one), and the four-beat story stays for an account that asks
+// for it (pack.json "writing": { "captionStyle": "story" }).
+export const SHORT_CAPTION = { minChars: 15, maxChars: 220, lines: 2 };
+
+/** How an account's TikTok captions are told: 'short' (the default) or 'story'. */
+export const captionStyleOf = (pack) => (pack?.meta?.writing?.captionStyle === 'story' ? 'story' : 'short');
+
 /** A beat's size: the hook is one sentence a reader takes in before "more"; the others say one thing. */
 export const BEAT = { hookMaxChars: 100, sentences: 2, minWords: 3 };
 
 /** The beats as the caption holds them: each one line, a blank line between two. */
-export function storyCaption(story) {
-  return STORY.map((k) => oneLine(story?.[k])).filter(Boolean).join('\n\n');
+export function storyCaption(story, style = 'story') {
+  // A short caption is the hook beat alone.
+  return (style === 'short' ? ['hook'] : STORY).map((k) => oneLine(story?.[k])).filter(Boolean).join('\n\n');
 }
 
 /** A caption's beats: every line of it. */
@@ -51,10 +61,15 @@ const words = (s) => String(s || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.
  * What is wrong with a TikTok caption as a story, one { where, code, msg } each. `limits`: the account's captionLong
  * limits, so a short-caption account's four beats are short too.
  */
-export function storyProblems(caption, limits = null) {
+export function storyProblems(caption, limits = null, style = 'story') {
   const out = [];
   const add = (msg) => out.push({ where: 'caption', code: 'caption', msg });
   const beats = beatsOf(caption);
+  if (style === 'short') {
+    if (beats.length > SHORT_CAPTION.lines) add(`the TikTok caption is short: one line, two at most (it has ${beats.length})`);
+    if (beats[0] && beats[0].length > BEAT.hookMaxChars) add(`the caption's first line is ${beats[0].length} characters: at most ${BEAT.hookMaxChars}, the part TikTok shows before "more"`);
+    return out;
+  }
   if (beats.length !== STORY.length) {
     add(`the TikTok caption tells the post as a story in ${STORY.length} lines, one beat a line (${STORY.join(', ')}): it has ${beats.length === 1 ? 'one line' : `${beats.length} lines`}`);
     return out;
@@ -101,6 +116,6 @@ export function hashtagProblems({ caption = '', captionShort = '' } = {}, tags =
 }
 
 /** Every way a post's captions break the story and hashtag rules. `limits`: the account's captionLong limits. */
-export function captionProblems(draft, { limits = null, tags = null } = {}) {
-  return [...storyProblems(draft.caption, limits), ...hashtagProblems(draft, tags)];
+export function captionProblems(draft, { limits = null, tags = null, style = 'story' } = {}) {
+  return [...storyProblems(draft.caption, limits, style), ...hashtagProblems(draft, tags)];
 }

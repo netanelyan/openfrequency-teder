@@ -85,13 +85,15 @@ export function slideModel(s) {
   if (s.kind === 'end') return { kind: 'end', title: s.title || '', body: s.body || '', handle: s.handle || '' };
   const cta = s.isLast && s.cta?.text ? s.cta.text : '';
   if (s.kind === 'item') {
+    // A ranking's place, as a number: the one label of a post's structure style E draws, before the title ("5.").
+    const rank = s.role === 'rank' && s.rank ? String(s.rank) : '';
     const n = numberOf(s);
-    if (n) return { kind: 'number', ...n, title: s.title || '', highlight: s.highlight || '', cta };
+    if (n) return { kind: 'number', ...n, title: s.title || '', highlight: s.highlight || '', cta, rank };
     const vis = s.visual && !s.visual.bad && s.role !== 'stat' ? s.visual : null;
-    return { kind: 'text', label: lightLabel(s), title: s.title || '', highlight: s.highlight || '', body: s.body || '', list: LIST_ROLES.has(s.role), visual: vis, cta };
+    return { kind: 'text', label: lightLabel(s), title: s.title || '', highlight: s.highlight || '', body: s.body || '', list: LIST_ROLES.has(s.role), visual: vis, cta, rank };
   }
   // A list post's closing slide: its title and its line.
-  return { kind: 'text', label: '', title: s.title || '', highlight: '', body: s.body || '', list: false, visual: null, cta: '' };
+  return { kind: 'text', label: '', title: s.title || '', highlight: '', body: s.body || '', list: false, visual: null, cta: '', rank: '' };
 }
 
 /** "מקור: X" under a slide, when the account shows its sources, from its facts' sources. */

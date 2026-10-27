@@ -12,7 +12,7 @@ import { suggestStyle } from '../onboarding/style.js';
 import { ActionError } from './actions.js';
 import { csrfField, esc, icon, layout, postButton, shortDate } from './ui.js';
 
-// The account's slide style, in Teder: its last post drawn in all four styles side by side, the one it is drawn in
+// The account's slide style, in Teder: its last post drawn in every style side by side, the one it is drawn in
 // now, the one suggested for it and why, a button to switch, and the style test.
 //
 // The previews are drawn the first time the page is opened for a post (about half a minute), kept under
@@ -23,12 +23,15 @@ import { csrfField, esc, icon, layout, postButton, shortDate } from './ui.js';
 // An account with no post in this database can show a review set instead: its last post from another database,
 // drawn by scripts/styles-review.js into the same folder, with review.json naming it.
 
-const HE = { A: 'כרטיס', B: 'פוסטר', C: 'מפוצל', D: 'כהה' };
+const HE = Object.fromEntries(STYLE_NAMES.map((s) => [s, STYLES[s].he]));
 const ABOUT = {
   A: 'כהה ונוח לנתונים: תמונה למעלה, המספר על כרטיס',
   B: 'פוסטר: כותרת ענקית, המילה החשובה על פס צבע',
   C: 'בהיר ונקי: התמונה למעלה, הטקסט על משטח בהיר',
   D: 'כהה: תמונה שנמסה לרקע, כותרת צפופה',
+  E: 'כמו בטיקטוק עצמו: תמונה חדה על כל המסך, שורה או שתיים בקופסה לבנה',
+  // E with pack.json style.text "shadow".
+  Eshadow: 'כמו בטיקטוק עצמו: תמונה חדה על כל המסך, שורה או שתיים בלבן עם צל דק',
 };
 
 // The account's colour in a style, as a dot: an image, since the site's policy allows no inline style.
@@ -105,7 +108,7 @@ function accountPanel(pc, pack, { lock, prev, suggestion, test }) {
       ? st.files.map((_, n) => { const src = `/styles/img/${esc(pack.id)}/${esc(key)}/${s}/${n}`; return `<a href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${esc(`סגנון ${s}, שקף ${n + 1}`)}" loading="lazy" width="180" height="320"></a>`; }).join('')
       : '<p class="muted small">אין עדיין תצוגה</p>';
     return `<article class="stylecol${s === current ? ' on' : ''}"><header><b>${s} · ${HE[s]}</b>${s === current ? '<span class="chip ok">עכשיו</span>' : s === suggestion.name ? '<span class="chip">מומלץ</span>' : ''}</header>
-<p class="muted small">${esc(ABOUT[s])} <img class="sw" src="${swatch(accent)}" alt="" title="${esc(accent)}" width="12" height="12"></p>
+<p class="muted small">${esc(s === 'E' && pack.meta.style?.text === 'shadow' ? ABOUT.Eshadow : ABOUT[s])} <img class="sw" src="${swatch(accent)}" alt="" title="${esc(accent)}" width="12" height="12"></p>
 <div class="stylestrip">${imgs}</div>${warnLine(st?.warnings)}
 ${s === current ? '' : postButton(pc, `/accounts/${pack.id}/style-pick`, `לעבור לסגנון ${s}`, { cls: 'btn sm', fields: { style: s }, confirm: `לחצו שוב כדי לעבור לסגנון ${s}` })}</article>`;
   }).join('');

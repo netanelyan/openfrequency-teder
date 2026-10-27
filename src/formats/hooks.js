@@ -44,6 +44,10 @@ export const MECHANISMS = {
   wish: { he: 'הלוואי שידעתם קודם', about: 'what they wish they had known before' },
   truth: { he: 'האמת האמיתית', about: 'the real truth about something they think they know' },
   save: { he: 'חוסכים לכם זמן', about: 'the time or trouble it saves them' },
+  // The cover 14 of 25 viral slideshows opened with: a count and the subject, and 8 of them said "you didn't know".
+  count: { he: 'כמה דברים שלא ידעתם', about: 'a count of things about the subject they did not know' },
+  // The owner's own count: the small-business slideshows that spread are the owner's mistakes and numbers.
+  owner: { he: 'מה שלמדתי על בשרי', about: "the owner's own mistakes or lessons, counted" },
 };
 
 /** The slots a template can hold, as the writer is told to fill them. */
@@ -53,18 +57,24 @@ export const SLOTS = {
   who: 'the one who should have told them, an authority of the niche with its article ("המאמן", "הסוכן", "השופט")',
   x: 'a real number or time from the quotes of hookFacts, with its unit ("3 שעות בשבוע"): never estimated',
   thing: 'the method or the thing that saves it, as a slide names it',
-  moment: 'when they needed to know, a clause in the plural ("שקניתם את העציץ", "ההשקיה הבאה")',
+  moment: 'when, as a clause: for the audience, when they needed to know, in the plural ("שקניתם את העציץ", "ההשקיה הבאה"); in the story of the owner, when it happened to them ("בשנה הראשונה של העסק")',
   skill: 'what they should have been taught, a verb phrase ("להשקות פוטוס")',
+  // Filled by the code, never the writer: the post's own count of items, which the cover may say without a quote.
+  n: 'leave it "": the code writes how many items the post counts',
 };
+
+/** The slots the code fills itself (draftFromAnswer): the writer leaves them empty. */
+export const CODE_SLOTS = new Set(['n']);
 
 const SPEAKER = ['m', 'f', 'p'];
 export const SPEAKER_EN = { m: 'in the masculine', f: 'in the feminine', p: 'in the plural' };
 
 // Where a template's promise can be kept without giving the post away. A fact on the cover is fine where the
 // payoff is not one withheld answer; a topic is fine anywhere but a guess-who, whose topic is its answer.
-const ANY = ['story', 'what-happened', 'on-this-day', 'iceberg', 'hot-take', 'myth-fact', 'meme', 'do-dont', 'head-to-head', 'ranking'];
-const FACT = ['myth-fact', 'do-dont', 'iceberg', 'hot-take', 'meme'];
-const HOWTO = ['do-dont', 'myth-fact', 'iceberg', 'head-to-head', 'ranking'];
+const ANY = ['story', 'what-happened', 'on-this-day', 'iceberg', 'hot-take', 'myth-fact', 'meme', 'do-dont', 'head-to-head', 'ranking', 'facts', 'tips'];
+const FACT = ['myth-fact', 'do-dont', 'iceberg', 'hot-take', 'meme', 'facts', 'tips'];
+const HOWTO = ['do-dont', 'myth-fact', 'iceberg', 'head-to-head', 'ranking', 'tips'];
+const COUNTED = ['facts', 'iceberg', 'tips'];
 
 export const TEMPLATES = [
   { id: 'nobody-told', mechanism: 'secret', text: 'במקרה שאף אחד עוד לא סיפר לכם, {fact}', kinds: FACT, examples: ['במקרה שאף אחד עוד לא סיפר לכם, פוטוס שורד 81 יום בלי מים'] },
@@ -77,6 +87,11 @@ export const TEMPLATES = [
   { id: 'reveal', mechanism: 'truth', text: '{s:אני עומד|אני עומדת|אנחנו עומדים} לחשוף את האמת על {topic}', kinds: ANY, examples: ['אני עומדת לחשוף את האמת על נענע בעציץ'] },
   { id: 'save-time', mechanism: 'save', text: 'תנו {s:לי|לי|לנו} לחסוך לכם זמן עם {topic}', kinds: HOWTO, examples: ['תנו לי לחסוך לכם זמן עם השתילה הראשונה'] },
   { id: 'save-x', mechanism: 'save', text: '{s:חוסך|חוסכת|חוסכים} לכם {x} רק בזכות {thing}', kinds: HOWTO, examples: ['חוסכת לכם 3 שעות בשבוע רק בזכות טפטפת אחת'] },
+  { id: 'didnt-know', mechanism: 'count', text: '{n} דברים שלא ידעתם על {topic}', kinds: COUNTED, examples: ['7 דברים שלא ידעתם על ליגת העל'] },
+  { id: 'few-know', mechanism: 'count', text: '{n} עובדות על {topic} שמעטים מכירים', kinds: COUNTED, examples: ['6 עובדות על ה-UFC שמעטים מכירים'] },
+  { id: 'nobody-tells', mechanism: 'count', text: '{n} דברים על {topic} שאף אחד לא אומר לכם', kinds: ['tips', 'facts'], examples: ['5 דברים על משכנתא שאף אחד לא אומר לכם'] },
+  { id: 'mistakes', mechanism: 'owner', text: '{n} טעויות {s:שעשיתי|שעשיתי|שעשינו} {moment}', kinds: ['owner-story'], examples: ['5 טעויות שעשיתי בשנה הראשונה של העסק'] },
+  { id: 'after-year', mechanism: 'owner', text: 'מה {s:למדתי|למדתי|למדנו} {moment}', kinds: ['owner-story'], examples: ['מה למדתי בשנה הראשונה עם עגלת קפה'] },
 ];
 
 const TOKEN = /\{(?:([sw]):([^}]*)|([a-z]+))\}/g;
@@ -263,6 +278,9 @@ export function hookProblems(pack, format, draft, facts = []) {
   if (!on) {
     // A frame the draft never declared is a teaser like any other: no promise was made to check.
     const t = lib.find((x) => matchFrame(x, draft.hook || ''));
+    // A count promises its count alone, which the kind's own check holds to the slides (kindProblems): a format whose
+    // cover pattern is the same line ("7 דברים שלא ידעתם על...") was blocked on a live run for not declaring it.
+    if (t && t.mechanism === 'count' && t.kinds.includes(kindName(format))) return out;
     if (t && !t.kinds.includes(kindName(format))) add('cover', `the template "${t.id}" does not fit a ${kindName(format)} post: write the cover after the format's pattern`);
     else if (t) add('cover', `the cover opens like the template "${t.id}" without being written from it: write it from the template (hookTemplate, hookSlots, hookFacts) or as a plain line`);
     return out;
@@ -282,6 +300,7 @@ export function hookProblems(pack, format, draft, facts = []) {
   const keys = [...new Set((draft.hookTemplate?.facts || []).map(String))];
   const content = draft.slides.filter((s) => s.kind === 'item');
   const cited = new Set(content.flatMap((s) => s.factKeys || []));
+  if (tpl.mechanism === 'count') return out;
   if (!keys.length) add('cover', `a cover written from the template "${tpl.id}" names the facts it promises (hookFacts), and the slides state them: none named`);
   const good = [];
   for (const k of keys) {

@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { contentRange, kindProblems, KINDS, rankAmount, ranksOf, shapeProblems, structureNumbers } from '../src/formats/kinds.js';
+import { contentRange, everyPhoto, kindOf, kindProblems, KINDS, rankAmount, ranksOf, shapeProblems, structureNumbers } from '../src/formats/kinds.js';
 import { bothSides, buildPost, candidatesOf, gateDraft, hashtagsFor, keepItems, loadPost, mentionsDay, needsSides, sourceLabel, textsOf } from '../src/pipeline/build.js';
 import { outlineUser, slidesUser } from '../src/pipeline/prompts.js';
 import { reviewUser } from '../src/voice/review.js';
@@ -42,18 +42,34 @@ const SAMPLES = {
     s('rule', 'טקסט כהה על רקע בהיר', 'טקסט אפור בהיר קשה לקרוא בשמש.', ['f1'], { visual: { type: 'dodont', title: '', a: '', b: '', style: 'app', items: [{ label: 'text', value: '#B8BEC6 משלוח חינם מעל שני עציצים', value2: '#1B1F24 משלוח חינם מעל שני עציצים', sub: '' }] } }),
   ] },
   meme: { slides: [s('joke', 'כשקונים צמח רביעי', 'כי השלישי לא שרד את החורף', []), s('joke', 'כשהשכן שואל איך הצמחים', 'מצוין, בעיקר המתים', []), s('joke', 'כשהעלה הראשון מצהיב', 'מתחילים לחפש מטפל לצמחים', []), s('truth', 'רוב הצמחים מתים מעודף מים', 'לא מחוסר אהבה.')] },
+  facts: { slides: [s('fact', 'פוטוס שורד 81 יום בלי מים במשרד סגור', ''), s('fact', 'בזיליקום במרפסת צריך 6 שעות שמש ביום', ''), s('fact', 'קקטוס אחד בגינה חי כבר 40 שנה', 'בלי השקיה אחת בקיץ'), s('fact', 'נענע בעציץ משתלטת על כל הגינה תוך עונה', '')] },
+  tips: { slides: [s('tip', 'השקיה לעומק פעם בשבוע', 'משקים עד שהמים יוצאים מהחור למטה, ומחכים שהשכבה העליונה תתייבש לגמרי.'), s('tip', 'עציץ עם חור בתחתית', 'בלי חור המים נשארים בשורשים והם נרקבים תוך שבועיים.'), s('tip', 'דשן אחרי הפריחה', 'מוסיפים דשן נוזלי פעם בחודש מהאביב ועד סוף הקיץ.'), s('tip', 'מסובבים את העציץ פעם בשבוע', 'כך הצמח גדל ישר ולא נוטה לכיוון החלון.')] },
+  'owner-story': { slides: [s('moment', 'קניתי 200 עציצים לפני שבדקתי מה נמכר', ''), s('moment', 'מכרנו ב-100 אלף שקל ועדיין הפסדנו', ''), s('moment', 'המשלוח הראשון הגיע שבור לגמרי', 'ושילמתי עליו פעמיים'), s('moment', 'הלקוחה הראשונה חזרה אחרי שבוע עם חברה', ''), s('lesson', 'תבדקו מה נמכר לפני שקונים מלאי', '', [])] },
 };
 
 test('every kind has a 5 to 8 slide shape, and the samples pass it', () => {
-  assert.equal(Object.keys(KINDS).filter((k) => k !== 'list').length, 11);
+  assert.equal(Object.keys(KINDS).filter((k) => k !== 'list').length, 14);
   for (const [kind, sample] of Object.entries(SAMPLES)) {
     const f = fmt(kind);
     const [lo, hi] = contentRange(f);
     assert.ok(lo + 1 >= 5 && hi + 1 <= 8, `${kind}: ${lo + 1} to ${hi + 1} slides with the cover`);
     assert.deepEqual(shapeProblems(f, sample.slides.map((x) => x.role)), [], kind);
-    const post = { hook: 'שער', sub: '', subject: { a: '', b: '', answer: '', date: '', ...(sample.subject || {}) }, slides: sample.slides, caption: '', captionShort: '', keywords: [] };
+    // A countdown's cover is its count and its subject.
+    const counted = { facts: 'fact', tips: 'tip' }[kind];
+    const post = { hook: counted ? `${sample.slides.filter((x) => x.role === counted).length} דברים שלא ידעתם על צמחים` : 'שער', sub: '', subject: { a: '', b: '', answer: '', date: '', ...(sample.subject || {}) }, slides: sample.slides, caption: '', captionShort: '', keywords: [] };
     assert.deepEqual(kindProblems(f, post), [], kind);
   }
+});
+
+test('the kinds that spread: one short line a slide, the count on the cover kept, and every slide on its own photograph', () => {
+  const long = { hook: '4 דברים שלא ידעתם על צמחים', sub: '', subject: {}, slides: [...SAMPLES.facts.slides], caption: '', captionShort: '', keywords: [] };
+  assert.deepEqual(kindProblems(fmt('facts'), long), []);
+  long.slides = [{ ...long.slides[0], title: 'פוטוס אחד שנשכח במשרד סגור שרד שם 81 יום בלי טיפת מים אחת עד שמישהו נזכר בו' }, ...long.slides.slice(1)];
+  assert.match(kindProblems(fmt('facts'), long).join(' '), /slide 1: the title has 1\d words: 14 at most/);
+  assert.match(kindProblems(fmt('facts'), { ...long, slides: SAMPLES.facts.slides, hook: '7 דברים שלא ידעתם על צמחים' }).join(' '), /the cover promises 7 and the post has 4/);
+  assert.equal(kindOf(fmt('facts')).photo, 'every');
+  assert.ok(everyPhoto({ meta: {} }, fmt('owner-story')) && everyPhoto({ meta: { style: { name: 'E' } } }, fmt('story')) && !everyPhoto({ meta: {} }, fmt('story')));
+  assert.ok(structureNumbers(fmt('facts'), SAMPLES.facts.slides).has('4'), "the count is the post's own, never a claim");
 });
 
 test('a shape out of order, too short or with a foreign role is refused, with a reason the model can use', () => {
@@ -171,7 +187,8 @@ test('the demo pack builds a post of every kind through the real pipeline, offli
       assert.equal(post.kind, kind);
       const n = post.slides.length;
       assert.ok(n >= 5 && n <= 8, `${kind}: ${n} slides`);
-      assert.ok(post.caption.length >= 200 && post.caption_ig?.startsWith(post.hook.replace(/\s*\n\s*/g, ' ')), `${kind}: two captions, the Instagram one led by the cover line`);
+      // TikTok's caption is one short line by default (captionStyleOf); Instagram's is led by the cover line.
+      assert.ok(post.caption.length >= 15 && post.caption.split('\n').filter(Boolean).length <= 2 && post.caption_ig?.startsWith(post.hook.replace(/\s*\n\s*/g, ' ')), `${kind}: two captions, the Instagram one led by the cover line`);
       assert.ok(post.hook_pattern && post.data.cta?.text, `${kind}: a cover pattern and a call to action`);
       for (const p of ['tiktok', 'instagram']) assert.equal(post.media[p].length, n, `${kind}: every slide on ${p}`);
     }

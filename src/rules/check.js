@@ -6,7 +6,8 @@ import { normHe } from '../voice/tells.js';
 // rules, the engine's compliance checks, honesty (no invented experience, no fake
 // proof) and HARD RULE 2's "no cross-promotion".
 //
-// texts: [{ where, text }]. Returns [{ where, code, msg }].
+// texts: [{ where, text, owner }]. Returns [{ where, code, msg }]. A text marked `owner` says what the business
+// owner wrote down as their own story (src/sources/facts.js "owner"): the first person is theirs there, and only there.
 
 export function checkRules({ pack, others = [], texts }) {
   const out = [];
@@ -18,12 +19,12 @@ export function checkRules({ pack, others = [], texts }) {
     .filter((o) => o.id !== pack.id)
     .flatMap((o) => [o.meta.handle, `@${o.meta.handle}`, o.meta.displayName].filter(Boolean).map((n) => ({ id: o.id, n })));
 
-  for (const { where, text } of texts) {
+  for (const { where, text, owner = false } of texts) {
     const s = String(text || '');
     if (!s.trim()) continue;
     for (const r of patterns) if (r.re.test(s)) out.push({ where, code: `rule:${r.id}`, msg: r.message });
     for (const c of compliance) for (const why of c.check(s)) out.push({ where, code: `compliance:${c.id}`, msg: `${c.he}: ${why}` });
-    const exp = experienceIn(s);
+    const exp = owner ? null : experienceIn(s);
     if (exp) out.push({ where, code: 'honesty:experience', msg: `claims an experience nobody had: "${exp}"` });
     const proof = fakeProofIn(s);
     if (proof) out.push({ where, code: 'honesty:proof', msg: `a badge or a metric about the account: "${proof}"` });

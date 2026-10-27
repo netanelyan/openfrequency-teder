@@ -52,6 +52,7 @@ export const KEYS = [
   { name: 'YOUTUBE_API_KEY', group: 'discovery', what: 'YouTube Data API: formats that work now', he: 'YouTube: פורמטים שעובדים עכשיו, עם מספרים אמיתיים' },
   { name: 'PEXELS_API_KEY', group: 'images', what: 'Pexels photographs', he: 'Pexels: תמונות ברישיון' },
   { name: 'UNSPLASH_ACCESS_KEY', group: 'images', what: 'Unsplash photographs', he: 'Unsplash: תמונות ברישיון' },
+  { name: 'OPENVERSE_TOKEN', group: 'images', what: 'Openverse: a higher allowance than the anonymous one (optional)', he: 'Openverse: מכסה גבוהה יותר מהאנונימית (לא חובה)' },
   { name: 'SESSION_SECRET', group: 'website', what: "signs the forms' CSRF tokens", he: 'חתימה על הטפסים באתר' },
   { name: 'OF_INTERNAL_TOKEN', group: 'website', what: 'asks openfrequency-accounts who is signed in, and lets the website hand in a demo request', he: 'הבדיקה מול שירות הכניסה מי נכנס, ובקשות לדמו שמגיעות מהאתר' },
   { name: 'OF_ASSISTANT_SECRET', group: 'website', what: 'signs what Teder and the WhatsApp assistant (openfrequency-toran) send each other', he: 'החתימה בין תדר לבין העוזר בוואטסאפ' },

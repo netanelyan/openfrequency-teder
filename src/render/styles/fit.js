@@ -121,14 +121,16 @@ export function styleFitProblems(draft, { style, platforms = ['tiktok'], overlay
   draft.slides.forEach((s0, i) => {
     const s = { ...s0, ...(places?.[i] || {}), postKind, hook: draft.hook, sub: draft.sub, subject: draft.subject || {} };
     const m = slideModel(s);
+    // A style that sets a ranking's place before its title (E) has the title's first line that much shorter.
+    const title = S.rank && m.rank && m.title ? `${m.rank}. ${m.title}` : m.title;
     if (m.kind === 'cover') {
       check('cover', 'hook', m.hook, m.highlight);
       check('cover line 2', 'sub', m.sub);
     } else if (m.kind === 'number') {
-      check(`slide ${i} title`, 'ntitle', m.title, m.highlight);
+      check(`slide ${i} title`, 'ntitle', title, m.highlight);
       check(`slide ${i} text`, 'body', m.body);
     } else if (s.kind === 'item' && !m.list) {
-      check(`slide ${i} title`, 'title', m.title, m.highlight);
+      check(`slide ${i} title`, 'title', title, m.highlight);
       check(`slide ${i} text`, 'tbody', m.body);
     }
   });

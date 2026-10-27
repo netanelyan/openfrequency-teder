@@ -78,13 +78,13 @@ test('a post the reviewer does not flag costs one cheap review call and no rewri
   }
 });
 
-test('a rewrite that invents a number is thrown away, and a text still scored 6 blocks the post', async () => {
+test('a rewrite that invents a number is thrown away, and a text still scored 9 blocks the post', async () => {
   const { home, cleanup } = tempHome();
   try {
     keepOnly(path.join(home, 'packs', 'demo'), ['basil-containers']);
     const ctx = withReviewer(
       home,
-      () => ({ reviews: [{ index: 0, botScore: 7, tells: ['brochure tone'], factProblem: '' }] }),
+      () => ({ reviews: [{ index: 0, botScore: 9, tells: ['brochure tone'], factProblem: '' }] }),
       () => ({ rewrites: [{ index: 0, text: 'בזיליקום במרפסת: 9 דברים שהוא צריך מכם' }] })
     );
     const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
@@ -116,6 +116,24 @@ test('a text the reviewer says goes beyond its facts is rewritten with the probl
   }
 });
 
+test('a text the reviewer still scores 7 after its rewrite is not thrown away: the post waits for the owner with its score', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    keepOnly(path.join(home, 'packs', 'demo'), ['basil-containers']);
+    const ctx = withReviewer(
+      home,
+      () => ({ reviews: [{ index: 0, botScore: 7, tells: ['too polished'], factProblem: '' }] }),
+      () => ({ rewrites: [{ index: 0, text: '5 דברים שהבזיליקום במרפסת צריך מכם כדי לשרוד' }] })
+    );
+    const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
+    assert.equal(res.status, 'queued', res.reason);
+    const { REWRITE_AT } = await import('../src/voice/review.js');
+    assert.ok(ctx.db.get('SELECT review_score FROM posts WHERE id = ?', res.postId).review_score >= REWRITE_AT, 'held for the owner in every mode');
+  } finally {
+    cleanup();
+  }
+});
+
 test('a generic closing question is dropped in code, and a question already in the caption is not asked twice', async () => {
   const { joinCaption } = await import('../src/pipeline/build.js');
   assert.equal(joinCaption('הבזיליקום אוהב שמש.', 'ידעתם את זה?'), 'הבזיליקום אוהב שמש.');
@@ -132,7 +150,7 @@ test('a rewritten text is scored again as it now reads, and one that still reads
     const seen = [];
     const ctx = withReviewer(
       home,
-      (req) => (seen.push(req.user), { reviews: [{ index: 0, botScore: 7, tells: ['too polished'], factProblem: '' }] }),
+      (req) => (seen.push(req.user), { reviews: [{ index: 0, botScore: 9, tells: ['too polished'], factProblem: '' }] }),
       () => ({ rewrites: [{ index: 0, text: '5 דברים שהבזיליקום במרפסת צריך מכם כדי לשרוד' }] })
     );
     const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
@@ -140,7 +158,7 @@ test('a rewritten text is scored again as it now reads, and one that still reads
     assert.match(seen[1], /^\[0\] \(cover[^)]*\) 5 דברים שהבזיליקום במרפסת/m, 'the second look reads the rewrite alone');
     assert.equal(res.status, 'blocked');
     assert.equal(res.kind, 'voice');
-    assert.match(res.reason, /נשמע כמו בוט \(7\/10\) גם אחרי שכתוב/);
+    assert.match(res.reason, /נשמע כמו בוט \(9\/10\) גם אחרי שכתוב/);
   } finally {
     cleanup();
   }

@@ -97,10 +97,11 @@ test('the cover-only exception: a template opens the cover, never a slide or a c
   // The account speaks as it speaks: a rewrite into another gender is refused.
   assert.match(msgs(mythDraft({ hook: 'אני עומד לחשוף את האמת על השקיה של עציצים', hookTemplate: { id: 'reveal', facts: ['f6'] } })).join(), /this account speaks in the feminine \("אני עומדת"\)/);
   assert.match(msgs(mythDraft({ hook: 'במקרה שסבתא שלכם לא לימד אתכם להשקות עציצים', hookTemplate: { id: 'who-taught', facts: ['f6'] } })).join(), /"סבתא" takes "לימדה"/);
-  // The voice check lets a template's own words through on the cover, and nowhere else. "הסוד ש" is a teaser.
+  // The voice check lets a template's own words through on the cover, and nowhere else. "הסוד ש" is a gap a cover
+  // may open (COVER_GAP), and a teaser anywhere else.
   const secret = { formats: { formats: [MYTH], hookTemplates: { add: [{ id: 'the-secret', mechanism: 'secret', text: 'הסוד שעוזר ל{topic}', kinds: ['myth-fact'] }] } } };
   const cover = 'הסוד שעוזר לעציצים בדירה';
-  assert.match(tellsIn(cover, { kind: 'cover' }).map((x) => x.msg).join(), /teaser/);
+  assert.deepEqual(tellsIn(cover, { kind: 'cover' }), []);
   const frame = coverFrame(secret, MYTH, { hook: cover, hookTemplate: { id: 'the-secret' } });
   assert.deepEqual(tellsIn(cover, { kind: 'cover', frame }), []);
   assert.match(tellsIn(cover, { kind: 'slideTitle', frame }).map((x) => x.msg).join(), /teaser/, 'the frame is let through on the cover only');

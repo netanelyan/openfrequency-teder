@@ -1656,3 +1656,82 @@ engine can act on, and what changed:
     mechanisms), `add` (its own templates, in the same syntax, validated for their slots,
     the plural, and no invented experience) and `off`. The demo speaks in the masculine,
     names "המוכר במשתלה" and "סבתא", and turns off "told-wrong".
+
+- **Accounts' setup checklist reads Teder's steps (2026-10-27).** openfrequency-accounts
+  gets a public sign-up and one checklist page, `/setup`, that asks each product for a
+  workspace's steps and links each one to the product's own page (the session cookie is
+  shared across `*.openfrequency.co.il`). Teder answers `GET /internal/setup?workspace=<id>`
+  under the checks `/internal/demos` has (the `OF_INTERNAL_TOKEN` bearer, a loopback socket,
+  no `X-Forwarded-For`), in the contract accounts and Toran share (README, "For the services
+  on this machine"). The steps are read from what is already kept (the onboarding row, the
+  account's status, the samples, `zernio_connections`); nothing new is stored. A workspace
+  with several accounts is reported on one, its newest account on air and else its newest
+  onboarding, so a setup once done stays done when a second account is added: the
+  checklist is about getting started, and each account's own state stays on its pages.
+
+- **More licensed photographs: the owner's first, Openverse last (2026-10-27).** Posts went
+  out bare: Commons has few usable photographs of today's athletes, and the fit check
+  refused many it had. Three changes. *The owner's photographs* (`<pack>/photos/photos.json`)
+  are searched first for every query whenever the pack has any, even when
+  `imagery.providers` leaves `pack` out, matched on their subject, description and tags
+  (the subject counts double); the screen still looks at each, and is given the owner's
+  description as what the picture shows. *Openverse* (api.openverse.org, WordPress.org's
+  index of CC-licensed pictures, mostly Flickr and Commons) is a fifth library, last in
+  the default order: CC BY, CC BY-SA and CC0 only, an author for every BY licence, never
+  NC, ND or the Public Domain Mark (on Flickr, where fans re-upload agency press photos
+  tagged with AFP's own codes), and nothing carrying an agency's name or code. The credit
+  says where Openverse found it ("Flickr via Openverse"). It works with no key at 20
+  searches a minute and 200 a day; an optional `OPENVERSE_TOKEN` raises that, and a
+  search it turns away rests it an hour. *A content slide's photograph* is checked for the
+  slide's subject, not its claim: dairy shelves were refused for a slide about the
+  regulated price of milk. It is refused only for the wrong person, the wrong sport or
+  subject, or a picture that misleads; the safety questions are unchanged, and a cover is
+  still held to its whole line.
+
+### What spreads on TikTok, and the engine moved to it (2026-10-27)
+
+The owner asked whether the engine is good enough, so its slideshows were laid beside 25 real TikTok photo posts
+read slide by slide (20 over 500K views; 6 Hebrew, the best at 889K), and beside what the studies say. On the same
+day the engine, run live five times on the three accounts, rendered none: every draft was blocked by its
+own checks. What it made before looked like a sports site's infographics: a blurred, darkened photograph behind dense
+cards (17 to 28 words a slide, 30 to 60 with the graphics), counters and progress bars, a news headline for a cover,
+and a closing "follow" slide. The posts that spread are one sharp photograph a slide with one short line on it in
+TikTok's own text, a cover of about seven words with a count, the best item last, a one-line caption, and a sound.
+Seven changes, each where the engine was wrong, not where the posts were:
+
+1. *What blocked every post.* A line broken by hand came back from the model as the two characters "\n", and the
+   mixed-script check read "האוטובוס\nשל" as a Hebrew word with a Latin letter (two blocks in five): `mechanicalFix`
+   makes it a line break. A year on the cover or in a caption ("2005") was refused when the quote the outline kept
+   was another sentence of the same article: a year the post's own stored documents give is allowed there
+   (`documentYears`, and again when the post is published); every other number is still held to its quotes. The
+   review blocked at 6: it blocks only an obvious bot (9), and a post scored 4 to 8 after its rewrite waits for the
+   owner in every mode (the runner already holds anything at `REWRITE_AT`).
+2. *Covers may open a gap.* 8 of the 25 covers said "you didn't know" or "few people know", and the fight-sport countdowns
+   kept number one for last. On the cover alone, "שאף אחד לא אומר לכם", "הסוד ש", "הראשון מפתיע" and "זה סיפור
+   אמיתי" are no longer tells (`COVER_GAP`), and the reviewer is told a cover's job is to stop a thumb; the empty
+   teasers ("לא תאמינו", "תתפלאו") and a cover that hides its subject ("זו הסיבה ש...") stay refused. The template
+   library gains the count mechanism ("{n} דברים שלא ידעתם על {topic}", "{n} עובדות על {topic} שמעטים מכירים", "{n}
+   דברים על {topic} שאף אחד לא אומר לכם"), its {n} written by the code from the post's own count.
+3. *A photograph a slide.* The kinds below and any post in the native style (E) search a photograph for every slide,
+   the cover included, up to one search a slide (`everyPhoto`); its photograph search is the slide's visual, and a
+   graphic is drawn only where a photograph cannot show the point. The writer gives a thing as well as a person or a
+   place ("espresso machine"). The native style itself, Openverse as a source and the owner's photographs first are
+   their own entries.
+4. *Short.* A facts slide's title is the fact in 6 to 12 words (14 at most) with no more than 10 under it; a tip has
+   room for what to copy (40); a moment of the owner's story 16. A cover's count must match the slides.
+5. *The shapes that spread.* `facts`: 4 to 7 separate surprising facts counted down to the one they will send, each
+   on a photograph of who it is about (every sports hit). `tips`: 4 to 7 things worth saving (the AI and
+   money hits, saved more than liked). `owner-story`: the business owner's own mistakes and numbers.
+6. *The business's own story.* Every small-business hit was the owner on their own photographs, in the first person,
+   with real numbers. A topic in facts/ marked `"owner": true` is the owner's own words (no page, no expiry, its
+   document keyed "story-"), written on the Sources page under "הסיפור שלכם"; a slide that cites one, and the cover
+   and captions of an owner-story post that has them, may say "I" (`ownerTexts`). Everywhere else an account still
+   never claims an experience.
+7. *The ending, the caption, the sound.* A post on a photograph a slide ends on its best slide: no call to action is
+   drawn and no closing "follow" slide is added (17 of 25 ended on their last item; 1 of the 19 outside Israel asked
+   to follow). TikTok's caption is one line by default, the hook beat (21 of 25 were one line or hashtags); the
+   four-beat story stays for an account that asks (`writing.captionStyle: "story"`). A business account
+   (`"business": true`) adds only sounds from TikTok's Commercial Music Library, which is all a business may use.
+
+What did not change: every fact is still quoted from an approved source, every photograph licensed. The fact accounts
+that spread use press photographs they have no licence for; the engine finds more licensed ones instead.

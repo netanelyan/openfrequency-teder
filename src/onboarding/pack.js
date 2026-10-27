@@ -126,7 +126,9 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     schedule: { postsPerDay: 1, windows: [[12, 14], [19, 22]], slots: ['19:30'], slotsByDay: { 5: ['12:30'], 6: ['21:00'] } },
     autonomy: { mode: 'approve' },
     compliance: FINANCIAL.test(about) ? ['il-investment-advice'] : [],
-    imagery: { providers: ['pexels', 'unsplash', 'commons'] },
+    // The owner's own photographs (<pack>/photos) first, then the libraries; Openverse last, for the people and places
+    // the stock libraries do not have.
+    imagery: { providers: ['pack', 'pexels', 'unsplash', 'commons', 'openverse'] },
   };
   // The slide style (src/render/styles), from what the account is about and its colours, away from a look-alike.
   pack.style = { name: suggestStyle({ ...seed, displayName: pack.displayName }, theme.colors, ctx.packs).name };

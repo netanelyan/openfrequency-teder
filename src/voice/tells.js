@@ -58,6 +58,13 @@ export const TEASER = group('a teaser that withholds the point', [
   'הראשון מפתיע', 'המקום הראשון מפתיע', 'זה סיפור אמיתי', 'שאף אחד לא אומר לכם', 'שאף אחד לא מספר לכם', 'תראו מה קרה', 'ואז קרה משהו',
 ]);
 
+// What a cover may hold back. Its one job is to stop a thumb, and of 25 slideshows that spread on TikTok, 8 said
+// "you didn't know" or "few people know" on the cover and 3 counted down to a number one they kept for the last
+// slide: a gap the slides close is the cover's work, not a tell. The empty ones that promise nothing ("לא תאמינו",
+// "תתפלאו", "תראו מה קרה") stay refused everywhere, and a slide or a caption still says its point.
+// "זו הסיבה ש..." and "הנה מה שקרה" hide the subject itself, and stay refused on a cover too.
+export const COVER_GAP = new Set(['שאף אחד לא אומר לכם', 'שאף אחד לא מספר לכם', 'הסוד ש', 'הראשון מפתיע', 'המקום הראשון מפתיע', 'זה סיפור אמיתי']);
+
 // Plain narration in a slide's body ("זו הסיבה שהוא פרש"), a withheld payoff as a headline.
 export const HEADLINE_TEASER = group('a headline that withholds the point', ['זה מה שקרה', 'הנה מה שקרה', 'זאת הסיבה', 'זו הסיבה']);
 
@@ -231,7 +238,10 @@ export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null, fra
   const ownNorm = normHe(own);
   // A template's frame is held back on purpose, and only on the cover: its own words are not a teaser there.
   const teaserNorm = kind === 'cover' && frame.length ? frame.reduce((t, f) => t.replace(normHe(f), ' '), ownNorm).replace(/\s+/g, ' ').trim() : ownNorm;
-  for (const t of [...BUREAUCRATIC, ...AD, ...TEASER, ...BOT, ...CALQUES, ...GLUED, ...(headline ? HEADLINE_TEASER : [])]) if (t.re.test(TEASERS.has(t) ? teaserNorm : ownNorm)) add('phrase', `${t.label}: "${t.p}"`);
+  for (const t of [...BUREAUCRATIC, ...AD, ...TEASER, ...BOT, ...CALQUES, ...GLUED, ...(headline ? HEADLINE_TEASER : [])]) {
+    if (kind === 'cover' && COVER_GAP.has(t.p)) continue;
+    if (t.re.test(TEASERS.has(t) ? teaserNorm : ownNorm)) add('phrase', `${t.label}: "${t.p}"`);
+  }
   for (const p of extra) if (phrase(p).test(norm)) add('banned', `banned by the pack: "${p}"`);
 
   // The structures are rewritten as a sentence, never patched by swapping a word.
@@ -334,6 +344,9 @@ export function mechanicalFix(text) {
     if (next !== t) fixed.push(what);
     t = next;
   };
+  // A line broken by hand can come back from the model as the two characters "\n": the mixed-script check then read
+  // "האוטובוס\nשל" as a Hebrew word with a Latin letter in it, and refused two covers in five on a live run.
+  sub(/\s*\\n\s*/g, '\n', 'an escaped line break');
   sub(/(\d)\s*[—–]\s*(\d)/g, '$1-$2', 'a dash between numbers');
   sub(/\s*[—–]\s*/g, ', ', 'a long dash');
   sub(/\?!+|!+\?/g, '?', 'an exclamation mark');

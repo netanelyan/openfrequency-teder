@@ -1,10 +1,11 @@
 import { COMPLIANCE } from '../rules/compliance.js';
 import { overlayOf } from '../rules/overlay.js';
 import { styleRoom } from '../render/styles/fit.js';
-import { BEAT, MAX_HASHTAGS, STORY } from '../rules/caption.js';
+import { BEAT, MAX_HASHTAGS, STORY, captionStyleOf } from '../rules/caption.js';
 import { AD, BUREAUCRATIC, CALQUES, CONNECTIVES, FILLER, FORMAL, LIMITS, TEASER, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
-import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
+import { OWNER_TITLE } from '../sources/facts.js';
+import { contentRange, everyPhoto, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
 import { VISUAL_SCHEMA, visualsOf, visualsPrompt } from '../render/visuals.js';
 import { SLOTS, SPEAKER_EN, speakerOf, templatesPrompt } from '../formats/hooks.js';
 
@@ -263,26 +264,27 @@ ${
     ? ''
     : `
 EVERY POST:
-- 5 to 8 slides with the cover. One idea per slide. The payoff is on the last slide, and the design draws the call to action on it: never write one yourself.
-- The cover is one bold claim or one question, narrow and specific, with a famous name in it when there is one. It can tease; it never promises what the post does not deliver.
+- 5 to 8 slides with the cover. One idea per slide. The best item, the payoff, is on the last slide: the slideshows that spread end on their strongest slide, never on a request to follow, save or comment. Never write a call to action on a slide.
+- WHAT SPREADS ON TIKTOK (25 slideshows over 500K views, read slide by slide): one short line on one real photograph a slide, the way a person types on their phone. A sport or story slide holds 5 to 15 words: the title is the point, the body empty or one short line. A slide nobody can read in two seconds is skipped. Covers are about 7 words with a count or a famous name ("7 דברים שלא ידעתם על ליגת העל", "5 טעויות שעשיתי בשנה הראשונה").
+- The cover is one bold claim or one question, narrow and specific, with a famous name in it when there is one. It opens a gap the slides close ("שלא ידעתם", a count, a number one kept for the end); it never promises what the post does not deliver, and it never hides what the post is about.
 - Facts in every kind of post come from the documents: a story, a quiz or an opinion holds only facts the quotes support.
 - keywords: 3 to 6 words people would search for, shown on the slides: names, the topic, the competition. At least one in Hebrew and one in English letters.
 - Today's date is in the request. Anything that happened more than a year before it is told with its year on the cover or the first slide, as what it shows or teaches now: never as news, never as if it just happened.
 - Every slide adds something the cover and the slides before it did not: no slide and no graphic repeats another's numbers or point.
 - A claim of "the only", "the first", "never" or "every" keeps every condition its fact has: "the only player to win all six" shortened to three of them is false. Keep the whole list, or drop the "only".
 - Name what the post is about (the product, the person, the club, the fight) on the cover or the first slide: a post that never says whose story it is reads as a riddle nobody asked for.
-- story: the TikTok caption, told as a story in four beats that the code puts one a line: hook (one sentence of at most ${BEAT.hookMaxChars} characters that stops the scroll: TikTok shows it before "more"), problem (what was at stake, what went wrong, or the question the post settles), discovery (the turn: what the slides found), result (how it ended, or what it means for them now). Each beat ${BEAT.minWords} words or more, at most ${BEAT.sentences} sentences, and none repeats another. Together ${shortCaps ? `${capLong.minChars} to ${capLong.maxChars} characters: short and catchy, each beat one short line, with the names people search for` : '200 to 600 characters, in the words people search for (the names, the topic)'}. The beats retell the slides: the post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). A guess-who's result never names the answer and a ranking's never names number one: it says what the last slide settles, not how. captionShort: the Instagram caption, ${capShort.maxChars < LIMITS.captionShort.maxChars ? `up to ${capShort.maxChars} characters, one catchy line` : '60 to 200 characters'} (the design puts the cover line before it). Neither has hashtags (the engine adds the post's own, ${MAX_HASHTAGS} at most), links or a question.
+${captionStyleOf(pack) === 'short' ? `- story: the TikTok caption is short: story.hook is ONE line of at most ${BEAT.hookMaxChars} characters, the cover's promise said another way with the names people search for (the code uses it alone, and problem, discovery and result are ""). captionShort: the Instagram caption, one line of up to ${Math.min(capShort.maxChars, 120)} characters. Neither has hashtags (the engine adds the post's own, ${MAX_HASHTAGS} at most), links or a question.` : `- story: the TikTok caption, told as a story in four beats that the code puts one a line: hook (one sentence of at most ${BEAT.hookMaxChars} characters that stops the scroll: TikTok shows it before "more"), problem (what was at stake, what went wrong, or the question the post settles), discovery (the turn: what the slides found), result (how it ended, or what it means for them now). Each beat ${BEAT.minWords} words or more, at most ${BEAT.sentences} sentences, and none repeats another. Together ${shortCaps ? `${capLong.minChars} to ${capLong.maxChars} characters: short and catchy, each beat one short line, with the names people search for` : '200 to 600 characters, in the words people search for (the names, the topic)'}. The beats retell the slides: the post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). A guess-who's result never names the answer and a ranking's never names number one: it says what the last slide settles, not how. captionShort: the Instagram caption, ${capShort.maxChars < LIMITS.captionShort.maxChars ? `up to ${capShort.maxChars} characters, one catchy line` : '60 to 200 characters'} (the design puts the cover line before it). Neither has hashtags (the engine adds the post's own, ${MAX_HASHTAGS} at most), links or a question.`}
 
 VISUALS: a post is pictures as much as words, never a deck of text cards. At least half of the slides carry a visual: the cover always has one, and the request says how many content slides need one. A content slide's "visual" is data the design draws as a graphic; its numbers are claims like the slide's own, held to the facts the slide cites. A head-to-head "stat" slide's two values are already its visual (give it type "none"). The graphics this account draws:
 ${visualsPrompt(pack)}
   Unused fields are "", and type "none" means no graphic. A visual adds what the words do not: the timeline of the moment, the numbers side by side, where the players stood. It never repeats the title as a picture.
-- imageQuery on a content slide: 2 to 5 English words naming one real, famous person or place the slide is about ("Steven Gerrard", "Wembley Stadium"), for a licensed photograph of exactly them; the engine checks the picture shows them and drops it otherwise. "" when the slide is not about a person or place${pack.meta.imagery?.providers?.length ? '' : ' (this account uses no photographs: always "")'}. Never a logo, a crest, a screenshot or a product.
+- imageQuery on a content slide: 2 to 5 English words naming one real, famous person or place the slide is about ("Steven Gerrard", "Wembley Stadium"), or the thing it shows ("espresso machine", "octagon cage"), for a licensed photograph of exactly them; the engine checks the picture shows them and drops it otherwise. A photograph is the best visual a slide can have: give one to every slide that is about a person, a place or a thing, and "" only when it is about none${pack.meta.imagery?.providers?.length ? '' : ' (this account uses no photographs: always "")'}. Never a logo, a crest, a screenshot or a product.
 - coverVisual: the cover's graphic when no photograph is used: the most striking number or match-up of the post, as one visual of the types above (a stat, a compare...), or type "none" to let the design draw the kind's own art. A date is the cover's graphic only on a post about that day (this day in history, a fight's date): a past date as the biggest thing on a cover reads as old news.
 `
 }
 ${legacy ? '' : templatesPrompt(pack)}
 ${HEBREW}
-- Never claim to have tried, bought, used, visited or seen anything. The account explains; it does not have experiences.
+- Never claim to have tried, bought, used, visited or seen anything. The account explains; it does not have experiences. The one exception is an owner-story post: the documents titled "${OWNER_TITLE}..." are the business owner's own words, and a slide that cites one of their facts tells it in the owner's first person, exactly as much as the fact says and no more.
 - Never mention another account, a follower count, views, a badge or "official".
 - Never these words: ${banned.join(', ')}.
 ${compliance(pack)}`,
@@ -310,7 +312,7 @@ RESEARCH COMES NEXT. After this plan, the engine reads the articles you name in 
 
 subject: what the kind needs, "" for the rest: a and b (the two sides of a head-to-head; a alone for what-happened), answer (guess-who), date (on-this-day, in Hebrew with the year).
 topic: the post's subject in a few Hebrew words.
-imageQuery: 2 to 5 English words for a licensed photograph that would suit the post (a famous person or place by name is fine where the account's rules allow it; never a logo, a crest, a badge, a screen, an injury); or "" if none would. The person the post is about, by full name (Cristiano Ronaldo, never Ronaldo alone), as they looked in the story's years. Whoever the cover shows, the cover line names: a face the cover does not explain is a stranger (a World Cup iceberg went out with an old man nobody could name, a scorers' ranking with a close-up of its number three). A ranking's cover never shows its number one (it spoils the countdown): name someone else on the list whom the cover line names too, or "". A guess-who names its answer: the design shows it blurred until the reveal. A head-to-head names side a here and side b in imageQueryB (full names in English): the cover shows the two side by side.
+imageQuery: 2 to 5 English words for a licensed photograph that would suit the post (a famous person or place by name is fine where the account's rules allow it; never a logo, a crest, a badge, a screen, an injury); or "" if none would. The person the post is about, by full name (Cristiano Ronaldo, never Ronaldo alone), as they looked in the story's years. Whoever the cover shows, the cover line names: a face the cover does not explain is a stranger (a World Cup iceberg went out with an old man nobody could name, a scorers' ranking with a close-up of its number three). A ranking's cover never shows its number one (it spoils the countdown): name someone else on the list whom the cover line names too, or "". A facts or tips post's cover is the most famous face on its list (every countdown that spread opened on a star: Dana White, Bruce Buffer, Messi), never the last slide's subject, and never a crowd or an empty arena. A guess-who names its answer: the design shows it blurred until the reveal. A head-to-head names side a here and side b in imageQueryB (full names in English): the cover shows the two side by side.
 imageQueryB: a head-to-head's side b, as above; "" for every other kind.
 research: 1 to 4 titles of encyclopedia articles, or short search phrases, that would tell this post's subject in more detail than these documents: the match, the fight, the event, the person, the product or company itself ("2005 UEFA Champions League final", "Natan Levy"). The engine reads them before the slides are written, for the details a fan would want. [] when the documents already hold them.
 
@@ -451,6 +453,8 @@ export function slidesPrompt(pack, { ttl = '5m' } = {}) {
 /** How many content slides need a visual, so that with the cover at least half of the slides have one. */
 export const visualsNeeded = (n) => Math.max(0, Math.ceil((n + 1) / 2) - 1);
 
+export { everyPhoto } from '../formats/kinds.js';
+
 /**
  * The overlay rules as the writer is told them (src/rules/overlay.js holds them and checks them): the
  * account's own numbers, so a pack that asks for longer lines is written for as it asks.
@@ -507,10 +511,12 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     templates.length ? `COVER TEMPLATES FOR THIS POST, best first: ${templates.map((t) => `[${t.id}]`).join(', ')}. The cover is written from the first whose promise these facts keep, speaking ${SPEAKER_EN[speakerOf(pack)]}; "" when none does.` : '',
     hook ? `COVER PATTERN${templates.length ? ' (when no template fits)' : ''}: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
-    end && !legacy ? 'The design adds a closing slide that asks them to follow the account: no slide asks to save, send, follow or comment.' : cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
+    end && !legacy && !everyPhoto(pack, format, style) ? 'The design adds a closing slide that asks them to follow the account: no slide asks to save, send, follow or comment.' : cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
     body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',
     sub.maxChars < LIMITS.sub.maxChars ? `SUB: the line under the cover is at most ${sub.maxChars} characters, one punchy line that makes them swipe (the stakes or a tease, never an explanation of the topic), or "".` : '',
-    !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
+    !legacy && everyPhoto(pack, format, style)
+      ? `PHOTOGRAPHS: every slide stands on its own real photograph, the way the slideshows that spread do. Every content slide has an imageQuery: the person, the place or the thing it is about, by name ("Khabib Nurmagomedov", "Bloomfield Stadium", "espresso machine"). A graphic (visual) only where a photograph cannot show the point (a table of prices, two numbers side by side), else type "none".`
+      : !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
     linesRule(pack),
     styleRoomFor(pack, style),
     steerLine(steer),

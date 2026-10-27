@@ -11,7 +11,7 @@
 import { loadEnv } from '../src/core/env.js';
 import { loadAll } from '../src/packs/load.js';
 import { openDb, j } from '../src/db/index.js';
-import { PROVIDERS } from '../src/images/index.js';
+import { PROVIDERS, providerOrder } from '../src/images/index.js';
 
 loadEnv();
 const only = process.argv[2] || null;
@@ -24,7 +24,8 @@ if (!packs.length) {
 const N = 30;
 for (const pack of packs) {
   const opts = pack.theme.options || {};
-  const libs = pack.meta.imagery?.providers || [];
+  // In the order a post searches them: the owner's own photographs first when the pack has any.
+  const libs = (pack.meta.imagery?.providers || []).length ? providerOrder(pack) : [];
   console.log(`\n${pack.meta.displayName} (${pack.id})`);
   console.log(`  photo libraries: ${libs.length ? libs.map((id) => `${id}${PROVIDERS[id] ? (PROVIDERS[id].ready() ? '' : ' (key missing)') : ' (unknown)'}`).join(', ') : 'none: imagery.providers is empty, so no post searches for a photograph'}`);
   console.log(`  cover photograph: ${opts.coverPhoto ? 'yes' : 'no (theme.options.coverPhoto is off)'} · behind the slides: ${opts.backgroundPhoto ? `yes (${(pack.theme.backgroundQueries || []).join(' / ')})` : 'no'}`);

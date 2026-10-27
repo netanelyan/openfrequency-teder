@@ -65,7 +65,7 @@ const fail = (file, why) => problems.push(`${file}: ${why}`);
 
 const MEDIA = /\.(jpe?g|png|webp|gif|mp4|mov|webm|heic)$/i;
 const MEDIA_OK = [/^docs\/screenshots\//, /^src\/web\/static\//, /^assets\/brand\/png\//];
-const KEY_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'ZERNIO_API_KEY', 'BRAVE_API_KEY', 'YOUTUBE_API_KEY', 'PEXELS_API_KEY', 'UNSPLASH_ACCESS_KEY', 'SESSION_SECRET', 'OF_ADMIN_PASSWORD', 'OF_INTERNAL_TOKEN', 'META_APP_SECRET', 'IG_TOKEN_[A-Z0-9_]+'];
+const KEY_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'ZERNIO_API_KEY', 'BRAVE_API_KEY', 'YOUTUBE_API_KEY', 'PEXELS_API_KEY', 'UNSPLASH_ACCESS_KEY', 'OPENVERSE_TOKEN', 'SESSION_SECRET', 'OF_ADMIN_PASSWORD', 'OF_INTERNAL_TOKEN', 'META_APP_SECRET', 'IG_TOKEN_[A-Z0-9_]+'];
 const KEY_SHAPES = [
   [/sk-ant-[A-Za-z0-9_-]{20,}/, 'an Anthropic key'],
   [/\bEAA[A-Za-z0-9]{60,}\b/, 'a Meta (Facebook) access token'],

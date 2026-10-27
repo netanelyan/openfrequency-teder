@@ -3,10 +3,10 @@ import { VISUAL_TYPES } from '../render/visuals.js';
 import { isFont } from '../render/fonts.js';
 import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
-import { ctasOf, hookPatterns, isKind, KINDS, MIX } from '../formats/kinds.js';
+import { ctasOf, hookPatterns, isKind, kindOf, KINDS, MIX } from '../formats/kinds.js';
 import { overlayConfigProblems } from '../rules/overlay.js';
 import { resolveStyle, styleConfigProblems } from '../render/styles/tokens.js';
-import { MAX_HASHTAGS } from '../rules/caption.js';
+import { MAX_HASHTAGS, captionStyleOf } from '../rules/caption.js';
 import { templateConfigProblems } from '../formats/hooks.js';
 import { FLOOR } from '../voice/tells.js';
 
@@ -141,7 +141,8 @@ export function validatePack(pack) {
       const [lo, hi] = f.items || [];
       if (!(Number.isInteger(lo) && Number.isInteger(hi) && lo >= 2 && hi <= 10 && lo <= hi)) p.push(`${where}: items must be [min, max] between 2 and 10`);
       if (!Array.isArray(f.closers) || !f.closers.length || f.closers.some((x) => !String(x?.title || '').trim())) p.push(`${where}: closers must list at least one { title, body }`);
-    } else if (!ctasOf(pack, f).length) {
+    } else if (!ctasOf(pack, f).length && kindOf(f).photo !== 'every') {
+      // A post on a photograph a slide ends on its best slide, with no call to action drawn (src/formats/kinds.js everyPhoto).
       p.push(`${where}: a ${f.kind} post ends with a call to action: list ctas [{ kind: save|comment|send, text }] on the format or the file`);
     }
     for (const c of f.ctas || []) if (typeof c === 'object' && c && !['save', 'comment', 'send'].includes(c.kind)) p.push(`${where}: cta kind "${c.kind}" must be save, comment or send`);
@@ -163,8 +164,9 @@ export function validatePack(pack) {
     if (!meta.events?.source) p.push('pack.json: a fight week needs events.source, the source its calendar is read from');
   }
   if (meta.events?.source && !list.some((x) => x.id === meta.events.source)) p.push(`pack.json: events.source "${meta.events.source}" is not a source in sources.json`);
+  if (meta.business != null && typeof meta.business !== 'boolean') p.push('pack.json: business is true for a shop or a brand (its TikTok sounds come from the Commercial Music Library), or false');
   if (meta.imagery?.safety && !['standard', 'strict'].includes(meta.imagery.safety)) p.push('pack.json: imagery.safety must be "standard" or "strict"');
-  for (const prov of meta.imagery?.providers || []) if (!['commons', 'pexels', 'unsplash', 'pack'].includes(prov)) p.push(`pack.json: imagery.providers: "${prov}" is not one of commons, pexels, unsplash, pack`);
+  for (const prov of meta.imagery?.providers || []) if (!['commons', 'pexels', 'unsplash', 'openverse', 'pack'].includes(prov)) p.push(`pack.json: imagery.providers: "${prov}" is not one of commons, pexels, unsplash, openverse, pack`);
   const minDetails = meta.research?.minDetails;
   if (minDetails !== undefined && !(Number.isInteger(minDetails) && minDetails >= 0 && minDetails <= 8)) p.push('pack.json: research.minDetails is a whole number from 0 to 8');
   const maxAge = meta.research?.maxAgeDays;
@@ -175,6 +177,11 @@ export function validatePack(pack) {
   if (meta.bio !== undefined && [...String(meta.bio)].length > 80) p.push('pack.json: bio is over 80 characters, the limit on TikTok');
   if (meta.endSlide !== undefined && !(isObj(meta.endSlide) && String(meta.endSlide.title || '').trim() && [...String(meta.endSlide.title)].length <= 60 && [...String(meta.endSlide.body || '')].length <= 120)) p.push('pack.json: endSlide needs a title (up to 60 characters) and may have a body (up to 120)');
   for (const [k, v] of Object.entries(meta.writing || {})) {
+    // How TikTok's caption is told: one short line (the default) or the four-beat story (src/rules/caption.js).
+    if (k === 'captionStyle') {
+      if (!['short', 'story'].includes(v)) p.push('pack.json: writing.captionStyle is "short" (one line, the default) or "story" (four beats)');
+      continue;
+    }
     if (!['cover', 'sub', 'slideTitle', 'slideBody', 'slideLines', 'captionLong', 'captionShort'].includes(k) || !isObj(v)) p.push(`pack.json: writing.${k} is not a text the pack can limit (cover, sub, slideTitle, slideBody, slideLines, captionLong, captionShort)`);
     else for (const [m, n] of Object.entries(v)) if (!['maxChars', 'sentences', 'maxWords', 'minChars'].includes(m) || !(Number.isInteger(n) && n > 0)) p.push(`pack.json: writing.${k}.${m} must be maxChars, sentences, maxWords or minChars, a whole number`);
   }
@@ -215,7 +222,8 @@ export function validatePack(pack) {
 export function packWarnings(pack) {
   const w = [];
   const id = pack?.meta?.id || pack?.dirName || '?';
-  for (const [kind, floor] of Object.entries(FLOOR)) {
+  // The floor is the four-line story's room: an account on short captions (the default) never needs it.
+  for (const [kind, floor] of Object.entries(captionStyleOf(pack) === 'story' ? FLOOR : {})) {
     for (const [k, min] of Object.entries(floor)) {
       const v = pack?.meta?.writing?.[kind]?.[k];
       if (Number.isFinite(v) && v < min) w.push(`pack "${id}": writing.${kind}.${k} ${v} is raised to ${min}, the room TikTok's four-line story needs`);

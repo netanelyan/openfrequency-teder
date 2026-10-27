@@ -119,7 +119,7 @@ topic, and the attempt is kept with what stopped it.
 
 ## Kinds of post
 
-A pack's format is one of eleven kinds (`src/formats/kinds.js`). The engine owns the
+A pack's format is one of fourteen kinds (`src/formats/kinds.js`). The engine owns the
 shape, checks it in code and draws it; the pack brings the name, the angle (`about`),
 the cover patterns and the calls to action.
 
@@ -136,20 +136,35 @@ the cover patterns and the calls to action.
 | `do-dont` | entertaining | 4 to 6 rules from a guideline, each drawn as the same screen done wrong and done right |
 | `head-to-head` | number | two sides, 3 to 6 stats with both values, the verdict last |
 | `ranking` | number | a top 5 (or 10), number one last; the design draws the places |
+| `facts` | entertaining | 4 to 7 separate surprising facts, one short line each on its own photograph, the best last; the cover is the count and the subject |
+| `tips` | number | 4 to 7 things worth saving (prompts, tools, settings), each exact enough to use from the slide, the best last |
+| `owner-story` | entertaining | the business owner's own mistakes and numbers in the first person, from what they wrote down, on their own photographs |
+
+The last three are the shapes the slideshows that spread on TikTok take (25 of them
+read slide by slide, `docs/decisions.md`). They, and any post drawn in the native
+style (E), stand on a photograph a slide, end on their best slide with no call to
+action and no closing "follow" slide, and keep to one short line a slide.
 
 Every post has 5 to 8 slides, one idea a slide, keywords in Hebrew and English for
 TikTok's search, a TikTok caption and a short Instagram one led by the cover line.
-The TikTok caption tells the post as a story in four lines: the hook, the problem,
-the discovery and the result, with the closing question at its end
-(`src/rules/caption.js`). By default it is long (200 characters and up, for search);
-an account can ask for short, catchy captions and a short line under the cover
-instead (`writing` in `pack.json`), and still gets the four lines. No caption holds a
-hashtag: the engine adds the post's own, five at most, and the publisher refuses a
-caption with more.
+The TikTok caption is one short line by default, the cover's promise said another
+way with the names people search for (21 of 25 viral slideshows had one line or
+hashtags alone). An account can ask for the four-line story instead (`"writing":
+{ "captionStyle": "story" }`): the hook, the problem, the discovery and the result,
+with the closing question at its end (`src/rules/caption.js`), 200 characters and up,
+or short and catchy with the `writing` limits. No caption holds a hashtag: the engine
+adds the post's own, five at most, and the publisher refuses a caption with more.
+
+**The owner's story.** On the Sources page, "הסיפור שלכם" takes what happened in the
+business in the owner's own words (a topic in `facts/` marked `"owner": true`: no page,
+no expiry). Only a slide that cites one of those facts, and the cover and captions of an
+owner-story post, may speak in the first person; everywhere else the account still never
+claims an experience. A business account (`"business": true` in `pack.json`) adds only
+sounds from TikTok's Commercial Music Library, the only music a business may use.
 
 **The cover.** The first slide is written from a library of hook templates, lines that
 already took an account to 10k followers, filled for the post in hand
-(`src/formats/hooks.js`). They come in four mechanisms:
+(`src/formats/hooks.js`). They come in six mechanisms:
 
 | Mechanism | Templates (the account speaking in the feminine) |
 |---|---|
@@ -157,6 +172,8 @@ already took an account to 10k followers, filled for the post in hand
 | I wish you had known | "הלוואי שהייתם יודעים את זה לפני {moment}", "החלום שלי שכולם ידעו ש{fact}" |
 | the real truth | "הנה האמת האמיתית על {topic}", "האמת היא שמה שסיפרו לכם על {topic} לא נכון", "אני עומדת לחשוף את האמת על {topic}" |
 | I'll save you time | "תנו לי לחסוך לכם זמן עם {topic}", "חוסכת לכם {x} רק בזכות {thing}" |
+| a count of what they did not know | "{n} דברים שלא ידעתם על {topic}", "{n} עובדות על {topic} שמעטים מכירים", "{n} דברים על {topic} שאף אחד לא אומר לכם" ({n} is written by the code: the post's own count) |
+| the owner's own (owner-story only) | "{n} טעויות שעשיתי {moment}", "מה למדתי {moment}" |
 
 The code offers the writer up to three for each post, each of another mechanism, best
 first; the writer picks the first whose promise the facts keep and fills its slots
@@ -207,7 +224,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 | 2. Each account a distinct brand | `src/packs/validate.js`: no two packs share a template, a display face, a handle, a name or a palette too close to tell apart; under the slide styles, two accounts may share a style but never a style and a close accent; a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of that account's approved source, every number in its quotes, the render gate's token. `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
 | 4. AI disclosure | TikTok's `video_made_with_ai` flag through Zernio; a caption line on Instagram |
-| 5. Rights | photographs from Pexels, Unsplash and Wikimedia Commons (licence stored, Commons licences on an allowlist, logos and crests refused); every photo screened for blood, injuries, weapons, watermarks; takedowns on notice; quotes short (4 to 40 words) |
+| 5. Rights | photographs the owner added to the account first, then Pexels, Unsplash, Wikimedia Commons and Openverse (licence stored; Commons licences on an allowlist; from Openverse only CC BY, CC BY-SA and CC0 with an author to credit, never NC, ND, the Public Domain Mark or a picture carrying an agency's name or code; logos and crests refused); every photo screened for blood, injuries, weapons, watermarks; takedowns on notice; quotes short (4 to 40 words) |
 | 6. No investment advice | `src/rules/compliance.js`, required for any money niche |
 | 7. A plan per account, not a money cap | `src/budget/quota.js`: 40 slideshows and 10 redos a month per account, weighed before a post is started; what each call cost is recorded (`src/budget/ledger.js`), never capped |
 | 8. Hebrew, right to left | every slide and page is `lang="he" dir="rtl"` (tested) |
@@ -231,7 +248,7 @@ and edit its files.
 | `formats.json` | the account's formats, each of one kind, with a name, weight, angle (`about`), the sources it draws from, cover patterns and calls to action; the mix of entertaining formats; the cover's hook templates (`hookTemplates`: who the account speaks as, the niche's authorities, templates turned off or added, [The cover](#kinds-of-post)); caption questions, hashtags, trend queries |
 | `topics.json` (optional) | the topic bank: chosen topics, each with its kind (or one `format` of that kind), its angle, and the pages that document it, drafted from exactly those pages |
 | `rules.json` | banned phrases, regex checks, words that refuse an image search, the longest quote |
-| `photos/`, `facts/` (optional) | photos the owner cleared for the account, and hand-checked facts with the day they expire |
+| `photos/`, `facts/` (optional) | photos the owner cleared for the account (`photos/photos.json`: each one's `file`, `subject`, `description`, `tags`, `credit`, `origin`, `license`; matched to a slide by those words and searched before every library, whatever `imagery.providers` says), and hand-checked facts with the day they expire |
 
 Validation refuses a pack with weak contrast, a source without https or a reason to
 trust it, a money niche without the investment-advice check, or anything two packs
@@ -239,18 +256,30 @@ share.
 
 ### Slide styles
 
-An account can be drawn in one of four slide styles (`pack.json` `"style": { "name", "accent", "bg", "panel", "test" }`,
+An account can be drawn in one of five slide styles (`pack.json` `"style": { "name", "accent", "bg", "panel", "text", "test" }`,
 `src/render/styles/`). A style keeps the post as it is (its slides, their order, which
 slide carries a number) and replaces the type, how the text is treated and the chrome:
 
 | Style | | For |
 |---|---|---|
+| E, native | like a slideshow made in TikTok's own app: the slide's own photograph, sharp, over the whole slide, and a line or two in the middle of it, each line on a white box (`"text": "box"`, the default) or white with a thin dark edge (`"text": "shadow"`) (Heebo) | everything people watch for fun: sports, combat sports, culture, AI and life tips, lifestyle, food, shops; the default |
 | A, editorial card | dark; a photograph above, the number on a card (Heebo, Assistant) | prices, data, comparisons: finance, real estate, travel, tech, B2B |
 | B, poster | a condensed face set huge, the key words on a block of colour, a framed photograph (Karantina, Rubik) | sports, combat sports, gaming, fitness, events |
 | C, split | light; the photograph on top, the text on a light panel, never on the photograph (Rubik) | fashion, beauty, food, home, wellness, shops, kids |
-| D, native dark | a photograph fading into a dark ground, a condensed headline (Karantina, Rubik) | news, history, culture; the default |
+| D, native dark | a photograph fading into a dark ground, a condensed headline (Karantina, Rubik) | news, history, culture |
 
-No letter has an outline or a shadow, and no slide carries a progress bar, a counter,
+E is what 20 of the 25 viral TikTok slideshows we benchmarked look like: one real
+photograph a slide, never blurred, TikTok's own text over it, 5 to 15 words, nothing
+else. Its text sits in the middle of the band TikTok leaves free, below the face (or
+above it) when the photograph's screen found one; a cover is its hook, a content slide
+its title and at most two short lines, a number slide's number a line of its own on a
+box of the accent, a ranking's place before its title ("5."). A slide with a photograph
+does not draw its graphic as well; a slide with none stands on a solid dark ground,
+its graphic there as in every style. The source is one small, faint line at the foot.
+
+In A to D no letter has an outline or a shadow; E's "shadow" look is the one exception,
+on purpose, since that is how TikTok's own text tool draws plain text. No slide of any
+style carries a progress bar, a counter,
 dots, a handle or a blurred photograph: TikTok draws its own furniture. Text keeps out
 of TikTok's bands on all four sides (top 140, bottom 420, both sides 152 px, since the
 Hebrew app mirrors its button rail; Instagram's 4:5 keeps 80, 120 and 96), and the
@@ -260,10 +289,11 @@ its style's floor before it takes another line; one still too long is a check fa
 the repair loop sends back to the writer, with about how many characters fit
 (`src/render/styles/fit.js`, from the bundled faces' widths: `npm run styles:metrics`).
 
-Onboarding suggests a style from what the account is about and its colours, and gives
-a second customer in the same niche with a close colour the next best one
+Onboarding suggests a style from what the account is about and its colours (E unless
+the account is about money and data, which gets A; the niche's own of B, C or D next),
+and gives a second customer in the same niche with a close colour the next best one
 (`src/onboarding/style.js`). On Teder, *Accounts* > *להחליף סגנון* shows the account's
-last post in all four styles side by side and switches it; a switch applies from the
+last post in every style side by side and switches it; a switch applies from the
 next post. An optional style test draws the posts in the two best-fit styles in turn for
 14 days, and the morning feedback then locks the one whose posts did better on views
 and engagement together (shown in *Results*). `npm run styles:review -- <account>=<db>`

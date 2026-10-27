@@ -34,7 +34,7 @@ ${tail}<button class="btn danger" type="submit">לדחות את הפוסט</butt
 /** What a post counted as in the customer's month (src/budget/quota.js). */
 const QUOTA_KIND_HE = { suggestion: 'הצעה', redo: 'החלפה', retry: 'לא נספר, הבדיקות שלנו עצרו אותו' };
 
-const PROVIDER_HE = { pexels: 'Pexels', unsplash: 'Unsplash', commons: 'ויקישיתוף', pack: 'מהחשבון', rendered: 'מצויר' };
+const PROVIDER_HE = { pexels: 'Pexels', unsplash: 'Unsplash', commons: 'ויקישיתוף', openverse: 'Openverse', pack: 'מהחשבון', rendered: 'מצויר' };
 
 /** Light edits on a post's page: another of its own photographs on a slide, or a slide removed. Drawn again only. */
 function lightPanel(ctx, d) {
@@ -1003,7 +1003,7 @@ export function factsPage(ctx, { packs, current, topics, today, nextYear, form =
       (t) => `<section class="panel"><header><h2 dir="auto">${esc(t.topic)}</h2><span class="end muted small">${t.facts.length} עובדות</span></header>${t.facts.length ? `<ul class="factlist">${t.facts
         .map((f) => {
           const [he, cls] = FACT_STATE[f.state] || [f.state, ''];
-          return `<li><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span>${f.checkedBy === 'claude' ? '<span class="chip warn" title="הועתק מהעמוד, עוד לא נבדק על ידיך">נבדק על ידי Claude</span>' : ''}<span class="end muted small">נבדק ${esc(f.checkedAt)} · עד ${esc(f.expires)}</span></div>
+          return `<li><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span>${f.checkedBy === 'claude' ? '<span class="chip warn" title="הועתק מהעמוד, עוד לא נבדק על ידיך">נבדק על ידי Claude</span>' : ''}<span class="end muted small">${t.owner ? `נכתב ${esc(f.checkedAt)}` : `נבדק ${esc(f.checkedAt)} · עד ${esc(f.expires)}`}</span></div>
 <blockquote dir="auto">${esc(f.quote)}</blockquote><a class="small" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" dir="auto">${esc(f.source)}</a>${f.note ? `<p class="muted small m4" dir="auto">${esc(f.note)}</p>` : ''}
 ${f.problems.length ? `<div class="problems"><ul>${f.problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
 <div class="actions pt10 p0x"><form method="post" action="/facts/confirm" class="inline">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="topic" value="${esc(t.topic)}"><input type="hidden" name="id" value="${esc(f.id)}"><label class="small">בתוקף עד <input type="date" name="expires" value="${esc(f.expires > today ? f.expires : nextYear)}" dir="ltr"></label><button class="btn sm primary" type="submit">${icon('check')}בדקתי שוב היום</button></form>${postButton(ctx, '/facts/remove', 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את העובדה?', fields: { account: current.id, topic: t.topic, id: f.id } })}</div></li>`;
@@ -1025,7 +1025,13 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(
 <label class="f">נבדק ב<input type="date" name="checkedAt" required dir="ltr" value="${esc(form.checkedAt || today)}"></label>
 <label class="f">בתוקף עד <small>אחרי התאריך הזה היא לא בשימוש עד שתבדקו שוב. אפשר עד שנתיים קדימה</small><input type="date" name="expires" required dir="ltr" value="${esc(form.expires || nextYear)}"></label>
 <label class="f">הערה <small>לא חובה</small><input type="text" name="note" maxlength="200" value="${esc(form.note || '')}"></label>
-<button class="btn primary" type="submit">${icon('plus')}להוסיף עובדה</button></form></section></div>`;
+<button class="btn primary" type="submit">${icon('plus')}להוסיף עובדה</button></form></section>
+<section class="panel"><header><h2>הסיפור שלכם</h2></header>
+<p class="muted small">מה שקרה לכם בעסק, במילים שלכם: טעות שעשיתם, מספר מהשנה הראשונה, משהו שאף אחד לא סיפר לכם לפני שפתחתם. הסליידשואו של עסקים קטנים שהכי מתפשטים בטיקטוק הם בדיוק זה, על התמונות שלכם. החשבון כותב בגוף ראשון רק ממה שכתבתם כאן.</p>
+<form method="post" action="/facts/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="owner" value="1">
+<label class="f">נושא<input type="text" name="topic" required maxlength="60" placeholder="השנה הראשונה" value=""></label>
+<label class="f">מה קרה <small>משפט אחד, 4 עד 40 מילים, עם המספר אם יש</small><textarea name="quote" required rows="3" placeholder="מכרנו ב-100 אלף שקל בשנה הראשונה ועדיין הפסדנו כסף"></textarea></label>
+<button class="btn primary" type="submit">${icon('plus')}להוסיף לסיפור</button></form></section></div>`;
   return layout({ ...ctx, title: 'עובדות שנבדקו ביד', active: 'sources' }, body);
 }
 
@@ -1101,6 +1107,7 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(
 <label class="f">שם הסאונד<input type="text" name="name" required maxlength="${limits.chars}" dir="auto" value="${esc(form.name || '')}"></label>
 <label class="f">אמן<input type="text" name="artist" required maxlength="${limits.chars}" dir="auto" value="${esc(form.artist || '')}"></label>
 <label class="f">קישור <small>לא חובה: הסאונד בטיקטוק, כדי למצוא אותו מהר</small><input type="url" name="link" dir="ltr" placeholder="https://www.tiktok.com/music/..." value="${esc(form.link || '')}"></label>
+${current.meta?.business === true ? '<label class="f check"><input type="checkbox" name="commercial" value="1" required> הסאונד מהספרייה המסחרית של טיקטוק <small>חשבון עסקי לא יכול להשתמש בשירים טרנדיים רגילים: הסאונד יושתק או שהפוסט יורד</small></label>' : ''}
 <button class="btn primary" type="submit">${icon('plus')}הוספה</button></form></section>` : `<section class="panel"><header><h2>${limits.max} סאונדים</h2></header><p class="muted">זה המקסימום. כדי להוסיף אחר, הסירו אחד ישן.</p></section>`}</div>`;
   return layout({ ...ctx, title: 'סאונדים', active: 'accounts' }, body);
 }

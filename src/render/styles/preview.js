@@ -48,7 +48,7 @@ export function lastPost(db, accountId) {
 }
 
 /**
- * One post drawn in one style (`style`: 'A'..'D'): { files, slides: [idx], warnings, highlights }. `size`: one
+ * One post drawn in one style (`style`: 'A'..'E'): { files, slides: [idx], warnings, highlights }. `size`: one
  * platform. The files go to `outDir`.
  */
 export async function renderStylePreview(db, { pack, post, style, outDir, size = 'tiktok', highlights = true }) {
@@ -86,7 +86,7 @@ export async function renderStylePreview(db, { pack, post, style, outDir, size =
   return { files: files[size], slides: [...only], warnings: files.warnings, highlights: marked };
 }
 
-/** The post in all four styles. */
+/** The post in every style. */
 export async function renderAllStyles(db, { pack, post, outDir, size = 'tiktok' }) {
   const out = {};
   for (const style of STYLE_NAMES) out[style] = await renderStylePreview(db, { pack, post, style, outDir, size });

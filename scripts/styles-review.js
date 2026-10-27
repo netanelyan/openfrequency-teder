@@ -1,4 +1,4 @@
-// Each account's last post drawn in all four slide styles (cover and two content slides), for the owner to choose
+// Each account's last post drawn in every slide style (cover and two content slides), for the owner to choose
 // from on Teder's styles page (/styles). Nothing is switched: the page has the buttons.
 //
 //   node scripts/styles-review.js                         every account's last post in this home's database

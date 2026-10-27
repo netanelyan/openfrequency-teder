@@ -11,7 +11,7 @@ import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
 import { ensureFormats, groupsOf, mixOf, pickFormat, pickHook, pickTemplates } from '../formats/rotation.js';
 import { coverCredit, coverFrame, fillTemplate, hookProblems, isTemplateId, speakerOf, templateById, templateOnCover, whoGender } from '../formats/hooks.js';
-import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, structureNumbers } from '../formats/kinds.js';
+import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, SLIDES, structureNumbers } from '../formats/kinds.js';
 import { resolveFormat } from '../trends/index.js';
 import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
@@ -19,14 +19,15 @@ import { lockedStyle, lookFor, styleForPost } from '../render/style.js';
 import { highlightProblems, styleFitProblems } from '../render/styles/fit.js';
 import { checkRules } from '../rules/check.js';
 import { lineDraft, oneLine, overlayOf, overlayProblems } from '../rules/overlay.js';
-import { MAX_HASHTAGS, captionProblems, hashtagProblems, storyCaption } from '../rules/caption.js';
+import { isOwnerDoc } from '../sources/facts.js';
+import { MAX_HASHTAGS, SHORT_CAPTION, captionProblems, captionStyleOf, hashtagProblems, storyCaption } from '../rules/caption.js';
 import { ATTRIBUTED_MAX, gate, numbersIn, verifyFact } from '../verify/claims.js';
-import { findImage, MIN_SIDE } from '../images/index.js';
+import { findImage, MIN_SIDE, packPhotoList } from '../images/index.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost, slidePlaces } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
-import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, visualsNeeded } from './prompts.js';
+import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, everyPhoto, visualsNeeded } from './prompts.js';
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
@@ -293,7 +294,7 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   // A cover written from a hook template: its frame is no teaser there, and its promise is checked below.
   const frame = coverFrame(pack, f, draft);
   for (const t of textsOf(draft, { frame })) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [], pack, frame: t.frame })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
-  for (const x of checkRules({ pack, others: ctx.packs || [], texts: textsOf(draft) })) problems.push(x);
+  for (const x of checkRules({ pack, others: ctx.packs || [], texts: ownerTexts(ctx.db, f, draft, facts) })) problems.push(x);
   // The hook templates: on the cover only, from the template the draft declared, and paid off by the slides.
   for (const x of hookProblems(pack, f, draft, facts)) problems.push(x);
   // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
@@ -309,7 +310,9 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     for (const msg of shapeProblems(f, content.map((s) => s.role))) problems.push({ where: 'shape', code: 'shape', msg });
     for (const msg of kindProblems(f, { ...draft, slides: content })) problems.push({ where: 'shape', code: 'shape', msg });
     // TikTok's search reads the slides and a long caption; Instagram shows the start of a short one.
-    const cap = limitsFor('captionLong', pack);
+    // A short caption (the default, captionStyleOf) is one line; the four-beat story has the room TikTok's search reads.
+    const capStyle = captionStyleOf(pack);
+    const cap = capStyle === 'short' ? { ...limitsFor('captionLong', pack), ...SHORT_CAPTION } : limitsFor('captionLong', pack);
     const capLen = String(draft.caption || '').length;
     if (capLen < cap.minChars) problems.push({ where: 'caption', code: 'caption', msg: `the TikTok caption is ${capLen} characters: it needs ${cap.minChars} or more` });
     if (capLen > cap.maxChars) problems.push({ where: 'caption', code: 'caption', msg: `the TikTok caption is over ${cap.maxChars} characters` });
@@ -317,7 +320,7 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     if (!String(draft.captionShort || '').trim()) problems.push({ where: 'caption short', code: 'caption', msg: 'the Instagram caption (captionShort) is missing' });
     else if (String(draft.captionShort).length > capShort) problems.push({ where: 'caption short', code: 'caption', msg: `the Instagram caption is over ${capShort} characters: it is the short one` });
     // TikTok's caption is a story in four lines (hook, problem, discovery, result), and no caption holds a hashtag.
-    for (const x of captionProblems(draft, { limits: cap })) problems.push(x);
+    for (const x of captionProblems(draft, { limits: cap, style: capStyle })) problems.push(x);
     const kw = draft.keywords || [];
     if (kw.length < 2 || !kw.some((k) => HEBREW.test(k)) || !kw.some((k) => LATIN.test(k))) problems.push({ where: 'keywords', code: 'keywords', msg: 'keywords need at least one in Hebrew and one in English letters' });
     for (const s of content) {
@@ -328,14 +331,57 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     const allowed = visualsOf(pack);
     for (const s of content) for (const msg of visualProblems(s.visual, allowed, `slide ${draft.slides.indexOf(s)}`)) problems.push({ where: 'visual', code: 'shape', msg });
     for (const msg of visualProblems(draft.coverVisual, allowed, 'the cover')) problems.push({ where: 'visual', code: 'shape', msg });
-    const have = content.filter(slideHasVisual).length;
+    // A post on a photograph a slide (everyPhoto) counts each slide's photograph search as its visual.
+    const photoEach = everyPhoto(pack, f, draft.style || null);
+    const have = content.filter((s) => slideHasVisual(s) || (photoEach && String(s.imageQuery || '').trim())).length;
     const need = visualsNeeded(content.length);
     if (have < need) problems.push({ where: 'visual', code: 'shape', msg: `only ${have} of the ${content.length} content slides carry a visual: at least ${need} need one (with the cover, half the post)` });
   }
-  // A fixed subject's own numbers (the card's name and date, from the approved event calendar) may be on the cover.
-  const g = gateDraft(f, draft, facts, { allow: ctx.subjectText ? numbersIn(ctx.subjectText) : [] });
+  // A fixed subject's own numbers (the card's name and date, from the approved event calendar) may be on the cover,
+  // and so may a year the post's own documents give (documentYears).
+  const g = gateDraft(f, draft, facts, { allow: [...(ctx.subjectText ? numbersIn(ctx.subjectText) : []), ...documentYears(ctx.db, facts)] });
   for (const msg of g.problems) problems.push({ where: 'facts', code: 'verify', msg });
   return { problems, gate: g };
+}
+
+/**
+ * The years the stored documents behind the post's verified facts give, for the cover and the captions. A cover
+ * dates its story ("2005, איסטנבול") from the article, while the quote the outline kept is the sentence with the
+ * goal in it: the gate refused "2005" there although the document said it, and blocked a football post on a live
+ * run. Only a year (1900 to 2100), and only from the post's own documents: every other number is still held to its
+ * quotes, and a slide to the quotes it cites.
+ */
+export function documentYears(db, facts) {
+  const ids = [...new Set(facts.filter((f) => f.verified && f.document_id != null).map((f) => f.document_id))];
+  if (!db || !ids.length) return [];
+  const out = new Set();
+  for (const id of ids) {
+    const text = db.get('SELECT text FROM documents WHERE id = ?', id)?.text || '';
+    for (const m of text.matchAll(/(?<!\d)(19\d\d|20\d\d)(?!\d)/g)) out.add(m[1]);
+  }
+  return [...out];
+}
+
+/** The keys of the post's verified facts that are the owner's own story (a "story-" document, src/sources/facts.js). */
+export function ownerFactKeys(db, facts) {
+  const out = new Set();
+  if (!db) return out;
+  for (const f of facts) {
+    if (!f.verified || f.document_id == null) continue;
+    if (isOwnerDoc(db.get('SELECT key FROM documents WHERE id = ?', f.document_id)?.key)) out.add(f.key);
+  }
+  return out;
+}
+
+/**
+ * The post's texts for the rule checks, each marked `owner` where the first person is the owner's own: a slide that
+ * cites one of the owner's facts, and in an owner-story post with such facts its cover and captions. Everywhere else
+ * an account that never had an experience still may not claim one.
+ */
+export function ownerTexts(db, format, draft, facts) {
+  const owned = ownerFactKeys(db, facts);
+  const whole = owned.size > 0 && Boolean(kindOf(format).owner);
+  return textsOf(draft).map((t) => ({ ...t, owner: t.idx != null ? (draft.slides[t.idx]?.factKeys || []).some((k) => owned.has(k)) : whole }));
 }
 
 const say = (p) => `${p.where}: ${p.msg}`;
@@ -463,7 +509,9 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   // A cover from a hook template is written by the code from the writer's slots, in the account's voice: the
   // gendered forms are never the model's to get wrong. Any template this format may use is taken, offered or not.
   const tpl = legacy ? null : templateById(pack, format, d.hookTemplate);
-  const slots = d.hookSlots || {};
+  // The count on a counted cover ("7 דברים שלא ידעתם על...") is the post's own, written by the code (CODE_SLOTS).
+  const counted = tpl && /\{n\}/.test(tpl.text) ? { n: String((d.slides || []).filter((s) => !['lesson', 'ranks'].includes(String(s.role || ''))).length) } : {};
+  const slots = { ...(d.hookSlots || {}), ...counted };
   const gender = tpl && slots.who ? whoGender(pack, slots.who, String(slots.whoGender || '')) : 'm';
   const filled = tpl ? fillTemplate(tpl, slots, { speaker: speakerOf(pack), who: gender }) : null;
   const fromTemplate = Boolean(filled && !filled.missing.length);
@@ -480,7 +528,7 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
     keywords: (d.keywords || []).map((k) => String(k).trim()).filter(Boolean).slice(0, 6),
     question: String(d.question || '').trim(),
     // TikTok's caption comes as the story's four beats (src/rules/caption.js); an older answer as one text.
-    caption: joinCaption(d.story ? storyCaption(d.story) : d.caption, d.question),
+    caption: joinCaption(d.story ? storyCaption(d.story, captionStyleOf(pack)) : d.caption, d.question),
     captionShort: String(d.captionShort || '').trim(),
     cta,
     slides: [
@@ -1039,7 +1087,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const fixedCta = ctaText ? ctas.find((c) => c.text === ctaText) : null;
     // A call to action the feedback found did not convert is not used again on this post.
     const fresh = ctas.filter((c) => c.text !== lastCta && c.text !== dv.avoidCta);
-    const cta = legacy || !ctas.length ? null : fixedCta || pickBy(fresh.length ? fresh : ctas.length > 1 ? ctas.filter((c) => c.text !== lastCta) : ctas, postId);
+    // A post on a photograph a slide ends on its best slide, with no call to action drawn on it (everyPhoto).
+    const cta = legacy || !ctas.length || everyPhoto(pack, format, postStyle) ? null : fixedCta || pickBy(fresh.length ? fresh : ctas.length > 1 ? ctas.filter((c) => c.text !== lastCta) : ctas, postId);
     let draft = null;
     let checked = null;
     let lastProblems = [];
@@ -1311,9 +1360,13 @@ export async function sidePhotos(ctx, { pack, outline, postId }) {
 export async function findPhotos(ctx, { pack, format, draft, outline, postId }) {
   const out = new Map();
   const providers = pack.meta.imagery?.providers || [];
-  if (!providers.length) return out;
+  // An account with photographs of its own (photos/photos.json) is searched for them even when it lists no library.
+  if (!providers.length && !packPhotoList(pack).length) return out;
   const kind = kindName(format);
-  const photoOn = kindOf(format).photo;
+  // A post on a photograph a slide (a facts, tips or owner-story post, or the native style) looks for one for every
+  // slide, the cover included, whatever the theme says about covers: of 25 slideshows that spread, 20 did that.
+  const each = everyPhoto(pack, format, draft.style || null);
+  const photoOn = each ? 'every' : kindOf(format).photo;
   const last = draft.slides.length - 1;
   const wants = [];
   // The post's topic goes with every photograph's check: the cover line alone did not tell the check that a post about
@@ -1329,7 +1382,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       out.set('cb', sides.cb);
     }
   }
-  if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery && kind !== 'head-to-head') {
+  if ((pack.theme.options?.coverPhoto || each) && photoOn && outline.imageQuery && kind !== 'head-to-head') {
     const idx = photoOn === 'last' ? last : 0;
     const s = draft.slides[idx];
     // A guess-who's answer is a face, blurred on the cover and shown at the reveal: checked against the reveal's fight,
@@ -1349,7 +1402,8 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   const seen = new Set();
   for (const w of wants) {
     const key = w.query.toLowerCase().trim();
-    if (seen.has(key) || seen.size >= 4) continue;
+    // At most four searches a post, or one a slide when every slide stands on its own photograph.
+    if (seen.has(key) || seen.size >= (each ? SLIDES.max : 4)) continue;
     seen.add(key);
     const why = {};
     // A cover fills the frame; a content slide's photograph sits in one (the last slide of a guess-who fills it too).
@@ -1369,7 +1423,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // Only a portrait of the post's own subject moves (a cover about Natan Levy once took a slide's photograph of Dana
   // White), and never in a ranking (it would show number one) or a guess-who (the answer).
   const subjectWords = String(`${draft.subject?.a || ''} ${draft.subject?.answer || ''} ${outline.imageQuery || ''}`).toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
-  if (!out.has(0) && wants.some((w) => w.idx === 0) && photoOn === 'cover' && !['ranking', 'guess-who'].includes(kind)) {
+  if (!out.has(0) && wants.some((w) => w.idx === 0) && (photoOn === 'cover' || photoOn === 'every') && !['ranking', 'guess-who'].includes(kind)) {
     const portrait = [...out.entries()].find(([i, img]) => i > 0 && String(img.query).toLowerCase().split(/\s+/).some((w) => subjectWords.includes(w)));
     if (portrait) {
       out.set(0, portrait[1]);

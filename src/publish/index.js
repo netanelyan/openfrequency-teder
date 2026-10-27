@@ -10,7 +10,7 @@ import { j } from '../db/index.js';
 import { restAt } from '../schedule/shabbat.js';
 import { israelDate } from '../schedule/israel.js';
 import { verifyFact } from '../verify/claims.js';
-import { formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
+import { documentYears, formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
 import { imageCredit, waitingImages } from '../images/index.js';
 import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
@@ -96,7 +96,8 @@ export function recheck(db, post, pack) {
     if (!v.ok && post.slides.some((s) => s.factKeys.includes(f.key))) problems.push(`${f.key}: ${v.error}`);
     return { ...f, verified: v.ok };
   });
-  const g = gateDraft(formatOfPost(db, pack, post), postDraft(post), facts);
+  // The years the post's own documents give were allowed on its cover when it was made (documentYears), and still are.
+  const g = gateDraft(formatOfPost(db, pack, post), postDraft(post), facts, { allow: documentYears(db, facts) });
   problems.push(...g.problems);
   if (post.checks?.token && g.token !== post.checks.token) problems.push('the text changed after it was checked');
   return problems;

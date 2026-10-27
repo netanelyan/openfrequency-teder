@@ -17,7 +17,7 @@ import { timeHe } from './ui.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
 import { removeRival, saveRival } from '../pipeline/rivals.js';
-import { removeSound, saveSound } from '../pipeline/sounds.js';
+import { isBusiness, removeSound, saveSound } from '../pipeline/sounds.js';
 import { subscribe, unsubscribe } from '../notify/index.js';
 import { catalogSource } from '../sources/catalog.js';
 import { robotsAllows } from '../sources/robots.js';
@@ -456,6 +456,17 @@ const factPack = (ctx, form) => {
 export function addFact(ctx, user, _p, form) {
   const { pack, dir } = factPack(ctx, form);
   const topic = String(form.topic || '').trim().slice(0, 60);
+  // The owner's own story: their words, no page and no expiry (src/sources/facts.js "owner").
+  if (form.owner === '1') {
+    const story = { quote: String(form.quote || '').replace(/\s+/g, ' ').trim(), checkedAt: israelDate(Date.now()), checkedBy: user.name, note: String(form.note || '').trim().slice(0, 200) };
+    const problems = [...(topic ? [] : ['צריך נושא']), ...factProblems(story, { maxQuoteWords: pack.rules.maxQuoteWords || 40, owner: true })];
+    if (problems.length) throw new ActionError('הסיפור לא נשמר', 422, { problems, values: { ...form } });
+    const first = !pack.facts;
+    saveFact(dir, topic, story, { owner: true });
+    if (first) ctx.reloadPacks();
+    audit(ctx.db, { actor: user.name, action: 'story_added', accountId: pack.id, detail: { topic } });
+    return { ok: true, message: 'נשמר. הפוסטים של "הסיפור שלי" ייכתבו ממה שכתבתם, במילים שלכם.', redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
+  }
   const fact = {
     quote: String(form.quote || '').replace(/\s+/g, ' ').trim(),
     source: String(form.source || '').trim().slice(0, 80),
@@ -519,7 +530,7 @@ export function removeRivalAction(ctx, user, _p, form) {
 export function saveSoundAction(ctx, user, _p, form) {
   const pack = ctx.pack(String(form.account || ''));
   if (!pack) throw new ActionError('אין חשבון כזה', 404);
-  const r = saveSound(ctx.db, pack.id, form, { by: user.name });
+  const r = saveSound(ctx.db, pack.id, form, { by: user.name, business: isBusiness(pack) });
   if (r.problems) throw new ActionError('הסאונד לא נשמר', 422, { problems: r.problems, values: { ...form } });
   audit(ctx.db, { actor: user.name, action: 'sound_added', accountId: pack.id, detail: { name: String(form.name || '').trim() } });
   return { ok: true, message: 'נוסף. הטיוטה הבאה בטיקטוק תקבל סאונד מהרשימה.', redirect: `/sounds?account=${encodeURIComponent(pack.id)}` };

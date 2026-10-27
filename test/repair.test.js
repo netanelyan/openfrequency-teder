@@ -1,5 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
@@ -173,6 +174,10 @@ test('a graphic that draws a number its slide\'s quotes do not hold is dropped w
 test('a caption in one paragraph and a title over its length are repaired together, in one call', async () => {
   const { home, cleanup } = tempHome();
   try {
+    // An account that tells its TikTok captions as the four-beat story (the default is one short line).
+    const file = path.join(home, 'packs', 'demo', 'pack.json');
+    const meta = JSON.parse(readFileSync(file, 'utf8'));
+    writeFileSync(file, JSON.stringify({ ...meta, writing: { ...meta.writing, captionStyle: 'story' } }, null, 2));
     const ctx = contextFor(home);
     const long = 'מה חיכה להם ביוני כשהם חזרו למשרד אחרי שלושה חודשים ארוכים של שיפוץ ושקט מוחלט';
     const w = writer(

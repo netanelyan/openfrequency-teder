@@ -7,13 +7,19 @@ import { familiesOf, resolveStyle, STYLES, themeColors } from './tokens.js';
 import { displayText, slideModel, sourcesOf, textHtml } from './model.js';
 import { BODY_FLOOR, STEP } from './fit.js';
 
-// The four slide styles, drawn (tokens.js has what each one sets, model.js what each slide shows).
+// The five slide styles, drawn (tokens.js has what each one sets, model.js what each slide shows).
 //
 // A styled slide is its own page, not a template inside the shared one (html.js): none of the shared furniture
-// comes with it. No outline or shadow on any letter, no progress bar, counter, dots or ghost numeral, no handle on
-// a slide (TikTok draws its own), and no blurred photograph: a slide with no photograph of its own stands on the
-// style's solid ground, its text moved up. Legibility comes from where the text sits: on the ground, on a card,
-// under a fade into the ground, or over a flat dark layer.
+// comes with it. No progress bar, counter, dots or ghost numeral, no handle on a slide (TikTok draws its own), and no
+// blurred photograph: a slide with no photograph of its own stands on the style's solid ground, its text moved up.
+// In A to D no letter has an outline or a shadow either: legibility comes from where the text sits, on the ground, on
+// a card, under a fade into the ground, or over a flat dark layer.
+//
+// E is the one exception, on purpose: its text over a photograph is drawn as TikTok's own text tool draws it, and
+// that tool's plain text is white with a thin dark edge (the "shadow" look; the "box" look, the default, is the tool's
+// white box behind each line and has none). A native slideshow looks like that; text that copies it without the edge
+// reads as a template's. The edge is thin and drawn under the letters (paint-order), never a glow or an outline
+// around a block, and only on E's own lines: every other letter of every style still has none.
 //
 // Every block of text is placed at the style's own position and kept out of the safe zones on all four sides
 // (src/rules/overlay.js SAFE_ZONES). The renderer (src/render/render.js) then fits it: a headline is set smaller in
@@ -25,7 +31,7 @@ export function themeOf(pack, name = null) {
   const spec = name ? { ...(pack.meta?.style || {}), name } : pack.meta?.style;
   if (!spec?.name || !STYLES[spec.name]) return pack.theme;
   const style = resolveStyle(spec, pack.theme?.colors?.accent);
-  return { ...pack.theme, style: { name: style.name, colors: style.colors } };
+  return { ...pack.theme, style: { name: style.name, colors: style.colors, ...(style.text ? { text: style.text } : {}) } };
 }
 
 /** The style a pack draws in, by name, or null for the older templates. */
@@ -41,8 +47,12 @@ export function geo(size, overlay = null) {
 
 const HEADS = new Set(['hook', 'title', 'ntitle']);
 
-/** One text block the renderer fits: its size, its floor, the lines it may take, in data attributes. */
-function txt(tag, cls, S, field, text, g, { highlight = '' } = {}) {
+/**
+ * One text block the renderer fits: its size, its floor, the lines it may take, in data attributes. In a style whose
+ * text is one inline run (E) its words are in a span, for the box behind each line; `pre` is HTML set before them in
+ * the same run (E's ranking place).
+ */
+function txt(tag, cls, S, field, text, g, { highlight = '', pre = '' } = {}) {
   const spec = S.text[field];
   if (!String(text || '').trim()) return '';
   const breaks = spec.breaks !== false;
@@ -51,8 +61,12 @@ function txt(tag, cls, S, field, text, g, { highlight = '' } = {}) {
   const writer = displayText(text, { breaks }).split('\n').length;
   const max = spec.lines || 99;
   const want = breaks ? Math.min(writer, max) : max;
-  return `<${tag} class="sf ${cls}${breaks ? '' : ' nb'}" style="font-size:${px}px" data-px="${px}" data-floor="${floor}" data-max="${max}" data-want="${want}" data-step="${HEADS.has(field) ? STEP : 2}">${textHtml(text, { breaks, highlight })}</${tag}>`;
+  const words = `${pre}${textHtml(text, { breaks, highlight })}`;
+  return `<${tag} class="sf ${cls}${breaks ? '' : ' nb'}" style="font-size:${px}px" data-px="${px}" data-floor="${floor}" data-max="${max}" data-want="${want}" data-step="${HEADS.has(field) ? STEP : 2}">${S.inline ? ln(words) : words}</${tag}>`;
 }
+
+/** One inline run of text: E draws its box behind each of the run's lines. */
+const ln = (html) => `<span class="ln">${html}</span>`;
 
 /** A number set large: it never breaks, and a long one is set smaller (down to 40%) to stay inside the slide. */
 const bigNum = (num, px, cls = 'num') => `<b class="sf ${cls}" style="font-size:${px}px" data-px="${px}" data-floor="${Math.round(px * 0.4)}" data-max="1" data-want="1" data-step="8" dir="ltr">${he(num)}</b>`;
@@ -310,12 +324,118 @@ ${BAND}
 .list li{font:400 32px/1.45 'Rubik';color:var(--muted)}
 `;
 
+/* -------------------------------------------------------------------------------------------------- E: native */
+
+// What a slideshow made in TikTok's own app looks like: the slide's own photograph over the whole screen, sharp and
+// whole (never framed, blurred or veiled), and over it a line or two in the middle of the screen, centred, as the
+// app's text tool sets them. On a box: each line on its own white box with rounded corners, the words near-black. Or
+// in white with a thin dark edge. A cover is its hook (and its line under it, small); a content slide is its title
+// and at most two short lines of text; a number slide's number is a line of its own, on a box of the accent.
+//
+// One thing a slide: a slide with a photograph shows the photograph, not its graphic as well; a slide with no
+// photograph stands on the solid ground, its graphic drawn there as every style draws it. The source is a line in
+// small type at the foot of the room the text has, faint: the account's credit, not a part of the design.
+
+// The room E's text has, top and bottom in px: the middle band of the slide (the safe zones, and the source's line at
+// its foot), or, when the photograph's screen found a face, the part of the band below the face or above it, whichever
+// is larger, so the words do not cover the eyes. object-position aligns the same point of the photograph and of the
+// slide, so the face's place on the slide is its place in the photograph (focusOf: "x% y%").
+function roomE(slide, g) {
+  const top = g.z.top;
+  const bottom = g.h - g.z.bottom - g.y(48);
+  const fy = slide.photo ? Number(/\s(\d+(?:\.\d+)?)%\s*$/.exec(String(slide.photoPos || ''))?.[1]) : NaN;
+  if (!Number.isFinite(fy)) return { top, bottom };
+  const face = (fy / 100) * g.h;
+  // About half a face's height on a portrait drawn to fill the slide: what is kept clear above or below its centre.
+  const clear = g.y(260);
+  const need = g.y(620);
+  const below = { top: Math.max(top, Math.min(bottom - need, face + clear)), bottom };
+  const above = { top, bottom: Math.min(bottom, Math.max(top + need, face - clear)) };
+  return below.bottom - below.top >= above.bottom - above.top ? below : above;
+}
+
+function drawE(m, slide, g, S) {
+  const photo = hasPhoto(slide);
+  const room = roomE(slide, g);
+  // A soft shade behind the text only, so white text reads on a bright photograph: its depth is measured on the
+  // photograph by the renderer (render.js, data-scrim) between these bounds, so a dark picture keeps all of its colour,
+  // and is the least of them where it cannot be measured (a head-to-head's two halves). A box carries its own ground:
+  // under it the shade is the faintest.
+  const box = slide.textLook !== 'shadow';
+  const [lo, hi] = box ? [0.06, 0.14] : [0.22, 0.5];
+  const mid = Math.round((room.top + room.bottom) / 2);
+  const under = photo ? `${photoHtml(slide, 'ph full')}<div class="ov" data-scrim data-min="${lo}" data-max="${hi}" style="--mid:${mid}px;--scrim:${lo}"></div>` : '';
+  const blk = (cls, inner) => `<div class="blk${cls}" style="bottom:${g.h - room.bottom}px">${inner}</div>`;
+  if (m.kind === 'cover') {
+    return {
+      bt: room.top,
+      html: `${under}${blk(' cov', `${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}`)}`,
+    };
+  }
+  // The closing slide stands in the middle of the band, as every other slide of E does.
+  if (m.kind === 'end') return { ...endHtml(m, g, S), bt: g.z.top };
+  const rank = S.rank && m.rank ? `<span class="rk">${he(m.rank)}.</span> ` : '';
+  const head = txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight, pre: rank });
+  // A number's line is one row that never breaks (the renderer sets a long one smaller), on a box of its own.
+  const unit = (u) => (u ? `<span class="unit">${he(u)}</span>` : '');
+  const num = m.kind === 'number'
+    ? m.sides
+      ? `<div class="sides">${m.sides.map((x) => `<div class="nrow"><span class="unit">${he(x.who)}</span>${bigNum(x.value, g.hs(84))}</div>`).join('')}</div>`
+      : `<div class="nrow">${unit(m.value.pre)}${bigNum(m.value.num, g.hs(S.text.number.px))}${unit(m.value.post)}</div>`
+    : '';
+  const body = m.kind === 'number' ? txt('p', 'bd', S, 'body', m.body, g) : m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g);
+  const cta = m.cta ? `<div class="cta">${ln(he(m.cta))}</div>` : '';
+  return {
+    bt: room.top,
+    html: `${under}${blk('', `${head}${num}${m.kind === 'text' && !photo ? gfx(m) : ''}${body}${cta}`)}${srcHtml(slide)}`,
+  };
+}
+
+const CSS_E = (g, S) => {
+  const t = S.tokens;
+  return `
+:root{--box:${t.box};--box-ink:${t.ink}}
+.ph.full{height:100%}
+/* Darkest behind the middle of the text's room (--mid, drawE), fading out to every side: a soft shade behind the
+   words, not a band across the photograph. */
+.ov{position:absolute;inset:0;background:radial-gradient(ellipse 78% ${g.y(460)}px at 50% var(--mid),rgba(0,0,0,var(--scrim,.3)) 0%,rgba(0,0,0,calc(var(--scrim,.3) * .7)) 50%,rgba(0,0,0,0) 100%)}
+.blk{justify-content:center;align-items:center;text-align:center;gap:${g.y(22)}px}
+.blk>.sf{max-width:100%}
+.blk.cov{gap:${g.y(30)}px}
+.blk>.gfx{align-self:stretch;text-align:right}
+.hl{font-family:'Heebo';font-weight:800;line-height:1.24;letter-spacing:-.5px;color:var(--fg)}
+.sub{font-family:'Heebo';font-weight:700;line-height:1.3;color:var(--fg)}
+.bd{font-family:'Heebo';font-weight:700;line-height:1.3;color:var(--fg)}
+.nrow{display:flex;align-items:baseline;gap:${g.hs(16)}px;white-space:nowrap;max-width:100%;padding:${g.y(4)}px ${g.hs(30)}px ${g.y(10)}px;border-radius:${g.hs(18)}px;color:var(--fg)}
+.num{font-family:'Heebo';font-weight:900;line-height:1.05;letter-spacing:-1px;white-space:nowrap;unicode-bidi:isolate}
+.unit{font:800 ${g.hs(52)}px/1.1 'Heebo';white-space:nowrap}
+.sides{display:flex;flex-direction:column;align-items:center;gap:${g.y(14)}px}
+.cta{font:800 ${g.hs(44)}px/1.3 'Heebo';color:var(--fg)}
+.list{align-items:center;gap:${g.y(12)}px}
+.list li{font:700 38px/1.3 'Heebo';color:var(--fg)}
+.src{position:absolute;right:${g.z.right}px;left:${g.z.left}px;bottom:${g.z.bottom}px;text-align:center;font:400 ${S.text.label.px}px/1.2 'Heebo';color:rgba(255,255,255,.62)}
+/* The box: each line of a run on its own white box, its corners rounded, as the app draws it. A highlight is a
+   highlighter's stroke of the accent inside it; a number's line is a box of the accent. */
+.tx-box .ln{background:var(--box);color:var(--box-ink);padding:.05em .3em .09em;border-radius:.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tx-box mark.hi{background:var(--accent);color:var(--on-accent);border-radius:.12em;padding:0 .06em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tx-box .nrow{background:var(--accent);color:var(--on-accent)}
+/* White with a thin dark edge (drawn under the letters, so half of it shows) and a soft shadow: the app's plain text.
+   On E's own lines only, past the rule that no other letter has one (base, .st *). */
+.st.st-E.tx-shadow .ln,.st.st-E.tx-shadow .ln *,.st.st-E.tx-shadow .nrow,.st.st-E.tx-shadow .nrow *{color:#fff;text-shadow:0 0 .1em rgba(0,0,0,.45),0 .03em .12em rgba(0,0,0,.55)!important;-webkit-text-stroke:.05em rgba(0,0,0,.6)!important;paint-order:stroke fill}
+/* The highlight's words in the accent; a number stays white, large enough to stand out by its size alone (an accent
+   of the account's own, set over any photograph, read badly on a dark one). */
+.st.st-E.tx-shadow .ln mark.hi,.st.st-E.tx-shadow .ln mark.hi *{color:var(--accent)}
+/* The source's line is small and faint; over a photograph it keeps a soft shadow, so it is there when it is looked for. */
+.st.st-E.has-photo .src,.st.st-E.has-photo .src *{text-shadow:0 1px 3px rgba(0,0,0,.6)!important}
+`;
+};
+
 /* --------------------------------------------------------------------------------------------- shared parts */
 
 /** A body that is a list (places 10 to 6, an iceberg's layer): one item a line, as its kind is checked. */
 function listHtml(body, S, g) {
   const ls = String(body || '').split(/\n+/).map((l) => l.trim()).filter(Boolean);
-  return ls.length ? `<ul class="list">${ls.map((l) => `<li>${he(displayText(l))}</li>`).join('')}</ul>` : '';
+  return ls.length ? `<ul class="list">${ls.map((l) => `<li>${S.inline ? ln(he(displayText(l))) : he(displayText(l))}</li>`).join('')}</ul>` : '';
 }
 
 /** The closing slide: its line, and the handle the account is followed at. */
@@ -326,8 +446,8 @@ function endHtml(m, g, S) {
   };
 }
 
-const DRAW = { A: drawA, B: drawB, C: drawC, D: drawD };
-const CSS = { A: CSS_A, B: CSS_B, C: CSS_C, D: CSS_D };
+const DRAW = { A: drawA, B: drawB, C: drawC, D: drawD, E: drawE };
+const CSS = { A: CSS_A, B: CSS_B, C: CSS_C, D: CSS_D, E: CSS_E };
 
 const base = (g, c, S) => `
 :root{
@@ -356,7 +476,8 @@ mark.hi{color:inherit;background:none}
 .src{color:var(--muted)}
 .list{list-style:none;display:flex;flex-direction:column;gap:14px}
 .handle{font:700 48px/1.2 var(--text);color:var(--accent)}
-/* No outline and no shadow on any letter, the shared graphics' included: the text reads by where it sits. */
+/* No outline and no shadow on any letter, the shared graphics' included: the text reads by where it sits. E's own
+   lines in its "shadow" look are the one exception, set over this in CSS_E. */
 .st *{text-shadow:none!important;-webkit-text-stroke:0!important}
 /* A slide with no photograph: its text moves up, into the middle of the room the photograph left. */
 .no-photo:not(.k-cover) .blk{justify-content:center}
@@ -366,7 +487,10 @@ mark.hi{color:inherit;background:none}
 /** The whole page of one styled slide. `slide.photo` (or `slide.split`) is its own photograph, when it has one. */
 export function stylePage({ theme, size, slide: given, overlay = null }) {
   const st = theme.style;
-  const slide = theme.options?.fullPhoto && st.name === 'A' ? { ...given, fullPhoto: true } : given;
+  const slide0 = theme.options?.fullPhoto && st.name === 'A' ? { ...given, fullPhoto: true } : given;
+  // E's text look (resolveStyle: "box" unless the pack asks for "shadow").
+  const look = st.name === 'E' ? (st.text === 'shadow' ? 'shadow' : 'box') : null;
+  const slide = look ? { ...slide0, textLook: look } : slide0;
   const S = STYLES[st.name];
   const g = geo(size, overlay);
   const m = slideModel(slide);
@@ -384,7 +508,7 @@ ${base(g, st.colors, S)}
 ${CSS[st.name](g, S)}
 ${VISUAL_CSS}
 </style></head>
-<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0">
+<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}${look ? ` tx-${look}` : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0">
 ${d.html}
 <div class="probe">א</div>
 </body></html>`;

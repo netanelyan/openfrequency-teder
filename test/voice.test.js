@@ -135,7 +135,7 @@ test("an account can ask for shorter slides than the engine allows, never longer
 });
 
 test('an account can ask for a short line under the cover and short, catchy captions', () => {
-  const pack = { meta: { writing: { sub: { maxChars: 60, sentences: 1 }, captionLong: { minChars: 60, maxChars: 220 }, captionShort: { maxChars: 150 } } }, rules: {}, voice: '', formats: { formats: [{ id: 'x', kind: 'story', name: 'x', about: 'a', weight: 1, hooks: [{ id: 'h', pattern: 'p', examples: [] }], ctas: [] }] } };
+  const pack = { meta: { writing: { captionStyle: 'story', sub: { maxChars: 60, sentences: 1 }, captionLong: { minChars: 60, maxChars: 220 }, captionShort: { maxChars: 150 } } }, rules: {}, voice: '', formats: { formats: [{ id: 'x', kind: 'story', name: 'x', about: 'a', weight: 1, hooks: [{ id: 'h', pattern: 'p', examples: [] }], ctas: [] }] } };
   assert.deepEqual([limitsFor('sub', pack).maxChars, limitsFor('captionLong', pack).minChars, limitsFor('captionShort', pack).maxChars], [60, 60, 150]);
   assert.equal(limitsFor('captionLong').minChars, 200, "the engine's own minimum is TikTok's long caption");
   assert.equal(limitsFor('captionLong', { meta: { writing: { captionLong: { minChars: 400 } } } }).minChars, 200, 'a pack cannot raise the minimum');
@@ -145,7 +145,9 @@ test('an account can ask for a short line under the cover and short, catchy capt
   const system = packBlock(pack).text;
   assert.match(system, /60 to 220 characters: short and catchy/);
   assert.match(system, /up to 150 characters, one catchy line/);
-  assert.match(packBlock({ ...pack, meta: {} }).text, /200 to 600 characters/);
+  assert.match(packBlock({ ...pack, meta: { writing: { captionStyle: 'story' } } }).text, /200 to 600 characters/);
+  // The default is the short caption: one line, the hook.
+  assert.match(packBlock({ ...pack, meta: {} }).text, /the TikTok caption is short: story\.hook is ONE line/);
   const user = slidesUser({ format: { kind: 'story', name: 's' }, n: 4, outline: { topic: 't', items: [] }, facts: [], pack });
   assert.match(user, /SUB: the line under the cover is at most 60 characters/);
 });
@@ -180,7 +182,10 @@ test('a heading has no colon and no label, but a score is a score', () => {
 });
 
 test('teasers, form Hebrew, translated Hebrew, ad words and engagement lines are refused', () => {
-  assert.ok(refused('5 הצמחים שהכי פחות צריכים מים, והראשון מפתיע', 'cover'));
+  // A cover may keep its number one for the last slide (COVER_GAP); a slide says its point.
+  assert.ok(!refused('5 הצמחים שהכי פחות צריכים מים, והראשון מפתיע', 'cover'));
+  assert.ok(refused('5 הצמחים שהכי פחות צריכים מים, והראשון מפתיע', 'slideTitle'));
+  assert.ok(refused('לא תאמינו מה קרה לפיקוס', 'cover'), 'an empty teaser is refused on the cover too');
   assert.ok(refused('אנחנו הולכים על אבלויב, והנה למה', 'slideTitle'));
   assert.ok(refused('לא תאמינו מה קרה לפיקוס'));
   assert.ok(refused('במידה והעציץ יבש, משקים'));

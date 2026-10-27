@@ -231,7 +231,8 @@ export function blockRates(ctx, t = now()) {
 export function factsFor(ctx, pack) {
   return readTopics(path.join(pack.dir, 'facts')).map((t) => ({
     ...t,
-    facts: t.facts.map((f) => ({ ...f, state: factState(f), problems: factProblems(f, { maxQuoteWords: pack.rules.maxQuoteWords || 40 }) })),
+    owner: t.owner,
+    facts: t.facts.map((f) => ({ ...f, state: factState(f, undefined, { owner: t.owner }), problems: factProblems(f, { maxQuoteWords: pack.rules.maxQuoteWords || 40, owner: t.owner }) })),
   }));
 }
 

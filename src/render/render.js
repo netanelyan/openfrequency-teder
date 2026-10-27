@@ -6,7 +6,7 @@ import { tokenOf } from '../verify/claims.js';
 import { page, SIZES } from './html.js';
 import { buildSlide, TEMPLATE_IMPL } from './templates/index.js';
 import { endParts } from './end.js';
-import { kindName, ranksOf } from '../formats/kinds.js';
+import { everyPhoto, kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
 import { overlayOf } from '../rules/overlay.js';
@@ -540,7 +540,8 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const overlay = overlayOf(pack);
   const noHandle = opts.handleTag === false;
   // The closing "follow" slide, when the account has one, takes the call to action off the last content slide.
-  const end = pack.meta.endSlide?.title ? pack.meta.endSlide : null;
+  // A post on a photograph a slide ends on its best slide instead (everyPhoto).
+  const end = pack.meta.endSlide?.title && !(format && everyPhoto(pack, format)) ? pack.meta.endSlide : null;
   const kindNow = format ? kindName(format) : 'list';
   // A do-dont's rules are someone else's guidance, under licences that ask for credit: its slides name their source
   // even on an account that keeps its sources off the slides.

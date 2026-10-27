@@ -46,6 +46,7 @@ test('every style draws a cover, a number slide and a text slide, on TikTok and 
   }
 });
 
+// E's default look (its text on white boxes) has none either: only its "shadow" look draws one, on its own lines.
 test('no outline and no shadow on any letter, and no progress bar, counter, dots or handle on a slide', async () => {
   const browser = await getBrowser();
   const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
@@ -207,7 +208,11 @@ test("a slide is a number slide when its point is a number, else a title and its
 
 test('pack.json style: the tokens, the brand colour over the accent unless it does not read, and the spread', () => {
   assert.deepEqual(styleConfigProblems({ name: 'B', accent: '#FFD23F' }), []);
-  assert.match(styleConfigProblems({ name: 'E' })[0], /style.name/);
+  assert.match(styleConfigProblems({ name: 'F' })[0], /style.name/);
+  assert.deepEqual(styleConfigProblems({ name: 'E' }), []);
+  assert.deepEqual(styleConfigProblems({ name: 'E', text: 'shadow' }), []);
+  assert.deepEqual(styleConfigProblems({ name: 'B', text: 'shadow' }), [], "kept beside another style, after a switch away from E");
+  assert.match(styleConfigProblems({ name: 'E', text: 'outline' }).join(' '), /style.text is "box" or "shadow"/);
   assert.match(styleConfigProblems({ name: 'C', panel: '#333333' }).join(' '), /needs 7:1/);
   assert.equal(resolveStyle({ name: 'B' }, '#FFD23F').colors.accent, '#FFD23F', 'the brand colour');
   assert.equal(resolveStyle({ name: 'C' }, '#FFD23F').colors.accent, STYLES.C.tokens.accent, 'yellow does not read on the light panel');
@@ -219,16 +224,22 @@ test('pack.json style: the tokens, the brand colour over the accent unless it do
 });
 
 test('onboarding suggests a style from the niche and the brand, away from a look-alike', () => {
-  assert.equal(suggestStyle({ niche: 'כדורגל' }).name, 'B');
+  // E wherever the account entertains, the niche's own style next; A for money and data.
+  assert.deepEqual(suggestStyle({ niche: 'כדורגל' }).ranked.slice(0, 2), ['E', 'B']);
+  assert.deepEqual(suggestStyle({ niche: 'UFC ואגרוף' }).ranked.slice(0, 2), ['E', 'B']);
+  assert.equal(suggestStyle({ niche: 'טיפים לבינה מלאכותית', topics: ['ChatGPT', 'Claude'] }).name, 'E');
+  assert.equal(suggestStyle({ niche: 'חנות בגדים' }).name, 'E');
   assert.equal(suggestStyle({ niche: 'סטארטאפים ומחירי מוצרים', topics: ['AI', 'founders'] }).name, 'A');
-  assert.equal(suggestStyle({ niche: 'מתכונים לילדים' }, { bg: '#FFF8F0' }).name, 'C');
-  assert.equal(suggestStyle({ niche: 'היסטוריה' }).name, 'D');
-  assert.equal(suggestStyle({ niche: 'תחביבים' }).name, 'D', 'the default');
-  assert.notEqual(suggestStyle({ niche: 'אופנה' }, { bg: '#050505' }).name, 'C', 'a strongly dark brand never gets C');
-  const other = { meta: { topics: ['כדורגל'], style: { name: 'B' } }, theme: { colors: { accent: '#FFC24D' } } };
+  assert.equal(suggestStyle({ niche: 'השקעות, מניות ומשכנתא' }).name, 'A');
+  const light = suggestStyle({ niche: 'מתכונים לילדים' }, { bg: '#FFF8F0' });
+  assert.deepEqual(light.ranked.slice(0, 2), ['E', 'C'], 'a light brand moves C up, to just behind E');
+  assert.deepEqual(suggestStyle({ niche: 'היסטוריה' }).ranked.slice(0, 2), ['E', 'D']);
+  assert.equal(suggestStyle({ niche: 'תחביבים' }).name, 'E', 'the default');
+  assert.equal(suggestStyle({ niche: 'אופנה' }, { bg: '#050505' }).ranked.at(-1), 'C', 'a strongly dark brand never gets C');
+  const other = { meta: { topics: ['כדורגל'], style: { name: 'E' } }, theme: { colors: { accent: '#FFC24D' } } };
   const s = suggestStyle({ niche: 'כדורגל' }, { accent: '#FFC850' }, [other]);
-  assert.notEqual(s.name, 'B', 'the second football account in a close colour gets the next best');
-  assert.equal(suggestStyle({ niche: 'כדורגל' }, { accent: '#2F6BFF' }, [other]).name, 'B', 'another colour may share the style');
+  assert.equal(s.name, 'B', 'the second football account in a close colour gets the next best');
+  assert.equal(suggestStyle({ niche: 'כדורגל' }, { accent: '#2F6BFF' }, [other]).name, 'E', 'another colour may share the style');
 });
 
 test('a style test is judged on views and engagement together, and not at all on too few posts', () => {
@@ -243,4 +254,159 @@ test("a preview's highlight is chosen in code only where a post has none: a numb
   assert.equal(previewHighlight('מי שווה הכי הרבה בעולם ה-AI?'), 'AI');
   assert.equal(previewHighlight('Thinking Machines Lab'), '');
   assert.equal(previewHighlight('הקרב שלא קרה'), '');
+});
+
+/* ------------------------------------------------------------------------------------------------ E: native */
+
+const themedE = (look) => themeOf({ ...pack, meta: { ...pack.meta, style: { name: 'E', ...(look ? { text: look } : {}) } } });
+const drawE = (look, slide, size = 'tiktok') => stylePage({ theme: themedE(look), size, slide });
+
+test('E, native: every slide in both looks, on TikTok and on Instagram 4:5, right to left Hebrew, inside the safe zones', async () => {
+  const all = { ...slides, photoText: { ...text, photo, sources: ['ויקיפדיה'] }, end: { kind: 'end', title: 'עוד סיפורים כאלה?', body: 'עקבו', handle: 'demo.bench' } };
+  for (const look of ['box', 'shadow']) {
+    for (const size of ['tiktok', 'instagram']) {
+      for (const [k, slide] of Object.entries(all)) {
+        const html = drawE(look, slide, size);
+        assert.match(html, /<html lang="he" dir="rtl">/);
+        assert.match(html, new RegExp(`class="st st-E [^"]*tx-${look}`));
+        // Not lenient: a line in a safe zone (the source's line at the foot too), or a text over its lines at its floor, throws.
+        const r = await renderHtml(html, { size, file: path.join(out, `E-${look}-${size}-${k}.jpg`) });
+        assert.ok(r.bytes > 0, `${look} ${size} ${k}`);
+        assert.deepEqual(r.warnings, []);
+      }
+    }
+  }
+});
+
+test("E's photograph fills the slide, sharp, with only a light shade behind the text; a slide with none stands on the solid ground", async () => {
+  const browser = await getBrowser();
+  const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  try {
+    for (const look of ['box', 'shadow']) {
+      for (const slide of [cover, number, { ...text, photo }]) {
+        await tab.setContent(drawE(look, slide));
+        const ph = await tab.evaluate(() => {
+          const img = document.querySelector('img.ph');
+          const r = img.getBoundingClientRect();
+          const cs = getComputedStyle(img);
+          const ov = document.querySelector('.ov');
+          return { box: [r.left, r.top, r.width, r.height], fit: cs.objectFit, filter: cs.filter, opacity: cs.opacity, imgs: document.querySelectorAll('img').length, max: Number(ov?.dataset.max) };
+        });
+        assert.deepEqual(ph.box, [0, 0, 1080, 1920], `${look} ${slide.kind}: full-bleed`);
+        assert.equal(ph.fit, 'cover');
+        assert.equal(ph.filter, 'none', 'never blurred');
+        assert.equal(ph.opacity, '1');
+        assert.equal(ph.imgs, 1, 'one photograph a slide');
+        assert.ok(ph.max <= 0.5, `${look}: the shade is light (${ph.max})`);
+      }
+      // A slide with no photograph: the solid ground, no image, no shade.
+      await tab.setContent(drawE(look, text));
+      assert.deepEqual(await tab.evaluate(() => [document.querySelectorAll('img, .ov').length, getComputedStyle(document.body).backgroundColor]), [0, 'rgb(18, 18, 18)']);
+    }
+  } finally {
+    await tab.close();
+  }
+});
+
+test('E: one thing a slide (a photograph wins over a graphic), no counter, label, handle or logo; a ranking keeps its place', () => {
+  const graphic = { kind: 'item', role: 'beat', postKind: 'story', n: 2, of: 4, pos: 2, title: 'מי כבש יותר', body: 'שני החלוצים, עונה אחת.', visual: { type: 'compare', title: '', a: 'הולאנד', b: 'קיין', style: '', items: [{ label: 'שערים', value: '36', value2: '30' }] } };
+  assert.match(drawE('box', graphic), /class="gfx"/, 'with no photograph the graphic is drawn on the ground');
+  assert.doesNotMatch(drawE('box', { ...graphic, photo }), /class="gfx"|class="vis/, 'with a photograph the photograph is the slide');
+  const clue = { kind: 'item', role: 'clue', postKind: 'guess-who', n: 2, of: 3, clues: 3, pos: 2, title: 'שיחק בשלוש ליגות', body: 'ובכל אחת זכה באליפות.', photo, handle: 'demo.bench', displayName: 'דמו', brand: photo };
+  const html = drawE('box', clue);
+  assert.doesNotMatch(html, /מתוך|רמז 2|@demo\.bench|class="(chip|track|count|dots|ghost|handle|handle-tag|brand|cue|key)"/);
+  assert.equal((html.match(/<img/g) || []).length, 1, 'no logo');
+  const ranked = { kind: 'item', role: 'rank', rank: 4, postKind: 'ranking', n: 2, of: 5, pos: 2, title: 'רונאלדו בריאל מדריד', body: 'שמונה עונות, ארבע אליפויות אירופה.', photo };
+  assert.match(drawE('box', ranked), /<span class="ln"><span class="rk">4\.<\/span> /, "the place before the title, in the title's own box");
+  assert.equal(slideModel(ranked).rank, '4');
+  // The check measures the title with its place before it.
+  const S = STYLES.E.text.title;
+  const title = 'מקום ארבע ברשימה הארוכה של כל הזמנים';
+  const draft = (rank) => ({ hook: 'x', slides: [{ kind: 'cover' }, { kind: 'item', role: 'rank', postKind: 'ranking', title, body: '' }], rank });
+  const alone = fitText(title, S, { box: boxFor(S) });
+  const withPlace = fitText(`4. ${title}`, S, { box: boxFor(S) });
+  assert.ok(withPlace.lines >= alone.lines);
+  assert.deepEqual(styleFitProblems(draft(), { style: 'E', places: [{}, { rank: 4 }], postKind: 'ranking' }).length, withPlace.ok ? 0 : 1);
+});
+
+test("E's two looks: white boxes behind each line (no shadow), or white text with a thin dark edge on E's own lines only", async () => {
+  const browser = await getBrowser();
+  const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  try {
+    await tab.setContent(drawE('box', { ...text, photo, sources: ['ויקיפדיה'] }));
+    const box = await tab.evaluate(() => {
+      const ln = getComputedStyle(document.querySelector('.hl .ln'));
+      const lit = (el) => getComputedStyle(el).textShadow !== 'none' || parseFloat(getComputedStyle(el).webkitTextStrokeWidth) > 0;
+      return { bg: ln.backgroundColor, color: ln.color, clone: ln.boxDecorationBreak || ln.webkitBoxDecorationBreak, radius: parseFloat(ln.borderTopLeftRadius), shadows: [...document.querySelectorAll('.blk, .blk *')].filter(lit).length };
+    });
+    assert.equal(box.bg, 'rgb(255, 255, 255)');
+    assert.equal(box.color, 'rgb(17, 17, 17)');
+    assert.equal(box.clone, 'clone', 'a box for each line');
+    assert.ok(box.radius > 0, 'rounded');
+    assert.equal(box.shadows, 0, 'the box look has no shadow');
+    await tab.setContent(drawE('shadow', { ...number, sources: ['ויקיפדיה'] }));
+    const sh = await tab.evaluate(() => {
+      const ln = getComputedStyle(document.querySelector('.hl .ln'));
+      const lit = (el) => getComputedStyle(el).textShadow !== 'none' || parseFloat(getComputedStyle(el).webkitTextStrokeWidth) > 0;
+      const other = [...document.querySelectorAll('body *')].filter((el) => !el.closest('.ln,.nrow,.src,style,title') && lit(el));
+      return { color: ln.color, shadow: ln.textShadow, stroke: parseFloat(ln.webkitTextStrokeWidth), size: parseFloat(ln.fontSize), bg: ln.backgroundColor, other: other.length };
+    });
+    assert.equal(sh.color, 'rgb(255, 255, 255)');
+    assert.notEqual(sh.shadow, 'none');
+    assert.ok(sh.stroke > 0 && sh.stroke < sh.size * 0.08, `a thin edge (${sh.stroke}px)`);
+    assert.equal(sh.bg, 'rgba(0, 0, 0, 0)');
+    assert.equal(sh.other, 0, "no letter outside E's own lines has a shadow");
+    // The source: small, faint, under the text, never in the bottom band.
+    await tab.setContent(drawE('box', { ...text, photo, sources: ['ויקיפדיה'] }));
+    const src = await tab.evaluate(() => {
+      const el = document.querySelector('.src');
+      const cs = getComputedStyle(el);
+      return { px: parseFloat(cs.fontSize), color: cs.color, bottom: el.getBoundingClientRect().bottom, text: document.querySelector('.bd').getBoundingClientRect().bottom };
+    });
+    assert.ok(src.px <= 24, `small (${src.px}px)`);
+    assert.match(src.color, /rgba\(255, 255, 255, 0\.[0-7]\d*\)/, 'faint');
+    assert.ok(src.bottom <= 1920 - SAFE_ZONES.tiktok.bottom && src.bottom > src.text, 'below the text, above the band');
+  } finally {
+    await tab.close();
+  }
+});
+
+test("E: the cover's hook is set large and centred in the middle band, and the text moves off a face the screen found", async () => {
+  assert.ok(STYLES.E.text.hook.px >= 76 && STYLES.E.text.hook.px <= 96 && STYLES.E.text.hook.floor >= 76);
+  assert.ok(STYLES.E.text.title.px >= 60 && STYLES.E.text.title.px <= 72);
+  assert.equal(STYLES.E.text.tbody.lines, 2);
+  const browser = await getBrowser();
+  const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  try {
+    await tab.setContent(drawE('box', cover));
+    const mid = await tab.evaluate(() => {
+      const r = document.querySelector('.hl').getBoundingClientRect();
+      return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, align: getComputedStyle(document.querySelector('.hl')).textAlign };
+    });
+    assert.ok(Math.abs(mid.x - 540) < 2, 'centred across');
+    assert.equal(mid.align, 'center');
+    const band = (SAFE_ZONES.tiktok.top + 1920 - SAFE_ZONES.tiktok.bottom) / 2;
+    assert.ok(Math.abs(mid.y - band) < 120, `in the middle band (${Math.round(mid.y)})`);
+    // A face at 35% of the slide: the text goes below it.
+    await tab.setContent(drawE('box', { ...cover, photoPos: '50% 35%' }));
+    const top = await tab.evaluate(() => document.querySelector('.hl').getBoundingClientRect().top);
+    assert.ok(top > 0.35 * 1920 + 150, `below the face (${Math.round(top)})`);
+  } finally {
+    await tab.close();
+  }
+  const r = await renderHtml(drawE('box', { ...cover, photoPos: '50% 35%' }), { size: 'tiktok', file: path.join(out, 'E-face.jpg') });
+  assert.deepEqual(r.warnings, []);
+});
+
+test("E is chosen in pack.json and carries its look; the other styles' looks are hashed as before", () => {
+  assert.ok(STYLE_NAMES.includes('E'));
+  assert.equal(themedE().style.text, 'box', 'the box is the default');
+  assert.equal(themedE('shadow').style.text, 'shadow');
+  assert.equal('text' in themed('D').style, false, 'no new key on another style, so its saved look is unchanged');
+  assert.equal('text' in themeOf({ ...pack, meta: { ...pack.meta, style: { name: 'B', text: 'shadow' } } }).style, false);
+  const a = { ...pack, dirName: 'demo', meta: { ...pack.meta, style: { name: 'E', text: 'shadow' } } };
+  assert.deepEqual(validatePack(a).filter((p) => /style/.test(p)), []);
+  // The writer is told E's room, from E's own faces' widths (metrics.json has them).
+  assert.ok(fitText('ה', STYLES.E.text.hook, { box: boxFor(STYLES.E.text.hook) }).chars > 10);
+  assert.match(styleFitProblems({ hook: 'מי שווה הכי הרבה בעולם ה-AI? חמש חברות, מדד אחד ושווי אחד שמשנה את כל התמונה של השוק והכל', sub: '', slides: [{ kind: 'cover' }] }, { style: 'E' })[0]?.msg || '', /Shorten it/);
 });

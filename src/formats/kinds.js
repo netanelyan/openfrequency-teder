@@ -127,6 +127,37 @@ export const KINDS = {
     cta: 'save',
     prompt: `do-dont: 4 to 6 rules on one subject (a sign-up form, a landing page, a prompt, keeping a key secret), one rule a slide, each from the guidance in the documents. A "rule" slide's title is the rule in a few spoken words, said as what to do ("תכתבו בתוך השדה איך התשובה נראית"); its body one short line on why, sourced. Its visual is a "dodont": the same small screen drawn twice, wrong and right, so the reader sees the rule before reading it; the design labels the two sides and numbers the rules. The two sides differ only where the rule is, and everything else on them is the same. The screens are made-up examples of an app the reader might build (never a real product's screen, name or logo). The cover names the subject and how many rules ("5 טעויות בטופס הרשמה שמבריחות משתמשים") and gives no rule away. Never number a rule yourself, and never write "לא" or "כן" as a label: the design draws them.`,
   },
+  // The three kinds below are the shapes the slideshows that spread on TikTok take (25 of them read slide by slide,
+  // 20 over 500K views): separate surprising facts counted down to the best one (every football and MMA hit), a
+  // list worth saving (the AI and money hits, saved more than they were liked), and the owner's own story told with
+  // their own numbers on their own photographs (every small-business hit). Each slide is one short line on its own
+  // photograph (photo: 'every'), the strongest last, and no slide of its own for a call to action.
+  facts: {
+    group: 'entertaining',
+    name: 'עובדות שלא ידעתם',
+    segments: [['fact', 4, 7]],
+    photo: 'every',
+    cta: 'send',
+    prompt: `facts: 4 to 7 separate surprising facts about one subject the audience already cares about (a club, a league, a fighter, the UFC, a product), counted down from good to best: the last "fact" slide is the one they will send to a friend. Each fact stands on its own: a reader who sees only that slide gets it, with its name, its number and what makes it strange. Its title IS the fact, said the way a fan says it in one breath ("חביב נורמגומדוב לא דימם באף קרב בקריירה", "ליגת העל לא ראתה אלופה שלוש שנים ברצף מאז 1999"): 6 to 12 words. Its body is empty, or one short line that makes it land (at most 10 words). Never a fact every fan knows, never two facts about the same moment, never a list of trophies. Each slide names a different person, team or moment where the documents allow, and its imageQuery is the person or place it is about, by name, so it stands on its own photograph. The cover says how many and what about ("7 דברים שלא ידעתם על ליגת העל") and gives none of them away.`,
+  },
+  tips: {
+    group: 'number',
+    name: 'רשימה לשמור',
+    segments: [['tip', 4, 7]],
+    photo: 'every',
+    cta: 'save',
+    prompt: `tips: 4 to 7 things the reader will save to use later (prompts to copy, tools, settings, steps, rights, deadlines), each one from the guidance in the documents. A "tip" slide's title names it in 2 to 6 words ("פרומפט שמסכם פגישה ב-5 שורות", "הכפתור שמכבה את ההיסטוריה"); its body is the exact thing to do or copy, complete enough to use without the source (at most 35 words): the reader saves the post for these lines. Every tip is concrete and specific, never advice everyone gives ("תהיו עקביים"). The order goes from useful to the most useful, the best last. The cover says how many and what they get ("5 פרומפטים שחוסכים שעה ביום") and gives none of them away.`,
+  },
+  'owner-story': {
+    group: 'entertaining',
+    name: 'הסיפור שלי',
+    segments: [['moment', 4, 6], ['lesson', 0, 1]],
+    factFree: ['lesson'],
+    photo: 'every',
+    owner: true,
+    cta: 'comment',
+    prompt: `owner-story: the business owner tells their own story in the first person, from what THEY wrote down (the facts marked as the owner's own): the mistakes they made, what happened after a year, what nobody told them before they opened, the numbers they wish they had known. 4 to 6 "moment" slides, one each: the title is the moment in the owner's own words, with its real number when the fact has one ("מכרנו ב-100 אלף ושקל ועדיין הפסדנו", "קניתי מקרר יד שנייה ב-4,000 שקל והוא מת אחרי חודש"): 5 to 14 words. Body empty or one short line. The order builds to the strongest or the most honest one. An optional last "lesson" slide says what they would tell someone opening the same business, in one or two short lines, no moral, no sales pitch: the business is never sold on a slide (the post is the pitch). Only what the owner's facts say: never an experience, a number or a customer the facts do not hold. Each slide's imageQuery describes one of the owner's own photographs (the shop, the product, the owner at work) in the words its description uses.`,
+  },
   list: {
     group: 'number',
     name: 'רשימה',
@@ -138,6 +169,14 @@ export const KINDS = {
 };
 
 export const isKind = (k) => Object.hasOwn(KINDS, k);
+
+/**
+ * Does every slide of this post stand on its own photograph? The kinds made for it (photo: 'every') and any post drawn
+ * in the native style (E), which is a photograph a slide with a line of text on it. Such a post ends on its best
+ * slide: no call to action is drawn on it and no closing "follow" slide follows it (17 of the 25 slideshows that
+ * spread ended on their last item, and one of the 19 outside Israel on a request to follow).
+ */
+export const everyPhoto = (pack, format, style = null) => kindOf(format).photo === 'every' || (style || pack?.meta?.style?.name) === 'E';
 
 /** A format's kind (formats.json "kind", or the phase 1 list). */
 export const kindOf = (format) => KINDS[format?.kind] || KINDS.list;
@@ -207,6 +246,17 @@ export function shapeProblems(format, roles) {
 }
 
 const SLIDE_TOTAL = (format, content) => 1 + content + (kindOf(format).closer ? 1 : 0);
+
+/** Words a reader counts on a slide: a number is one. */
+const wordsIn = (s) => String(s || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+
+const COUNT_WORDS = { שניים: 2, שתיים: 2, שני: 2, שתי: 2, שלושה: 3, שלוש: 3, ארבעה: 4, ארבע: 4, חמישה: 5, חמש: 5, שישה: 6, שש: 6, שבעה: 7, שבע: 7, שמונה: 8 };
+
+/** The count a cover promises ("7 דברים", "חמש טעויות"), or null. */
+export function countOnCover(text) {
+  const m = String(text || '').match(/(?:^|\s)(\d+|שניים|שתיים|שני|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש|שישה|שש|שבעה|שבע|שמונה)\s+(?:דברים|עובדות|טעויות|טיפים|כללים|פרומפטים|כלים|סודות|שיאים|רגעים|שאלות|תובנות|הגדרות|קיצורים|זכויות)/);
+  return m ? Number(COUNT_WORDS[m[1]] ?? m[1]) : null;
+}
 
 /** The lines of a slide's body, for the kinds that hold several facts on one slide. */
 export const linesOfBody = (body) => String(body || '').split(/\n+/).map((l) => l.trim()).filter(Boolean);
@@ -285,6 +335,31 @@ export function kindProblems(format, post) {
     if (said != null && said !== rules) out.push(`the cover promises ${said} and the post has ${rules} rules: make them match`);
   }
   if (name === 'iceberg') content.forEach((s, i) => linesOfBody(s.body).length > 3 && out.push(`slide ${i + 1}: a layer holds 1 to 3 short lines`));
+  // One short line on a photograph: the football and MMA slideshows that spread hold 5 to 15 words a slide.
+  const WORDS_CAP = { facts: { fact: [14, 10] }, tips: { tip: [8, 40] }, 'owner-story': { moment: [16, 12], lesson: [16, 20] } }[name];
+  if (WORDS_CAP) {
+    content.forEach((s, i) => {
+      const cap = WORDS_CAP[s.role];
+      if (!cap) return;
+      if (wordsIn(s.title) > cap[0]) out.push(`slide ${i + 1}: the title has ${wordsIn(s.title)} words: ${cap[0]} at most, one line a reader takes in at a glance`);
+      if (wordsIn(s.body) > cap[1]) out.push(`slide ${i + 1}: the text has ${wordsIn(s.body)} words: ${cap[1]} at most${cap[1] <= 12 ? ', or none' : ''}`);
+    });
+    // "7 דברים שלא ידעתם" over six facts read as a mistake to every reader who counted.
+    const role = Object.keys(WORDS_CAP)[0];
+    const n = content.filter((s) => s.role === role).length;
+    const said = countOnCover(`${post.hook} ${post.sub}`);
+    if (said != null && said !== n) out.push(`the cover promises ${said} and the post has ${n}: make them match`);
+    // A countdown's cover is its count and its subject ("7 עובדות על ה-UFC שלא ידעתם"): a live run put the best fact,
+    // the last slide's "17 ברצף", on the cover, and nothing was left to swipe for.
+    if (name !== 'owner-story') {
+      if (said == null) out.push(`the cover says how many and what about ("${n} דברים שלא ידעתם על ...", "${n} ${name === 'tips' ? 'פרומפטים' : 'עובדות'} ש..."): a ${name} cover is its count and its subject`);
+      const best = [...content].reverse().find((s) => s.role === role);
+      const bestNums = new Set(best ? [...numbersIn(`${best.title} ${best.body}`, { hebrew: true })] : []);
+      bestNums.delete(String(n));
+      const spoiled = [...numbersIn(`${post.hook} ${post.sub}`, { hebrew: true })].filter((x) => bestNums.has(x));
+      if (spoiled.length) out.push(`the cover states ${spoiled.join(', ')}, the last slide's number: the best item is kept for the end, the cover never gives it away`);
+    }
+  }
   if (name === 'myth-fact') {
     content.forEach((s, i) => {
       if (s.role !== 'myth') return;
@@ -308,6 +383,9 @@ export function structureNumbers(format, content) {
   if (name === 'myth-fact') out.add(String(content.filter((s) => s.role === 'myth').length));
   if (name === 'iceberg') out.add(String(content.length));
   if (name === 'do-dont') out.add(String(content.filter((s) => s.role === 'rule').length));
+  if (name === 'facts') out.add(String(content.filter((s) => s.role === 'fact').length));
+  if (name === 'tips') out.add(String(content.filter((s) => s.role === 'tip').length));
+  if (name === 'owner-story') out.add(String(content.filter((s) => s.role === 'moment').length));
   return out;
 }
 
