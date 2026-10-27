@@ -88,6 +88,51 @@ works without JavaScript, and adds to a phone's home screen. Its mark is Teder's
 wave on violet; the footer carries the company's, OpenFrequency's halftone on blue
 (both from [`assets/brand`](assets/brand/README.md)).
 
+### For the services on this machine
+
+Three routes answer the other OpenFrequency services on the VPS, never a browser: a
+loopback socket only, `Authorization: Bearer $OF_INTERNAL_TOKEN` (the value
+openfrequency-accounts has, 32 characters or more), and no `X-Forwarded-For`, so Caddy
+never passes them on. Anything else is `403 {"ok":false,"error":"forbidden"}`, and no
+answer is cached. The WhatsApp assistant's own API is apart, signed with
+`OF_ASSISTANT_SECRET` ([docs/assistant-api.md](docs/assistant-api.md)).
+
+| Route | Who asks | |
+|---|---|---|
+| `POST /internal/lead` | the website's lead service | a store asked for a demo (`src/web/demos.js`) |
+| `GET /internal/demos` | Toran's dashboard | every demo and its opens |
+| `GET /internal/setup?workspace=<id>` | accounts' `/setup` page | the workspace's setup steps in Teder (`src/web/setup.js`) |
+
+`/internal/setup` answers the contract accounts and Toran share:
+
+```json
+{ "product": "teder", "ready": false, "steps": [
+  { "key": "account", "title": "פותחים חשבון", "status": "done", "detail": "מטבח ירוק", "href": null, "required": true },
+  { "key": "sources", "title": "בוחרים מקורות", "status": "done", "detail": "4 מקורות מאושרים.", "href": null, "required": true },
+  { "key": "samples", "title": "עוברים על פוסטים לדוגמה", "status": "todo", "detail": "חמשת הפוסטים מוכנים ומחכים שתעברו עליהם.", "href": "https://teder.openfrequency.co.il/new/o_123", "required": true },
+  { "key": "live", "title": "מעלים לאוויר", "status": "todo", "detail": "", "href": null, "required": true },
+  { "key": "tiktok", "title": "מחברים את טיקטוק", "status": "todo", "detail": "...", "href": "https://teder.openfrequency.co.il/new/o_123#connect-green-kitchen", "required": false },
+  { "key": "instagram", "title": "מחברים את אינסטגרם", "status": "soon", "detail": "...", "href": null, "required": false } ] }
+```
+
+`status` is `todo`, `working`, `done`, `attention` or `soon`; `detail` is one short
+sentence, or `""`; `href` is the Teder page where the step is done, on
+`https://<PUBLIC_HOST>` (the address the request came to on a laptop), or null when
+there is nothing to open yet; `ready` is every required step done. The steps follow the
+new-account flow: **account** is `todo` (to `/new`) with nothing started, `working` while
+sources are searched for, `attention` when the search failed, and done once the pack is
+written; **sources** is `todo` on the onboarding page while the sources wait to be picked;
+**samples** is `working` while the five samples are written, `todo` while they wait to be
+made or looked over, done once reviewed; **live** is done when the account is active, and
+`attention` when it is paused. **tiktok** and **instagram** are optional, one for each
+platform the account publishes to: done when connected (or Instagram through Teder's own
+Meta app), `attention` when Zernio says reconnect, `todo` with a link to the connect panel
+(the onboarding page while the account is in onboarding, then the account page), and
+`soon` while `ZERNIO_API_KEY` is not set. A workspace with several accounts is reported
+on one: its newest account on air (active, else paused), and without one its newest
+onboarding still under way. A workspace id Teder has never seen is a new workspace with
+nothing; one that is not a positive integer is `400 bad_workspace`.
+
 ## How a post is made
 
 ```

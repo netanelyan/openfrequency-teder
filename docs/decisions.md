@@ -1656,3 +1656,15 @@ engine can act on, and what changed:
     mechanisms), `add` (its own templates, in the same syntax, validated for their slots,
     the plural, and no invented experience) and `off`. The demo speaks in the masculine,
     names "המוכר במשתלה" and "סבתא", and turns off "told-wrong".
+
+- **Accounts' setup checklist reads Teder's steps (2026-10-27).** openfrequency-accounts
+  gets a public sign-up and one checklist page, `/setup`, that asks each product for a
+  workspace's steps and links each one to the product's own page (the session cookie is
+  shared across `*.openfrequency.co.il`). Teder answers `GET /internal/setup?workspace=<id>`
+  under the checks `/internal/demos` has (the `OF_INTERNAL_TOKEN` bearer, a loopback socket,
+  no `X-Forwarded-For`), in the contract accounts and Toran share (README, "For the services
+  on this machine"). The steps are read from what is already kept (the onboarding row, the
+  account's status, the samples, `zernio_connections`); nothing new is stored. A workspace
+  with several accounts is reported on one, its newest account on air and else its newest
+  onboarding, so a setup once done stays done when a second account is added: the
+  checklist is about getting started, and each account's own state stays on its pages.

@@ -22,6 +22,7 @@ import { latestNotification } from '../notify/index.js';
 import { assistantApi, isAssistantPath } from '../assistant/api.js';
 import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
 import { connectRoutes, goPage, publicConnect } from './connect.js';
+import { setupFeed } from './setup.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -39,7 +40,8 @@ import { connectRoutes, goPage, publicConnect } from './connect.js';
 //   - every POST carries the CSRF token derived from its session, and an Origin
 //     that is ours; a read-only session (the operator viewing as a customer)
 //     changes nothing
-// Three doors need no session. /internal/assistant/* is the WhatsApp assistant's
+// /internal/lead, /internal/demos and /internal/setup are for services on this machine with OF_INTERNAL_TOKEN
+// (src/web/demos.js fromWebsite, src/web/setup.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
 // API (src/assistant/api.js): this machine only, never through the proxy, every
 // request signed. /m/... is one rendered slide behind a signed link that expires,
 // handed out by that API for WhatsApp to fetch. /connect/<account>/<platform> is the
@@ -243,6 +245,12 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
       // pages' address is the public name's; without one (a laptop), the address this request came to.
       if (req.method === 'GET' && p === '/internal/demos') {
         const [status, body] = demosFeed(ctx, req, env, { origin: publicHost ? `https://${publicHost}` : `http://${host}` });
+        return json(req, res, status, body);
+      }
+      // Accounts' setup checklist asks for a workspace's steps here (src/web/setup.js): the same checks, and each step's
+      // page under the public name, where the browser goes with the session it already has.
+      if (req.method === 'GET' && p === '/internal/setup') {
+        const [status, body] = setupFeed(ctx, req, env, { base: publicHost ? `https://${publicHost}` : `http://${host}`, query: url.searchParams });
         return json(req, res, status, body);
       }
 
