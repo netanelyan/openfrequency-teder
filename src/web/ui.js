@@ -206,6 +206,7 @@ export const STATUS_HE = {
   rejected: ['נדחה', 'ghost'],
   blocked: ['נחסם', 'bad'],
   failed: ['נכשל', 'bad'],
+  held: ['מחכה לחיבור', 'warn'],
   expired: ['פג תוקף', 'ghost'],
   sample: ['דוגמה', 'warn'],
   taken_down: ['הוסר אחרי הודעה', 'bad'],

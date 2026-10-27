@@ -145,7 +145,8 @@ function snapshotB() {
     onboarding: db.all('SELECT * FROM onboarding WHERE workspace_id = 2 ORDER BY id'),
     demos: db.all('SELECT * FROM demos ORDER BY id'),
     assistant: db.all('SELECT * FROM assistant_prefs WHERE workspace_id = 2'),
-    settings: db.all('SELECT key, value_json FROM settings ORDER BY key'),
+    // A's own email choices are A's to change; what accounts said of each workspace's payment is kept as it is asked.
+    settings: db.all("SELECT key, value_json FROM settings WHERE key != 'email:prefs:1' AND key NOT LIKE 'entitlement:%' ORDER BY key"),
     facts: existsSync(factsDir) ? readdirSync(factsDir).map((f) => [f, readFileSync(path.join(factsDir, f), 'utf8')]) : [],
   });
 }
@@ -232,6 +233,8 @@ const casesFor = () => {
     ['/accounts/bravo/kill'],
     ['/accounts/bravo/resume'],
     ['/accounts/bravo/quota', { suggested: '1', redos: '0', cap: '0' }],
+    // The days and times B posts on are B's to choose.
+    ['/accounts/bravo/schedule', { day_1: 'on', t1_1: '10:00' }],
     // Connecting B's TikTok or Instagram, reading B's connections, or setting how B's TikTok goes out: B's alone.
     ['/accounts/bravo/connect/tiktok'],
     ['/accounts/bravo/connect/instagram'],
@@ -267,11 +270,14 @@ const casesFor = () => {
     ['/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/alpha-browser' }, { ownOk: true }],
     // The WhatsApp assistant's choices are the session's workspace's: A sets A's, whatever the form names.
     ['/settings/whatsapp', { workspace: '2', 'ev_post.ready': '1', quiet_nights: '1' }, { ownOk: true }],
+    // The email choices too: A turning emails off turns off A's.
+    ['/settings/email', { workspace: '2', em_weekly: '1' }, { ownOk: true }],
     ['/new', { niche: 'AlphaNiche' }, { ownOk: true }],
     [`/new/${B.onboarding}/create`, { displayName: 'A in B', handle: 'a.in.b' }],
     [`/new/${B.onboarding}/samples`],
     [`/new/${B.onboarding}/reviewed`],
     [`/new/${B.onboarding}/live`],
+    [`/new/${B.onboarding}/retry`],
     // A store's demo is the operator's alone: no customer approves, rewrites or takes one down, or sets its price.
     [`/demos/${B.demo}/approve`],
     [`/demos/${B.demo}/redo`],

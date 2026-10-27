@@ -6,7 +6,7 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { listen } from '../src/web/server.js';
-import { fromWebsite, running } from '../src/web/demos.js';
+import { fromWebsite, joinUrl, running } from '../src/web/demos.js';
 import { checkDraft, checkFact } from '../src/demos/write.js';
 import { readArticles } from '../src/demos/build.js';
 import { storeDocument } from '../src/demos/store.js';
@@ -239,23 +239,32 @@ test('the price the operator sets is on the store\'s page, VAT and the setup fee
   assert.ok(page.includes('מה כלול במחיר'));
 });
 
-test("the store's page says the team fits Teder to the business and connects it, with the systems' marks, before the price", async () => {
+test("the store's page says what the sample is and what Teder does, promises no work by hand, before the price", async () => {
   const d = demo();
   const page = await (await get(`/s/${d.slug}`)).text();
   const sec = page.match(/<section class="links" aria-labelledby="links-h">[\s\S]*?<\/section>/)?.[0];
   assert.ok(sec, 'the section');
   assert.ok(page.indexOf(sec) < page.indexOf('<section class="price"'), 'before the price card');
   assert.ok(page.indexOf(sec) > page.indexOf('id="show"'), 'after the slideshow');
-  assert.ok(sec.includes('<h2 id="links-h">מותאם לעסק שלכם. החיבורים עלינו.</h2>'));
-  assert.ok(sec.includes('ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.'), 'the lede, at no extra cost');
-  assert.ok(sec.includes('את ההדגמה הזו תדר בנה מהמוצרים שבאתר שלכם: חנות ב-Shopify, ב-WooCommerce או ב-Wix הוא קורא לבד.'), 'what it reads on its own, said as it is');
-  for (const name of ['TikTok', 'Instagram', 'Facebook', 'YouTube', 'Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva'])
-    assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
-  assert.ok(sec.includes('<li class="wide" title="WooCommerce">'), 'the wordmark on a wider tile');
-  assert.ok(sec.includes('<span>וכל חיבור נוסף שתרצו וקיים בעולם</span>'), 'the tile for anything else');
-  assert.ok(sec.includes('<h3>וכשצריך משהו שעוד לא קיים, מפתחים אותו.</h3>'), 'the note');
-  assert.ok(sec.includes('הצוות שבנה את תדר בונה גם אותם, וגם זה כלול בשירות.'));
+  assert.ok(sec.includes('<h2 id="links-h">בתדר אתם בוחרים על מה החשבון כותב</h2>'));
+  assert.ok(sec.includes('את המצגת הזו תדר כתב מהאתר שלכם'), 'the sample is from their site');
+  assert.ok(sec.includes('בוחרים לו נושא, ותדר כותב עליו מצגות מתוך מקורות שאתם מאשרים'), 'in Teder they choose the subject');
+  assert.ok(sec.includes('ואין בהן המלצות על מוצרים'), 'and Teder never recommends products');
+  for (const name of ['TikTok', 'Instagram']) assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
+  for (const name of ['Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva']) assert.ok(!sec.includes(`aria-label="${name}"`), `no ${name}: Teder does not connect to it`);
+  for (const promise of ['החיבורים עלינו', 'וכל חיבור נוסף', 'מפתחים אותו', 'הצוות', 'כלול בשירות', 'בנה מהמוצרים']) assert.ok(!page.includes(promise), `no "${promise}"`);
+  assert.ok(sec.includes('<h3>ככה מתחילים</h3>'), 'how one starts, on their own');
+  assert.ok(page.includes('פרסום בימים ובשעות שאתם בוחרים. בשבת ובחג לא מפרסמים'), 'the days and times are theirs');
   assert.doesNotMatch(sec, /style=|<img|https?:\/\//, 'inline SVG only, no inline style and nothing loaded from elsewhere');
+});
+
+test("the page's button goes to accounts' sign-up once it is open, and to the website's /join until then", () => {
+  assert.equal(joinUrl({}), 'https://openfrequency.co.il/join?p=teder', 'closed by default');
+  assert.equal(joinUrl({ OF_SIGNUP_URL: 'https://accounts.example.test/signup' }), 'https://openfrequency.co.il/join?p=teder', 'an address alone does not open it');
+  assert.equal(joinUrl({ OF_SIGNUP_OPEN: '1' }), 'https://accounts.openfrequency.co.il/signup', 'open, the default address');
+  assert.equal(joinUrl({ OF_SIGNUP_OPEN: '1', OF_SIGNUP_URL: 'https://accounts.example.test/signup?p=teder' }), 'https://accounts.example.test/signup?p=teder');
+  assert.equal(joinUrl({ OF_SIGNUP_OPEN: '1', OF_SIGNUP_URL: 'javascript:alert(1)' }), 'https://openfrequency.co.il/join?p=teder', 'only an https address');
+  assert.equal(joinUrl({ OF_SIGNUP_OPEN: '0' }), 'https://openfrequency.co.il/join?p=teder');
 });
 
 test("a view of the store's page by someone not signed in is an open; a cookie counts the browsers; never the operator's, never its pictures", async () => {

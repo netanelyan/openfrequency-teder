@@ -671,6 +671,11 @@ ol.trace li .d { color: var(--ink-3); font-size: 12px; }
 .prefs legend { font-weight: 600; font-size: 13px; padding: 0; float: right; width: 100%; margin-bottom: 4px; }
 .prefs .check { display: flex; gap: 10px; align-items: center; }
 .prefs .check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent, currentColor); }
+/* When the account posts (src/web/schedule.js): a weekday a row, its box and up to two times. */
+.schedrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.schedrow .check { min-width: 9em; }
+.schedrow .times { display: flex; gap: 8px; }
+.schedrow input[type='time'] { width: 7.5em; }
 .problems { background: var(--bad-bg); border-radius: var(--r-m); padding: 12px 16px; margin: 0 0 16px; }
 .problems b, .problems li { color: var(--bad); }
 .problems ul { margin: 6px 0 0; padding-inline-start: 18px; }

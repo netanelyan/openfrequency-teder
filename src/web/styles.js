@@ -119,7 +119,7 @@ ${s === current ? '' : postButton(pc, `/accounts/${pack.id}/style-pick`, `לעב
     : '';
   const on = Boolean(pack.meta.style?.test && test && !test.result);
   return `<section class="panel" id="acc-${esc(pack.id)}"><header><h2>${esc(pack.meta.displayName)}</h2><span class="muted small">${current ? `עכשיו בסגנון ${current} · ${HE[current]}` : 'עכשיו בעיצוב הישן'}</span></header>
-${pending ? `<div class="banner info">${icon('alert')}<div><b>ב-pack.json כתוב סגנון ${esc(pending)}</b><div class="small">הוא ייכנס רק כשתעברו אליו כאן.</div></div></div>` : ''}
+${pending ? `<div class="banner info">${icon('alert')}<div><b>${pc.operator ? `ב-pack.json כתוב סגנון ${esc(pending)}` : `הוכן לחשבון סגנון ${esc(pending)}`}</b><div class="small">הוא ייכנס רק כשתעברו אליו כאן.</div></div></div>` : ''}
 <p class="small">ההמלצה: <b>${esc(suggestion.name)} · ${HE[suggestion.name]}</b>. ${esc(suggestion.why.join('. '))}.</p>
 ${prev ? `<p class="muted small">התצוגה היא של ${prev.live ? 'הפוסט האחרון' : `הפוסט האחרון מסט ההשקה (<bdi dir="ltr">${esc(prev.from || '')}</bdi>)`}: “${esc(prev.hook || '')}”${prev.styles && Object.values(prev.styles).some((x) => x.highlights?.length) ? '. לפוסט הזה אין הדגשה משלו, אז ההדגשה בתצוגה נבחרה בקוד. בפוסטים חדשים הכותב בוחר אותה.' : ''}</p>` : '<p class="muted small">לחשבון עוד אין פוסט מרונדר להציג.</p>'}
 <div class="stylegrid">${cols}</div>

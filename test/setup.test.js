@@ -92,7 +92,7 @@ test('a new workspace with nothing: open an account, at /new; the rest waits, an
   assert.deepEqual(Object.keys(out), ['product', 'ready', 'steps']);
   assert.equal(out.product, 'teder');
   assert.equal(out.ready, false);
-  assert.deepEqual(out.steps.map((s) => s.key), ['account', 'sources', 'samples', 'live', 'tiktok', 'instagram']);
+  assert.deepEqual(out.steps.map((s) => s.key), ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram']);
   for (const s of out.steps) {
     assert.deepEqual(Object.keys(s), ['key', 'title', 'status', 'detail', 'href', 'required']);
     assert.match(s.title, /[א-ת]/, 'a Hebrew title');
@@ -103,6 +103,7 @@ test('a new workspace with nothing: open an account, at /new; the rest waits, an
   assert.deepEqual([k.account.status, k.account.href, k.account.required], ['todo', `${T}/new`, true]);
   for (const key of ['sources', 'samples', 'live']) assert.deepEqual([k[key].status, k[key].href, k[key].required], ['todo', null, true], key);
   for (const key of ['tiktok', 'instagram']) assert.deepEqual([k[key].status, k[key].href, k[key].required], ['soon', null, false], key);
+  assert.deepEqual([k.connect.status, k.connect.href, k.connect.required], ['soon', null, true], 'nothing can be connected here, and nothing published');
   // Another workspace's accounts are not this one's: alpha in workspace 6 leaves workspace 5 where it was.
   account('alpha', 6, 'active');
   assert.equal(byKey(await steps(5)).account.status, 'todo');
@@ -152,7 +153,16 @@ test('each onboarding stage: searching, failed, sources to pick, samples being w
   const out = await steps(6);
   k = byKey(out);
   assert.deepEqual(['account', 'sources', 'samples', 'live'].map((x) => k[x].status), ['done', 'done', 'done', 'done']);
-  assert.equal(out.ready, true, 'every required step is done; the connections are optional');
+  assert.equal(out.ready, false, 'on air, but nothing is connected: nothing would go out');
+  assert.equal(k.connect.required, true);
+
+  // One platform connected is enough: the other stays optional.
+  process.env.ZERNIO_API_KEY = 'zk_test_key';
+  connection('alpha', 'instagram', 'connected', 'alpha.ig');
+  const connected = await steps(6);
+  assert.equal(connected.ready, true, 'every required step is done; TikTok is optional once Instagram is connected');
+  assert.deepEqual([byKey(connected).connect.status, byKey(connected).tiktok.status, byKey(connected).tiktok.required], ['done', 'todo', false]);
+  assert.match(byKey(connected).connect.detail, /אינסטגרם מחובר \(@alpha\.ig\)/);
 
   account('alpha', 6, 'paused');
   const paused = await steps(6);
@@ -163,6 +173,8 @@ test('several accounts: the newest on air is reported, and a second account bein
   account('alpha', 6, 'active', { created_at: '2026-10-01T10:00:00.000Z' });
   account('beta', 6, 'onboarding', { created_at: '2026-10-25T10:00:00.000Z' });
   onboarding('o2', 6, 'samples', { pack_id: 'beta' });
+  process.env.ZERNIO_API_KEY = 'zk_test_key';
+  connection('alpha', 'tiktok', 'connected');
   const out = await steps(6);
   assert.equal(out.ready, true);
   assert.equal(byKey(out).account.detail, 'חשבון alpha');
@@ -178,15 +190,23 @@ test('TikTok and Instagram: connected is done, reconnect needs attention, none l
   let k = byKey(await steps(8));
   assert.deepEqual([k.tiktok.status, k.tiktok.href], ['todo', null]);
 
+  assert.deepEqual([k.connect.status, k.connect.href, k.connect.required], ['todo', null, true]);
+
   account('alpha', 6, 'active');
   k = byKey(await steps(6));
   for (const p of ['tiktok', 'instagram']) assert.deepEqual([k[p].status, k[p].href, k[p].required], ['todo', `${T}/accounts?account=alpha#connect-alpha`, false], p);
+  assert.deepEqual([k.connect.status, k.connect.href], ['todo', `${T}/accounts?account=alpha#connect-alpha`]);
+  assert.match(k.connect.detail, /מקצועי/, 'what Instagram needs, said before the connect');
+
+  // A connection that stopped working, and nothing else: attention.
+  connection('alpha', 'instagram', 'reconnect');
+  assert.deepEqual([byKey(await steps(6)).connect.status, (await steps(6)).ready], ['attention', false]);
 
   connection('alpha', 'tiktok', 'connected', 'alpha.tt');
-  connection('alpha', 'instagram', 'reconnect');
   k = byKey(await steps(6));
   assert.deepEqual([k.tiktok.status, k.tiktok.detail, k.tiktok.href], ['done', '@alpha.tt', null]);
   assert.deepEqual([k.instagram.status, k.instagram.href], ['attention', `${T}/accounts?account=alpha#connect-alpha`]);
+  assert.equal(k.connect.status, 'done', 'one platform that works is enough');
 
   // While the account is in onboarding, the panel is on its onboarding page.
   account('beta', 7, 'onboarding');

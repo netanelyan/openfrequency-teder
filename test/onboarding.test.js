@@ -10,9 +10,10 @@ import { suggestApis } from '../src/onboarding/apis.js';
 import { createPack, newTheme, paletteFor } from '../src/onboarding/pack.js';
 import { contrast } from '../src/render/color.js';
 import { listen } from '../src/web/server.js';
-import { __onboarding } from '../src/web/onboarding.js';
+import { __onboarding, recoverOnboarding } from '../src/web/onboarding.js';
+import { choiceOf, scheduleOf } from '../src/schedule/choice.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
 
 after(() => closeBrowser());
 
@@ -48,7 +49,121 @@ test('discovery without keys says what it skipped and invents nothing', async ()
     assert.ok(out.notes.some((n) => /רשת חברתית/.test(n)), 'a social account is a style example, never read');
     assert.deepEqual(out.formats, []);
     assert.ok(out.candidates.every((c) => c.score && !c.approved));
+    // The customer is told only what they can act on, in plain Hebrew.
+    assert.deepEqual(out.said, ['את החשבונות ברשתות החברתיות שנתתם שמרנו כדוגמה לסגנון. עובדות לוקחים רק מאתרים.']);
+    assert.equal(out.nicheEn, null, 'no model, no English niche, and nothing asked of the owner');
   } finally {
+    cleanup();
+  }
+});
+
+test('discovery reads the sites four at a time, keeps their order, says how far it got, and names a site it could not read', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const sites = Array.from({ length: 9 }, (_, i) => `https://site${i}.example.org/`);
+    let now = 0;
+    let most = 0;
+    const seen = [];
+    const readSite = async (url, notes) => {
+      now += 1;
+      most = Math.max(most, now);
+      await new Promise((r) => setTimeout(r, 30 - sites.indexOf(url) * 3));
+      now -= 1;
+      if (url.includes('site3')) return notes.push(`${url}: fetch failed`), [];
+      return [{ type: 'web', url, name: `Site ${url.slice(12, 13)}`, newest: null }];
+    };
+    const out = await discover(ctx, { niche: 'גינון', examples: sites }, { yt: null, readSite, onProgress: (p) => seen.push(p) });
+    assert.equal(most, 4, 'never more than four at once, and four when there are more');
+    const webs = out.candidates.filter((c) => c.origin === 'example').map((c) => c.url);
+    assert.equal(webs.length, 8);
+    assert.deepEqual([...webs].sort(), sites.filter((u) => !u.includes('site3')).sort());
+    const sitesSeen = seen.filter((p) => p.step === 'sites');
+    assert.deepEqual(sitesSeen.at(-1), { step: 'sites', done: 9, total: 9 }, 'the progress reaches the end');
+    assert.ok(seen.some((p) => p.step === 'score'));
+    assert.ok(out.said.some((l) => l === 'לא הצלחנו לקרוא את site3.example.org. אפשר לבחור מהמקורות האחרים, או לנסות שוב מאוחר יותר.'));
+    assert.ok(out.notes.some((n) => /site3.*fetch failed/.test(n)), "the failure's detail is the operator's");
+  } finally {
+    cleanup();
+  }
+});
+
+test('a discovery that runs too long is stopped and failed; the page says so in Hebrew and searches again with the same seed', async () => {
+  const { home, cleanup } = tempHome();
+  let server;
+  let fake;
+  try {
+    const ctx = contextFor(home);
+    ctx.discoveryTimeoutMs = 60;
+    ctx.discoverOpts = { readSite: () => new Promise((r) => setTimeout(() => r([]), 400)) };
+    fake = await fakeAccounts();
+    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...fake.env } });
+    server = s.server;
+    const base = `http://127.0.0.1:${s.port}`;
+    const { cookie } = fake.session(customer(3));
+    const csrf = /name="_csrf" value="([^"]+)"/.exec(await (await fetch(`${base}/new`, { headers: { cookie } })).text())[1];
+    const post = (p, body) => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: csrf, ...body }).toString() });
+    const r1 = await post('/new', { niche: 'גינון במרפסת', examples: 'https://garden.example.org/' });
+    const id = r1.headers.get('location').split('/').pop();
+    const waiting = await (await fetch(`${base}/new/${id}`, { headers: { cookie } })).text();
+    assert.match(waiting, /זה לוקח בדרך כלל כמה דקות/, 'honest about the wait');
+    assert.match(waiting, /http-equiv="refresh"/);
+    await Promise.all([...__onboarding.running.values()]);
+    const failed = ctx.db.get('SELECT status, candidates_json, notes_json FROM onboarding WHERE id = ?', id);
+    assert.equal(failed.status, 'failed');
+    assert.equal(JSON.parse(failed.candidates_json).failure, 'timeout');
+    assert.match(failed.notes_json, /seconds and was stopped/, "the operator's note");
+    const page = await (await fetch(`${base}/new/${id}`, { headers: { cookie } })).text();
+    assert.match(page, /החיפוש לקח יותר מדי זמן ונעצר/);
+    assert.match(page, new RegExp(`action="/new/${id}/retry"`), 'a button to search again');
+    assert.match(page, /לנסות שוב/);
+    assert.doesNotMatch(page, /http-equiv="refresh"/, 'a failed search stops refreshing');
+    assert.doesNotMatch(page, /seconds|stopped|הערות למפעיל/, 'nothing technical for the customer');
+    // Again, now that the sites answer in time: the same seed, found.
+    ctx.discoverOpts = { readSite: async (url) => [{ type: 'web', url, name: 'Garden', newest: null }] };
+    const r2 = await post(`/new/${id}/retry`, {});
+    assert.equal(r2.status, 303);
+    await Promise.all([...__onboarding.running.values()]);
+    const again = ctx.db.get('SELECT status, seed_json, candidates_json FROM onboarding WHERE id = ?', id);
+    assert.equal(again.status, 'review');
+    assert.equal(JSON.parse(again.seed_json).niche, 'גינון במרפסת');
+    assert.ok(JSON.parse(again.candidates_json).candidates.some((c) => c.url === 'https://garden.example.org/'));
+    assert.equal((await post(`/new/${id}/retry`, {})).status, 303, 'refused (a flash) once it is not failed');
+    assert.equal(ctx.db.get('SELECT status FROM onboarding WHERE id = ?', id).status, 'review');
+  } finally {
+    server?.close();
+    await fake?.close();
+    cleanup();
+  }
+});
+
+test('a search a restart cut off is failed at boot, or when its page opens, and offers to search again', async () => {
+  const { home, cleanup } = tempHome();
+  let server;
+  let fake;
+  try {
+    const ctx = contextFor(home);
+    const at = new Date().toISOString();
+    ctx.db.insert('onboarding', { id: 'o-boot', seed_json: { niche: 'צילום' }, status: 'discovering', workspace_id: 4, created_at: at, updated_at: at });
+    ctx.db.insert('onboarding', { id: 'o-late', seed_json: { niche: 'ריצה' }, status: 'discovering', workspace_id: 4, created_at: at, updated_at: at });
+    ctx.db.insert('onboarding', { id: 'o-done', seed_json: { niche: 'שחייה' }, status: 'review', workspace_id: 4, created_at: at, updated_at: at });
+    assert.equal(recoverOnboarding(ctx.db), 2);
+    assert.equal(ctx.db.get("SELECT status FROM onboarding WHERE id = 'o-boot'").status, 'failed');
+    assert.equal(ctx.db.get("SELECT status FROM onboarding WHERE id = 'o-done'").status, 'review', 'the rest untouched');
+    // A row left searching after boot (no job in this process): its page fails it.
+    ctx.db.run("UPDATE onboarding SET status = 'discovering' WHERE id = 'o-late'");
+    fake = await fakeAccounts();
+    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env } });
+    server = s.server;
+    const { cookie } = fake.session(customer(4));
+    const page = await (await fetch(`http://127.0.0.1:${s.port}/new/o-late`, { headers: { cookie } })).text();
+    assert.match(page, /החיפוש נקטע באמצע/);
+    assert.match(page, /action="\/new\/o-late\/retry"/);
+    assert.doesNotMatch(page, /http-equiv="refresh"/, 'no page refreshing forever');
+    assert.equal(JSON.parse(ctx.db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-late'").candidates_json).failure, 'restart');
+  } finally {
+    server?.close();
+    await fake?.close();
     cleanup();
   }
 });
@@ -107,6 +222,8 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     const review = await (await fetch(`${base}/new/${id}`, { headers: { cookie } })).text();
     assert.match(review, /Wikidata/);
     assert.match(review, /<html lang="he" dir="rtl"/);
+    assert.doesNotMatch(review, /BRAVE_API_KEY|YOUTUBE_API_KEY|היוריסט|מפתח API|ליצור את החבילה|מזהה החבילה|התיקייה|הערות למפעיל/, 'the review page keeps the technical notes from the customer');
+    assert.doesNotMatch(await (await fetch(`${base}/new`, { headers: { cookie } })).text(), /name="nicheEn"|באנגלית/, 'no English niche to fill in');
     const cand = ctx.db.get('SELECT candidates_json FROM onboarding WHERE id = ?', id);
     const first = JSON.parse(cand.candidates_json).candidates[0].id;
     const r2 = await post(`/new/${id}/create`, { [`approve_${first}`]: 'on', displayName: 'מטבח ירוק בדוגמה', handle: 'demo.green.kitchen' });
@@ -120,7 +237,25 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     await post(`/new/${id}/samples`, {});
     await Promise.all([...__onboarding.running.values()]);
     const notes = JSON.parse(ctx.db.get('SELECT notes_json FROM onboarding WHERE id = ?', id).notes_json).join(' ');
-    assert.match(notes, /ANTHROPIC_API_KEY/, 'offline, it says what it needs to write the samples');
+    assert.match(notes, /ANTHROPIC_API_KEY/, "offline, the operator's notes say what it needs to write the samples");
+    // The customer reads none of it: no key, no command, no file or package; the operator does, folded away.
+    // "החבילה" alone is the customer's monthly plan; the pack (files in a folder) is never named.
+    const DEV = /[A-Z]{3,}_[A-Z_]{3,}|npm run|היוריסט|ליצור את החבילה|החבילה נכתבה|מזהה החבילה|התיקייה|באנגלית|YouTube|Brave/;
+    const visible = (html) => html.replace(/<script[\s\S]*?<\/script>|<svg[\s\S]*?<\/svg>/g, '');
+    const samplesPage = await (await fetch(`${base}/new/${id}`, { headers: { cookie } })).text();
+    const around = (html) => {
+      const m = DEV.exec(visible(html));
+      return m ? visible(html).slice(Math.max(0, m.index - 80), m.index + 40) : null;
+    };
+    assert.equal(around(samplesPage), null, 'the samples page has no developer text');
+    assert.match(samplesPage, /לא הצלחנו לכתוב דוגמאות הפעם/, 'samples that could not be written are said plainly');
+    assert.match(samplesPage, /id="schedule"/, 'the days and times are offered before going live');
+    assert.match(samplesPage, /name="back" value="\/new\//, 'and the form comes back here');
+    assert.ok(choiceOf(ctx.db, row.pack_id), 'the new account starts with the default days and times');
+    assert.equal(scheduleOf(ctx.db, ctx.pack(row.pack_id)).perMonth, 40);
+    assert.equal(around(await (await fetch(`${base}/new`, { headers: { cookie } })).text()), null, '/new: no developer text');
+    const op = fake.session(operator()).cookie;
+    assert.match(await (await fetch(`${base}/new/${id}`, { headers: { cookie: op } })).text(), /הערות למפעיל[\s\S]*ANTHROPIC_API_KEY/, 'the operator sees the notes');
     await post(`/new/${id}/live`, {});
     assert.equal(ctx.db.get('SELECT status FROM accounts WHERE id = ?', row.pack_id).status, 'onboarding', 'no going live without five reviewed samples');
   } finally {

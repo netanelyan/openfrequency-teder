@@ -7,6 +7,7 @@ import { OWN_APP } from '../publish/tiktok-app.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { GONE, connectLink, connectLinkOk, connectState, doneLink, doneLinkOk, refreshConnections, startConnect, zernioCost } from '../publish/connect.js';
 import { ActionError } from './actions.js';
+import { connectErrorHe } from '../publish/errors.js';
 import { csrfField, esc, icon, postButton, tederMark, usd } from './ui.js';
 
 // Connecting a customer's TikTok and Instagram (src/publish/connect.js), on the website:
@@ -36,6 +37,22 @@ const MODE_CHOICE = {
 /* ------------------------------------------------------------------ the panel */
 
 /**
+ * What each platform needs, said before its button, for the platforms still to connect: Instagram connects only as a
+ * professional account (business or creator), as Zernio requires; TikTok any account the customer logs into, and in
+ * draft-now its posts land in TikTok's drafts on purpose, for the owner to add a popular sound and post.
+ */
+export function requirements(d) {
+  const open = d.platforms.filter((s) => s.state !== 'meta' && s.state !== 'connected').map((s) => s.platform);
+  const lines = [];
+  if (open.includes('instagram')) lines.push('אינסטגרם מתחבר רק כחשבון מקצועי, עסקי או יוצר. חשבון פרטי מעבירים לחשבון מקצועי בהגדרות של אינסטגרם, בלי תשלום, ואז מחברים כאן.');
+  if (open.includes('tiktok')) {
+    lines.push('בטיקטוק נכנסים עם החשבון שאליו המצגות יעלו, ומאשרים את ההרשאות במסך של טיקטוק.');
+    if (d.mode === 'draft-now') lines.push('המצגות מגיעות לטיוטות בטיקטוק בכוונה, כדי שתבחרו סאונד פופולרי ותפרסמו משם. כשמגיעה השעה, תדר מזכיר לכם.');
+  }
+  return lines.length ? `<ul class="needs muted small">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
+}
+
+/**
  * Each platform's state and its button, for the account page and the onboarding page. `d` is connectData's.
  */
 export function connectPanel(ctx, d) {
@@ -62,7 +79,7 @@ export function connectPanel(ctx, d) {
       ? 'אי אפשר לחבר עכשיו: בשרת לא מוגדר ZERNIO_API_KEY.'
       : 'החיבור עוד לא זמין בשרת הזה.';
   return `<div class="connect" id="connect-${esc(pack.id)}"><div class="row"><span>טיקטוק ואינסטגרם</span>${d.configured && d.hasProfile ? `<span class="end">${postButton(ctx, `/accounts/${pack.id}/connections`, 'לבדוק שוב', { cls: 'btn sm ghost' })}</span>` : ''}</div>
-<ul class="factlist">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
+${d.configured ? requirements(d) : ''}<ul class="factlist">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
 }
 
 /** How the account's TikTok posts go out, and (the operator) through what. */
@@ -190,7 +207,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const sig = { accountId: account, platform, e: query.get('e'), s: query.get('s'), t };
   if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, resultPage(EXPIRED)];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'בשרת הזה עוד לא הוגדר Zernio.' })];
+  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לטיקטוק ולאינסטגרם עוד לא זמין. אנחנו מטפלים בזה.' })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;
 
   if (!done) {
@@ -208,8 +225,10 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const error = query.get('error');
   if (error) {
     audit(ctx.db, { actor: 'zernio', action: 'zernio_connect_failed', accountId: pack.id, detail: { platform, error, reason: query.get('error_message') || null, request: query.get('request_id') || null } });
-    const declined = error === 'oauth_denied' || query.get('is_user_fixable') === 'true';
-    return [200, resultPage({ title: 'החיבור לא הצליח', text: declined ? `החיבור בוטל במסך של ${name}. צריך לאשר שם את כל ההרשאות, ואז זה עובד.` : `${name} החזיר שגיאה (${error}). אפשר לנסות שוב. אם זה חוזר, השגיאה נשמרה ביומן ואפשר לבדוק אותה.`, actions: again() })];
+    // Zernio's code stays in the audit and the log; the customer reads what it means and what to do.
+    ctx.log?.(`[connect] ${pack.id} ${platform}: Zernio returned ${error}${query.get('error_message') ? ` (${query.get('error_message')})` : ''}`);
+    const text = connectErrorHe(platform, { error: error === 'oauth_denied' ? 'denied' : error, message: query.get('error_message') || '', fixable: query.get('is_user_fixable') === 'true' });
+    return [200, resultPage({ title: 'החיבור לא הצליח', text, actions: again() })];
   }
   try {
     const prefer = query.get('accountId') ? { [platform]: query.get('accountId') } : {};

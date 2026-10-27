@@ -12,6 +12,7 @@ import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
 import { canRun, pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
+import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { timeHe } from './ui.js';
 import { MODES } from '../packs/validate.js';
@@ -27,6 +28,7 @@ import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budg
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
 import { EVENT_TYPES, setPrefs } from '../assistant/data.js';
+import { EMAIL_KINDS, setEmailPrefs } from '../notify/email.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
 // that returns { ok, message, redirect } or throws an ActionError with a message
@@ -172,12 +174,17 @@ export function oldDraftsDeleted(ctx, user, { id }) {
 
 export async function publishNow(ctx, user, { id }) {
   const post = mustPost(ctx, id);
+  // Held for a connection (src/publish/hold.js): it goes out by itself once TikTok or Instagram is connected.
+  if (post.status === 'held') throw new ActionError(post.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.');
   try {
     const r = await publishPost(engineOf(ctx), id);
     audit(ctx.db, { actor: user.name, action: 'publish_now', accountId: post.account_id, postId: id, detail: { via: r.via, ok: r.ok } });
+    if (r.held) return { ok: false, message: loadPost(ctx.db, id)?.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.' };
     return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? 'פורסם בפרסום יבש: נכתב לדיסק.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט.' };
   } catch (e) {
-    throw new ActionError(`לא פורסם: ${e.message}`);
+    // The publisher's own words go to the log; the customer reads them in Hebrew (src/publish/errors.js).
+    console.error(`[publish-now] ${id}: ${e?.message || e}`);
+    throw new ActionError(user.operator ? `לא פורסם: ${e.message}` : publishErrorHe(e));
   }
 }
 
@@ -554,6 +561,14 @@ export function setAssistantPrefs(ctx, user, _p, form) {
   const events = Object.fromEntries(EVENT_TYPES.map((k) => [k, form[`ev_${k}`] === '1']));
   const r = setPrefs(ctx.db, ctx.workspaceId, { events, quiet: { nights: form.quiet_nights === '1', shabbat: form.quiet_shabbat === '1' } }, { by: user.name });
   audit(ctx.db, { actor: user.name, action: 'assistant_prefs', detail: { workspace: ctx.workspaceId, ...r } });
+  return { ok: true, message: 'נשמר.' };
+}
+
+/** Which emails the workspace's owners get (src/notify/email.js): a box per kind, unticked is off. */
+export function setEmailPrefsAction(ctx, user, _p, form) {
+  if (ctx.workspaceId == null) throw new ActionError('את זה בוחר כל לקוח בחשבון שלו', 403);
+  const prefs = setEmailPrefs(ctx.db, ctx.workspaceId, Object.fromEntries(EMAIL_KINDS.map((k) => [k, form[`em_${k}`] === '1'])), { by: user.name });
+  audit(ctx.db, { actor: user.name, action: 'email_prefs', detail: { workspace: ctx.workspaceId, ...prefs } });
   return { ok: true, message: 'נשמר.' };
 }
 

@@ -14,12 +14,13 @@ import { forWorkspace } from './workspace.js';
 // status is todo | working | done | attention | soon. href is an absolute address on Teder's public name (the page
 // where the step is done), or null when there is nothing to open yet. ready is every required step done.
 //
-// The steps follow the new-account flow (src/web/onboarding.js): account, sources, samples, live, then the optional
-// tiktok and instagram connections (src/publish/connect.js). A workspace with several accounts is reported on one:
+// The steps follow the new-account flow (src/web/onboarding.js): account, sources, samples, live, then connect (required:
+// at least one of TikTok and Instagram connected, src/publish/connect.js, so the checklist never says ready with nothing
+// to publish to), then the tiktok and instagram connections one by one, optional. A workspace with several accounts is reported on one:
 // its newest live account (active, else paused), and without one its newest onboarding still under way. Once a
 // workspace has an account on air its setup is done; a second account being added does not undo it.
 
-export const STEP_KEYS = ['account', 'sources', 'samples', 'live', 'tiktok', 'instagram'];
+export const STEP_KEYS = ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram'];
 const STAGE = { none: 0, discovering: 1, failed: 1, review: 2, samples: 3, ready: 4, live: 5 };
 
 /** The account and the onboarding the checklist reports on: { account, ob }, either one null. */
@@ -49,8 +50,8 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
 
   // The account: the seed, the search for sources, and the pack written once its name is picked.
   if (stage === 'none') steps.push(step('account', 'פותחים חשבון', 'todo', { detail: 'כותבים במה החשבון יעסוק, ותדר מחפש לו מקורות.', href: at('/new') }));
-  else if (stage === 'discovering') steps.push(step('account', 'פותחים חשבון', 'working', { detail: 'מחפשים מקורות לנישה. זה לוקח עד דקה.', href: obPage }));
-  else if (stage === 'failed') steps.push(step('account', 'פותחים חשבון', 'attention', { detail: 'החיפוש נכשל. בדף רואים למה, ואפשר להתחיל שוב.', href: obPage }));
+  else if (stage === 'discovering') steps.push(step('account', 'פותחים חשבון', 'working', { detail: 'מחפשים מקורות לחשבון. זה לוקח בדרך כלל כמה דקות.', href: obPage }));
+  else if (stage === 'failed') steps.push(step('account', 'פותחים חשבון', 'attention', { detail: 'החיפוש נעצר באמצע. בדף אפשר לנסות שוב עם אותם פרטים.', href: obPage }));
   else if (stage === 'review') steps.push(step('account', 'פותחים חשבון', 'todo', { detail: 'בוחרים שם לחשבון, באותו דף של המקורות.', href: obPage }));
   else steps.push(step('account', 'פותחים חשבון', 'done', { detail: pack?.meta.displayName || account?.display_name || '' }));
 
@@ -78,9 +79,20 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
   else if (account.status === 'paused') steps.push(step('live', 'מעלים לאוויר', 'attention', { detail: 'החשבון מושהה, ופוסטים לא יוצאים עד שמפעילים אותו מחדש.', href: at(`/accounts?account=${encodeURIComponent(account.id)}`) }));
   else steps.push(step('live', 'מעלים לאוויר', 'done'));
 
-  // TikTok and Instagram, optional: each platform the account publishes to (both, before there is an account). The
-  // connect panel is on the onboarding page while the account is in onboarding, then on the account page.
+  // Connected: required, done once at least one platform the account publishes to is connected (nothing goes out
+  // before). The connect panel is on the onboarding page while the account is in onboarding, then on the account page.
   const panel = account && pack ? at(account.status === 'onboarding' && ob ? `/new/${encodeURIComponent(ob.id)}#connect-${pack.id}` : `/accounts?account=${encodeURIComponent(pack.id)}#connect-${pack.id}`) : null;
+  const states = pack ? pack.meta.platforms.filter((p) => ['tiktok', 'instagram'].includes(p)).map((p) => connectState(c.db, pack, p, env)) : [];
+  const on = states.filter((s) => s.state === 'connected' || s.state === 'meta');
+  const CONNECT = 'מחברים את טיקטוק או אינסטגרם';
+  if (on.length) steps.push(step('connect', CONNECT, 'done', { detail: on.map((s) => `${PLATFORM_NAME[s.platform]} מחובר${s.username ? ` (@${s.username})` : ''}.`).join(' ') }));
+  else if (!zernioConfigured()) steps.push(step('connect', CONNECT, 'soon', { detail: 'החיבור עוד לא זמין בשרת הזה.' }));
+  else if (!pack) steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים אחרי שהחשבון נוצר. בלי חיבור המצגות לא עולות.' }));
+  else if (states.some((s) => s.state === 'reconnect')) steps.push(step('connect', CONNECT, 'attention', { detail: 'החיבור הפסיק לעבוד, ומצגות לא עולות עד שמחברים מחדש.', href: panel }));
+  else steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים לפחות אחד מהשניים כדי שהמצגות יעלו. אינסטגרם צריך חשבון מקצועי, עסקי או יוצר.', href: panel }));
+
+  // TikTok and Instagram, each on its own and optional: each platform the account publishes to (both, before there is
+  // an account).
   for (const platform of ['tiktok', 'instagram']) {
     if (pack && !pack.meta.platforms.includes(platform)) continue;
     const name = PLATFORM_NAME[platform];

@@ -99,15 +99,22 @@ async function feedsOf(url, notes) {
   const out = [];
   try {
     const page = await getText(url, { timeoutMs: 12_000 });
-    for (const f of declaredFeeds(page.body, page.finalUrl).slice(0, 2)) {
-      try {
-        const items = parseFeed((await getText(f.url, { timeoutMs: 12_000 })).body);
-        const newest = items.map((x) => x.publishedAt).filter(Boolean).sort().pop() || null;
-        out.push({ type: 'rss', url: f.url, name: f.title || titleOf(page.body) || new URL(url).hostname, newest, items: items.length });
-      } catch (e) {
-        notes.push(`${f.url}: ${e.message}`);
-      }
-    }
+    // The site's two feeds at once, kept in the order the page declares them.
+    const feeds = await Promise.all(
+      declaredFeeds(page.body, page.finalUrl)
+        .slice(0, 2)
+        .map(async (f) => {
+          try {
+            const items = parseFeed((await getText(f.url, { timeoutMs: 12_000 })).body);
+            const newest = items.map((x) => x.publishedAt).filter(Boolean).sort().pop() || null;
+            return { type: 'rss', url: f.url, name: f.title || titleOf(page.body) || new URL(url).hostname, newest, items: items.length };
+          } catch (e) {
+            notes.push(`${f.url}: ${e.message}`);
+            return null;
+          }
+        })
+    );
+    out.push(...feeds.filter(Boolean));
     if (!out.length) out.push({ type: 'web', url: page.finalUrl, name: titleOf(page.body) || new URL(url).hostname, newest: null });
   } catch (e) {
     notes.push(`${url}: ${e.message}`);
@@ -115,12 +122,51 @@ async function feedsOf(url, notes) {
   return out;
 }
 
+/** How many sites (and Brave queries) are read at once. Each fetch has its own timeout (12 seconds, feedsOf). */
+export const PARALLEL = 4;
+
+/** fn over every item, at most `n` at a time; the results in the items' order. Stops starting new ones once `signal` aborts. */
+export async function mapLimit(items, n, fn, signal = null) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length && !signal?.aborted) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return out;
+}
+
+const stopped = (signal) => {
+  if (signal?.aborted) throw Object.assign(new Error('discovery stopped: it ran out of time'), { code: 'timeout' });
+};
+
+const NICHE_EN_SCHEMA = { type: 'object', properties: { en: { type: 'string' } }, required: ['en'], additionalProperties: false };
+
+/** The niche in English, for searching formats on YouTube: the model's few words, or null without one. */
+export async function nicheInEnglish(ctx, niche) {
+  if (ctx.llm?.kind !== 'claude' || !niche) return null;
+  const { data } = await askJson(ctx, {
+    task: 'niche_en', role: 'judge', effort: 'low', maxTokens: 200, expectOut: 30, tag: 'onboarding', schema: NICHE_EN_SCHEMA,
+    system: 'Translate the niche of a Hebrew social account into the two to five English words a person would type into YouTube search to find short videos about it. Return { en }.',
+    user: niche,
+  });
+  const en = String(data?.en || '').replace(/[^\p{L}\p{N} '&-]/gu, '').trim().slice(0, 80);
+  return en || null;
+}
+
 /**
- * The whole discovery for a seed. Returns { candidates, formats, notes }.
+ * The whole discovery for a seed. Returns { candidates, formats, notes, said, nicheEn }: `notes` are the operator's
+ * (what was skipped and why, every failed fetch); `said` is what the customer is told, in plain Hebrew; `nicheEn` the
+ * niche in English when the model gave it (the seed has no such field to fill in).
  * seed: { niche, language, audience, examples: [urls or @handles], topics }
+ * onProgress({ step, done, total }): 'search', 'sites' (with counts), 'formats', 'score'.
  */
-export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() ? youtubeClient() : null } = {}) {
+export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() ? youtubeClient() : null, onProgress = () => {}, signal = null, parallel = PARALLEL, readSite = feedsOf } = {}) {
   const notes = [];
+  const said = [];
   const byUrl = new Map();
   const add = (c) => {
     if (!c?.url || byUrl.has(c.url)) return;
@@ -132,40 +178,73 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
     byUrl.set(c.url, c);
   };
 
-  // 1. authority sites through Brave
+  // 0. the niche in English (the owner writes it in Hebrew alone): for the catalog's words and YouTube's search
+  onProgress({ step: 'search' });
+  const nicheEn = seed.nicheEn || (await nicheInEnglish(ctx, seed.niche).catch((e) => (notes.push(`תרגום הנישה לאנגלית נכשל: ${e.message}`), null)));
+
+  // 1. authority sites through Brave, the queries at once, their results taken in the queries' order
   const hosts = new Set();
   if (isSet('BRAVE_API_KEY')) {
-    const qs = [`${seed.niche} site:gov.il`, `${seed.niche} רשמי`, `${seed.niche} official guide`, ...(seed.topics || []).slice(0, 2).map((x) => `${x} מידע רשמי`)];
-    for (const q of qs) {
-      try {
-        for (const r of await brave(ctx, q, notes)) {
+    const qs = [`${seed.niche} site:gov.il`, `${seed.niche} רשמי`, `${nicheEn || seed.niche} official guide`, ...(seed.topics || []).slice(0, 2).map((x) => `${x} מידע רשמי`)];
+    const results = await mapLimit(qs, parallel, (q) => brave(ctx, q, notes).catch((e) => (notes.push(`Brave "${q}": ${e.message}`), [])), signal);
+    for (const list of results) {
+      for (const r of list || []) {
+        try {
           const h = new URL(r.url).hostname;
           if (isSocial(h) || hosts.has(h)) continue;
           hosts.add(h);
           add({ type: 'web', url: r.url, name: r.title, snippet: r.description, origin: 'brave' });
+        } catch {
+          /* a result with no address is skipped */
         }
-      } catch (e) {
-        notes.push(`Brave "${q}": ${e.message}`);
       }
     }
   } else {
     notes.push('אין BRAVE_API_KEY: לא חיפשתי אתרים, רק בדקתי את הדוגמאות שנתתם');
   }
+  stopped(signal);
 
-  // 2. feeds: the example sites, and the top authority hosts found
+  // 2. feeds: the example sites, and the top authority hosts found, a few at a time
   const examples = (seed.examples || []).map((x) => String(x).trim()).filter((x) => /^https?:\/\//.test(x));
-  for (const h of (seed.examples || []).filter((x) => /^@|instagram|tiktok|youtube/.test(String(x)))) notes.push(`${h}: חשבון ברשת חברתית, נשמר כדוגמה לסגנון בלבד ולא נקרא`);
+  const social = (seed.examples || []).filter((x) => /^@|instagram|tiktok|youtube/.test(String(x)));
+  for (const h of social) notes.push(`${h}: חשבון ברשת חברתית, נשמר כדוגמה לסגנון בלבד ולא נקרא`);
+  if (social.length) said.push('את החשבונות ברשתות החברתיות שנתתם שמרנו כדוגמה לסגנון. עובדות לוקחים רק מאתרים.');
   const probe = [...examples, ...[...hosts].slice(0, 6).map((h) => `https://${h}/`)];
-  for (const url of probe) for (const c of await feedsOf(url, notes)) add({ ...c, origin: examples.includes(url) ? 'example' : 'feed' });
+  let done = 0;
+  onProgress({ step: 'sites', done, total: probe.length });
+  const read = await mapLimit(
+    probe,
+    parallel,
+    async (url) => {
+      const before = notes.length;
+      const found = await readSite(url, notes);
+      done += 1;
+      onProgress({ step: 'sites', done, total: probe.length });
+      return { url, found, failed: !found.length && notes.length > before };
+    },
+    signal
+  );
+  stopped(signal);
+  for (const r of read) for (const c of r.found) add({ ...c, origin: examples.includes(r.url) ? 'example' : 'feed' });
+  const unread = read.filter((r) => r.failed && examples.includes(r.url)).map((r) => {
+    try {
+      return new URL(r.url).hostname.replace(/^www\./, '');
+    } catch {
+      return r.url;
+    }
+  });
+  if (unread.length) said.push(`לא הצלחנו לקרוא את ${unread.join(', ')}. אפשר לבחור מהמקורות האחרים, או לנסות שוב מאוחר יותר.`);
 
   // 3. structured APIs from the catalog
-  for (const api of suggestApis(seed)) add({ ...api, origin: 'api' });
+  for (const api of suggestApis({ ...seed, nicheEn })) add({ ...api, origin: 'api' });
 
-  // 4. formats that work now in the niche
+  // 4. formats that work now in the niche, searched in English in the niche's English words
+  onProgress({ step: 'formats' });
   const formats = [];
   if (yt) {
     for (const lang of ['he', 'en']) {
-      const q = lang === 'he' ? `טיפים ${seed.niche}` : `${seed.nicheEn || seed.niche} tips`;
+      stopped(signal);
+      const q = lang === 'he' ? `טיפים ${seed.niche}` : `${nicheEn || seed.niche} tips`;
       try {
         const found = await yt.search(q, { lang, t });
         const stats = await yt.stats(found.map((f) => f.id));
@@ -183,6 +262,8 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   }
 
   // 5. scores
+  stopped(signal);
+  onProgress({ step: 'score' });
   const list = [...byUrl.values()];
   let scores;
   if (ctx.llm?.kind === 'claude' && list.length) {
@@ -194,5 +275,5 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   }
   scores ??= list.map((c) => heuristicScore(c, t));
   const candidates = list.map((c, i) => ({ id: `c${i + 1}`, ...c, score: scores[i], approved: false })).sort((a, b) => b.score.authority - a.score.authority || b.score.freshness - a.score.freshness);
-  return { candidates, formats: formats.slice(0, 8), notes };
+  return { candidates, formats: formats.slice(0, 8), notes, said, nicheEn };
 }

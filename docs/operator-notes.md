@@ -1,0 +1,194 @@
+# Operator notes
+
+Teder is sold self-serve, so a customer's pages say only what is happening and what they can do, in plain Hebrew.
+Everything technical that used to be on those pages (a missing key, a fallback ranking, a file or folder name, a
+command) moved here. The operator (the superadmin outside view-as) still sees each note on the page, in a small line
+or folded under "הערות למפעיל"; a customer never does.
+
+Each section: what the note is, where it shows up, what to do, and whether it is needed now. The live server is
+Teder at `/opt/open-frequency` on the VPS (systemd; its SSH alias is in private/DEPLOY.md); its `.env` is where a key goes, and a restart of the service
+picks it up. Nothing here is set by a customer.
+
+When asked "what should I do about Teder's setup", read this file top to bottom and report, for each section, whether
+the server is in the state it asks for. In developer mode (Settings, seven taps on the version line) the "מפתחות" panel
+says which keys are set without showing them.
+
+## Needed before sign-up opens to the public
+
+### BRAVE_API_KEY: searching the web for a new account's sources
+
+- **What it is.** The new-account flow (`/new`) searches Brave for authority sites (government, official bodies,
+  established publications) about the niche the customer wrote. Without the key it searches nothing and only reads
+  the sites the customer typed in as examples, plus the open-data catalog (Wikidata always, data.gov.il, the CBS,
+  the Bank of Israel and others when the niche matches).
+- **Where it shows.** Operator only: "אין BRAVE_API_KEY: לא חיפשתי אתרים, רק בדקתי את הדוגמאות שנתתם" under
+  "הערות למפעיל" on `/new/<id>`. The customer used to read "הגדירו BRAVE_API_KEY" when nothing was found; now they read
+  "לא נמצאו מקורות" and a link to start again with sites they trust.
+- **What to do.** Get a key at brave.com/search/api and set `BRAVE_API_KEY=` in the server's `.env`. It costs $5 per
+  1,000 queries; a new account makes up to five, each cached for 30 days, and every one is in the spend ledger (tag
+  `onboarding`).
+- **Needed now?** Yes, before self-serve sign-up opens (`OF_SIGNUP_OPEN=1`). A customer who types no example site
+  otherwise gets only the catalog's few sources.
+
+### ANTHROPIC_API_KEY: writing the sample posts, scoring sources
+
+- **What it is.** Claude writes the five sample posts of a new account, scores each source found (authority,
+  freshness, terms of use, a one-line reason), writes the account's voice guide and turns the Hebrew niche into the
+  English words YouTube is searched with. Without a key (the engine in recorded mode) no sample is written, sources are
+  scored by a transparent heuristic (the web address: `.gov.il`, `.ac.il`, a known publication), the voice guide is the
+  template, and YouTube is searched in Hebrew alone.
+- **Where it shows.** Operator only:
+  - "המנוע במצב הקלטות: בלי ANTHROPIC_API_KEY אין מי שיכתוב פוסטים..." under "הערות למפעיל" on the samples page.
+    The customer reads "לא הצלחנו לכתוב דוגמאות הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו לנו."
+  - "דירוג היוריסטי (בלי מפתח API)" after a source's reason on the sources step. The customer sees the reason alone.
+  - "הדירוג עם Claude נכשל (...), הדירוג הוא היוריסטי": the key is set and the scoring call failed; the heuristic
+    stood in.
+  - "בודק הקול: אופליין (בלי מפתח API)" on a post's page. The customer does not see the reviewer's name.
+- **What to do.** The live server must run with `ANTHROPIC_API_KEY` set (and `ANTHROPIC_WORKSPACE_ID` for a key not
+  scoped to one workspace). If the key is set and the notes still appear, read the service's log for the failed call
+  (rate limit, billing, a model id).
+- **Needed now?** Yes. Without it no new account can reach its five samples, so none can go live.
+
+## Optional, for better results
+
+### YOUTUBE_API_KEY: formats that work in the niche
+
+- **What it is.** Discovery looks up the YouTube Shorts that work now in the niche, in Hebrew and in English, with
+  their real view counts, and the weekly trends step does the same for every account. Without the key nothing is
+  looked up and no number is made up in its place.
+- **Where it shows.** Operator only: "אין YOUTUBE_API_KEY: לא חיפשתי פורמטים, ושום מספר לא הומצא במקום" under
+  "הערות למפעיל", and the panel "פורמטים שעובדים בנישה" with "לא נבדק (בלי YOUTUBE_API_KEY)". The customer used to
+  read that line; now the panel is simply not there for them when there is nothing to show. A "YouTube: ..." note is
+  a failed call (quota, a bad key).
+- **What to do.** A key restricted to YouTube Data API v3 from console.cloud.google.com, as `YOUTUBE_API_KEY=` in the
+  server's `.env`. Free, within Google's daily quota.
+- **Needed now?** No. Posts are written without it; the formats panel and the weekly trends are what it adds.
+
+### The niche in English
+
+- **What it is.** The `/new` form used to ask for "הנישה באנגלית לחיפוש פורמטים ביוטיוב". A business owner should not
+  have to answer that, so the field is gone: discovery asks the model already used in onboarding for the two to five
+  English words (src/onboarding/discover.js `nicheInEnglish`), keeps them with the seed, and the new pack's English
+  trend query is built from them.
+- **Where it shows.** Operator only, and only when it failed: "תרגום הנישה לאנגלית נכשל: ...". Without a model (no
+  `ANTHROPIC_API_KEY`) nothing is asked, and the Hebrew niche is used for the English search too.
+- **What to do.** Nothing, unless it fails every time: then it is the Claude key (above).
+- **Needed now?** No.
+
+## What a customer may run into, and what the operator reads
+
+### A site that could not be read
+
+- **What it is.** Discovery reads each example site's home page and up to two feeds it declares, four sites at a
+  time, each fetch with a 12-second timeout.
+- **Where it shows.** The customer reads one line naming the sites ("לא הצלחנו לקרוא את example.co.il. אפשר לבחור
+  מהמקורות האחרים, או לנסות שוב מאוחר יותר."). The operator also sees each failure as "<address>: <the error>" under
+  "הערות למפעיל" (a timeout, a 403 from a site that blocks bots, a feed that does not parse).
+- **What to do.** Usually nothing: the site is down or refuses robots. If every site fails, check the server's network
+  and `OF_USER_AGENT` (a contact address in the user agent keeps some sites from refusing).
+- **Needed now?** No.
+
+### A social account given as an example
+
+- **What it is.** An `@handle` or an Instagram, TikTok or YouTube address among the examples is kept as an example of
+  style and never read for facts.
+- **Where it shows.** The customer reads "את החשבונות ברשתות החברתיות שנתתם שמרנו כדוגמה לסגנון. עובדות לוקחים רק
+  מאתרים." The operator also sees "<handle>: חשבון ברשת חברתית, נשמר כדוגמה לסגנון בלבד ולא נקרא".
+- **What to do.** Nothing.
+
+### A search for sources that ran too long
+
+- **What it is.** A discovery has three minutes (`DISCOVERY_TIMEOUT_MS`, src/web/onboarding.js). Past that it is
+  stopped, and the row is `failed` with `candidates_json.failure = "timeout"`.
+- **Where it shows.** The customer reads "החיפוש לקח יותר מדי זמן ונעצר." with a "לנסות שוב" button that runs it again
+  on the same seed. The operator also sees "the discovery ran past 180 seconds and was stopped".
+- **What to do.** One is a slow site. If it keeps happening, look at which sites the notes name, or raise the timeout.
+- **Needed now?** No.
+
+### A search a restart cut off
+
+- **What it is.** Discovery runs inside the website's process. A restart in the middle of one used to leave the page
+  refreshing every few seconds forever. Now, at boot, every row still `discovering` is marked `failed` with
+  `failure = "restart"` (the log says "onboarding: N search(es) for sources interrupted by a restart, marked to try
+  again"), and a page opened on such a row does the same.
+- **Where it shows.** The customer reads "החיפוש נקטע באמצע." and the same "לנסות שוב" button. The operator also sees
+  "the server restarted while the discovery ran".
+- **What to do.** Nothing: the customer retries. Avoid restarting the service while someone is in `/new` if you can.
+
+### The account could not be created
+
+- **What it is.** Writing the new pack failed for a reason the customer cannot fix: every template and variant or
+  every display font is already used by another account, or the pack would not validate.
+- **Where it shows.** The customer reads "לא הצלחנו ליצור את החשבון הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו
+  לנו." The details go to the service's log, as "[onboarding] the pack was not written: ...". (What the customer can
+  fix is said to them: a taken user name, one with other than Latin letters and digits, no source approved.)
+- **What to do.** Read the log line. "every template and variant is in use" needs one more template file in
+  src/render/templates; "every display face is in use" needs a font in src/render/fonts.js; validation problems are
+  listed one by one.
+- **Needed now?** Only when it happens. With many customers the templates and fonts will run out: plan for it.
+
+### Something went wrong on our side (500)
+
+- **What it is.** An error no page expected.
+- **Where it shows.** The customer reads "משהו השתבש אצלנו. נסו שוב בעוד כמה דקות." (it used to say the details are in
+  the log, which is the operator's). The stack is in the service's log as "[web] <method> <address>: ...".
+- **What to do.** Read the log.
+
+### Where an account's files are
+
+- **What it is.** Every account is a pack, six files in the private folder (`$OF_HOME/packs/<id>`).
+- **Where it shows.** Operator only: "התיקייה הפרטית: <id>" on the samples page; "הסגנון בקובץ theme.json השתנה" on the
+  Accounts page and "ב-pack.json כתוב סגנון ..." on the Styles page, when a file was edited by hand. The customer reads
+  "יש לחשבון סגנון חדש" and "הוכן לחשבון סגנון ..." with the same button to switch to it.
+- **What to do.** Nothing.
+
+### How each platform is published
+
+- **What it is.** The Accounts page's "פרסום" line: Zernio, Meta directly, or dry (to disk), and why it is dry when
+  the pack asked for more ("PUBLISH_MODE לא live", "חסר ZERNIO_API_KEY", a missing Instagram token).
+- **Where it shows.** Operator only now. The customer has the connect panel, which says whether TikTok and Instagram
+  are connected.
+- **What to do.** `PUBLISH_MODE=live` and `ZERNIO_API_KEY` on the server once posts should really go out.
+
+### Other technical words taken off customer pages
+
+- The sources page: the catalog no longer explains robots.txt and Claude ("האתר מרשה לנו לקרוא אותו ולכתוב מחדש את
+  מה שהוא אומר"); a source's type reads "פיד חדשות", "דף באתר", "מקור נתונים" (it said RSS/Atom and API/JSON); an
+  API-type source's chip reads "נתונים".
+- The facts page's empty state no longer names the `facts/` folder.
+- A post's takedown form and its result no longer say "API" ("נמחק אוטומטית", "באינסטגרם הוא נמחק לבד כשאפשר").
+- The sounds page no longer says "API"; the results page no longer names Zernio.
+- Left for the parallel branch `paywall-notify`, which owns the connect flow and Zernio's errors: the connect panel's
+  "אי אפשר לחבר עכשיו: בשרת לא מוגדר ZERNIO_API_KEY", the connect result page's "בשרת הזה עוד לא הוגדר Zernio", and
+  Zernio by name in the connect copy and in accounts' setup checklist ("מחברים דרך Zernio"). Once that branch is in,
+  check that none of these reach a customer.
+
+## Settings the operator controls
+
+### OF_SIGNUP_OPEN and OF_SIGNUP_URL: where a demo page sends people
+
+- **What it is.** A store's demo page (`/s/<slug>`) ends with "להפעיל את תדר". With `OF_SIGNUP_OPEN=1` it goes to
+  accounts' sign-up, `OF_SIGNUP_URL` (https only; empty is `https://accounts.openfrequency.co.il/signup`). Without it
+  the button goes to the website's `https://openfrequency.co.il/join?p=teder`, so nobody is sent to a page that does
+  not take them yet.
+- **What to do.** Leave `OF_SIGNUP_OPEN` empty until accounts really has a public sign-up page (today accounts signs
+  in existing customers and invited people only). When it does, set `OF_SIGNUP_OPEN=1`, and `OF_SIGNUP_URL` if the
+  address is not the default (for example with a `?p=teder` the sign-up page reads).
+- **Needed now?** No. It is the switch for the day self-serve sign-up opens, together with `BRAVE_API_KEY` and
+  `ANTHROPIC_API_KEY` above.
+
+### Posting days and times are the customer's
+
+- **What it is.** Each account's owner chooses on Settings (the account shown in the switcher), and before going live
+  on the new-account page, which days to post on and at what time, up to two times a day. Shabbat and the festivals
+  never post, whatever is chosen. The choice is stored in `settings` as `schedule:<account id>` and is laid over
+  pack.json's `schedule` (its slots, posting windows and posts a day; a fight week stays the pack's). A new account
+  starts with two posts Sunday to Thursday (12:30, 19:30), Friday 12:30 and Saturday 21:00: about 45 to 54 slots a
+  month, at least 45 in every month of 2026 to 2028, festivals included. A month with more slots than the account's
+  plan (40, or what the operator set) is thinned evenly to the plan, a day's second slot first, so the posts last the
+  whole month; the quota still caps it.
+- **Where it shows.** Settings, "מתי מפרסמים", says how many posts next month gets and how many chosen times fall on
+  Shabbat or a festival.
+- **What to do.** Nothing. When the day's posts are written (`generateAt`, 07:00) is still the operator's, on
+  Settings. An account with no choice saved (the accounts made before this) keeps its pack.json schedule exactly as
+  before, until its owner saves one. To undo an owner's choice, delete the `schedule:<account id>` row from `settings`.

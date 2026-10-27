@@ -31,6 +31,10 @@ import { owns } from './workspace.js';
 import { prefsOf } from '../assistant/data.js';
 import { connectData } from './connect.js';
 import { zernioCost } from '../publish/connect.js';
+import { scheduleOf, timesOf } from '../schedule/choice.js';
+import { scheduleData } from './schedule.js';
+import { emailPrefsOf } from '../notify/email.js';
+import { unconnectedPlatforms } from '../publish/hold.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -92,6 +96,9 @@ export function today(ctx, t = now()) {
       ...row,
       waiting: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'queued' AND sample = 0 ORDER BY slot_at IS NULL, slot_at, created_at", id),
       scheduled: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' ORDER BY slot_at", id),
+      // Approved, and waiting for TikTok or Instagram to be connected (src/publish/hold.js); what is not connected.
+      held: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'held' ORDER BY slot_at", id),
+      unconnected: unconnectedPlatforms(ctx.db, row.pack),
       blocked: ctx.db.all("SELECT id, hook, topic, reason, format_id, created_at FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC", id, from),
       published: ctx.db.all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? ORDER BY published_at DESC", id, from),
       // TikTok drafts of the last day and a half, each with where it stands (src/publish/draft.js); a duplicate stays
@@ -250,7 +257,7 @@ export function topicsFor(ctx, pack) {
 /** An account's rivals, and their posting hours beside the account's own slots. */
 export function rivalsFor(ctx, pack) {
   const rivals = rivalsOf(ctx.db, pack.id);
-  return { current: pack, rivals, times: timesBeside(rivals, pack.meta.schedule?.slots || []) };
+  return { current: pack, rivals, times: timesBeside(rivals, timesOf(scheduleOf(ctx.db, pack))) };
 }
 
 export function sourcesFor(ctx, accountId) {
@@ -290,6 +297,10 @@ export function settingsData(ctx) {
     plans: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id) })),
     // The customer's choices for the WhatsApp assistant: a workspace's own, the operator has none.
     assistant: operator ? null : prefsOf(ctx.db, ctx.workspaceId),
+    // The days and times the account shown posts on (src/schedule/choice.js): its owner chooses them here.
+    schedule: ctx.packs[0] ? scheduleData(ctx.db, ctx.packs[0]) : null,
+    // Which emails the workspace's owners get (src/notify/email.js).
+    email: operator ? null : emailPrefsOf(ctx.db, ctx.workspaceId),
   };
 }
 

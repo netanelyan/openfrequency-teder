@@ -1,5 +1,6 @@
 import { nowIso } from '../core/clock.js';
 import { audit, settings } from '../core/store.js';
+import { workspaceAllowed } from '../billing/entitlement.js';
 
 // The safety rails, in every mode:
 //   - a kill switch per account and a global one
@@ -7,7 +8,8 @@ import { audit, settings } from '../core/store.js';
 //     takedown notices. A failed fact check blocks its post and nothing else: the
 //     account goes on
 // A paused account says why, on the website, and stays paused until the owner
-// resumes it. Money pauses nothing: there is no cap, and the month's plan (40
+// resumes it. An account whose workspace has not paid for Teder (src/billing/entitlement.js) is stopped the same
+// way without being paused: nothing is drafted or published for it until accounts says it is allowed again. Money pauses nothing: there is no cap, and the month's plan (40
 // slideshows, 10 redos) stops the drafting without pausing (src/budget/quota.js).
 
 export const PAUSE_REASONS = {
@@ -18,6 +20,9 @@ export const PAUSE_REASONS = {
   publish_errors: 'רצף שגיאות פרסום',
   takedowns: 'הודעות הסרה חוזרות',
 };
+
+/** Why an account of a workspace that has not paid writes and publishes nothing. */
+export const UNPAID = 'התשלום על תדר לא פעיל בחשבון';
 
 export function pauseAccount(db, accountId, reason, detail = null, actor = 'engine') {
   const acc = db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', accountId);
@@ -36,9 +41,10 @@ export function resumeAccount(db, accountId, actor = 'engine') {
 /** Can this account publish or generate right now? { ok, why } */
 export function canRun(db, accountId) {
   if (settings(db).globalKill) return { ok: false, why: 'מתג הכיבוי הכללי מופעל' };
-  const acc = db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', accountId);
+  const acc = db.get('SELECT status, paused_reason, workspace_id FROM accounts WHERE id = ?', accountId);
   if (!acc) return { ok: false, why: 'אין חשבון כזה' };
   if (acc.status !== 'active') return { ok: false, why: PAUSE_REASONS[acc.paused_reason] || acc.status };
+  if (acc.workspace_id != null && !workspaceAllowed(db, acc.workspace_id)) return { ok: false, why: UNPAID, code: 'unpaid' };
   return { ok: true, why: null };
 }
 
