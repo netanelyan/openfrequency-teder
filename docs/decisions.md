@@ -1735,3 +1735,86 @@ Seven changes, each where the engine was wrong, not where the posts were:
 
 What did not change: every fact is still quoted from an approved source, every photograph licensed. The fact accounts
 that spread use press photographs they have no licence for; the engine finds more licensed ones instead.
+
+### The native style made native, and facts that make a fan say "wait, what?" (2026-10-27)
+
+The owner looked at the first posts of the new engine and said they did not look viral. Laid beside the UFC
+countdowns again, slide by slide in the app (6.1M, 3.9M and 1.6M views) and a Hebrew facts post (889K), they were not:
+the native style set its lines on white boxes with a red highlighter, small (68px over a 72%-wide band), with a line
+under each title and a source under that; a landscape press photograph was cut to 9:16, a third of it blown up three
+times; slides the search found nothing for stood black; and the facts were rows of a records table ("28 ניצחונות,
+ואף אחד לא ניצח יותר"), on a photograph of a lit-up arena for a cover. What the countdowns do: one line in the app's
+plain white text with a thin shadow, about a nineteenth of the screen tall and four fifths of its width, the place
+before it ("4. Both Diaz's brother are vegan"), over a sharp photograph of the one it is about, a landscape one shown
+whole on black as the app shows it; a famous face on the cover with its count; strange facts about famous names.
+The owner also said that A to D stay: they are their designs, and the content is everyone's.
+
+- *Style E* (tokens.js, index.js): the white text with a shadow is its default (the box stays a choice), Heebo 700 at
+  100px for the cover and 92px for a title (four lines at most, down to 64px), its side bands 100px instead of 152, no
+  highlighter, no source line (the caption credits the photographs), and a facts post counts down to "1." as a
+  ranking does. A photograph close to 9:16 fills the slide; a wider one, or one that would be blown up past twice its
+  size, is shown whole in the middle of a black slide (`fitE`), its text on the black right above it when the face is
+  in the middle of the picture. A slide with no photograph of its own takes one the post already has of the same
+  person, then the cover's when the post is about one subject, then its scene's: never a black slide, never another
+  fighter's face on a facts slide.
+- *Facts* (kinds.js, prompts.js): a fact is about the sport as the audience follows it now (this season, this year's
+  tournament, today's champions and stars), what happened in the cage or on the pitch, said as its shock: a never, an
+  only, a first, a number that sounds impossible, a comparison that floors them ("GSP has more title defences than
+  Khabib and McGregor combined"). A record is a fact only said as its shock. The name first, at most 60 characters,
+  why it is strange in the line itself, and nothing under it. A first try went to life trivia from the "Early life"
+  and "Personal life" sections of famous names (Lesnar's typing test, Henry flying to the NBA Finals, Rooney and the
+  priesthood): the owner read it as old (a post from 2022) and beside the point, and so it was replaced the same day.
+  The cover is the most famous face on the list, by name, never named on the cover and never a building, a plaque or
+  a crowd (a plaque of Ronaldo's footprints passed as "Ronaldo"); the cover photograph is checked for the face. A
+  facts or tips cover is written from a count template only. The research details are no longer three-at-least for
+  these two kinds: the writer put them under the titles, and two rounds of repair could not take them off.
+- *Sources* (the packs' topic banks), current pages only: for the fight account, the biggest stars of now (the
+  current champions table, and Topuria, Pereira, Chimaev, Makhachev, Volkanovski and Gaethje, each one's lead and
+  accomplishments: the firsts and onlys a shock is made of; the champions of the lesser-known divisions gave averages
+  of fight time), the UFC's 2026 (the Paramount deal and the end of
+  pay-per-view, the White House card, the bonuses, the new rankings) and the records that sound impossible; for the
+  soccer one, the 2026 World Cup's records (the records page's players' section, already holding Mbappé's 22 goals,
+  Ronaldo scoring at 41, Messi's 34 matches) and its final, the stars of now (Lamine Yamal, Haaland, Mbappé, Kane, each from this
+  season's section) and this Premier League season. For the AI account, three tips topics from the guidance its bank
+  already approved (Gemini's prompting guides, Google Cloud, Firebase and OWASP on security, GOV.UK on interface
+  writing). A bank of current pages goes stale: the champions table follows the titles, but a topic that names the
+  stars has to be read again each season.
+- *Photographs*: a facts slide's photograph must show its subject large, the face visible (a stadium seen from the
+  stands passed as Emiliano Martínez); a slide with none of its own stands on the post's scene only when the scene names
+  no place (Anfield's crest stood behind two World Cup slides); a Commons author is cut to the name (one file's Artist
+  field was its licence, and it went into a caption).
+- *The caption* of a facts or tips post with short captions is its cover line, with its question: told to give nothing
+  away, the writer still put the best fact in it, run after run. The reviewer is told that a countdown's caption saying
+  its cover again is no tell, and the rewrite leaves it: scored 6 for it, it was rewritten with two of the facts.
+- *Everywhere*: every slide's title is a whole statement with a name, a number or a moment, never a bridge line
+  ("ואז הכל השתנה"); a story's beats in the order they happened; a short caption may be the cover line itself, never
+  a list of names (a list that left three out was caught as a wrong summary).
+- `npm run redraw -- --pack <id> [--style X]` draws a dry run's posts again from what it stored, in the style as it is
+  now, with no model call: for looking at a change to a style.
+- *Every slide on a photograph, in every style, and no photograph on every slide* (the owner, after seeing one post of
+  each format: "the same background image can't be in all of the slides. even on A-D formats, an image has to be
+  present. not a dark background"). A styled account searches a photograph for every slide and up to three scenes
+  ('bg', 'bg2', 'bg3', a scene with no place's name first); the writer gives every content slide an imageQuery, a
+  scene when the slide is about no one. `planPhotos` (render.js) gives each slide its own, else the least-used of what
+  it may show, two slides a photograph at most while another is left: the same person's photograph, on a post about
+  one subject its other photographs, then the scenes; never a guess-who's answer before its reveal, never another
+  subject's face on a facts, ranking, head-to-head or list slide. A small photograph is shown anyway (E whole on black,
+  A to D blown up), a slide keeps its photograph down to smaller type before giving it up, and the closing slide stands
+  on a scene under a veil of the style's ground. The ranking that went out with two black slides now has a photograph
+  on each.
+- *Covers*: a hot take opens on its opinion (the format's own pattern, no template), and a list (do-and-don't, ranking,
+  iceberg, facts, tips) on its count or its own pattern: "במקרה שאף אחד עוד לא סיפר לכם" opened both a hot take and a
+  do-and-don't, read as forced, and hid the take until the last slide.
+- *Every format of our time*: the soccer bank gains the 2026 World Cup final and knockouts, the 2026 Champions League
+  final, last season's scorers, the all-time World Cup scorers after 2026, Yamal against Mbappé, Bellingham against
+  Pedri, Neymar back at Santos, two hot takes (Spain the best team now; Yamal ahead of Messi at his age), guess-whos of
+  today's stars and an iceberg of 2026; the fight bank, Gaethje stopping Topuria and Gane stopping Pereira at the White
+  House card, the card itself, Topuria, Jon Jones and Pereira now, Harrison against Nunes at UFC 334, Gaethje against
+  Topuria again, today's champions by defences and guess-whos of the 2026 champions. They come before the classics,
+  which stay.
+- *Three blocks that were the engine's*: a fighter's infobox row ("Wins | 17") is evidence however short, once in its
+  document and as whole words (every stat of every head-to-head was refused as "too short"); a reviewer's fact note
+  that clears itself ("No real unsupported claim") blocks nothing; and a doubted line under a title that no rewrite
+  could fix is taken off when the post holds without it. A count of views a verified fact gives (UFC 1's pay-per-view)
+  is a fact, not the account's proof.
+

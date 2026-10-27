@@ -112,29 +112,36 @@ export const STYLES = {
   E: {
     name: 'E',
     he: 'נייטיב',
-    about: "native: like a slideshow made in TikTok's own app; the photograph sharp over the whole slide, a line or two on white boxes or in white with a thin shadow",
+    about: "native: like a slideshow made in TikTok's own app; the photograph sharp and whole, one line in white with a thin shadow (or on white boxes)",
     dark: true,
     inline: true,
     rank: true,
+    // Its side bands on TikTok, narrower than the shared ones (152): the viral countdowns' lines run across about four
+    // fifths of the screen, centred. The bottom band, over the caption and the buttons' lower half, stays.
+    sides: { tiktok: 100 },
     // `bg`: the ground of a slide with no photograph of its own. `accent`: a highlight, a highlighter's yellow behind
     // the words on a white box, or the words themselves in yellow in white text. The box is white and its text
     // near-black whatever the account's colours (`box`, `ink`): that is TikTok's own, and what reads as native.
     tokens: { bg: '#121212', text: '#FFFFFF', muted: '#D6D6D6', accent: '#FFD43B', box: '#FFFFFF', ink: '#111111' },
     text: {
-      // Heebo, the face closest to the app's own Hebrew (a plain, bold grotesque), never a display face.
-      hook: T('Heebo', 800, 92, 1.24, { lines: 3, floor: 76, breaks: true, inset: 56, mark: 8 }),
-      sub: T('Heebo', 700, 40, 1.3, { lines: 2, inset: 24 }),
-      title: T('Heebo', 800, 68, 1.24, { lines: 2, floor: 56, breaks: true, inset: 42, mark: 6 }),
-      ntitle: T('Heebo', 800, 68, 1.24, { lines: 2, floor: 56, breaks: true, inset: 42, mark: 6 }),
-      body: T('Heebo', 700, 40, 1.3, { lines: 2, inset: 24 }),
-      tbody: T('Heebo', 700, 40, 1.3, { lines: 2, inset: 24 }),
+      // Heebo, the face closest to the app's own Hebrew (a plain, bold grotesque), never a display face, at the size
+      // the viral posts set theirs: a line about a nineteenth of the screen tall (UFC and football countdowns measured
+      // in the app, 2026-10-27), one block of it, nothing under it but a short line when the writer gave one.
+      hook: T('Heebo', 700, 100, 1.18, { lines: 4, floor: 76, breaks: true, inset: 30, mark: 8 }),
+      sub: T('Heebo', 700, 54, 1.22, { lines: 2, inset: 24 }),
+      title: T('Heebo', 700, 92, 1.18, { lines: 4, floor: 64, breaks: true, inset: 28, mark: 6 }),
+      ntitle: T('Heebo', 700, 92, 1.18, { lines: 4, floor: 64, breaks: true, inset: 28, mark: 6 }),
+      body: T('Heebo', 700, 56, 1.22, { lines: 3, inset: 24 }),
+      // A tip's text is the thing to copy (a prompt, a setting), up to some 35 words: it may take six lines, set smaller.
+      tbody: T('Heebo', 700, 54, 1.22, { lines: 6, floor: 42, inset: 24 }),
       number: T('Heebo', 900, 112, 1),
       label: T('Heebo', 400, 22, 1.2),
     },
   },
 };
 
-/** E's two ways of drawing its text (pack.json style.text): TikTok's white box, the default, or its white text with a thin dark edge. */
+/** E's two ways of drawing its text (pack.json style.text): TikTok's plain white text with a thin shadow, the default (what the
+ * viral countdowns use), or its white box. */
 export const TEXT_LOOKS = ['box', 'shadow'];
 
 export const STYLE_NAMES = Object.keys(STYLES);
@@ -189,7 +196,7 @@ export function resolveStyle(spec, brand = null) {
   };
   // E's text look rides with it, and only with it: another style's look is hashed as it always was (style.js), so no
   // account drawn in A to D finds its saved look changed under it.
-  return { name: s.name, colors, notes, ...(s.name === 'E' ? { text: TEXT_LOOKS.includes(spec?.text) ? spec.text : 'box' } : {}) };
+  return { name: s.name, colors, notes, ...(s.name === 'E' ? { text: TEXT_LOOKS.includes(spec?.text) ? spec.text : 'shadow' } : {}) };
 }
 
 /** The colours a resolved style hands the shared graphics (src/render/visuals.js), which read the theme's variables. */

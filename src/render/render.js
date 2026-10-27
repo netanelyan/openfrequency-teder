@@ -10,7 +10,7 @@ import { everyPhoto, kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
 import { overlayOf } from '../rules/overlay.js';
-import { fillsCover } from '../images/size.js';
+import { fillsCover, imageSize } from '../images/size.js';
 import { stylePage } from './styles/index.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
@@ -516,6 +516,46 @@ export function slidePlaces(slides) {
   });
 }
 
+/** A scene with no name in it ("football stadium night"), never one of a named place ("Anfield", "Camp Nou"). */
+export const genericScene = (query) => Boolean(query) && !/(?:^|\s)\p{Lu}\p{Ll}/u.test(String(query));
+
+/**
+ * Which photograph each slide of a styled post stands on: Map(slide index -> key of `byIdx`), and how often each is
+ * used. Pure. (The rules are said where renderPost calls it.)
+ */
+export function planPhotos({ slides, byIdx, postKind }) {
+  const has = (k) => Boolean(byIdx.get(k)?.file);
+  const MAX_USES = 2;
+  const manySubjects = ['guess-who', 'ranking', 'head-to-head', 'list', 'facts'].includes(postKind);
+  const sceneKeys = ['bg', 'bg2', 'bg3'].filter((k) => has(k)).sort((a, b) => Number(!genericScene(byIdx.get(a)?.query)) - Number(!genericScene(byIdx.get(b)?.query)));
+  const answer = postKind === 'guess-who' ? slides.length - 1 : null;
+  const plan = new Map();
+  const uses = new Map();
+  const use = (i, k) => {
+    plan.set(i, k);
+    uses.set(k, (uses.get(k) || 0) + 1);
+  };
+  const splitCover = postKind === 'head-to-head' && has('ca') && has('cb');
+  slides.forEach((s, i) => {
+    if (has(i) && !(s.kind === 'cover' && postKind === 'guess-who')) use(i, i);
+  });
+  const candidates = (s, i) => {
+    const q = String(s.imageQuery || '').toLowerCase().trim();
+    const own = [...byIdx].filter(([k, p]) => p?.file && typeof k === 'number' && k !== i && k !== answer);
+    const same = q ? own.filter(([, p]) => String(p.query || '').toLowerCase().trim() === q).map(([k]) => k) : [];
+    const subject = manySubjects || postKind === 'guess-who' ? [] : own.map(([k]) => k).sort((a, b) => a - b);
+    return [...new Set([...same, ...subject, ...sceneKeys])];
+  };
+  slides.forEach((s, i) => {
+    if (plan.has(i) || (s.kind === 'cover' && splitCover)) return;
+    const c = candidates(s, i);
+    const free = c.find((k) => (uses.get(k) || 0) < MAX_USES);
+    const k = free ?? c.sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0];
+    if (k != null) use(i, k);
+  });
+  return { plan, uses, sceneKeys };
+}
+
 const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i.test(file) ? 'image/svg+xml' : 'image/jpeg'};base64,${readFileSync(file).toString('base64')}`;
 
 /**
@@ -577,8 +617,15 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   // without its framed photograph (a presentation choice: the text and the graphic are what was checked), then with
   // its type allowed smaller. Returns the size its text came out at, as a share of the design's.
   const drawSlide = async ({ i, s, slide, look, file, size, scale = 1 }) => {
-    const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
-    for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
+    // Style E puts its text over the photograph before it gives the photograph up: a ranking's number, title and line did
+    // not fit on the black above a landscape photograph, and two slides of a countdown went out black.
+    const over = styled && pack.theme.style?.name === 'E' && slide.photo ? [{ ...slide, textOver: true }] : [];
+    const bare = slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [];
+    // A styled slide keeps its photograph down to smaller type before it gives the photograph up: a slide with none is
+    // a dark ground, which the owner refused.
+    const keep = styled && slide.photo ? [[0.45, { ...slide }]] : [];
+    const attempts = [...[{ ...slide }, ...over].map((t) => [FIT_FLOOR, t]), ...keep, ...bare.map((t) => [FIT_FLOOR, t]), [0.45, bare[0] || { ...slide }]];
+    for (const [k, sl] of attempts.entries()) {
       const html = styled ? stylePage({ theme: pack.theme, overlay, size, slide: sl[1] }) : page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), ...look });
       try {
         const r = await renderHtml(html, { size, file, floor: sl[0], scale, lenient });
@@ -586,11 +633,25 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
         return Math.min(scale, ...r.fitted.filter((f) => f.from).map((f) => f.to / f.from));
       } catch (e) {
-        if (e.code !== 'overflow' || k === tries.length) throw e;
+        if (e.code !== 'overflow' || k === attempts.length - 1) throw e;
       }
     }
     throw new RenderError('the slide did not render', 'overflow');
   };
+  // Every slide of a styled post stands on a photograph, in every style, and no photograph stands on every slide (the
+  // owner, 2026-10-27: "the same background image can't be in all of the slides... an image has to be present, not a
+  // dark background"). One plan for the post, the same on every platform: each slide its own photograph; a slide with
+  // none takes the least-used of those it may show, at most MAX_USES slides a photograph while another is left:
+  //   - one the post has of the same person or place (the cover's search took the query first, and a slide does not
+  //     search twice);
+  //   - on a post about one subject, the post's other photographs of it, the cover's first;
+  //   - the post's scenes, one with no place's name first (a World Cup countdown stood on Anfield, its crest on the
+  //     wall), then any.
+  // Never a guess-who's answer before its reveal, never one side of a head-to-head on a slide of both, never another
+  // subject's face on a facts, ranking or list slide (those take scenes).
+  const { plan, uses, sceneKeys } = planPhotos({ slides, byIdx, postKind });
+  // The closing slide, when the account has one, stands on the least-used scene (or photograph) of the post.
+  const endKey = [...sceneKeys, ...[...uses.keys()]].sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0] ?? null;
   for (const size of platforms || pack.meta.platforms) {
     out[size] = [];
     const drawn = [];
@@ -637,10 +698,19 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         // A style draws a slide's own photograph, sharp, or none: never the cover's behind another slide, never a
         // blurred one, never a guess-who's answer on its cover. A cover photograph too small to fill is left off.
         // A cover with no photograph of its own stands on the post's scene ('bg'), sharp, when the post has one.
-        const own = uri.get(i) || (s.kind === 'cover' && postKind !== 'guess-who' ? uri.get('bg') : null) || null;
-        const fills = own && (s.kind !== 'cover' || fillsCover(readFileSync((byIdx.get(i) || byIdx.get('bg')).file)));
-        slide.photo = split ? null : fills ? own : null;
-        slide.photoPos = slide.photo ? focus.get(uri.has(i) ? i : 'bg') || null : null;
+        // Style E is a slideshow made in the app: every slide on a photograph. A slide the search found none for
+        // stands on the post's own (its cover's, when the post is about one subject) or its scene's, never on a black
+        // ground with words alone, never a guess-who's answer before its reveal, never another subject's face.
+        const from = plan.has(i) ? plan.get(i) : null;
+        const own = from != null ? uri.get(from) : null;
+        // A small photograph is shown all the same (E shows it whole, on black; A to D blow it up): a photograph, never a
+        // dark ground (the owner's call).
+        slide.photo = split ? null : own;
+        slide.photoPos = slide.photo ? focus.get(from) || null : null;
+        if (slide.photo) {
+          const sz = imageSize(readFileSync(byIdx.get(from).file));
+          slide.photoSize = sz ? { w: sz.width, h: sz.height } : null;
+        }
         slide.split = split;
         slide.splitPos = split ? [focus.get('ca'), focus.get('cb')] : null;
         slide.hasPhoto = Boolean(slide.photo || split);
@@ -678,7 +748,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     (scales[size] = drawn.map((d) => Math.round(d.ratio * 100) / 100));
     if (end && styled && !only) {
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
-      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle } }), { size, file, lenient });
+      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null } }), { size, file, lenient });
       for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
       out[size].push(file);
     } else if (end && !only) {

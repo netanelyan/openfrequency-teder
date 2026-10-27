@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { STYLES } from './tokens.js';
 import { displayText, highlightIn, slideModel } from './model.js';
 import { zonesFor } from '../../rules/overlay.js';
+import { LIMITS } from '../../voice/tells.js';
 
 // Does a text fit its style, before anything is rendered?
 //
@@ -91,10 +92,13 @@ export function fitText(text, spec, { box, scale = 1 }) {
 }
 
 /** The width a style's text has on one platform: the slide less its side bands, less a card's inset. */
-export function boxFor(spec, size = 'tiktok', overlay = null) {
-  const z = zonesFor(size, overlay, H[size]);
+export function boxFor(spec, size = 'tiktok', overlay = null, style = null) {
+  const z = sidesOf(zonesFor(size, overlay, H[size]), STYLES[style], size);
   return W - z.left - z.right - (spec.inset || 0) - (spec.mark ? 2 * spec.mark : 0);
 }
+
+/** A style's own side bands, where it sets them (E's), in place of the shared ones. */
+export const sidesOf = (z, S, size) => (S?.sides?.[size] ? { ...z, left: S.sides[size], right: S.sides[size] } : z);
 
 const SPOKEN = { hook: 'the cover line', sub: 'the line under the cover', title: 'the title', ntitle: 'the title', body: 'the text', tbody: 'the text' };
 
@@ -114,7 +118,7 @@ export function styleFitProblems(draft, { style, platforms = ['tiktok'], overlay
     const spec = S.text[field];
     if (!text || !spec) return;
     // A highlight block is wider than its words by its padding: measured on a narrower box, the line it is on fits.
-    const box = boxFor({ ...spec, mark: highlight && highlightIn(text, highlight) ? spec.mark : 0 }, size, overlay);
+    const box = boxFor({ ...spec, mark: highlight && highlightIn(text, highlight) ? spec.mark : 0 }, size, overlay, style);
     const r = fitText(text, spec, { box, scale: field === 'hook' || field === 'title' || field === 'ntitle' ? scale : 1 });
     if (!r.ok) add(where, field, text, r);
   };
@@ -158,7 +162,10 @@ export function styleRoom(style, { platforms = ['tiktok'] } = {}) {
   const S = STYLES[style];
   if (!S) return '';
   const size = platforms.includes('tiktok') ? 'tiktok' : 'instagram';
-  const room = (field, scale = 1) => fitText('ה', S.text[field], { box: boxFor(S.text[field], size), scale }).chars;
+  // Never more than the voice allows a cover or a title (LIMITS): E's room is 77 characters a title, the voice's 60,
+  // and a writer told 77 wrote 67 and went back to be cut, slide after slide.
+  const cap = { hook: LIMITS.cover.maxChars, title: LIMITS.slideTitle.maxChars };
+  const room = (field, scale = 1) => Math.min(cap[field] || Infinity, fitText('ה', S.text[field], { box: boxFor(S.text[field], size, null, style), scale }).chars);
   const sc = SIZE_SCALE[size];
   return `STYLE ${S.name}: this account's slides are drawn large. The cover line holds about ${room('hook', sc)} characters (${S.text.hook.lines} lines at most), the line under it about ${room('sub')}; a slide's title about ${room('title', sc)}; a slide's text about ${room('tbody')} characters, and on a slide whose point is a number about ${room('body')} beside the number. A longer text is sent back to be shortened.`;
 }

@@ -207,9 +207,17 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
   if (!quote) return fail('no quote');
   if (/\.\.\.|…/.test(quote)) return fail('the quote is cut with an ellipsis');
   const n = wordCount(quote);
-  if (n < MIN_QUOTE_WORDS) return fail(`the quote is ${n} words, too short to be evidence of anything`);
+  // A table's labelled row is evidence however short: a fighter's record is an infobox of two- and three-word rows
+  // ("Wins | 17", "By knockout | 7"), and every stat of every head-to-head was refused as "too short". Such a row must
+  // be in the document once, as whole words ("Wins | 17" is not in "Wins | 170").
+  const row = /\|/.test(quote) && /\p{N}/u.test(quote) && n >= 2;
+  if (n < MIN_QUOTE_WORDS && !row) return fail(`the quote is ${n} words, too short to be evidence of anything`);
   if (n > maxQuoteWords) return fail(`the quote is ${n} words, more than ${maxQuoteWords}: a short fact, not a copied passage`);
   if (!normalise(doc.text).includes(normalise(quote))) return fail('the quote is not in the source document, word for word');
+  if (n < MIN_QUOTE_WORDS) {
+    const hits = ` ${normalise(doc.text)} `.split(` ${normalise(quote)} `).length - 1;
+    if (hits !== 1) return fail(`the row "${quote}" is in the document ${hits ? `${hits} times` : 'only inside a longer one'}: quote it with the words around it`);
+  }
   const inQuote = numbersIn(quote, { words: true, hebrew: true });
   const missing = [...numbersIn(fact.claim, { hebrew: true })].filter((x) => !inQuote.has(x));
   if (missing.length) return fail(`the claim states ${missing.join(', ')}, which the quote does not`);

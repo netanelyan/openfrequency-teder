@@ -6,7 +6,7 @@ import path from 'node:path';
 import { readPack } from '../src/packs/load.js';
 import { validateAll, validatePack } from '../src/packs/validate.js';
 import { closeBrowser, getBrowser, renderHtml } from '../src/render/render.js';
-import { stylePage, themeOf } from '../src/render/styles/index.js';
+import { fitE, geo, stylePage, themeOf } from '../src/render/styles/index.js';
 import { displayText, highlightIn, slideModel, textHtml } from '../src/render/styles/model.js';
 import { fitText, highlightProblems, styleFitProblems, boxFor } from '../src/render/styles/fit.js';
 import { resolveStyle, STYLE_NAMES, STYLES, styleConfigProblems } from '../src/render/styles/tokens.js';
@@ -46,14 +46,15 @@ test('every style draws a cover, a number slide and a text slide, on TikTok and 
   }
 });
 
-// E's default look (its text on white boxes) has none either: only its "shadow" look draws one, on its own lines.
+// E's box look (its text on white boxes) has none either: only its "shadow" look, the default, draws one, on its own
+// lines (checked below).
 test('no outline and no shadow on any letter, and no progress bar, counter, dots or handle on a slide', async () => {
   const browser = await getBrowser();
   const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   try {
     for (const name of STYLE_NAMES) {
       for (const slide of Object.values(slides)) {
-        const html = draw(name, { ...slide, handle: 'demo.bench', displayName: 'דמו' });
+        const html = name === 'E' ? drawE('box', { ...slide, handle: 'demo.bench', displayName: 'דמו' }) : draw(name, { ...slide, handle: 'demo.bench', displayName: 'דמו' });
         assert.doesNotMatch(html, /class="(track|count|dots|ghost|qmark|handle-tag|bgphoto|bgveil)"/);
         assert.doesNotMatch(html, /@demo\.bench/, 'the handle is not on a slide');
         await tab.setContent(html);
@@ -128,7 +129,8 @@ test('a highlight is drawn once a slide, only on words of its own headline', asy
   const tab = await browser.newPage();
   try {
     for (const name of STYLE_NAMES) {
-      await tab.setContent(draw(name, { ...cover, sub: 'נגאנו נגאנו נגאנו' }));
+      // E's native look marks nothing (below): its box look is the one with a highlight.
+      await tab.setContent(name === 'E' ? drawE('box', { ...cover, sub: 'נגאנו נגאנו נגאנו' }) : draw(name, { ...cover, sub: 'נגאנו נגאנו נגאנו' }));
       assert.equal(await tab.evaluate(() => document.querySelectorAll('mark.hi').length), 1, `style ${name}`);
     }
   } finally {
@@ -372,9 +374,10 @@ test("E's two looks: white boxes behind each line (no shadow), or white text wit
 });
 
 test("E: the cover's hook is set large and centred in the middle band, and the text moves off a face the screen found", async () => {
-  assert.ok(STYLES.E.text.hook.px >= 76 && STYLES.E.text.hook.px <= 96 && STYLES.E.text.hook.floor >= 76);
-  assert.ok(STYLES.E.text.title.px >= 60 && STYLES.E.text.title.px <= 72);
-  assert.equal(STYLES.E.text.tbody.lines, 2);
+  // The viral countdowns' size: a line about a nineteenth of the screen tall, the text across four fifths of it.
+  assert.ok(STYLES.E.text.hook.px >= 88 && STYLES.E.text.hook.px <= 108 && STYLES.E.text.hook.floor >= 72);
+  assert.ok(STYLES.E.text.title.px >= 84 && STYLES.E.text.title.px <= 100);
+  assert.equal(STYLES.E.sides.tiktok, 100);
   const browser = await getBrowser();
   const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   try {
@@ -400,7 +403,8 @@ test("E: the cover's hook is set large and centred in the middle band, and the t
 
 test("E is chosen in pack.json and carries its look; the other styles' looks are hashed as before", () => {
   assert.ok(STYLE_NAMES.includes('E'));
-  assert.equal(themedE().style.text, 'box', 'the box is the default');
+  assert.equal(themedE().style.text, 'shadow', "the app's plain white text is the default, as on the viral countdowns");
+  assert.equal(themedE('box').style.text, 'box');
   assert.equal(themedE('shadow').style.text, 'shadow');
   assert.equal('text' in themed('D').style, false, 'no new key on another style, so its saved look is unchanged');
   assert.equal('text' in themeOf({ ...pack, meta: { ...pack.meta, style: { name: 'B', text: 'shadow' } } }).style, false);
@@ -409,4 +413,67 @@ test("E is chosen in pack.json and carries its look; the other styles' looks are
   // The writer is told E's room, from E's own faces' widths (metrics.json has them).
   assert.ok(fitText('ה', STYLES.E.text.hook, { box: boxFor(STYLES.E.text.hook) }).chars > 10);
   assert.match(styleFitProblems({ hook: 'מי שווה הכי הרבה בעולם ה-AI? חמש חברות, מדד אחד ושווי אחד שמשנה את כל התמונה של השוק והכל', sub: '', slides: [{ kind: 'cover' }] }, { style: 'E' })[0]?.msg || '', /Shorten it/);
+});
+
+test('E shows a landscape or small photograph whole on black, its text clear of the face; a portrait near the slide fills it', async () => {
+  const g = geo('tiktok');
+  assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1920 } }, g).mode, 'cover', 'a 9:16 photograph fills the slide');
+  assert.equal(fitE({ photo, photoSize: { w: 1200, h: 1800 } }, g).mode, 'cover', 'a 2:3 one is cut a little and fills it');
+  assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1350 } }, g).mode, 'contain', "a 4:5 one is shown whole, as the app shows the countdowns' press photos");
+  const wide = fitE({ photo, photoSize: { w: 1600, h: 900 } }, g);
+  assert.deepEqual(wide, { mode: 'contain', top: 656, ph: 608 }, 'a 16:9 one is shown whole, in the middle');
+  assert.equal(fitE({ photo, photoSize: { w: 450, h: 600 } }, g).mode, 'contain', 'a small one is not blown up past twice its size');
+  assert.equal(fitE({ photo }, g).mode, 'cover', 'no size known: as before');
+  const browser = await getBrowser();
+  const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  try {
+    // A face in the middle of a landscape photograph: the text goes on the black above it, with no shade there.
+    await tab.setContent(drawE(null, { ...text, photo, photoSize: { w: 1600, h: 900 }, photoPos: '50% 40%' }));
+    const r = await tab.evaluate(() => {
+      const img = document.querySelector('img.ph').getBoundingClientRect();
+      const blk = [...document.querySelectorAll('.blk .sf')].map((e) => e.getBoundingClientRect());
+      return { img: [img.top, img.height], bottom: Math.max(...blk.map((b) => b.bottom)), max: Number(document.querySelector('.ov').dataset.max) };
+    });
+    assert.deepEqual(r.img, [656, 608]);
+    assert.ok(r.bottom <= 656, `the text ends above the photograph (${r.bottom})`);
+    assert.equal(r.max, 0, 'no shade on black');
+  } finally {
+    await tab.close();
+  }
+  const file = path.join(out, 'E-landscape.jpg');
+  const done = await renderHtml(drawE(null, { ...text, photo, photoSize: { w: 1600, h: 900 }, photoPos: '50% 40%' }), { size: 'tiktok', file });
+  assert.deepEqual(done.warnings, []);
+});
+
+test("E's native look marks nothing and draws no source line; a facts post counts down to its best fact as 1.", () => {
+  const html = drawE(null, { ...text, highlight: text.title.split(' ')[0], photo, sources: ['ויקיפדיה'] });
+  assert.doesNotMatch(html, /<mark class="hi">/, 'no highlighter in the native look');
+  assert.doesNotMatch(html, /class="src"/, 'no source line on the slide');
+  assert.match(drawE('box', { ...text, photo, sources: ['ויקיפדיה'] }), /class="src"/, 'the box look keeps its source line');
+  const fact = (n) => ({ kind: 'item', role: 'fact', postKind: 'facts', n, of: 5, title: 'האחים דיאז טבעונים', body: '', photo });
+  assert.equal(slideModel(fact(1)).rank, '5');
+  assert.equal(slideModel(fact(5)).rank, '1');
+  assert.match(drawE(null, fact(5)), /<span class="rk">1\.<\/span> /);
+  assert.equal(slideModel({ kind: 'item', role: 'tip', postKind: 'tips', n: 2, of: 5, title: 'פרומפט שמסכם פגישה', body: 'תכתבו: סכם את הפגישה ב-5 שורות.' }).rank, '2', 'tips count up from one');
+  assert.equal(slideModel({ kind: 'item', role: 'fact', postKind: 'myth-fact', n: 1, of: 2, title: 'x', body: '' }).rank, '', "a myth-fact's fact is not counted");
+});
+
+test('every slide of a styled post on a photograph, none on more than two while another is free, never the wrong face', async () => {
+  const { planPhotos } = await import('../src/render/render.js');
+  const ph = (query) => ({ file: 'x.jpg', query });
+  const items = (n, q = () => '') => [{ kind: 'cover' }, ...Array.from({ length: n }, (_, k) => ({ kind: 'item', imageQuery: q(k) }))];
+  // A story with two photographs of its own and one scene: six slides, each on one, none on more than two.
+  const story = planPhotos({ slides: items(5), byIdx: new Map([[0, ph('a')], [2, ph('b')], ['bg', ph('football stadium night')]]), postKind: 'story' });
+  assert.equal(story.plan.size, 6, 'every slide has a photograph');
+  assert.ok(Math.max(...story.uses.values()) <= 2, 'no photograph on more than two slides');
+  // A facts slide never stands on another person's face: a scene, the place's name last.
+  const facts = planPhotos({ slides: items(4, (k) => ['Messi', 'Mbappé', 'Kane', 'Yamal'][k]), byIdx: new Map([[0, ph('Messi')], [1, ph('Messi')], ['bg', ph('Anfield')], ['bg2', ph('football stadium night')]]), postKind: 'facts' });
+  assert.deepEqual([2, 3, 4].map((i) => facts.plan.get(i)), ['bg2', 'bg2', 'bg'], 'the scene with no name first, twice at most, then the next');
+  // A guess-who's clue never shows its answer, and its cover is a scene.
+  const gw = planPhotos({ slides: items(3), byIdx: new Map([[3, ph('Zlatan')], ['bg', ph('football pitch grass')]]), postKind: 'guess-who' });
+  assert.equal(gw.plan.get(3), 3);
+  for (const i of [0, 1, 2]) assert.notEqual(gw.plan.get(i), 3, `slide ${i} does not give the answer away`);
+  // A slide the same person's search already found shows that photograph.
+  const same = planPhotos({ slides: items(2, (k) => (k === 1 ? 'Messi' : '')), byIdx: new Map([[1, ph('Messi')], ['bg', ph('octagon cage')]]), postKind: 'facts' });
+  assert.equal(same.plan.get(2), 1);
 });

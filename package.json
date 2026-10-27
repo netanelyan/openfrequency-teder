@@ -12,6 +12,7 @@
     "test": "node --test --test-concurrency=1 \"test/*.test.js\" && node scripts/check-public.js",
     "check:public": "node scripts/check-public.js",
     "dry": "node scripts/dry.js",
+    "redraw": "node scripts/redraw.js",
     "web": "node scripts/web.js",
     "start": "node scripts/web.js --runner",
     "demo": "node scripts/demo.js",

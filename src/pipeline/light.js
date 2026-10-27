@@ -14,7 +14,7 @@ import { lockedStyle, styleByHash } from '../render/style.js';
  * person cleared, and whose file is still there. Nothing new is searched for: that would be a model call.
  */
 export function photoChoices(db, post) {
-  const ids = [...new Set([...(post.checks?.images || []), post.checks?.image, post.checks?.bgImage, ...(post.checks?.coverImages || []), ...post.slides.map((s) => s.image_id)].filter(Boolean))];
+  const ids = [...new Set([...(post.checks?.images || []), post.checks?.image, post.checks?.bgImage, ...(post.checks?.sceneImages || []), ...(post.checks?.coverImages || []), ...post.slides.map((s) => s.image_id)].filter(Boolean))];
   return ids
     .map((id) => db.get('SELECT * FROM images WHERE id = ?', id))
     .filter((img) => img && (img.safety == null || img.safety === 'ok' || img.reviewed_at) && img.file && existsSync(img.file));
@@ -37,7 +37,7 @@ export async function drawAgain(ctx, { post, pack, format, draft, token }) {
   const look = styleByHash(db, pack, post.checks?.style) || lockedStyle(db, pack, (ctx.global || ctx).packs);
   const img = (imageId) => (imageId ? db.get('SELECT * FROM images WHERE id = ?', imageId) : null);
   const photos = new Map(
-    [...draft.slides.map((s, i) => [i, img(s.imageId)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file)
+    [...draft.slides.map((s, i) => [i, img(s.imageId)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.sceneImages || []).map((x, k) => [`bg${k + 2}`, img(x)]), ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file)
   );
   const files = await renderPost({
     pack: { ...pack, theme: look.theme }, format, post: { id: post.id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token, extra, ctaKind: draft.cta?.kind }, slides,

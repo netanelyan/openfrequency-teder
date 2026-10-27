@@ -163,3 +163,11 @@ test('a rewritten text is scored again as it now reads, and one that still reads
     cleanup();
   }
 });
+
+test("a fact note that clears itself is no fact problem; one that names a wrong fact still is", async () => {
+  const { CLEARED } = await import('../src/voice/review.js');
+  assert.ok(CLEARED.test('The text ties the term to AI code, while it means not checking it - minor. No real unsupported claim.'));
+  assert.ok(CLEARED.test('This is not a problem.'));
+  assert.ok(!CLEARED.test('The source says it was the first final since 1985, not the first win.'));
+  assert.ok(!CLEARED.test('The caption names three of the six players as if they were all of them.'));
+});

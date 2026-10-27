@@ -86,7 +86,10 @@ export function slideModel(s) {
   const cta = s.isLast && s.cta?.text ? s.cta.text : '';
   if (s.kind === 'item') {
     // A ranking's place, as a number: the one label of a post's structure style E draws, before the title ("5.").
-    const rank = s.role === 'rank' && s.rank ? String(s.rank) : '';
+    // A facts post counts down the same way, to its best fact as "1." (every viral countdown: "5. Yoel Romero was
+    // never champion" ... "1. Khabib never bled").
+    // A tips post numbers its tips from one, as the saved lists do ("1. Expertise Accelerator").
+    const rank = s.role === 'rank' && s.rank ? String(s.rank) : s.role === 'fact' && s.postKind === 'facts' && s.of && s.n ? String(s.of - s.n + 1) : s.role === 'tip' && s.postKind === 'tips' && s.n ? String(s.n) : '';
     const n = numberOf(s);
     if (n) return { kind: 'number', ...n, title: s.title || '', highlight: s.highlight || '', cta, rank };
     const vis = s.visual && !s.visual.bad && s.role !== 'stat' ? s.visual : null;
