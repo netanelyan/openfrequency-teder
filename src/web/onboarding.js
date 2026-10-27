@@ -211,4 +211,7 @@ export function onboardingRoutes() {
   ];
 }
 
+/** Whether this onboarding has work running in the background (its discovery, or its sample posts). */
+export const onboardingBusy = (id) => running.has(id);
+
 export const __onboarding = { running };
