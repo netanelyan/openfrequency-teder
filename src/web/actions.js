@@ -12,6 +12,7 @@ import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
 import { canRun, pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
+import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { timeHe } from './ui.js';
 import { MODES } from '../packs/validate.js';
@@ -181,7 +182,9 @@ export async function publishNow(ctx, user, { id }) {
     if (r.held) return { ok: false, message: loadPost(ctx.db, id)?.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.' };
     return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? 'פורסם בפרסום יבש: נכתב לדיסק.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט.' };
   } catch (e) {
-    throw new ActionError(`לא פורסם: ${e.message}`);
+    // The publisher's own words go to the log; the customer reads them in Hebrew (src/publish/errors.js).
+    console.error(`[publish-now] ${id}: ${e?.message || e}`);
+    throw new ActionError(user.operator ? `לא פורסם: ${e.message}` : publishErrorHe(e));
   }
 }
 

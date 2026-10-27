@@ -207,7 +207,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const sig = { accountId: account, platform, e: query.get('e'), s: query.get('s'), t };
   if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, resultPage(EXPIRED)];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'בשרת הזה עוד לא הוגדר Zernio.' })];
+  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לטיקטוק ולאינסטגרם עוד לא זמין. אנחנו מטפלים בזה.' })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;
 
   if (!done) {
