@@ -123,7 +123,9 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     // as a carousel. Nothing leaves before PUBLISH_MODE=live and a connected account.
     publishers: { tiktok: 'zernio', instagram: 'zernio' },
     zernio: { tiktokMode: 'draft-now', tiktokPrivacy: 'SELF_ONLY' },
-    schedule: { postsPerDay: 1, windows: [[12, 14], [19, 22]], slots: ['19:30'], slotsByDay: { 5: ['12:30'], 6: ['21:00'] } },
+    // The new account's days and times (src/schedule/choice.js DEFAULT_CHOICE, about 51 slots a month, so the plan's 40
+    // are reached even in a month of festivals). The owner changes them on Settings, and the choice is laid over this.
+    schedule: { postsPerDay: 2, windows: [[12, 14], [19, 22]], slots: ['12:30', '19:30'], slotsByDay: { 5: ['12:30'], 6: ['21:00'] } },
     autonomy: { mode: 'approve' },
     compliance: FINANCIAL.test(about) ? ['il-investment-advice'] : [],
     // The owner's own photographs (<pack>/photos) first, then the libraries; Openverse last, for the people and places

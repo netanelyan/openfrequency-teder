@@ -29,9 +29,13 @@ export function postsOn(date, perDay) {
   return Math.floor((n + 1) * p) - Math.floor(n * p);
 }
 
-/** { slots: Date[], dropped: [{ at, why }] } for one account on one Israel date. */
+/**
+ * { slots: Date[], dropped: [{ at, why }] } for one account on one Israel date. A schedule with `perMonth` (the
+ * customer's own, src/schedule/choice.js) keeps only the slots its month's plan has room for (monthSlots below).
+ */
 export function slotsFor(date, schedule = {}, { notBefore = null } = {}) {
   const day = schedule.slotsByDay?.[String(weekday(date))] || schedule.slots || [];
+  const kept = schedule.perMonth != null ? new Set(monthSlots(date.slice(0, 7), schedule).slots.map((s) => s.getTime())) : null;
   const dropped = [];
   const slots = [];
   for (const hhmm of day) {
@@ -39,9 +43,50 @@ export function slotsFor(date, schedule = {}, { notBefore = null } = {}) {
     const rest = restAt(at);
     if (rest) dropped.push({ at: hhmm, why: rest });
     else if (!inWindows(at, schedule.windows)) dropped.push({ at: hhmm, why: 'מחוץ לשעות הפרסום' });
+    else if (kept && !kept.has(at.getTime())) dropped.push({ at: hhmm, why: 'מעבר לחבילה החודשית' });
     else if (notBefore != null && at.getTime() < notBefore) dropped.push({ at: hhmm, why: 'השעה עברה' });
     else slots.push(at);
   }
   const cap = postsOn(date, schedule.postsPerDay) ?? slots.length;
   return { slots: slots.slice(0, cap), dropped };
+}
+
+/** Every Israel date of a month, 'YYYY-MM' -> ['YYYY-MM-01', ...]. */
+export function datesOf(month) {
+  const [y, m] = month.split('-').map(Number);
+  const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: n }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
+}
+
+const thinned = new Map();
+
+/**
+ * A month's slots, thinned to a plan: { slots: Date[] (the ones kept), all: how many before thinning }. A schedule with
+ * more slots in a month than `perMonth` drops the extra ones evenly over the month, a day's second slot first, so a
+ * plan of 40 posts lasts the whole month instead of running out in its third week. Shabbat and the festivals are
+ * dropped before any of this, and a month with fewer slots than the plan keeps them all.
+ */
+export function monthSlots(month, schedule = {}, perMonth = schedule.perMonth) {
+  const plain = { ...schedule, perMonth: null };
+  const key = `${month}|${perMonth}|${JSON.stringify(plain)}`;
+  if (thinned.has(key)) return thinned.get(key);
+  const days = datesOf(month).map((d) => slotsFor(d, plain).slots);
+  const all = days.flat();
+  let keep = all;
+  const cap = Number(perMonth);
+  if (perMonth != null && Number.isInteger(cap) && cap >= 0 && all.length > cap) {
+    const drop = new Set();
+    const spread = (list, n) => {
+      for (let i = 0; i < n; i++) drop.add(list[Math.floor(((i + 0.5) * list.length) / n)]);
+    };
+    const seconds = days.flatMap((d) => d.slice(1));
+    const extra = all.length - cap;
+    spread(seconds, Math.min(extra, seconds.length));
+    if (extra > seconds.length) spread(all.filter((s) => !drop.has(s)), extra - seconds.length);
+    keep = all.filter((s) => !drop.has(s));
+  }
+  const out = { slots: keep, all: all.length };
+  if (thinned.size > 500) thinned.clear();
+  thinned.set(key, out);
+  return out;
 }

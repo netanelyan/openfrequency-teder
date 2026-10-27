@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { connectPanel, tiktokModePanel } from './connect.js';
+import { schedulePanel } from './schedule.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -108,7 +109,7 @@ const ROLE_NAME = {
   beat: 'בנייה', payoff: 'הסוף', then: 'אז', turn: 'התפנית', now: 'היום', context: 'רקע', moment: 'הרגע', after: 'אחרי', clue: 'רמז', reveal: 'התשובה',
   stat: 'נתון', verdict: 'השורה התחתונה', ranks: 'מקומות 10 עד 6', rank: 'מקום', layer: 'שכבה', case: 'נימוק', ask: 'השאלה', myth: 'מיתוס', fact: 'עובדה', joke: 'בדיחה', truth: 'בלי צחוק',
 };
-const PLATFORM_DELETE = { deleted: 'נמחק דרך ה-API', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
+const PLATFORM_DELETE = { deleted: 'נמחק אוטומטית', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
 const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
@@ -300,7 +301,7 @@ ${stopBanners(ctx, d)}
 <div class="kpi side">${side('/posts', 'waiting', 'מחכים לאישור')}${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}</div>
 </section>
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
-${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעה שקבעתם בהגדרות.</p>'}
+${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.</p>'}
 </section>
 ${tiktokPanel(d)}
 ${d.summary ? summaryPanel(ctx, d) : ''}`;
@@ -352,7 +353,7 @@ ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.acc?.mode || 'approve'];
     return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
-${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעה שקבעתם בהגדרות.'}</div>`}
+${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.'}</div>`}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(b.reason)}</div></li>`).join('')}</ul></details>` : ''}
 </section>`;
   })
@@ -428,7 +429,7 @@ ${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכ
     ? `<section class="panel"><header><h2>הודעות הסרה</h2></header>
 ${tds.map((t) => `<div class="banner bad">${icon('alert')}<div><b>${esc(stamp(t.received_at))}${t.claimant ? ` · ${esc(t.claimant)}` : ''}</b><p dir="auto">${esc(t.notice.slice(0, 300))}</p><ul class="factlist">${Object.entries(t.deleted).map(([pl, x]) => `<li>${esc(PLATFORM_HE[pl] || pl)}: <b>${esc(PLATFORM_DELETE[x.state] || x.state)}</b>${x.why ? `<div class="muted small">${esc(x.why)}</div>` : ''}${x.state === 'by_hand' ? postButton(ctx, `/takedowns/${t.id}/deleted`, 'מחקתי ידנית', { cls: 'btn sm', fields: { platform: pl } }) : ''}</li>`).join('')}</ul></div></div>`).join('')}
 ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert')}התקבלה הודעת הסרה על הפוסט הזה</summary><form method="post" action="/post/${esc(post.id)}/takedown" class="formgrid">${csrfField(ctx)}
-<p class="muted small">הפוסט יורד מיד: באינסטגרם נמחק דרך ה-API כשאפשר, בטיקטוק צריך למחוק ידנית (אין לזה API). הודעה שנייה תוך 90 יום משהה את החשבון.</p>
+<p class="muted small">הפוסט יורד מיד: באינסטגרם הוא נמחק לבד כשאפשר, ובטיקטוק צריך למחוק אותו ידנית באפליקציה. הודעה שנייה תוך 90 יום משהה את החשבון.</p>
 <label class="f">פלטפורמה<select name="platform"><option value="">שתיהן</option><option value="tiktok">טיקטוק</option><option value="instagram">אינסטגרם</option></select></label>
 <label class="f">ממי<input type="text" name="claimant" maxlength="200"></label>
 <label class="f">נוסח ההודעה<textarea name="notice" maxlength="4000" required></textarea></label>
@@ -459,7 +460,7 @@ ${topicPanel(d.topic)}
 <section class="panel">${factsBlock(post, { open: true })}</section>
 <section class="panel"><header><h2>בדיקות</h2></header>
 <dl class="kv"><dt>שער העובדות</dt><dd>${post.checks?.token ? '<span class="chip ok">עבר</span>' : '<span class="chip">לא הגיע</span>'}</dd>
-<dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין (בלי מפתח API)'}</dd>
+${ctx.operator ? `<dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין (בלי מפתח API)'}</dd>` : ''}
 ${scores.length ? `<dt>ציון הכי גבוה</dt><dd><span class="num ltr">${Math.max(...scores)}/10</span></dd>` : ''}
 ${(post.checks?.rewrites || []).length ? `<dt>שכתובים</dt><dd>${post.checks.rewrites.length}</dd>` : ''}
 ${post.quota_kind ? `<dt>במכסה</dt><dd>${esc(QUOTA_KIND_HE[post.quota_kind] || post.quota_kind)}</dd>` : ''}
@@ -497,9 +498,9 @@ ${ctx.operator ? `<div class="row"><span>עלות החודש</span><b class="num
 ${quota ? quotaRow(quota) : ''}
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
-<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd>${style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`} · נעול מ-${esc(shortDate(style.at))} · <a href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></dd>` : ''}</dl>
+<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd>${ctx.operator ? `<dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>` : ''}${style ? `<dt>סגנון</dt><dd>${style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`} · נעול מ-${esc(shortDate(style.at))} · <a href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></dd>` : ''}</dl>
 ${connect ? `${connectPanel(ctx, connect)}${tiktokModePanel(ctx, connect)}` : ''}
-${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
+${style?.pending ? `<div class="paused">${icon('alert')}<div><b>${ctx.operator ? 'הסגנון בקובץ theme.json השתנה' : 'יש לחשבון סגנון חדש'}</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
 <div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}לכבות את החשבון`, { cls: 'btn danger', confirm: 'לחצו שוב כדי לכבות' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
 </article>`;
     })
@@ -672,7 +673,7 @@ export function resultsPage(ctx, d) {
     ? `<section class="panel"><header><h2>הפוסטים שפורסמו</h2><span class="end muted small">${d.posts.length}</span></header>
 <table class="table stack resposts"><thead><tr><th>פוסט</th><th>צפיות</th><th>לייקים</th><th>שיתופים</th><th>תגובות</th><th>מול החציון</th></tr></thead><tbody>${d.posts.map(postRow).join('')}</tbody></table>
 <p class="muted small">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה, באינסטגרם שמירות לחשיפה.</p></section>`
-    : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>המספרים נקראים מ-Zernio רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
+    : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>מספרים מגיעים רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const formats = `<p class="lede">70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
 ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)} · בידור מול מספרים</h2></header>
@@ -766,7 +767,7 @@ export function topicPanel(t) {
 /* ------------------------------------------------------------ sources */
 
 const SOURCE_STATUS = { approved: ['מאושר', 'ok'], pending: ['ממתין לאישור', 'warn'], removed: ['הוסר', 'ghost'] };
-const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'API' };
+const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'נתונים' };
 
 export function sourcesPage(ctx, { packs, current, sources, form = {}, problems = [] }) {
   // The switcher at the top picks the account; tabs only when a page is given more than one.
@@ -790,7 +791,7 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(
 <form method="post" action="/sources/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
 <label class="f">שם<input type="text" name="name" required value="${esc(form.name || '')}"></label>
 <label class="f">כתובת <small>https בלבד</small><input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
-<label class="f">סוג<select name="type"><option value="rss">פיד (RSS/Atom)</option><option value="web">דף</option><option value="api">API (JSON)</option></select></label>
+<label class="f">סוג<select name="type"><option value="rss">פיד חדשות</option><option value="web">דף באתר</option><option value="api">מקור נתונים</option></select></label>
 <label class="f">למה סומכים עליו? <small>יופיע ליד כל עובדה ממנו</small><textarea name="why" required minlength="10">${esc(form.why || '')}</textarea></label>
 <button class="btn primary" type="submit">${icon('plus')}להוסיף כמקור מאושר</button></form></section></div>
 ${catalogPanel(ctx, current, sources)}`;
@@ -806,7 +807,7 @@ function catalogPanel(ctx, current, sources) {
     .join('')}</ul>
 ${n.refused.length ? `<p class="muted small">אי אפשר לקרוא אותם: ${n.refused.map(([name, why]) => `${esc(name)} (${esc(why)})`).join(' · ')}</p>` : ''}</details>`;
   return `<section class="panel mt16"><header><h2>מקורות מוכנים לפי נישה</h2></header>
-<p class="muted">כל פיד כאן נבדק: האתר מרשה בקובץ robots.txt שלו לנו ול-Claude לקרוא, כי Claude כותב מחדש כל מה שמקור אומר. הבדיקה חוזרת בכל קריאה, וכתבות ארוכות וראיונות נקראים ראשונים.</p>
+<p class="muted">כל פיד כאן נבדק: האתר מרשה לנו לקרוא אותו ולכתוב מחדש את מה שהוא אומר. הבדיקה חוזרת בכל קריאה, וכתבות ארוכות וראיונות נקראים ראשונים.</p>
 ${Object.entries(CATALOG).map(niche).join('')}</section>`;
 }
 
@@ -877,6 +878,7 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
+${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
 ${d.assistant ? assistantPanel(ctx, d.assistant) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 </div>
@@ -1014,7 +1016,7 @@ ${f.problems.length ? `<div class="problems"><ul>${f.problems.map((x) => `<li>${
   const body = `<div class="head"><h1>עובדות שנבדקו ביד</h1><span class="sub">מה שקראתם באתר שהמנוע לא קורא</span></div>
 ${tabs}
 <p class="lede">חלק מהאתרים הרשמיים (כל זכות, gov.il) חוסמים קוראים אוטומטיים, והמנוע לא עוקף את זה. כאן אתם כותבים עובדה שקראתם בעצמכם: המשפט מילה במילה, העמוד, היום שבדקתם, ועד מתי היא בתוקף. אחרי תאריך התפוגה העובדה לא משמשת אף פוסט עד שתבדקו אותה שוב, ופוסט שנכתב ממנה ועוד לא פורסם ייחסם.</p>
-<div class="cols"><div>${list || '<div class="empty"><b>עוד אין עובדות לחשבון הזה</b>הראשונה תיצור את התיקייה <code class="ltr">facts/</code> בחבילה שלו.</div>'}</div>
+<div class="cols"><div>${list || '<div class="empty"><b>עוד אין עובדות לחשבון הזה</b>העובדה הראשונה שתוסיפו תופיע כאן.</div>'}</div>
 <section class="panel"><header><h2>עובדה חדשה</h2></header>
 ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
 <form method="post" action="/facts/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
@@ -1070,7 +1072,7 @@ export function rivalsPage(ctx, { packs, current, rivals, times, form = {}, prob
   const fewer = rivals.length < RIVALS.min ? `<p class="small"><span class="chip warn">${rivals.length ? `עוד ${RIVALS.min - rivals.length}` : `${RIVALS.min} לפחות`}</span> שלושה עד חמישה חשבונות נותנים תמונה של הנישה. חשבון אחד מראה רק את הטעם שלו.</p>` : '';
   const slots = times.own.length
     ? `<section class="panel"><header><h2>שעות</h2></header><dl class="kv">${times.own.map((x) => `<dt class="ltr">${esc(x.at)}</dt><dd>${x.near ? `${x.near === 1 ? 'מתחרה אחד מפרסם' : `${x.near} מתחרים מפרסמים`} בטווח שעה` : 'אף מתחרה לא מפרסם בטווח שעה'}</dd>`).join('')}${times.theirs.length ? `<dt>הם</dt><dd><bdi dir="ltr">${esc(times.theirs.map((x) => x.at).join(' · '))}</bdi></dd>` : ''}</dl>
-<p class="muted small m6">שעות הפרסום של החשבון מוגדרות בחבילה שלו, כולל שבת וחגים. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
+<p class="muted small m6">את שעות הפרסום של החשבון בוחרים <a href="/settings#schedule">בהגדרות</a>, ובשבת ובחג לא מפרסמים. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
     : '';
   const adding = !editing && problems.length;
   const body = `<div class="head"><h1>מתחרים</h1><span class="sub">מה שראיתם אצלם, בשביל הכתיבה</span></div>
@@ -1097,7 +1099,7 @@ export function soundsPage(ctx, { packs, current, sounds, mode, recent, limits, 
   const fewer = sounds.length < limits.min ? `<p class="small"><span class="chip warn">${sounds.length ? `עוד ${limits.min - sounds.length}` : `${limits.min} לפחות`}</span> כל טיוטה מקבלת סאונד שלא היה ב-${limits.recent} הטיוטות האחרונות, אז כדאי שיהיו כמה.</p>` : '';
   const body = `<div class="head"><h1>סאונדים</h1><span class="sub">לטיוטות בטיקטוק</span></div>
 ${tabs}
-<p class="lede">הסאונדים הוויראליים של טיקטוק לא נגישים לשום API, אז ${mode === 'direct' ? 'כשהחשבון במצב טיוטה כל פוסט בטיקטוק יוצא כטיוטה' : 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. כל טיוטה מקבלת סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. ${mode === 'draft-fallback' ? 'אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.' : 'הטיוטה נשלחת ברגע שאתם מאשרים, ובשעה של הפוסט מגיעה תזכורת עם הסאונד.'}</p>
+<p class="lede">את הסאונדים הוויראליים של טיקטוק אי אפשר להוסיף לפוסט מבחוץ, אז ${mode === 'direct' ? 'כשהחשבון במצב טיוטה כל פוסט בטיקטוק יוצא כטיוטה' : 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. כל טיוטה מקבלת סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. ${mode === 'draft-fallback' ? 'אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.' : 'הטיוטה נשלחת ברגע שאתם מאשרים, ובשעה של הפוסט מגיעה תזכורת עם הסאונד.'}</p>
 ${mode === 'direct' ? '<p class="small"><span class="chip ghost">החשבון במצב ישיר</span> הרשימה נשמרת, ותשמש כשהחשבון יעבור למצב טיוטה.</p>' : ''}
 ${fewer}
 <div class="cols"><div>${list}</div>

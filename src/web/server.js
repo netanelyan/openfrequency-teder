@@ -23,6 +23,7 @@ import { assistantApi, isAssistantPath } from '../assistant/api.js';
 import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
 import { connectRoutes, goPage, publicConnect } from './connect.js';
 import { setupFeed } from './setup.js';
+import { scheduleRoutes } from './schedule.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -174,6 +175,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
     ...onboardingRoutes(),
+    ...scheduleRoutes(),
     ...stylesRoutes(),
     ...demosRoutes(),
     ...connectRoutes(connectLinks),
@@ -437,7 +439,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
       // The stack goes to the log, never to the page.
       ctx.log?.(`[web] ${req.method} ${req.url}: ${e.stack || e.message}`);
       const status = e.status || 500;
-      return send(req, res, status, status === 500 ? 'משהו השתבש. הפרטים ביומן.' : String(e.message), 'text/plain; charset=utf-8');
+      return send(req, res, status, status === 500 ? 'משהו השתבש אצלנו. נסו שוב בעוד כמה דקות.' : String(e.message), 'text/plain; charset=utf-8');
     }
   };
   // Every route the site answers, for the test that each one keeps to its workspace.

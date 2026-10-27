@@ -232,6 +232,8 @@ const casesFor = () => {
     ['/accounts/bravo/kill'],
     ['/accounts/bravo/resume'],
     ['/accounts/bravo/quota', { suggested: '1', redos: '0', cap: '0' }],
+    // The days and times B posts on are B's to choose.
+    ['/accounts/bravo/schedule', { day_1: 'on', t1_1: '10:00' }],
     // Connecting B's TikTok or Instagram, reading B's connections, or setting how B's TikTok goes out: B's alone.
     ['/accounts/bravo/connect/tiktok'],
     ['/accounts/bravo/connect/instagram'],
@@ -272,6 +274,7 @@ const casesFor = () => {
     [`/new/${B.onboarding}/samples`],
     [`/new/${B.onboarding}/reviewed`],
     [`/new/${B.onboarding}/live`],
+    [`/new/${B.onboarding}/retry`],
     // A store's demo is the operator's alone: no customer approves, rewrites or takes one down, or sets its price.
     [`/demos/${B.demo}/approve`],
     [`/demos/${B.demo}/redo`],

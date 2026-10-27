@@ -31,6 +31,8 @@ import { owns } from './workspace.js';
 import { prefsOf } from '../assistant/data.js';
 import { connectData } from './connect.js';
 import { zernioCost } from '../publish/connect.js';
+import { scheduleOf, timesOf } from '../schedule/choice.js';
+import { scheduleData } from './schedule.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -250,7 +252,7 @@ export function topicsFor(ctx, pack) {
 /** An account's rivals, and their posting hours beside the account's own slots. */
 export function rivalsFor(ctx, pack) {
   const rivals = rivalsOf(ctx.db, pack.id);
-  return { current: pack, rivals, times: timesBeside(rivals, pack.meta.schedule?.slots || []) };
+  return { current: pack, rivals, times: timesBeside(rivals, timesOf(scheduleOf(ctx.db, pack))) };
 }
 
 export function sourcesFor(ctx, accountId) {
@@ -290,6 +292,8 @@ export function settingsData(ctx) {
     plans: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id) })),
     // The customer's choices for the WhatsApp assistant: a workspace's own, the operator has none.
     assistant: operator ? null : prefsOf(ctx.db, ctx.workspaceId),
+    // The days and times the account shown posts on (src/schedule/choice.js): its owner chooses them here.
+    schedule: ctx.packs[0] ? scheduleData(ctx.db, ctx.packs[0]) : null,
   };
 }
 

@@ -4,6 +4,7 @@ import { j } from '../db/index.js';
 import { israelDate, israelInstant, addDays, hhmm } from '../schedule/israel.js';
 import { inRest } from '../schedule/shabbat.js';
 import { inWindows, slotsFor, postsOn } from '../schedule/slots.js';
+import { scheduleOf } from '../schedule/choice.js';
 import { buildPost, PausedError } from '../pipeline/build.js';
 import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
@@ -65,7 +66,8 @@ export const CATCH_UP_LEAD_MS = 3 * 3_600_000;
 /** The slots to draft for one account at today's generation: tomorrow's, and today's that have no post yet. */
 export function generationTargets(db, pack, { t = now(), lead = 0 } = {}) {
   const today = israelDate(t);
-  const sched = pack.meta.schedule;
+  // The pack's schedule, or the days and times the customer chose (src/schedule/choice.js).
+  const sched = scheduleOf(db, pack);
   const live = db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status NOT IN ('blocked', 'drafting')", pack.id).map((r) => r.slot_at);
   const have = new Set(live);
   const onDay = (d) => live.filter((s) => israelDate(Date.parse(s)) === d).length;
@@ -157,7 +159,7 @@ export async function generateRecaps(ctx, report, { t = now() } = {}) {
   for (const pack of ctx.packs) {
     if (!pack.meta.schedule?.fightWeek || !canRun(db, pack.id).ok) continue;
     for (const w of recapsDue(db, pack, t)) {
-      const slots = slotsFor(today, pack.meta.schedule).slots.map((s) => s.toISOString());
+      const slots = slotsFor(today, scheduleOf(db, pack)).slots.map((s) => s.toISOString());
       const slot = [...fightWeekSlots(db, pack, today, slots).assign].find(([, x]) => x.role === 'recap')?.[0];
       if (!slot || t > Date.parse(slot) - 30 * 60_000) continue;
       if (db.get("SELECT id FROM posts WHERE account_id = ? AND slot_at = ? AND status NOT IN ('blocked')", pack.id, slot)) continue;
@@ -290,7 +292,7 @@ export async function tick(ctx, { t = now() } = {}) {
     }
 
     // ---- 4. publish what is approved and due
-    if (!run.ok || inRest(t) || !inWindows(t, pack.meta.schedule?.windows)) continue;
+    if (!run.ok || inRest(t) || !inWindows(t, scheduleOf(db, pack).windows)) continue;
     const ready = db.all("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' AND (slot_at IS NULL OR slot_at <= ?) ORDER BY slot_at", pack.id, new Date(t).toISOString());
     for (const p of ready.slice(0, 1)) {
       try {

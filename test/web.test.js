@@ -281,11 +281,12 @@ test('a changed theme.json waits on the Accounts page until the owner applies it
     await get('/accounts', cookie);
     pack.theme.colors.accent = '#0F5E9C';
     const page = await (await get('/accounts', cookie)).text();
-    assert.match(page, /הסגנון בקובץ theme.json השתנה/);
+    assert.match(page, /יש לחשבון סגנון חדש/);
+    assert.doesNotMatch(page, /theme\.json/, 'the customer is never told a file name');
     const csrf = await csrfOf(cookie);
     const res = await post('/accounts/demo/style', cookie, { _csrf: csrf });
     assert.equal(res.status, 200);
-    assert.doesNotMatch(await (await get('/accounts', cookie)).text(), /הסגנון בקובץ theme.json השתנה/);
+    assert.doesNotMatch(await (await get('/accounts', cookie)).text(), /יש לחשבון סגנון חדש/);
   } finally {
     pack.theme.colors.accent = before;
   }

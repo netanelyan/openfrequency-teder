@@ -212,27 +212,42 @@ const shelf = (demo, base) => {
   return `<div class="shelf" aria-hidden="true">${row(items.slice(0, half), 0)}${row(items.slice(half), 1)}</div>`;
 };
 
-// What Teder does for a store that turns it on: the same four lines as /teder on openfrequency.co.il.
-const INCLUDES = ['מצגות בעברית שתדר כותב ומעצב בשבילכם', 'כל מצגת בגודל של טיקטוק ובגודל של אינסטגרם', 'כל מצגת מחכה לאישור שלכם לפני שהיא עולה', 'פרסום בשעה שנקבעה. בשבת ובחג הוא לא מפרסם'];
+// What Teder does for a store that turns it on: the four lines of /teder on openfrequency.co.il, the last one saying
+// the days and times are the customer's own (src/schedule/choice.js).
+const INCLUDES = ['מצגות בעברית שתדר כותב ומעצב בשבילכם', 'כל מצגת בגודל של טיקטוק ובגודל של אינסטגרם', 'כל מצגת מחכה לאישור שלכם לפני שהיא עולה', 'פרסום בימים ובשעות שאתם בוחרים. בשבת ובחג לא מפרסמים'];
 const JOIN = 'https://openfrequency.co.il/join?p=teder';
+export const SIGNUP_DEFAULT = 'https://accounts.openfrequency.co.il/signup';
+
+/**
+ * Where the page's button goes: accounts' sign-up (OF_SIGNUP_URL, by default SIGNUP_DEFAULT) once it is open
+ * (OF_SIGNUP_OPEN=1), and until then the website's /join, so nobody is sent to a page that does not take them yet.
+ */
+export function joinUrl(env = process.env) {
+  const open = /^(1|true|yes|on)$/i.test(String(env.OF_SIGNUP_OPEN || '').trim());
+  const signup = String(env.OF_SIGNUP_URL || '').trim() || SIGNUP_DEFAULT;
+  return open && /^https:\/\/[^\s"'<>]+$/.test(signup) ? signup : JOIN;
+}
 const articleName = (title) => String(title || '').replace(/\s*\(Wikipedia[^)]*\)\s*$/, '');
 
-// The systems the team connects Teder to, for every business: their marks, then a tile for anything else, and a note
-// on what is built when nothing exists yet. The same on every page, nothing in it about the store; as on Toran's
-// (openfrequency-toran src/pitch/page.ts, linksSec).
-const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h">מותאם לעסק שלכם. החיבורים עלינו.</h2>
-<p class="links-lede">הצוות שלנו מגדיר את תדר לפי הקול של העסק שלכם ומחבר אותו למערכות שלכם: הקטלוג של החנות, החשבונות ברשתות החברתיות, ספריית התמונות והקבצים. כל מערכת שיש לה API. את ההדגמה הזו תדר בנה מהמוצרים שבאתר שלכם: חנות ב-Shopify, ב-WooCommerce או ב-Wix הוא קורא לבד. ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.</p>
-<ul class="logos" aria-label="חלק מהמערכות שתדר מתחבר אליהן">${LOGOS.map((l) => `<li${l.box ? ' class="wide"' : ''} title="${l.name}"><svg viewBox="${l.box || '0 0 24 24'}" role="img" aria-label="${l.name}"><path fill="${l.color}" d="${l.path}"/></svg></li>`).join('')}<li class="more"><span class="plus" aria-hidden="true">+</span><span>וכל חיבור נוסף שתרצו וקיים בעולם</span></li></ul>
-<div class="glass links-note"><h3>וכשצריך משהו שעוד לא קיים, מפתחים אותו.</h3>
-<p>אנחנו חברת פיתוח: אפליקציות, אוטומציות וסוכני AI. מערכת ניהול, חיבור שאין לו לוגו כאן, או זרימת עבודה שתפורה לעסק שלכם: הצוות שבנה את תדר בונה גם אותם, וגם זה כלול בשירות.</p></div>
+// What this page is and what Teder is, said plainly: the slideshow was written from the store's site to show how it
+// looks; in Teder the owner picks the account's subject and Teder writes about it from sources they approve, never
+// about their products. Where it goes out: TikTok and Instagram, the only two Teder posts to. Then how one starts, on
+// their own. Nothing here promises work done by hand. The same on every page, nothing in it about the store.
+const PLATFORM_LOGOS = LOGOS.filter((l) => ['TikTok', 'Instagram'].includes(l.name));
+const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h">בתדר אתם בוחרים על מה החשבון כותב</h2>
+<p class="links-lede">את המצגת הזו תדר כתב מהאתר שלכם, כדי שתראו איך זה נראה אצלכם. כשפותחים חשבון בתדר, בוחרים לו נושא, ותדר כותב עליו מצגות מתוך מקורות שאתם מאשרים. המצגות עוסקות בתחום עצמו, ואין בהן המלצות על מוצרים.</p>
+<ul class="logos" aria-label="איפה המצגות מתפרסמות">${PLATFORM_LOGOS.map((l) => `<li${l.box ? ' class="wide"' : ''} title="${l.name}"><svg viewBox="${l.box || '0 0 24 24'}" role="img" aria-label="${l.name}"><path fill="${l.color}" d="${l.path}"/></svg></li>`).join('')}</ul>
+<div class="glass links-note"><h3>ככה מתחילים</h3>
+<p>נרשמים, כותבים במה החשבון יעסוק, מאשרים מקורות ועוברים על חמישה פוסטים לדוגמה. אחר כך מחברים את טיקטוק ואת אינסטגרם, בוחרים ימים ושעות, וכל פוסט מחכה לאישור שלכם לפני שהוא עולה.</p></div>
 </section>`;
 
 /**
  * The store's page, built like Toran's (openfrequency-toran src/pitch/page.ts): what was read on its site and the
- * way in beside its products, on its own photograph; then the slideshow itself; then what the team fits and connects;
- * then what Teder would do for it and what that costs. No script: the two sizes are two radio buttons and CSS.
+ * way in beside its products, on its own photograph; then the slideshow itself; then what Teder is (LINKS above);
+ * then what Teder would do for it and what that costs, and the way in (joinUrl). No script: the two sizes are two
+ * radio buttons and CSS.
  */
-export function demoPage(demo, { offer }) {
+export function demoPage(demo, { offer, join = joinUrl() }) {
   const name = demo.store?.name || demo.domain;
   const subject = demo.topic?.niche || '';
   const base = `/s/${demo.slug}`;
@@ -290,7 +305,7 @@ ${LINKS}
 <div class="price-main">
 <p class="price-name">${tederMark()}<b>תדר</b></p>
 ${priced ? `<p class="figure"><span class="num">${esc(Number(offer.monthly).toLocaleString('he-IL'))}</span><span class="cur">₪</span><span class="per">לחודש</span></p><p class="price-notes">${notes}</p>` : ''}
-<a class="go" href="${JOIN}">להפעיל את תדר</a>
+<a class="go" href="${esc(join)}">להפעיל את תדר</a>
 </div>
 <div class="price-incl"><h3>${priced ? 'מה כלול במחיר' : 'מה תדר עושה'}</h3><ul class="checks">${INCLUDES.map((x) => `<li>${x}</li>`).join('')}</ul></div>
 </div>
