@@ -344,11 +344,12 @@ export function fitE(slide, g) {
   const sz = slide.photoSize;
   if (!slide.photo || !sz?.w || !sz?.h) return { mode: 'cover' };
   const a = sz.w / sz.h;
-  const frame = 1080 / g.h;
-  // A small photograph (Commons keeps today's fighters at 400 to 900 pixels) is shown whole rather than blown up past
-  // twice its size to fill the slide: soft either way, but whole it is less so, and nothing of it is cut.
+  // Every slide is the whole screen of picture: a photograph fills it, cut around its face, whatever its shape (TikTok's
+  // own guidance and every slideshow guide: 9:16, full screen; a landscape one shown whole looked like a letterbox to
+  // the owner). Only one too small to fill without blowing it up past twice its size is shown whole, over a blurred,
+  // darkened copy of itself that fills the rest (stylePage's backdrop): never a black band.
   const grow = Math.max(1080 / sz.w, g.h / sz.h);
-  if (a <= frame / 0.8 && grow <= 2.2) return { mode: 'cover' };
+  if (grow <= 2) return { mode: 'cover' };
   const ph = Math.min(g.h, Math.round(1080 / a));
   return { mode: 'contain', top: Math.round((g.h - ph) / 2), ph };
 }
@@ -524,10 +525,28 @@ mark.hi{color:inherit;background:none}
 /* No outline and no shadow on any letter, the shared graphics' included: the text reads by where it sits. E's own
    lines in its "shadow" look are the one exception, set over this in CSS_E. */
 .st *{text-shadow:none!important;-webkit-text-stroke:0!important}
+/* The backdrop: the slide's own photograph, blurred past recognition of detail, filling the slide behind the design. */
+.bf{position:absolute;top:-80px;left:-80px;width:calc(100% + 160px);height:calc(100% + 160px);object-fit:cover;filter:blur(42px) saturate(1.15);transform:scale(1.04)}
+.bfv{position:absolute;inset:0}
 /* A slide with no photograph: its text moves up, into the middle of the room the photograph left. */
 .no-photo:not(.k-cover) .blk{justify-content:center}
 .s-instagram .vis{font-size:38px}
 `;
+
+/**
+ * The slide's own photograph, blurred and darkened, over the whole slide behind the design: TikTok is a visual feed,
+ * and a slide whose photograph sits in a frame, a top half or a band on a flat ground read as empty to the owner ("at
+ * least add a blurred background, the same picture"). A to D keep their design over it, the ground's colour laid over
+ * the blur so their words read as they did; E has it only behind a photograph too small to fill the slide. Never behind
+ * a photograph that already fills the slide, and never a guess-who's answer (its cover has none of its own).
+ */
+function backdrop(name, m, slide, g, d) {
+  if (!slide.photo || slide.split || m.kind === 'end') return d;
+  const full = name === 'E' ? fitE(slide, g).mode === 'cover' : m.kind === 'cover' && name !== 'C';
+  if (full) return d;
+  const veil = name === 'E' ? 'rgba(0,0,0,.42)' : 'rgba(var(--bg-rgb),.66)';
+  return { ...d, html: `<img class="bf" src="${slide.photo}" alt=""><div class="bfv" style="background:${veil}"></div>${d.html}` };
+}
 
 /** The whole page of one styled slide. `slide.photo` (or `slide.split`) is its own photograph, when it has one. */
 export function stylePage({ theme, size, slide: given, overlay = null }) {
@@ -544,7 +563,7 @@ export function stylePage({ theme, size, slide: given, overlay = null }) {
   // on the ground: no slide of a post is a bare dark ground (the owner's call).
   const d = m.kind === 'end' && slide.photo
     ? { ...d0, html: `<img src="${slide.photo}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(var(--bg-rgb),.78)"></div>${d0.html}` }
-    : d0;
+    : backdrop(st.name, m, slide, g, d0);
   const families = familiesOf(st.name);
   const karantina = families.includes('Karantina');
   const z = g.z;

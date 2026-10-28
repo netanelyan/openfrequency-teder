@@ -59,7 +59,8 @@ test('no outline and no shadow on any letter, and no progress bar, counter, dots
         assert.doesNotMatch(html, /@demo\.bench/, 'the handle is not on a slide');
         await tab.setContent(html);
         const bad = await tab.evaluate(() =>
-          [...document.querySelectorAll('body *')]
+          // The backdrop (.bf) is the one blurred thing: the slide's own photograph behind the design, never a letter.
+          [...document.querySelectorAll('body *:not(.bf)')]
             .map((el) => getComputedStyle(el))
             .filter((cs) => cs.textShadow !== 'none' || parseFloat(cs.webkitTextStrokeWidth) > 0 || /blur/.test(cs.filter)).length
         );
@@ -415,13 +416,14 @@ test("E is chosen in pack.json and carries its look; the other styles' looks are
   assert.match(styleFitProblems({ hook: 'מי שווה הכי הרבה בעולם ה-AI? חמש חברות, מדד אחד ושווי אחד שמשנה את כל התמונה של השוק והכל', sub: '', slides: [{ kind: 'cover' }] }, { style: 'E' })[0]?.msg || '', /Shorten it/);
 });
 
-test('E shows a landscape or small photograph whole on black, its text clear of the face; a portrait near the slide fills it', async () => {
+test('E fills the slide with every photograph sharp enough to fill it; a small one is shown whole on a blurred copy of itself, its text clear of the face', async () => {
   const g = geo('tiktok');
   assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1920 } }, g).mode, 'cover', 'a 9:16 photograph fills the slide');
   assert.equal(fitE({ photo, photoSize: { w: 1200, h: 1800 } }, g).mode, 'cover', 'a 2:3 one is cut a little and fills it');
-  assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1350 } }, g).mode, 'contain', "a 4:5 one is shown whole, as the app shows the countdowns' press photos");
+  assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1350 } }, g).mode, 'cover', 'a 4:5 one fills the slide, cut around its face');
+  assert.equal(fitE({ photo, photoSize: { w: 2560, h: 1440 } }, g).mode, 'cover', 'so does a sharp landscape one: a slide is the whole screen of picture');
   const wide = fitE({ photo, photoSize: { w: 1600, h: 900 } }, g);
-  assert.deepEqual(wide, { mode: 'contain', top: 656, ph: 608 }, 'a 16:9 one is shown whole, in the middle');
+  assert.deepEqual(wide, { mode: 'contain', top: 656, ph: 608 }, 'a 16:9 one too small to fill is shown whole, in the middle');
   assert.equal(fitE({ photo, photoSize: { w: 450, h: 600 } }, g).mode, 'contain', 'a small one is not blown up past twice its size');
   assert.equal(fitE({ photo }, g).mode, 'cover', 'no size known: as before');
   const browser = await getBrowser();
@@ -436,7 +438,8 @@ test('E shows a landscape or small photograph whole on black, its text clear of 
     });
     assert.deepEqual(r.img, [656, 608]);
     assert.ok(r.bottom <= 656, `the text ends above the photograph (${r.bottom})`);
-    assert.equal(r.max, 0, 'no shade on black');
+    assert.equal(r.max, 0, 'no shade of its own: the blurred copy under it has its veil');
+    assert.equal(await tab.evaluate(() => document.querySelectorAll('img.bf').length), 1, 'never a black band: a blurred copy of the photograph fills the slide');
   } finally {
     await tab.close();
   }
@@ -476,4 +479,15 @@ test('every slide of a styled post on a photograph, none on more than two while 
   // A slide the same person's search already found shows that photograph.
   const same = planPhotos({ slides: items(2, (k) => (k === 1 ? 'Messi' : '')), byIdx: new Map([[1, ph('Messi')], ['bg', ph('octagon cage')]]), postKind: 'facts' });
   assert.equal(same.plan.get(2), 1);
+});
+
+test('A to D stand a slide on a blurred copy of its own photograph behind the design; a full-bleed cover has none', () => {
+  for (const name of ['A', 'B', 'C', 'D']) {
+    const html = draw(name, { ...text, photo });
+    assert.match(html, /<img class="bf" src="data:image\/svg\+xml/, `style ${name}: the photograph behind the design, blurred`);
+    assert.match(html, /class="bfv" style="background:rgba\(var\(--bg-rgb\),\.66\)"/, `style ${name}: under the style's own ground`);
+    assert.doesNotMatch(draw(name, text), /class="bf"/, `style ${name}: no photograph, no backdrop`);
+  }
+  assert.doesNotMatch(draw('B', { ...cover, photo }), /class="bf"/, 'a cover whose photograph fills it needs none');
+  assert.doesNotMatch(drawE(null, { ...text, photo }), /class="bf"/, "E's photograph fills its slide");
 });

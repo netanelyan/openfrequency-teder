@@ -88,7 +88,7 @@ const commons = {
   async search(query, { n = 20, minSide = MIN_SIDE.cover } = {}) {
     const params = new URLSearchParams({
       action: 'query', format: 'json', formatversion: '2', generator: 'search', gsrsearch: `${query} filetype:bitmap`, gsrnamespace: '6', gsrlimit: String(n),
-      prop: 'imageinfo|categories', iiprop: 'url|size|extmetadata|mime', iiurlwidth: '1440', clshow: '!hidden', cllimit: 'max',
+      prop: 'imageinfo|categories', iiprop: 'url|size|extmetadata|mime', iiurlwidth: '2560', iiurlheight: '2560', clshow: '!hidden', cllimit: 'max',
     });
     const body = await getJson(`https://commons.wikimedia.org/w/api.php?${params}`);
     return (body?.query?.pages || [])
@@ -115,7 +115,9 @@ const commons = {
         };
       })
       // The sharpest first: a blurry candid was picked over a portrait because it came first.
-      .sort((a, b) => Math.min(...b.original) - Math.min(...a.original))
+      // A portrait photograph first (a slide is 9:16, and a landscape one is cut to a third of itself), then the
+      // sharpest: a portrait counts as half as large again as a landscape of the same shorter side.
+      .sort((a, b) => Math.min(...b.original) * (b.original[1] >= b.original[0] * 0.9 ? 1.5 : 1) - Math.min(...a.original) * (a.original[1] >= a.original[0] * 0.9 ? 1.5 : 1))
       // A license that requires attribution is usable only with a name to attribute; a photograph big enough for
       // where it goes (MIN_SIDE).
       .filter((c) => commonsUsable(c, minSide));

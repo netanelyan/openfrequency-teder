@@ -1817,6 +1817,15 @@ The owner also said that A to D stay: they are their designs, and the content is
   that clears itself ("No real unsupported claim") blocks nothing; and a doubted line under a title that no rewrite
   could fix is taken off when the post holds without it. A count of views a verified fact gives (UFC 1's pay-per-view)
   is a fact, not the account's proof.
+- *The whole screen is picture* (the owner: "tiktok is a visual social media... the slides with no pictures or with a
+  small one are not good. at least add a blurred background (same picture)... i am not even a fan of landscape
+  pictures"). Every guide to photo posts says the same: 9:16, full screen, landscape photographs cropped to vertical
+  before upload, never letterboxed. So style E fills the slide with every photograph sharp enough to fill it (cut
+  around its face, blown up at most twice), landscape ones included, and shows whole only one too small for that, over
+  a blurred, darkened copy of itself (`backdrop`), never on black; Commons photographs come at up to 2560 pixels so a
+  landscape one has the pixels to be cut to a portrait, and a portrait one is preferred in the search (its shorter side
+  counts half again). A to D keep their designs over a blurred copy of the slide's own photograph, the style's ground
+  laid over it, where they had a flat ground around a frame, a top half or a fade.
 
 ### Sold self-serve: a paywall, posts that wait for a connection, emails through accounts, and a workspace that can leave (2026-10-27)
 
