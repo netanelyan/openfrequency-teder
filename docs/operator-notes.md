@@ -136,7 +136,7 @@ says which keys are set without showing them.
   terms that are not "no" (src/onboarding/discover.js `offered`); a site they typed in themselves is always offered.
   Only strong ones (authority 7+, relevance 7+) are ticked. Fewer than three on offer, and the customer reads "מצאנו
   מעט מקורות טובים לנושא הזה" with a box to search again with more of their own sites (POST /new/<id>/more).
-- **Why.** A seed "football" brought in sites with nothing to do with football: the Brave queries return pages that
+- **Why.** A seed "soccer" brought in sites with nothing to do with soccer: the Brave queries return pages that
   only mention the word, discovery then reads each such site's home page and site-wide feed, and nothing scored
   whether a source is about the niche at all.
 - **Where it shows.** The customer sees no numbers and no terms: at most "מקור מוביל" (authority 8+) and "מתעדכן כל
