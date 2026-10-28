@@ -62,6 +62,13 @@ export const OUTLINE_SCHEMA = {
     imageQuery: { type: 'string' },
     imageQueryB: { type: 'string' },
     research: { type: 'array', items: { type: 'string' } },
+    // A story's turning point: the one moment it turns on, and the ids of the facts that tell it (planFrom, checkDraft).
+    moment: {
+      type: 'object',
+      properties: { point: { type: 'string' }, facts: { type: 'array', items: { type: 'string' } } },
+      required: ['point', 'facts'],
+      additionalProperties: false,
+    },
   },
   required: ['usable', 'why', 'topic', 'subject', 'facts', 'items', 'imageQuery', 'research'],
   additionalProperties: false,
@@ -306,6 +313,8 @@ Facts:
 - A vendor's forecast or guidance, and the numbers of a demo, an example or a sample run, are claims, not results: the claim says whose forecast or which demo it is, and a post never stands on them.
 - An ATTRIBUTED fact is what someone said or reported, not what is so: a fighter's own account of a fight, a manager's claim, an investor's version, an outlet's report of a rumour. Give it who: the person or outlet as the document names them ("Dana White", "Sherdog"), and whoHe: how a Hebrew slide writes their name ("דנה וייט"). Its quote is their words, or the document's report of them, and the document must say beside the quote that they said or reported it. The slide that states it names them and says so ("לפי דנה וייט", "וייט סיפר"), never as plain fact. Two at most in a post: the rest stands on facts. A plain fact has who and whoHe "".
 - The angle. A story every fan of the niche already knows (the most famous final, upset or goal) is no post told the usual way: tell it through a detail from the documents most of them have never heard, and lead with that detail (the cover and the first slide). If the documents hold no such detail, prefer usable=false.
+
+Moment (a story's): the one moment the story turns on, as the documents tell it (the knockout and the blow that did it, the goal and its minute, the comeback, the decision), in a few Hebrew words, and the ids of the facts that tell it: who, when and how. The payoff slide, or the one before it, is that moment. A story whose documents do not tell its moment, even with research, is not usable: a list of a fighter's records under a fight's name is not its story. Every other kind: point "" and facts [].
 
 Items: the content slides in order, each { role, point: what the slide says in a few Hebrew words, facts: the fact ids it states }. The roles follow the kind's shape (THE SHAPES). Every item states at least one fact, except the roles the shape says carry none.
 

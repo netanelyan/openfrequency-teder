@@ -151,3 +151,40 @@ test("a fighter's infobox row is evidence however short, once in the document an
   assert.match(check('17 ניצחונות', 'Wins 17').error, /too short/, 'two words that are no table row are no evidence');
   assert.match(check('דירוג 17', 'Ranked | 17').error, /only inside a longer one/, '"Ranked | 17" is not in "Ranked | 170"');
 });
+
+test("a stat's year from the note that dates its table may be said with it; no other number may", () => {
+  const { db } = setup();
+  const at = new Date().toISOString();
+  const src = db.get("SELECT id FROM sources WHERE key = 's'").id;
+  const text = 'Senior career*\nYears | Team | Apps | (Gls)\n2023– | Barcelona | 111 | (38)\n* Club domestic league appearances and goals as of 23:11, 25 October 2026 (UTC)\nHe was born in 2007.';
+  const doc = db.insert('documents', { source_id: src, url: 'https://en.wikipedia.org/wiki/Lamine_Yamal', text, sha256: 'asof', fetched_at: at });
+  const check = (claim, quote) => verifyFact(db, { claim, quote, document_id: doc }, { accountId: 'demo' });
+  assert.equal(check('עד 2026 ימאל כבש 38 שערים ב-111 הופעות בברצלונה', '2023– | Barcelona | 111 | (38)').ok, true, 'the note dates the row');
+  assert.match(check('ב-2007 ימאל כבש 38 שערים ב-111 הופעות', '2023– | Barcelona | 111 | (38)').error, /2007/, 'a year from anywhere else in the page is not the row\'s');
+  assert.match(check('ימאל כבש 40 שערים ב-111 הופעות', '2023– | Barcelona | 111 | (38)').error, /40/, 'nor is another number');
+});
+
+test("a story is told through its moment: its verified facts go on the payoff slide, and a story whose moment no verified fact tells is refused", async () => {
+  const { planFrom } = await import('../src/pipeline/build.js');
+  const { db } = setup();
+  const at = new Date().toISOString();
+  const src = db.get("SELECT id FROM sources WHERE key = 's'").id;
+  const text = 'Gaethje and Holloway met for the BMF title at UFC 300 in April 2024. Holloway knocked Gaethje out with one second left in the fifth round. Gaethje had won 17 post-fight bonuses in 16 appearances.';
+  const doc = db.insert('documents', { source_id: src, url: 'https://en.wikipedia.org/wiki/UFC_300', text, sha256: 'moment', fetched_at: at });
+  const cand = { key: 'k', refs: [{ id: doc, source_id: src, ref: 'D1' }] };
+  const facts = [
+    { id: 'f1', claim: 'גייתג\' והולוואי נפגשו על חגורת ה-BMF ב-UFC 300', quote: 'Gaethje and Holloway met for the BMF title at UFC 300', doc: 'D1', who: '', whoHe: '' },
+    { id: 'f2', claim: 'הולוואי הפיל את גייתג\' שנייה לפני הסוף', quote: 'Holloway knocked Gaethje out with one second left in the fifth round', doc: 'D1', who: '', whoHe: '' },
+    { id: 'f3', claim: 'לגייתג\' 17 בונוסים ב-16 הופעות', quote: 'Gaethje had won 17 post-fight bonuses in 16 appearances', doc: 'D1', who: '', whoHe: '' },
+  ];
+  const items = [{ role: 'beat', point: 'a', facts: ['f1'] }, { role: 'beat', point: 'b', facts: ['f3'] }, { role: 'beat', point: 'c', facts: ['f1'] }, { role: 'payoff', point: 'd', facts: ['f3'] }];
+  const format = { id: 'fight-story', kind: 'story' };
+  const pack = { id: 'demo', rules: {} };
+  const outline = { topic: 't', facts, items: structuredClone(items), moment: { point: 'הנוקאאוט בשנייה האחרונה', facts: ['f2'] } };
+  const made = planFrom({ db }, { pack, format, outline, cand });
+  assert.ok(!made.why, made.why);
+  assert.deepEqual(outline.momentKeys, ['f2']);
+  assert.ok(made.items.find((it) => it.role === 'payoff').facts.includes('f2'), 'the payoff slide is given the moment');
+  const unsure = { topic: 't', facts: facts.map((f) => (f.id === 'f2' ? { ...f, quote: 'Holloway knocked Gaethje out in the first round' } : f)), items: structuredClone(items), moment: { point: 'הנוקאאוט', facts: ['f2'] } };
+  assert.match(planFrom({ db }, { pack, format, outline: unsure, cand }).why || '', /הרגע שהסיפור נשען עליו/);
+});

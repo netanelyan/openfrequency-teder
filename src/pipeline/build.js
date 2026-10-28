@@ -552,7 +552,7 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
   const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
-  const checked = checkDraft(ctx, pack, { draft, format, facts, items, attempt });
+  const checked = checkDraft(ctx, pack, { draft, format, facts, items, attempt, moment: outline?.momentKeys || null });
   return { draft, checked, fixes };
 }
 
@@ -562,8 +562,12 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
  */
 const ONE_LINE_KINDS = new Set(['facts', 'tips']);
 
-export function checkDraft(ctx, pack, { draft, format, facts, items, attempt = 0 }) {
+export function checkDraft(ctx, pack, { draft, format, facts, items, attempt = 0, moment = null }) {
   const checked = checkPost(ctx, pack, draft, facts, format);
+  // A story tells the moment it turns on, with its facts, on a slide (planFrom: outline.momentKeys).
+  if (moment?.length && !draft.slides.some((s) => (s.factKeys || []).some((k) => moment.includes(k)))) {
+    checked.problems.push({ where: 'shape', code: 'shape', msg: `the slides never tell the moment the story turns on: the payoff slide (or the one before it) states it, citing ${moment.join(', ')}` });
+  }
   // The details the research found are what makes a post worth finishing: at least three of them on the slides.
   const details = facts.filter((f) => f.verified && f.detail).map((f) => f.key);
   // A facts or tips slide is one line: a detail may be its fact, never a second line under it. Asked for three, the
@@ -640,7 +644,7 @@ export async function repairDraft(ctx, pack, { draft, checked, format, facts, it
       lineDraft(made.draft, pack);
       citeNumbers(made.draft, facts);
       made.draft.captionIg = igCaption(made.draft);
-      const next = checkDraft(ctx, pack, { draft: made.draft, format, facts, items, attempt });
+      const next = checkDraft(ctx, pack, { draft: made.draft, format, facts, items, attempt, moment: outline?.momentKeys || null });
       const before = new Set(checked.problems.map(say));
       const after = new Set(next.problems.map(say));
       const added = [...after].filter((p) => !before.has(p));
@@ -660,7 +664,7 @@ export async function repairDraft(ctx, pack, { draft, checked, format, facts, it
     if (unheld.size) {
       const next = structuredClone(draft);
       for (const i of unheld) next.slides[Number(i)].visual = null;
-      const after = checkDraft(ctx, pack, { draft: next, format, facts, items, attempt });
+      const after = checkDraft(ctx, pack, { draft: next, format, facts, items, attempt, moment: outline?.momentKeys || null });
       const before = new Set(checked.problems.map(say));
       if (after.problems.every((p) => before.has(say(p)))) {
         draft = next;
@@ -758,6 +762,16 @@ export function planFrom(ctx, { pack, format, outline, cand, details = [] }) {
   // documents that held Oliveira's numbers alone, and every draft of it was refused. A stat whose quotes hold one
   // side (bothSides) is no stat, and a matchup left with fewer than the kind's stats is not this format's post.
   const oneSided = kindName(format) === 'head-to-head' ? planned.filter((it) => it.role === 'stat' && !bothSides(it, facts, outline)) : [];
+  // A story is told through the moment it turns on: a UFC story about a last-second knockout went out as a list of the
+  // loser's bonuses, its knockout never told. The moment's verified facts go on the payoff slide, and a story whose
+  // moment no verified fact tells is not this topic's post.
+  const moment = kindName(format) === 'story' && outline.moment?.point ? (outline.moment.facts || []).map(String).filter((k) => good.has(k)) : null;
+  if (moment && !moment.length) return { why: `הרגע שהסיפור נשען עליו (${outline.moment.point}) לא נמצא בעובדות המאומתות`, facts };
+  if (moment) {
+    const payoff = planned.find((it) => it.role === 'payoff');
+    if (payoff) payoff.facts = [...new Set([...payoff.facts, ...moment])];
+    outline.momentKeys = moment;
+  }
   const fitted = fitShape(format, keepItems(format, planned.filter((it) => !oneSided.includes(it)), good));
   const items = fitted.items;
   outline.items = planned;
@@ -1448,7 +1462,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why, minSide }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
     // A cover whose query found nothing tries the post's own subject by name ("Haim Revivo" rather than "Revivo goal Spain 1998").
     const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
-    if (!img && w.idx === 0 && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
+    if (!img && (w.idx === 0 || (kind === 'guess-who' && w.idx === last)) && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
       seen.add(who.toLowerCase());
       img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why, minSide }).catch(() => null);
     }

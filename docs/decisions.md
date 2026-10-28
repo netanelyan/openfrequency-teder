@@ -1834,6 +1834,16 @@ The owner also said that A to D stay: they are their designs, and the content is
   gave up its wider 100); A, C and D start a slide's photograph 150 px down, under the tabs, with its words lower; A's
   cover ends above the caption; and E's photograph too small to fill the slide stands at the top under the tabs, its
   words under it in the middle of the screen.
+- *Three formats that failed by design* (one post of each format, 2026-10-28). Every soccer head-to-head was refused:
+  a player's stats are an infobox row ("2023– | Barcelona | 111 | (38)") dated by a note under the table ("as of 25
+  October 2026"), and the claim's "עד 2026" was in no row; a year an "as of" note of the same document gives may now be
+  said with it, and no other number. A guess-who of Lamine Yamal had no photograph, of the hundreds there are: its search
+  had a word the account blocks ("trophy"), and a blocked word refused the whole search; now the word is left out and
+  the rest searched (a photograph that shows the blocked thing is still refused), and the answer's photograph is looked
+  for by name when its own search finds none, as a cover's is. A story of a last-second knockout went out as a list of
+  the loser's bonuses: the outline now names the moment a story turns on with the facts that tell it, a story whose
+  moment no verified fact tells is not that topic's post, the payoff slide is given those facts, and a draft that cites
+  none of them is sent back.
 
 ### Sold self-serve: a paywall, posts that wait for a connection, emails through accounts, and a workspace that can leave (2026-10-27)
 

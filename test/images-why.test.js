@@ -10,8 +10,20 @@ test('a search that finds nothing records why', async () => {
   const db = new Db(':memory:');
   const ctx = { db, mode: 'live', log: () => {} };
   const why = {};
-  assert.equal(await findImage(ctx, { pack: { id: 'a', meta: { imagery: { providers: ['pexels'] } }, rules: { imageQueryBlock: ['belt'] } }, query: 'UFC belt ceremony', why }), null);
+  // A query that is the blocked word alone is refused; one that names someone is searched without it.
+  assert.equal(await findImage(ctx, { pack: { id: 'a', meta: { imagery: { providers: ['pexels'] } }, rules: { imageQueryBlock: ['belt'] } }, query: 'belt', why }), null);
   assert.deepEqual(why, { 'the query has a blocked word ("belt")': 1 });
+  const logs = [];
+  const whyBelt = {};
+  const keyed = process.env.PEXELS_API_KEY;
+  delete process.env.PEXELS_API_KEY;
+  try {
+    await findImage({ ...ctx, log: (m) => logs.push(m) }, { pack: { id: 'a', meta: { imagery: { providers: ['pexels'] } }, rules: { imageQueryBlock: ['belt'] } }, query: 'Islam Makhachev belts', why: whyBelt });
+  } finally {
+    if (keyed !== undefined) process.env.PEXELS_API_KEY = keyed;
+  }
+  assert.deepEqual(logs, ['image query without "belt": Islam Makhachev'], 'searched for the fighter, never for his belt');
+  assert.deepEqual(whyBelt, { 'no photo library is ready (its key is missing)': 1 });
   const why2 = {};
   const keyless = { ...process.env };
   delete process.env.PEXELS_API_KEY;

@@ -219,7 +219,11 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
     if (hits !== 1) return fail(`the row "${quote}" is in the document ${hits ? `${hits} times` : 'only inside a longer one'}: quote it with the words around it`);
   }
   const inQuote = numbersIn(quote, { words: true, hebrew: true });
-  const missing = [...numbersIn(fact.claim, { hebrew: true })].filter((x) => !inQuote.has(x));
+  // A table's numbers are dated in a note beside it, not in the row: "2023– | Barcelona | 111 | (38)" under "Club
+  // domestic league appearances and goals as of 25 October 2026". The year of such a note may be said with the row's
+  // numbers ("עד 2026"); every soccer head-to-head was refused for it. Every other number is the quote's own.
+  const asOf = new Set([...String(doc.text).matchAll(/\bas of\b[^\n]{0,60}?\b((?:19|20)\d{2})\b/gi)].map((m) => m[1]));
+  const missing = [...numbersIn(fact.claim, { hebrew: true })].filter((x) => !inQuote.has(x) && !asOf.has(x));
   if (missing.length) return fail(`the claim states ${missing.join(', ')}, which the quote does not`);
   if (!String(fact.claim || '').trim()) return fail('no claim');
   // An attributed fact is theirs only where the document says so.

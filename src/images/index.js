@@ -418,11 +418,22 @@ export function imageCredit(db, post) {
 export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null, minSide = MIN_SIDE.cover, role = minSide === MIN_SIDE.framed ? 'content' : 'cover' }) {
   const miss = (k) => why && (why[k] = (why[k] || 0) + 1);
   if (!query || (ctx.mode === 'recorded' && !ctx.imagesLive)) return null;
-  const blocked = blockedQuery(pack, query) || describes(query, ALWAYS_BLOCK);
-  if (blocked) {
-    ctx.log?.(`image query refused ("${blocked}"): ${query}`);
-    miss(`the query has a blocked word ("${blocked}")`);
-    return null;
+  // A query with a blocked word in it is searched without that word: "Lamine Yamal World Cup trophy" was refused whole,
+  // and a guess-who whose answer has hundreds of free photographs went out with none. What is blocked is still never
+  // shown: a photograph whose description names it is refused below, and the screen looks at every one.
+  for (let blocked = blockedQuery(pack, query) || describes(query, ALWAYS_BLOCK); blocked; blocked = blockedQuery(pack, query) || describes(query, ALWAYS_BLOCK)) {
+    const bad = String(blocked).toLowerCase();
+    const rest = String(query).split(/\s+/).filter((w) => {
+      const n = w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+      return n !== bad && n !== `${bad}s`;
+    }).join(' ').trim();
+    if (!/\p{L}/u.test(rest) || rest === query) {
+      ctx.log?.(`image query refused ("${blocked}"): ${query}`);
+      miss(`the query has a blocked word ("${blocked}")`);
+      return null;
+    }
+    ctx.log?.(`image query without "${blocked}": ${rest}`);
+    query = rest;
   }
   // The owner's own photographs first, whenever the pack has any; then the pack's libraries in its own order.
   const order = providerOrder(pack).map((id) => PROVIDERS[id]).filter((p) => p?.ready());
