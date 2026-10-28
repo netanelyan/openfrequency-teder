@@ -50,7 +50,7 @@ test('no engagement endpoint is named anywhere in the code', () => {
   assert.deepEqual(hits, []);
 });
 
-test("the only writes are Claude, our own post and a customer account's profile on Zernio (and their removal once the customer left), publishing our own post on Instagram, deleting it after a takedown, and an empty push to the owner's browser", () => {
+test("the only writes are Claude, our own post and a customer account's profile on Zernio (the Instagram account a customer picked in it, and their removal once the customer left), publishing our own post on Instagram, deleting it after a takedown, and an empty push to the owner's browser", () => {
   assert.deepEqual(
     WRITE_RULES.map((r) => `${r.method} ${r.host} ${r.path.source}`),
     [
@@ -58,6 +58,7 @@ test("the only writes are Claude, our own post and a customer account's profile 
       'POST api.anthropic.com ^\\/v1\\/messages\\/batches$',
       'POST zernio.com ^\\/api\\/v1\\/posts$',
       'POST zernio.com ^\\/api\\/v1\\/profiles$',
+      'POST zernio.com ^\\/api\\/v1\\/connect\\/instagram\\/select-account$',
       'DELETE zernio.com ^\\/api\\/v1\\/accounts\\/[A-Za-z0-9_-]+$',
       'DELETE zernio.com ^\\/api\\/v1\\/profiles\\/[A-Za-z0-9_-]+$',
       'POST graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
@@ -83,6 +84,9 @@ test("the only writes are Claude, our own post and a customer account's profile 
   assert.ok(assertAllowed('DELETE', 'https://zernio.com/api/v1/profiles/prof_123'));
   assert.throws(() => assertAllowed('DELETE', 'https://zernio.com/api/v1/accounts/acc_123/posts'), /refused/);
   assert.throws(() => assertAllowed('DELETE', 'https://zernio.com/api/v1/accounts'), /refused/);
+  // The headless connect picks only an Instagram account into our own profile; no other selection is reachable.
+  assert.ok(assertAllowed('POST', 'https://zernio.com/api/v1/connect/instagram/select-account'));
+  assert.throws(() => assertAllowed('POST', 'https://zernio.com/api/v1/connect/facebook/select-page'), /refused/);
   for (const r of READ_RULES.filter((x) => isSocial(x.host))) assert.ok(r.path, `${r.host} reads are limited to listed API paths`);
 });
 

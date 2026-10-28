@@ -10,6 +10,8 @@ export const API_CATALOG = [
     type: 'api', url: 'https://query.wikidata.org/sparql', name: 'Wikidata',
     why: 'עובדות מובנות תחת CC0: תאריכים, מקומות, אנשים ושיאים. לכל ערך יש הפניה משלו.',
     api: { kind: 'wikidata-sparql', query: 'SELECT ?item ?itemLabel WHERE { ?item wdt:P31 wd:Q5 } LIMIT 1' }, terms: 'ok',
+    // Offered for every niche: general facts, not the niche's own (its relevance is scored as such).
+    general: true,
   },
   {
     match: /ממשל|זכויות|מדינה|ציבור|government|rights|public|(?<![\p{L}])מס(?![\p{L}])|מיסים|ביטוח|רווחה|תחבורה|בריאות|חינוך|\bdata\b/iu,

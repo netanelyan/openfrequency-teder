@@ -64,7 +64,7 @@ Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
 - **Draws as much as it writes.** At least half of a post's slides carry a picture:
   a licensed photograph checked against its slide, or a graphic drawn from the
   slide's own numbers.
-- **Publishes carefully.** Never on Shabbat or a festival, never with engagement of
+- **Publishes carefully.** Never on Shabbat or a festival unless the account's owner chose to, never with engagement of
   any kind, always with the platforms' AI label, within each account's monthly plan
   of 40 slideshows and 10 redos.
 - **Learns.** It reads each post's numbers at 72 hours and moves the mix of formats
@@ -336,7 +336,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 | 6. No investment advice | `src/rules/compliance.js`, required for any money niche |
 | 7. A plan per account, not a money cap | `src/budget/quota.js`: 40 slideshows and 10 redos a month per account, weighed before a post is started; what each call cost is recorded (`src/budget/ledger.js`), never capped |
 | 8. Hebrew, right to left | every slide and page is `lang="he" dir="rtl"` (tested) |
-| 9. Shabbat and the festivals | `src/schedule/`: from candle lighting to nightfall, from the real sunset and the Hebrew calendar; the scheduler never plans such a slot and every publisher refuses one |
+| 9. Shabbat and the festivals | `src/schedule/`: from candle lighting to nightfall, from the real sunset and the Hebrew calendar; the scheduler never plans such a slot and every publisher refuses one. An account's owner may choose to post on Shabbat, on the festivals, or both (`src/schedule/choice.js`); off by default |
 | 10. Secrets | `.gitignore`, `check:public` and its pre-commit hook; `.env.example` lists every variable (tested) |
 
 ## Accounts (packs)

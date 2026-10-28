@@ -79,6 +79,15 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
     for (const c of db.all('SELECT platform, zernio_account_id FROM zernio_connections WHERE account_id = ?', r.id)) zernio.push({ account: r.id, kind: 'account', id: c.zernio_account_id, platform: c.platform });
     if (r.zernio_profile_id) zernio.push({ account: r.id, kind: 'profile', id: r.zernio_profile_id });
   }
+  // A new account's onboarding that connected TikTok or Instagram before its account existed has a profile of its own
+  // (src/publish/connect.js): unless an account took it over (listed above), it goes too.
+  const taken = new Set(rows.map((r) => r.zernio_profile_id).filter(Boolean));
+  for (const o of db.all('SELECT id, setup_json FROM onboarding WHERE workspace_id = ?', workspaceId)) {
+    const z = j(o.setup_json, {})?.zernio;
+    if (!z?.profileId || taken.has(z.profileId)) continue;
+    for (const [platform, c] of Object.entries(z.connections || {})) if (c?.id) zernio.push({ account: o.id, kind: 'account', id: c.id, platform });
+    zernio.push({ account: o.id, kind: 'profile', id: z.profileId });
+  }
 
   // ---- 1. nothing more is written or published for it, then its rows go, children before their parents
   db.tx(() => {
@@ -147,7 +156,7 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
         }
       }
     }
-    if (ids.length) audit(db, { actor: 'accounts', action: 'workspace_cleaned', detail: { workspace: workspaceId, ...out, left: zernio.length && !zernioConfigured() ? zernio.map((z) => `${z.kind}:${z.id}`) : [] } });
+    if (ids.length || zernio.length) audit(db, { actor: 'accounts', action: 'workspace_cleaned', detail: { workspace: workspaceId, ...out, left: zernio.length && !zernioConfigured() ? zernio.map((z) => `${z.kind}:${z.id}`) : [] } });
     return out;
   })().catch((e) => log?.(`[workspace delete] ${workspaceId}: ${e.stack || e.message}`));
   running.add(cleanup);

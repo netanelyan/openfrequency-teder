@@ -121,11 +121,57 @@ says which keys are set without showing them.
   every display font is already used by another account, or the pack would not validate.
 - **Where it shows.** The customer reads "לא הצלחנו ליצור את החשבון הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו
   לנו." The details go to the service's log, as "[onboarding] the pack was not written: ...". (What the customer can
-  fix is said to them: a taken user name, one with other than Latin letters and digits, no source approved.)
+  fix is said to them: a taken user name or account name, one with other than Latin letters and digits, no source
+  approved. A name another account already has used to fail here; it is now checked before the pack is written.)
 - **What to do.** Read the log line. "every template and variant is in use" needs one more template file in
   src/render/templates; "every display face is in use" needs a font in src/render/fonts.js; validation problems are
   listed one by one.
 - **Needed now?** Only when it happens. With many customers the templates and fonts will run out: plan for it.
+
+### Sources the customer is not offered: relevance, authority, terms
+
+- **What it is.** Discovery scores each source for relevance to the niche (0-10, from the site's own title, its
+  description and its latest items; Claude with a key, a strict keyword match without one) next to authority,
+  freshness and terms of use. The customer is offered a source only with relevance 6 or more, authority 5 or more, and
+  terms that are not "no" (src/onboarding/discover.js `offered`); a site they typed in themselves is always offered.
+  Only strong ones (authority 7+, relevance 7+) are ticked. Fewer than three on offer, and the customer reads "מצאנו
+  מעט מקורות טובים לנושא הזה" with a box to search again with more of their own sites (POST /new/<id>/more).
+- **Why.** A seed "football" brought in sites with nothing to do with football: the Brave queries return pages that
+  only mention the word, discovery then reads each such site's home page and site-wide feed, and nothing scored
+  whether a source is about the niche at all.
+- **Where it shows.** The customer sees no numbers and no terms: at most "מקור מוביל" (authority 8+) and "מתעדכן כל
+  יום" (an item in the last two days). The operator sees every chip as before, a "רלוונטיות N/10" chip and its reason,
+  and the sources left out folded under "מקורות שלא הוצגו ללקוח (N)", which the operator may still approve. A source
+  whose terms are "no" is approved by nobody.
+- **Terms marked "check".** These need our review of their terms of use. We handle it; the customer never sees the
+  word (the chip "לבדוק תנאי שימוש" is the operator's alone), and such a source is offered like any other.
+- **What to do.** Review the "check" sources of new accounts. If a good source keeps being left out, look at its
+  relevance reason.
+
+### Sample posts that could not be written
+
+- **What it is.** After the account is created, its approved sources are read first ("קוראים את המקורות שבחרתם"),
+  then the samples are written one at a time, each shown as it is ready. A refused one is followed by another, on
+  another document, up to nine tries for five; an error is tried once more after a few seconds. Three or more is done.
+- **Where it shows.** Below three, the customer reads what happened and what helps, with "לבחור מקורות" (the Sources
+  page) and "לנסות שוב": no facts in the sources ("במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן..."), sources that
+  could not be read, an error on our side, or posts our checks stopped. The ones written are kept. The operator sees
+  every try's reason under "הערות למפעיל", and the service's log has a line per read, per refused try and per run:
+  "[onboarding] <onboarding id> (<account>): ...".
+- **What to do.** Read the log lines. "no samples written: nofacts" is sources with nothing to write from (often the
+  off-topic ones above, or a home page with no articles); "(error)" lines are the model or the renderer.
+
+### Connecting TikTok and Instagram: headless, and before the account exists
+
+- **What it is.** The connect is Zernio's headless mode: the customer goes straight to TikTok's or Instagram's own
+  consent screen (Instagram Login), with no Zernio welcome screen or picker. Zernio still shows its own one-click
+  "continue" notice (zernio.com/connect/continue) on the way back to our site; only a custom app scheme skips it. An
+  Instagram that comes back through Facebook Login (a reconnect of one connected that way) is finished on our own page:
+  one account on offer is picked by itself, several are listed, and the pick is kept on the server for 15 minutes.
+  While the sources are searched, the customer may connect already: the profile is then the onboarding's (its
+  externalId the onboarding id, kept in onboarding.setup_json), and the new account takes it over at create. On
+  Zernio that profile keeps the onboarding's name and externalId; Teder finds it by the id it keeps.
+- **What to do.** Nothing. A workspace deleted before its account was created has that profile removed too.
 
 ### Something went wrong on our side (500)
 
@@ -180,15 +226,19 @@ says which keys are set without showing them.
 ### Posting days and times are the customer's
 
 - **What it is.** Each account's owner chooses on Settings (the account shown in the switcher), and before going live
-  on the new-account page, which days to post on and at what time, up to two times a day. Shabbat and the festivals
-  never post, whatever is chosen. The choice is stored in `settings` as `schedule:<account id>` and is laid over
-  pack.json's `schedule` (its slots, posting windows and posts a day; a fight week stays the pack's). A new account
+  on the new-account page, which days to post on and at what time, up to two times a day, and whether to post on
+  Shabbat ("לפרסם גם בשבת") and on the festivals ("לפרסם גם בחגים"). Both are off unless the owner ticks them: off,
+  nothing posts from candle lighting to nightfall, whatever times are chosen; on, those days post like any other, at
+  every rail (slots, the runner, the publish path, TikTok drafts, held posts). An operator's pack can say the same in
+  pack.json (`schedule.shabbat`, `schedule.holidays`, true or false); an owner's saved choice wins. The choice is stored
+  in `settings` as `schedule:<account id>` (`{ byDay, shabbat, holidays, at }`) and is laid over pack.json's `schedule`
+  (its slots, posting windows, posts a day and the two flags; a fight week stays the pack's). A new account
   starts with two posts Sunday to Thursday (12:30, 19:30), Friday 12:30 and Saturday 21:00: about 45 to 54 slots a
   month, at least 45 in every month of 2026 to 2028, festivals included. A month with more slots than the account's
   plan (40, or what the operator set) is thinned evenly to the plan, a day's second slot first, so the posts last the
   whole month; the quota still caps it.
 - **Where it shows.** Settings, "מתי מפרסמים", says how many posts next month gets and how many chosen times fall on
-  Shabbat or a festival.
+  a Shabbat or a festival the account does not post on.
 - **What to do.** Nothing. When the day's posts are written (`generateAt`, 07:00) is still the operator's, on
   Settings. An account with no choice saved (the accounts made before this) keeps its pack.json schedule exactly as
   before, until its owner saves one. To undo an owner's choice, delete the `schedule:<account id>` row from `settings`.

@@ -288,13 +288,19 @@ export async function createProfile({ name, externalId }) {
 export const CONNECT_PLATFORMS = ['tiktok', 'instagram'];
 
 /**
- * Zernio's link to connect (or reconnect) one platform into a profile: its own welcome screen with our name, then the
- * platform's consent screen, then back to `redirectUrl` with connected=, accountId=, username= (or error=). The link
- * works for 30 minutes, so it is asked for at the moment someone taps, never stored or sent on.
+ * Zernio's link to connect (or reconnect) one platform into a profile, headless (docs.zernio.com, GET
+ * /v1/connect/{platform}, headless=true): straight to the platform's own consent screen, no Zernio welcome screen or
+ * picker, then back to `redirectUrl`. TikTok and Instagram (Instagram Login, pinned here) need no selection, so the
+ * account is connected at once and the return carries connected=, accountId=, username= (or error=). Zernio still
+ * passes the return through its own one-click notice (zernio.com/connect/continue) for an address on another site. An
+ * Instagram account that comes back through Facebook Login instead (a reconnect of one connected that way) returns
+ * step=select_account with a tempToken, and is finished here (instagramPages, selectInstagram). The link works for 30
+ * minutes, so it is asked for at the moment someone taps, never stored or sent on.
  */
-export async function connectUrl(platform, { profileId, redirectUrl, reconnectAccountId = null, brandName = 'OpenFrequency' }) {
+export async function connectUrl(platform, { profileId, redirectUrl, reconnectAccountId = null }) {
   if (!CONNECT_PLATFORMS.includes(platform)) throw new ZernioError(`not a platform to connect: ${platform}`, { step: 'connect', code: 'bad_platform' });
-  const q = new URLSearchParams({ profileId, redirect_url: redirectUrl, welcome: 'true', brandName });
+  const q = new URLSearchParams({ profileId, redirect_url: redirectUrl, headless: 'true' });
+  if (platform === 'instagram') q.set('loginMethod', 'instagram_login');
   if (reconnectAccountId) q.set('reconnectAccountId', reconnectAccountId);
   let body;
   try {
@@ -304,6 +310,38 @@ export async function connectUrl(platform, { profileId, redirectUrl, reconnectAc
   }
   if (!/^https:\/\//.test(String(body?.authUrl || ''))) throw new ZernioError('Zernio returned no connect link', { step: 'connect', code: 'no_url' });
   return body.authUrl;
+}
+
+/** The headers a headless selection call carries: the token from the return, in a header rather than the address. */
+const selectionHeaders = ({ tempToken, connectToken }) => ({ ...auth(), 'x-temp-token': String(tempToken), ...(connectToken ? { 'x-connect-token': String(connectToken) } : {}) });
+
+/**
+ * The Instagram professional accounts a Facebook Login return can connect: [{ pageId, name, username, igId }], one per
+ * Facebook Page with an Instagram account linked (GET /v1/connect/instagram/select-account).
+ */
+export async function instagramPages({ profileId, tempToken, connectToken = null }) {
+  let body;
+  try {
+    body = await getJson(`${BASE()}/connect/instagram/select-account?${new URLSearchParams({ profileId })}`, { headers: selectionHeaders({ tempToken, connectToken }) });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'select', code: e.code, status: e.status });
+  }
+  return (body?.pages || [])
+    .filter((p) => p?.id && p.instagram_business_account?.id)
+    .map((p) => ({ pageId: String(p.id), name: String(p.name || ''), username: String(p.instagram_business_account.username || ''), igId: String(p.instagram_business_account.id) }));
+}
+
+/** Connect the Instagram account of the Page picked (POST /v1/connect/instagram/select-account): { accountId, username }. */
+export async function selectInstagram({ profileId, pageId, tempToken, connectToken = null, redirectUrl = null }) {
+  let body;
+  try {
+    body = await postJson(`${BASE()}/connect/instagram/select-account`, { profileId, pageId, ...(redirectUrl ? { redirect_url: redirectUrl } : {}) }, { headers: selectionHeaders({ tempToken, connectToken }), timeoutMs: 30_000 });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'select', code: e.code, status: e.status });
+  }
+  const a = body?.account;
+  if (!a?.accountId) throw new ZernioError('Zernio connected nothing', { step: 'select', code: 'no_account' });
+  return { accountId: String(a.accountId), username: String(a.username || '') };
 }
 
 /**

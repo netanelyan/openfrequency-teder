@@ -497,6 +497,10 @@ meter::-moz-meter-bar { background: var(--accent-fill); border-radius: 3px; }
 .post .hook { padding: 6px 20px 0; font: 700 16px/1.24 var(--display); margin: 0; text-wrap: balance; }
 .post .subline { padding: 4px 20px 0; color: var(--ink-3); font-size: 13px; margin: 0; }
 .post .caption, .caption { color: var(--ink-2); font-size: 13px; margin: 0 0 10px; }
+/* A slideshow still being written: a blank slide and one line, until the page reloads with the real card. */
+.post .pending { display: flex; align-items: center; gap: 14px; padding: 20px; }
+.post .pending .ph { flex: none; width: 54px; height: 96px; border-radius: 10px; background: var(--inset); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
+.post .pending .hook, .post .pending .subline { padding: 0; }
 .caption .tags { color: var(--accent); }
 .caption .chip { color: var(--ink); font-weight: 600; margin-inline-end: 6px; }
 
@@ -999,3 +1003,8 @@ details.more[open] > summary { background: var(--fill-2); }
 .d-factlist { display: grid; gap: 10px; margin: 0; padding-inline-start: 18px; }
 .d-factlist q { display: block; color: var(--ink-3); font-size: 14px; }
 .d-doc { white-space: pre-wrap; font: inherit; font-size: 14px; color: var(--ink-2); margin: 0; }
+
+/* A handle's field, with its @ before it (the new-account flow). */
+.atfield { display: flex; align-items: center; gap: 6px; }
+.atfield > span { color: var(--ink-3); font-weight: 600; }
+.atfield input { flex: 1; min-width: 0; }

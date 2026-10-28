@@ -68,6 +68,8 @@ export function validatePack(pack) {
   for (const [d, list] of Object.entries(s.slotsByDay || {})) {
     if (!/^[0-6]$/.test(d) || !Array.isArray(list) || list.some((x) => !HHMM.test(x))) p.push(`pack.json: schedule.slotsByDay.${d} must be a list of "HH:MM"`);
   }
+  // Post on Shabbat / the festivals too (off unless true; an account's saved choice wins: src/schedule/choice.js).
+  for (const k of ['shabbat', 'holidays']) if (s[k] != null && typeof s[k] !== 'boolean') p.push(`pack.json: schedule.${k} must be true or false`);
   if (!MODES.includes(meta.autonomy?.mode || 'approve')) p.push(`pack.json: autonomy.mode must be one of ${MODES.join(', ')}`);
   for (const c of meta.compliance || []) if (!isCompliance(c)) p.push(`pack.json: unknown compliance check "${c}" (have: ${Object.keys(COMPLIANCE).join(', ')})`);
   const about = [meta.displayName, meta.audience, meta.description, ...(meta.topics || [])].join(' ');

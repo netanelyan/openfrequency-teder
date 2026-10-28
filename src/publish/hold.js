@@ -2,6 +2,7 @@ import { now, nowIso } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { addDays, israelDate } from '../schedule/israel.js';
 import { slotsFor } from '../schedule/slots.js';
+import { scheduleOf } from '../schedule/choice.js';
 import { zernioAccountId } from './connect.js';
 import { instagramConfigured } from './instagram.js';
 import { wantedPublisher } from './index.js';
@@ -62,8 +63,10 @@ export function releaseHeld(db, pack, { t = now(), env = process.env } = {}) {
   const taken = new Set(db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status IN ('queued', 'approved', 'publishing')", pack.id).map((r) => r.slot_at));
   const free = [];
   const today = israelDate(t);
+  // The account's own schedule: the days and times its owner chose, and Shabbat and the festivals as they chose.
+  const sched = scheduleOf(db, pack);
   for (let i = 0; i < LOOK_DAYS && free.length < held.length; i++) {
-    for (const s of slotsFor(addDays(today, i), pack.meta.schedule || {}, { notBefore: t + 5 * 60_000 }).slots) {
+    for (const s of slotsFor(addDays(today, i), sched, { notBefore: t + 5 * 60_000 }).slots) {
       const iso = s.toISOString();
       if (!taken.has(iso) && !free.includes(iso)) free.push(iso);
     }

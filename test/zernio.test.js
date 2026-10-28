@@ -211,7 +211,8 @@ test('connecting: a fresh link each time, what is connected read from Zernio, a 
   const ask = Z.calls.find((c) => c.path === '/connect/tiktok');
   assert.equal(ask.q.profileId, 'prof1', 'the profile is made first');
   assert.equal(ask.q.redirect_url, 'https://teder.test/connect/alpha/tiktok/done?e=1&s=x');
-  assert.equal(ask.q.welcome, 'true');
+  assert.equal(ask.q.headless, 'true', 'headless: no Zernio welcome screen or picker');
+  assert.equal(ask.q.welcome, undefined, 'Zernio refuses welcome with headless');
   assert.equal(ask.q.reconnectAccountId, undefined, 'nothing to reconnect yet');
   assert.equal(connectState(db, p, 'tiktok').state, 'none');
 

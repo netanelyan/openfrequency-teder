@@ -8,6 +8,7 @@ import { dataDir, ensureDir, outDir } from '../core/paths.js';
 import { audit, settings, step } from '../core/store.js';
 import { j } from '../db/index.js';
 import { restAt } from '../schedule/shabbat.js';
+import { rulesFor } from '../schedule/choice.js';
 import { israelDate } from '../schedule/israel.js';
 import { verifyFact } from '../verify/claims.js';
 import { documentYears, formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
@@ -49,7 +50,8 @@ import { publishErrorHe } from './errors.js';
 //
 // Before anything goes anywhere, every time:
 //   - not on Shabbat or a yom tov (HARD RULE 9: the scheduler never plans such a
-//     slot, and this refuses one anyway)
+//     slot, and this refuses one anyway), unless the account's owner chose to post
+//     on them (src/schedule/choice.js rulesFor)
 //   - no kill switch, the account not paused
 //   - the post approved
 //   - every fact verified again against its stored document, with its source
@@ -182,7 +184,7 @@ export async function soundFor(db, pack, accountId) {
  * that no longer holds also blocks the post and pauses the account.
  */
 function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', before = 'לפני פרסום' } = {}) {
-  const rest = restAt(t);
+  const rest = restAt(t, rulesFor(db, pack));
   if (rest) throw new PublishRefused(`${rest}: לא מפרסמים עכשיו`, 'shabbat');
   const run = canRun(db, pack.id);
   if (!run.ok) throw new PublishRefused(run.why, 'paused');
@@ -380,7 +382,7 @@ const UPLOAD_STUCK_MS = 15 * 60_000;
  * approved, and at the slot publishPost sends Instagram as always and the owner one reminder.
  *
  * The draft meets every rail a post at its slot meets. HARD RULE 9: a draft is a write to TikTok, so none goes on
- * Shabbat or a yom tov. A draft the rails hold is sent at the runner's first tick that lets it through
+ * Shabbat or a yom tov, unless the account posts on them (its owner's choice). A draft the rails hold is sent at the runner's first tick that lets it through
  * (sendWaitingDrafts), and at the slot by publishPost at the latest.
  *
  * Returns { state: 'drafted' | 'held' | 'blocked' | 'failed' | 'skip', why, code }.

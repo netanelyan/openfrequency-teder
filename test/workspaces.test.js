@@ -156,7 +156,7 @@ const pagesFor = () => [
   '/', '/posts', '/all', '/accounts', '/results', '/sources', '/facts', '/topics', '/rivals', '/sounds', '/settings', '/more', '/new', '/styles',
   '/static/accounts.css', '/notifications/latest.json',
   '/?account=bravo', '/posts?account=bravo', '/accounts?account=bravo', '/results?account=bravo', '/sources?account=bravo', '/facts?account=bravo', '/topics?account=bravo', '/rivals?account=bravo', '/sounds?account=bravo', '/settings?account=loose',
-  `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`,
+  `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`, `/new/${B.onboarding}/status`,
   '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`,
   '/demos', `/demos/${B.demo}`, `/demos/${B.demo}/img/tiktok/0`,
 ];
@@ -278,6 +278,12 @@ const casesFor = () => {
     [`/new/${B.onboarding}/reviewed`],
     [`/new/${B.onboarding}/live`],
     [`/new/${B.onboarding}/retry`],
+    // The setup done while the sources are searched: the name, the days and times, TikTok and Instagram, a search again.
+    [`/new/${B.onboarding}/name`, { displayName: 'A in B', handle: 'a.in.b' }],
+    [`/new/${B.onboarding}/schedule`, { day_1: 'on', t1_1: '10:00' }],
+    [`/new/${B.onboarding}/connect/tiktok`],
+    [`/new/${B.onboarding}/connections`],
+    [`/new/${B.onboarding}/more`, { examples: 'https://a.example.org/' }],
     // A store's demo is the operator's alone: no customer approves, rewrites or takes one down, or sets its price.
     [`/demos/${B.demo}/approve`],
     [`/demos/${B.demo}/redo`],

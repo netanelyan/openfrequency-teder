@@ -6,6 +6,7 @@ import { audit, step } from '../core/store.js';
 import { j } from '../db/index.js';
 import { oneLine } from '../rules/overlay.js';
 import { restAt } from '../schedule/shabbat.js';
+import { rulesFor } from '../schedule/choice.js';
 import { israelDate } from '../schedule/israel.js';
 import { loadPost } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
@@ -166,7 +167,7 @@ async function fallback(ctx, pack, post, { t, said }) {
   const results = post.publish;
   const flow = results.tiktok.flow;
   // The rails a post at its slot meets, met again: they wait, and the draft waits with them.
-  const rest = restAt(t);
+  const rest = restAt(t, rulesFor(db, pack));
   if (rest) return { state: 'waiting', why: rest };
   const run = canRun(db, pack.id);
   if (!run.ok) return { state: 'waiting', why: run.why };

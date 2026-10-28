@@ -14,6 +14,7 @@ import { canRun, pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
+import { rulesFor } from '../schedule/choice.js';
 import { timeHe } from './ui.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
@@ -83,7 +84,7 @@ export function approve(ctx, user, { id }) {
   audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id, detail: via(user) });
   const pack = ctx.pack(post.account_id);
   if (pack && tiktokMode(pack) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
-    const rest = restAt(now());
+    const rest = restAt(now(), rulesFor(ctx.db, pack));
     const at = post.slot_at ? ` תזכורת תגיע ב-${timeHe(post.slot_at)}.` : '';
     return draftBeside(ctx, id, { ok: true, message: rest ? `אושר. הטיוטה תישלח לטיקטוק כש${rest} ייגמר.${at}` : `אושר. הטיוטה נשלחת לטיקטוק.${at}` });
   }
@@ -98,17 +99,22 @@ export function approveAll(ctx, user, params, form) {
   const ids = [...new Set(String(form.ids || '').split(',').map((s) => s.trim()).filter((s) => /^[\w-]+$/.test(s)))].slice(0, 500);
   if (!ids.length) throw new ActionError('אין פוסטים לאשר');
   const jobs = [];
+  const drafting = new Set();
   let done = 0;
   for (const id of ids) {
     const row = ctx.db.get('SELECT status, account_id FROM posts WHERE id = ?', id);
     if (row?.status !== 'queued' || !owns(ctx, row.account_id)) continue;
     const r = approve(ctx, user, { id });
     done++;
-    if (r.job) jobs.push(r.job);
+    if (r.job) {
+      jobs.push(r.job);
+      drafting.add(row.account_id);
+    }
   }
   if (!done) throw new ActionError('אף אחד מהפוסטים האלה כבר לא מחכה לאישור');
   const skipped = ids.length - done;
-  const rest = jobs.length ? restAt(now()) : null;
+  // Each account keeps Shabbat or not by its own choice: the drafts wait if any of theirs does.
+  const rest = [...drafting].map((a) => ctx.pack(a)).filter(Boolean).map((p) => restAt(now(), rulesFor(ctx.db, p))).find(Boolean) || null;
   const next = jobs.length ? (rest ? ` הטיוטות יישלחו לטיקטוק כש${rest} ייגמר.` : ' הטיוטות נשלחות לטיקטוק.') : ' כל פוסט ייצא בשעה שלו.';
   const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped} כבר לא חיכו)` : ''}.${next}` };
   Object.defineProperty(result, 'job', { value: Promise.all(jobs) });
