@@ -5,6 +5,8 @@
 //   GET /login?next=   sets the demo session cookie (of_session, as accounts does on a laptop) and goes back to next
 //   GET /logout        clears it
 //   GET /internal/session   what accounts would say: the owner of one fictional workspace, Teder on
+//   GET /internal/entitlement   that workspace has paid for Teder (the paywall, src/billing/entitlement.js); without
+//                               it every demo page was the "can't check right now" gate
 // Open the demo at http://localhost:<port>, not 127.0.0.1: the cookie belongs to the host name, and accounts and
 // Teder share it only under the same one.
 
@@ -34,6 +36,12 @@ export async function startDemoAccounts() {
     if (url.pathname === '/internal/session') {
       if (req.headers.authorization !== `Bearer ${token}`) return json(401, { error: 'bad_token' });
       return req.headers['x-of-session'] === sid ? json(200, answer) : json(401, { error: 'no_session' });
+    }
+    if (url.pathname === '/internal/entitlement') {
+      if (req.headers.authorization !== `Bearer ${token}`) return json(401, { error: 'bad_token' });
+      const ws = Number(url.searchParams.get('workspace'));
+      const paidThrough = new Date(Date.now() + 30 * 86_400_000).toISOString();
+      return json(200, { workspace: ws, product: url.searchParams.get('product'), enabled: true, access: 'paid', allowed: true, paidThrough, cancelAt: null });
     }
     const next = url.searchParams.get('next') || '';
     const back = /^http:\/\/(localhost|127\.0\.0\.1):\d+\//.test(next) ? next : 'about:blank';
