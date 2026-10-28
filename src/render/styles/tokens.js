@@ -116,9 +116,6 @@ export const STYLES = {
     dark: true,
     inline: true,
     rank: true,
-    // Its side bands on TikTok, narrower than the shared ones (152): the viral countdowns' lines run across about four
-    // fifths of the screen, centred. The bottom band, over the caption and the buttons' lower half, stays.
-    sides: { tiktok: 100 },
     // `bg`: the ground of a slide with no photograph of its own. `accent`: a highlight, a highlighter's yellow behind
     // the words on a white box, or the words themselves in yellow in white text. The box is white and its text
     // near-black whatever the account's colours (`box`, `ink`): that is TikTok's own, and what reads as native.

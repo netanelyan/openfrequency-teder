@@ -115,7 +115,7 @@ test("a highlight block (B, D) is a band behind its letters that stays inside it
 });
 
 test('the safe zones are px on all four sides, and a line in a side band is refused', async () => {
-  assert.deepEqual(SAFE_ZONES.tiktok, { top: 140, bottom: 420, right: 152, left: 152 });
+  assert.deepEqual(SAFE_ZONES.tiktok, { top: 220, bottom: 470, right: 160, left: 160 }, "TikTok's tabs, its caption and its buttons on either side");
   assert.deepEqual(SAFE_ZONES.instagram, { top: 80, bottom: 120, right: 96, left: 96 });
   // An account's own wider band (pack.json overlay.safeZone) widens it.
   assert.equal(zonesFor('tiktok', { safeZone: { top: 0.12 } }).top, Math.ceil(0.12 * 1920));
@@ -378,7 +378,7 @@ test("E: the cover's hook is set large and centred in the middle band, and the t
   // The viral countdowns' size: a line about a nineteenth of the screen tall, the text across four fifths of it.
   assert.ok(STYLES.E.text.hook.px >= 88 && STYLES.E.text.hook.px <= 108 && STYLES.E.text.hook.floor >= 72);
   assert.ok(STYLES.E.text.title.px >= 84 && STYLES.E.text.title.px <= 100);
-  assert.equal(STYLES.E.sides.tiktok, 100);
+  assert.equal(STYLES.E.sides, undefined, "E keeps TikTok's own bands, the buttons' column included");
   const browser = await getBrowser();
   const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   try {
@@ -423,7 +423,7 @@ test('E fills the slide with every photograph sharp enough to fill it; a small o
   assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1350 } }, g).mode, 'cover', 'a 4:5 one fills the slide, cut around its face');
   assert.equal(fitE({ photo, photoSize: { w: 2560, h: 1440 } }, g).mode, 'cover', 'so does a sharp landscape one: a slide is the whole screen of picture');
   const wide = fitE({ photo, photoSize: { w: 1600, h: 900 } }, g);
-  assert.deepEqual(wide, { mode: 'contain', top: 656, ph: 608 }, 'a 16:9 one too small to fill is shown whole, in the middle');
+  assert.deepEqual(wide, { mode: 'contain', top: 220, ph: 608 }, 'a 16:9 one too small to fill is shown whole, at the top under the tabs');
   assert.equal(fitE({ photo, photoSize: { w: 450, h: 600 } }, g).mode, 'contain', 'a small one is not blown up past twice its size');
   assert.equal(fitE({ photo }, g).mode, 'cover', 'no size known: as before');
   const browser = await getBrowser();
@@ -434,10 +434,10 @@ test('E fills the slide with every photograph sharp enough to fill it; a small o
     const r = await tab.evaluate(() => {
       const img = document.querySelector('img.ph').getBoundingClientRect();
       const blk = [...document.querySelectorAll('.blk .sf')].map((e) => e.getBoundingClientRect());
-      return { img: [img.top, img.height], bottom: Math.max(...blk.map((b) => b.bottom)), max: Number(document.querySelector('.ov').dataset.max) };
+      return { img: [img.top, img.height], top: Math.min(...blk.map((b) => b.top)), bottom: Math.max(...blk.map((b) => b.bottom)), max: Number(document.querySelector('.ov').dataset.max) };
     });
-    assert.deepEqual(r.img, [656, 608]);
-    assert.ok(r.bottom <= 656, `the text ends above the photograph (${r.bottom})`);
+    assert.deepEqual(r.img, [220, 608]);
+    assert.ok(r.top >= 220 + 608, `the text is under the photograph, in the middle of the screen (${r.top})`);
     assert.equal(r.max, 0, 'no shade of its own: the blurred copy under it has its veil');
     assert.equal(await tab.evaluate(() => document.querySelectorAll('img.bf').length), 1, 'never a black band: a blurred copy of the photograph fills the slide');
   } finally {

@@ -39,9 +39,12 @@ export const OVERLAY = {
  * its own furniture in Hebrew (the button rail moves to the left, the caption's start to the right), so both sides
  * are kept clear, as well as the tabs on top and the caption, the account and the sound at the bottom. Instagram's
  * 4:5 crop has only its own edges to keep. An account that keeps a wider band (overlay.safeZone) gets the wider one.
+ * TikTok's own furniture, measured on a 1080x1920 slide (2026): the status bar and the "Following | For You" tabs take
+ * the top 220 px, the account, the caption and the sound the bottom 450 to 480, and the column of buttons some 180 px
+ * of one side from 840 px down. The owner saw a slide's words and its face under them: the bands are those now.
  */
 export const SAFE_ZONES = {
-  tiktok: { top: 140, bottom: 420, right: 152, left: 152 },
+  tiktok: { top: 220, bottom: 470, right: 160, left: 160 },
   instagram: { top: 80, bottom: 120, right: 96, left: 96 },
 };
 

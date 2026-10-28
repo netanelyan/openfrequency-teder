@@ -47,6 +47,9 @@ export function geo(size, overlay = null, style = null) {
 
 const HEADS = new Set(['hook', 'title', 'ntitle']);
 
+/** Where A, C and D start a slide's photograph (TikTok px): under the status bar and the tabs, so no face is behind them. */
+const PHOTO_TOP = 150;
+
 /**
  * One text block the renderer fits: its size, its floor, the lines it may take, in data attributes. In a style whose
  * text is one inline run (E) its words are in a span, for the box behind each line; `pre` is HTML set before them in
@@ -104,7 +107,7 @@ function drawA(m, slide, g, S) {
       ? `<div class="sides">${m.sides.map((x) => `<div class="side"><span>${he(x.who)}</span>${bigNum(x.value, g.hs(104), 'num sm')}</div>`).join('')}</div>`
       : `<div class="nrow">${v.pre ? `<span class="unit">${he(v.pre)}</span>` : ''}${bigNum(v.num, g.hs(S.text.number.px))}${v.post ? `<span class="unit">${he(v.post)}</span>` : ''}</div>`;
     return {
-      bt: photo ? g.y(660) : g.y(280),
+      bt: photo ? g.y(780) : g.y(300),
       html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${txt('h2', 'hl', S, 'ntitle', m.title, g, { highlight: m.highlight })}${m.meta ? `<div class="meta">${he(m.meta)}</div>` : ''}
 <div class="card">${m.kicker ? `<div class="clbl">${he(m.kicker)}</div>` : ''}${row}${m.body ? `<i class="rule"></i>${txt('p', 'bd', S, 'body', m.body, g)}` : ''}</div>${ctaHtml(m)}${srcHtml(slide)}</div>`,
@@ -113,21 +116,22 @@ function drawA(m, slide, g, S) {
   // theme.options.fullPhoto (a store's demo, src/demos/build.js): the slide's photograph fills it, as the cover's
   // does, and the text stands at the bottom, over the fade into the ground.
   return {
-    bt: photo ? (slide.fullPhoto ? g.y(700) : g.y(660)) : g.y(280),
+    bt: photo ? (slide.fullPhoto ? g.y(700) : g.y(780)) : g.y(300),
     html: `${photoHtml(slide, slide.fullPhoto ? 'ph full' : 'ph')}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
 
 const CSS_A = (g, S) => `
-.ph{height:${g.y(940)}px}
-.ph.full{height:100%}
-.ov{position:absolute;inset:0 0 auto 0;height:${g.y(940)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(520)}px,rgba(var(--bg-rgb),1) ${g.y(940)}px)}
-.k-cover .ov{height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) 35%,rgba(var(--bg-rgb),.92) 72%,rgba(var(--bg-rgb),1) 100%)}
-.full-photo.k-item .ov{height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),.05) 0%,rgba(var(--bg-rgb),.25) 30%,rgba(var(--bg-rgb),.9) 60%,rgba(var(--bg-rgb),.97) 100%)}
+/* The photograph starts under TikTok's tabs (PHOTO_TOP), so a face is never behind them, and the words come down with it. */
+.ph{top:${g.y(PHOTO_TOP)}px;height:${g.y(900)}px}
+.ph.full{top:0;height:100%}
+.ov{position:absolute;inset:${g.y(PHOTO_TOP)}px 0 auto 0;height:${g.y(900)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(480)}px,rgba(var(--bg-rgb),1) ${g.y(900)}px)}
+.k-cover .ov{top:0;height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) 35%,rgba(var(--bg-rgb),.92) 72%,rgba(var(--bg-rgb),1) 100%)}
+.full-photo.k-item .ov{top:0;height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),.05) 0%,rgba(var(--bg-rgb),.25) 30%,rgba(var(--bg-rgb),.9) 60%,rgba(var(--bg-rgb),.97) 100%)}
 .full-photo.k-item .blk{justify-content:flex-end}
 .blk{gap:${g.y(36)}px}
-.blk.cov{justify-content:flex-end;bottom:${g.y(460)}px}
+.blk.cov{justify-content:flex-end;bottom:${g.z.bottom + g.y(40)}px}
 .blk.cov.mid{justify-content:center;top:${g.y(400)}px}
 .hl{font-family:'Heebo';font-weight:900;letter-spacing:-1px;line-height:1.04}
 .k-item .hl{line-height:1.05}
@@ -247,8 +251,8 @@ ${m.key ? `<div class="key">${he(m.key)}</div>` : ''}`,
 }
 
 const CSS_C = (g, S) => `
-.ph{height:calc(var(--bt) - ${g.y(80)}px)}
-.k-item .ph{height:calc(var(--bt) - ${g.y(120)}px)}
+.ph{top:${g.y(PHOTO_TOP)}px;height:calc(var(--bt) - ${g.y(80 + PHOTO_TOP)}px)}
+.k-item .ph{height:calc(var(--bt) - ${g.y(120 + PHOTO_TOP)}px)}
 .blk{gap:${g.y(32)}px}
 .blk.cov{gap:${g.y(36)}px}
 .blk.cov.keyed{bottom:${g.z.bottom + 36 + g.y(20)}px}
@@ -277,8 +281,8 @@ function drawD(m, slide, g, S) {
   const photo = hasPhoto(slide);
   if (m.kind === 'cover') {
     return {
-      bt: photo ? g.y(880) : g.y(560),
-      lift: photo ? g.y(560) : null,
+      bt: photo ? g.y(960) : g.y(560),
+      lift: photo ? g.y(640) : null,
       html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk cov">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}<i class="bar"></i></div>`,
     };
@@ -292,18 +296,18 @@ function drawD(m, slide, g, S) {
     : '';
   const body = m.kind === 'number' ? txt('p', 'bd', S, 'body', m.body, g) : m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g);
   return {
-    bt: photo ? g.y(800) : g.y(300),
-    lift: photo ? g.y(420) : null,
+    bt: photo ? g.y(880) : g.y(300),
+    lift: photo ? g.y(500) : null,
     html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${chip}${txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight })}${num}${body}${m.kind === 'number' ? '' : gfx(m)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
 
 const CSS_D = (g, S) => `
-.ph{height:${g.y(1000)}px}
-.k-cover .ph{height:${g.y(1120)}px}
-.ov{position:absolute;inset:0 0 auto 0;height:${g.y(1000)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(520)}px,rgba(var(--bg-rgb),1) ${g.y(1000)}px)}
-.k-cover .ov{height:${g.y(1120)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(560)}px,rgba(var(--bg-rgb),.92) ${g.y(1120)}px)}
+.ph{top:${g.y(PHOTO_TOP)}px;height:${g.y(900)}px}
+.k-cover .ph{height:${g.y(1000)}px}
+.ov{position:absolute;inset:${g.y(PHOTO_TOP)}px 0 auto 0;height:${g.y(900)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(470)}px,rgba(var(--bg-rgb),1) ${g.y(900)}px)}
+.k-cover .ov{height:${g.y(1000)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(500)}px,rgba(var(--bg-rgb),.92) ${g.y(1000)}px)}
 .blk{gap:${g.y(28)}px}
 .blk.cov{gap:${g.y(8)}px}
 .hl{font-family:'Karantina Headline';font-weight:700;line-height:.9;color:var(--fg)}
@@ -350,8 +354,10 @@ export function fitE(slide, g) {
   // darkened copy of itself that fills the rest (stylePage's backdrop): never a black band.
   const grow = Math.max(1080 / sz.w, g.h / sz.h);
   if (grow <= 2) return { mode: 'cover' };
-  const ph = Math.min(g.h, Math.round(1080 / a));
-  return { mode: 'contain', top: Math.round((g.h - ph) / 2), ph };
+  // At the top, just under TikTok's tabs, its words under it in the middle of the screen: centred, it left the words
+  // high on the slide, under the tabs' edge.
+  const ph = Math.min(g.h - g.z.top, Math.round(1080 / a));
+  return { mode: 'contain', top: g.z.top, ph };
 }
 
 // The room E's text has, top and bottom in px, and whether it hugs the photograph from above (`hug`). The middle of
@@ -369,15 +375,11 @@ function roomE(slide, g, fit) {
   // A block too tall for the black around the photograph (render.js tries this before it gives the photograph up).
   if (slide.textOver) return { top, bottom };
   if (fit.mode === 'contain') {
-    const face = known ? fit.top + (fy / 100) * fit.ph : null;
-    const clear = Math.round(fit.ph * 0.22);
-    const mid = (top + bottom) / 2;
-    // The face is clear of the middle: the text stays there, over the photograph.
-    if (known && Math.abs(face - mid) > clear + need / 2) return { top, bottom };
-    const above = { top, bottom: fit.top - g.y(28), hug: true };
-    if (above.bottom - above.top >= g.y(300)) return above;
+    // Under the photograph, in the middle of the screen; above it when there is no room under; else over it.
     const below = { top: fit.top + fit.ph + g.y(28), bottom };
     if (below.bottom - below.top >= g.y(300)) return below;
+    const above = { top, bottom: fit.top - g.y(28), hug: true };
+    if (above.bottom - above.top >= g.y(300)) return above;
     if (!known) return { top, bottom };
   } else if (!known) return { top, bottom };
   const face = fit.mode === 'contain' ? fit.top + (fy / 100) * fit.ph : (fy / 100) * g.h;

@@ -1826,6 +1826,14 @@ The owner also said that A to D stay: they are their designs, and the content is
   landscape one has the pixels to be cut to a portrait, and a portrait one is preferred in the search (its shorter side
   counts half again). A to D keep their designs over a blurred copy of the slide's own photograph, the style's ground
   laid over it, where they had a flat ground around a frame, a top half or a fade.
+- *TikTok's own furniture* (the owner: "tiktok has UI. format A cant be that high because of the ui, it has to be more
+  in the middle. check more like this"). Every style was drawn under a mock of the app (the status bar and the tabs on
+  top, the account, caption and sound at the bottom, the column of buttons on one side from 840 px down, on the left
+  in Hebrew and the right in English): faces under the tabs in A, C and D, Hebrew lines run in under the buttons in all
+  five, B's cover into the caption. The TikTok bands are now 220 on top, 470 at the bottom and 160 on each side (E
+  gave up its wider 100); A, C and D start a slide's photograph 150 px down, under the tabs, with its words lower; A's
+  cover ends above the caption; and E's photograph too small to fill the slide stands at the top under the tabs, its
+  words under it in the middle of the screen.
 
 ### Sold self-serve: a paywall, posts that wait for a connection, emails through accounts, and a workspace that can leave (2026-10-27)
 
