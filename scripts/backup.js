@@ -1,24 +1,21 @@
 #!/usr/bin/env node
 // npm run backup [-- --keep 14]
 //
-// A consistent copy of the database while the engine runs (SQLite's VACUUM INTO,
-// which reads a snapshot), into $OF_HOME/data/backups/, keeping the newest
-// --keep copies. Rendered media can always be rendered again; the database is
-// the one thing that cannot. On the VPS, run it from a daily timer and copy the
-// folder somewhere else.
+// The database and every account's pack folder, into $OF_HOME/data/backups/, keeping the newest --keep copies of each
+// (src/db/backup.js says what is copied, what is left out, and how to restore). The database copy is opened and
+// checked before the run counts as done: a copy that fails the check is removed and this exits 1, so the timer's unit
+// fails instead of leaving a file nobody can restore. On the VPS it runs from deploy/openfrequency-backup.timer; the
+// copy off the server is a separate step.
 
-import { readdirSync, rmSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { backupsDir, dbPath, ensureDir, requireHome } from '../src/core/paths.js';
+import { backup, BackupError } from '../src/db/backup.js';
+import { requireHome } from '../src/core/paths.js';
 
 requireHome();
 const keep = Number(process.argv.includes('--keep') ? process.argv[process.argv.indexOf('--keep') + 1] : 14);
-const dir = ensureDir(backupsDir());
-const file = path.join(dir, `openfrequency-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
-const db = new DatabaseSync(dbPath(), { readOnly: true });
-db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
-db.close();
-const all = readdirSync(dir).filter((f) => f.startsWith('openfrequency-') && f.endsWith('.db')).sort();
-for (const f of all.slice(0, Math.max(0, all.length - keep))) rmSync(path.join(dir, f));
-console.log(`backup: ${file} (${Math.min(all.length, keep)} kept)`);
+try {
+  const out = backup({ keep });
+  console.log(`backup: ${out.db} (${out.check.accounts} accounts, ${out.check.posts} posts, integrity ok)${out.packs ? `; ${out.packs}` : '; no packs folder'} (${out.kept.db} kept)`);
+} catch (e) {
+  console.error(`backup failed: ${e instanceof BackupError ? e.message : e.stack || e.message}`);
+  process.exitCode = 1;
+}
