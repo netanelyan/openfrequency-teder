@@ -77,10 +77,19 @@ export function packDirs(dir = packsDir()) {
     .sort();
 }
 
-/** All packs in the private folder, each valid and the set distinct. */
-export function loadAll({ dir = packsDir(), extra = [] } = {}) {
+/**
+ * Which group each pack's look is kept apart within (src/packs/validate.js validateAll): its account's workspace, or
+ * 'own' for the operator's accounts (no workspace) and a pack the database has no account for yet.
+ */
+export function lookGroups(db) {
+  const ws = new Map(db.all('SELECT id, workspace_id FROM accounts').map((r) => [r.id, r.workspace_id]));
+  return (pk) => (ws.get(pk.id ?? pk.meta?.id) != null ? `ws:${ws.get(pk.id ?? pk.meta?.id)}` : 'own');
+}
+
+/** All packs in the private folder, each valid and the set distinct (within each group, `groupOf`: see lookGroups). */
+export function loadAll({ dir = packsDir(), extra = [], groupOf } = {}) {
   const packs = [...packDirs(dir).map((d) => loadPack(d)), ...extra];
-  const problems = validateAll(packs);
+  const problems = validateAll(packs, { groupOf });
   if (problems.length) throw new PackError('the packs are not distinct brands', problems);
   return packs;
 }

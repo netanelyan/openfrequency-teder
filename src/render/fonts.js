@@ -31,6 +31,9 @@ export const FONTS = {
 
 export const isFont = (name) => Object.prototype.hasOwnProperty.call(FONTS, name);
 
+/** The faces a new account's slides may take as their display face (src/onboarding/pack.js newTheme), in that order. */
+export const DISPLAY_FACES = ['Secular One', 'Rubik', 'Heebo', 'Suez One', 'Frank Ruhl Libre', 'Karantina', 'IBM Plex Sans Hebrew', 'Varela Round'];
+
 // A display face whose digits read badly inside a line of text: Karantina's 7 has a
 // crossbar and its 1 a flag, so "177 שערים" reads as letters (the launch set's
 // reviewers caught it twice). As a big counter they are the look; in a headline the

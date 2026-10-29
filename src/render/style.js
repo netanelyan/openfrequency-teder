@@ -51,7 +51,11 @@ function save(db, id, theme) {
 export function lockedStyle(db, pack, packs = []) {
   const now = styleHash(themeOf(pack));
   let lock = getSetting(db, `style:${pack.id}`, null);
-  const clash = lock && packs.some((o) => o.id !== pack.id && lookOf(themeOf(o)) === lookOf(lock.theme));
+  // Another account of the same customer (or another of the operator's own), as looks are kept apart
+  // (src/packs/validate.js validateAll): another customer's account may look the same.
+  const group = (id) => db.get('SELECT workspace_id FROM accounts WHERE id = ?', id)?.workspace_id ?? null;
+  const mine = group(pack.id);
+  const clash = lock && packs.some((o) => o.id !== pack.id && group(o.id) === mine && lookOf(themeOf(o)) === lookOf(lock.theme));
   // No saved look yet, one the library no longer has, or one another account now uses: theme.json, saved.
   if (!lock || !isTemplate(lock.theme?.template, lock.theme?.variant || 'a') || clash) lock = save(db, pack.id, themeOf(pack));
   return { theme: lock.theme, hash: lock.hash, at: lock.at, pending: lock.hash !== now ? now : null };

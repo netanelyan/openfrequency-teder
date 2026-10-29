@@ -1,7 +1,7 @@
 import { contrast, deltaE, isHex, bestInk } from '../render/color.js';
 import { VISUAL_TYPES } from '../render/visuals.js';
-import { isFont } from '../render/fonts.js';
-import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
+import { DISPLAY_FACES, isFont } from '../render/fonts.js';
+import { ALL_LOOKS, isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
 import { ctasOf, hookPatterns, isKind, kindOf, KINDS, MIX } from '../formats/kinds.js';
 import { overlayConfigProblems } from '../rules/overlay.js';
@@ -251,15 +251,20 @@ export function voiceExamples(md) {
 }
 
 /**
- * HARD RULE 2 across the set: each account is a distinct brand. Refuses shared
- * ids, handles, display names, Zernio profiles and accounts, a shared visual
- * template, a display face used by two packs, and palettes too close to tell apart.
+ * HARD RULE 2 across the set: each account is a distinct brand. Refuses, everywhere, shared ids, handles, display names
+ * and Zernio profiles and accounts: those name one account and only one. The look (a shared visual template, a display
+ * face used by two packs, palettes too close to tell apart, one style with accents too close) is refused within a
+ * group: `groupOf(pack)` names it, one customer's workspace or the operator's own accounts (src/packs/load.js
+ * lookGroups). Two customers' accounts are two businesses and may look alike; one customer's own accounts may not, while
+ * the pool allows it: a group with more accounts than there are templates (or display faces) has to share one, and
+ * creating an account never fails for that (src/onboarding/pack.js newTheme takes the least used). Without `groupOf`
+ * every pack is in one group, as before.
  */
-export function validateAll(packs) {
+export function validateAll(packs, { groupOf = () => 'all' } = {}) {
   const p = [];
-  const seen = (field, get) => {
+  const seen = (field, get, list = packs) => {
     const map = new Map();
-    for (const pk of packs) {
+    for (const pk of list) {
       const v = String(get(pk) || '').trim().toLowerCase();
       if (!v) continue;
       if (map.has(v)) p.push(`${pk.meta.id} and ${map.get(v)} share the same ${field}`);
@@ -271,7 +276,31 @@ export function validateAll(packs) {
   seen('display name', (x) => x.meta.displayName);
   seen('Zernio profile', (x) => x.meta.zernio?.profileId);
   for (const plat of PLATFORMS) seen(`Zernio ${plat} account`, (x) => x.meta.zernio?.accounts?.[plat]);
-  seen('visual template', (x) => `${x.theme.template}/${x.theme.variant || 'a'}`);
+  const groups = new Map();
+  for (const pk of packs) {
+    const g = String(groupOf(pk) ?? 'all');
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(pk);
+  }
+  for (const list of groups.values()) p.push(...looksApart(list));
+  return p;
+}
+
+/** The look rules for one group of packs: what validateAll checks within a workspace (or the operator's accounts). */
+function looksApart(packs) {
+  const p = [];
+  const seen = (field, get) => {
+    const map = new Map();
+    for (const pk of packs) {
+      const v = String(get(pk) || '').trim().toLowerCase();
+      if (!v) continue;
+      if (map.has(v)) p.push(`${pk.meta.id} and ${map.get(v)} share the same ${field}`);
+      else map.set(v, pk.meta.id);
+    }
+  };
+  // Past the pool, sharing is unavoidable: the rule holds while the group is no bigger than what there is to give.
+  if (packs.length <= ALL_LOOKS.length) seen('visual template', (x) => `${x.theme.template}/${x.theme.variant || 'a'}`);
+  if (packs.length > DISPLAY_FACES.length) return p;
   seen('display font', (x) => x.theme.fonts?.display);
   // Under the slide styles (pack.json "style") two accounts may share a style, never a style and an accent close
   // enough to tell apart only side by side: the second customer in a niche is given another style or accent.

@@ -3,7 +3,7 @@ import { openDb } from './db/index.js';
 import { allowApiFlag, apiGate, makeLlm, ofEnv } from './llm/index.js';
 import { claudeBatchApi } from './llm/claude.js';
 import { liveSources, recordedSources } from './sources/index.js';
-import { loadAll, syncAccounts } from './packs/load.js';
+import { loadAll, lookGroups, syncAccounts } from './packs/load.js';
 
 // The engine's working context, built once per process: the database, the
 // packs, the model client, and how sources are read.
@@ -28,7 +28,8 @@ export function makeContext({ db = null, packs = null, mode = null, log = (m) =>
   loadEnv(env);
   const m = mode || engineMode(env);
   const database = db || openDb();
-  const all = packs || loadAll();
+  // A customer's accounts are kept apart from each other, the operator's from each other (lookGroups).
+  const all = packs || loadAll({ groupOf: lookGroups(database) });
   syncAccounts(database, all);
   const live = liveSources();
   const recorded = new Map();
@@ -52,7 +53,7 @@ export function makeContext({ db = null, packs = null, mode = null, log = (m) =>
     },
     /** Read the packs again (a new account from onboarding) and sync the database. */
     reloadPacks() {
-      this.packs = loadAll();
+      this.packs = loadAll({ groupOf: lookGroups(this.db) });
       syncAccounts(this.db, this.packs);
       return this.packs;
     },

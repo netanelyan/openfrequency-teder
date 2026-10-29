@@ -438,7 +438,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         const d = data.postFull(c, pm[1]);
         return d ? page(pages.postPage(pc, d)) : page(pages.notFoundPage(pc), 404);
       }
-      // The look is locked against every account on the server (no two alike), so the style reads the engine's packs.
+      // The look is locked against the same customer's other accounts (no two alike), so the style reads the engine's packs.
       if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(c, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
       if (p === '/results') return page(pages.resultsPage(pc, data.results(sc)));
       const cur = current;

@@ -2,20 +2,27 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { packsDir } from '../core/paths.js';
 import { contrast, deltaE, bestInk } from '../render/color.js';
-import { FONTS } from '../render/fonts.js';
+import { DISPLAY_FACES, FONTS } from '../render/fonts.js';
 import { ALL_LOOKS } from '../render/templates/registry.js';
 import { FINANCIAL } from '../rules/compliance.js';
 import { askJson } from '../llm/index.js';
 import { HEBREW } from '../pipeline/prompts.js';
-import { loadPack, readPack } from '../packs/load.js';
+import { lookGroups, loadPack, readPack } from '../packs/load.js';
 import { validateAll } from '../packs/validate.js';
 import { packIdOf } from './setup.js';
 import { suggestStyle } from './style.js';
+import { resolveStyle } from '../render/styles/tokens.js';
 
 // A new pack, written from an onboarding: the owner's seed, the sources they
-// approved, and a look no other account has. No code: the result is the same
-// six files a hand-written pack has, and it is validated like one before it is
-// written.
+// approved, and a look none of the customer's other accounts has. No code: the
+// result is the same six files a hand-written pack has, and it is validated like
+// one before it is written.
+//
+// Looks are kept apart within one customer's workspace (and among the operator's
+// own accounts), never across customers (src/packs/validate.js validateAll): two
+// businesses may share a template or a display face. And the pool never runs out:
+// a template or face the workspace does not use comes first, then the least used
+// on the whole server, so a workspace with more accounts than looks shares one.
 
 const hsl = (h, s, l) => {
   s /= 100;
@@ -38,20 +45,30 @@ export function paletteFor(hue, { dark = false } = {}) {
   return null;
 }
 
-/** A look nobody uses: a free template and variant, a free display face, a hue far from every accent. */
-export function newTheme(existing) {
-  const used = new Set(existing.map((p) => `${p.theme.template}/${p.theme.variant || 'a'}`));
-  const look = ALL_LOOKS.find((l) => !used.has(`${l.template}/${l.variant}`));
-  if (!look) throw new Error('every template and variant is in use: one more template file in src/render/templates is needed');
-  const usedFonts = new Set(existing.map((p) => p.theme.fonts?.display));
-  const display = ['Secular One', 'Rubik', 'Heebo', 'Suez One', 'Frank Ruhl Libre', 'Karantina', 'IBM Plex Sans Hebrew', 'Varela Round'].find((f) => FONTS[f] && !usedFonts.has(f));
-  if (!display) throw new Error('every display face is in use: add a font to src/render/fonts.js');
+/** The option used least: first by the group's packs, then by every pack, then in the list's own order. Never none. */
+function leastUsed(options, keyOf, mine, all) {
+  const count = (list, k) => list.filter((p) => keyOf(p) === k).length;
+  return options
+    .map((o, i) => ({ o, i, k: typeof o === 'string' ? o : `${o.template}/${o.variant}` }))
+    .sort((a, b) => count(mine, a.k) - count(mine, b.k) || count(all, a.k) - count(all, b.k) || a.i - b.i)[0].o;
+}
+
+/**
+ * A look for a new account: a template and variant and a display face the group (the customer's workspace, or the
+ * operator's own accounts: `groupOf`, `group`) does not use, else the least used, and a hue far from the group's
+ * accents (from every account's when the group has none yet). Never throws for a pool used up.
+ */
+export function newTheme(existing, { groupOf = () => 'all', group = 'all' } = {}) {
+  const mine = existing.filter((p) => groupOf(p) === group);
+  const look = leastUsed(ALL_LOOKS, (p) => `${p.theme.template}/${p.theme.variant || 'a'}`, mine, existing);
+  const display = leastUsed(DISPLAY_FACES.filter((f) => FONTS[f]), (p) => p.theme.fonts?.display, mine, existing);
+  const near = mine.length ? mine : existing;
   let best = null;
   for (let hue = 0; hue < 360; hue += 15) {
     for (const dark of [false, true]) {
       const c = paletteFor(hue, { dark });
       if (!c) continue;
-      const d = Math.min(Infinity, ...existing.map((p) => Math.max(deltaE(c.bg, p.theme.colors.bg), deltaE(c.accent, p.theme.colors.accent) * 0.9)));
+      const d = Math.min(Infinity, ...near.map((p) => Math.max(deltaE(c.bg, p.theme.colors.bg), deltaE(c.accent, p.theme.colors.accent) * 0.9)));
       if (!best || d > best.d) best = { d, c };
     }
   }
@@ -100,8 +117,11 @@ ${seed.audience || 'קהל ישראלי רחב'}.
 
 const VOICE_SCHEMA = { type: 'object', properties: { voice: { type: 'string' } }, required: ['voice'], additionalProperties: false };
 
-/** Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. */
-export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [] }) {
+/**
+ * Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. `workspaceId` is the
+ * customer's (null for the operator's own account): its look is kept apart from that workspace's other accounts.
+ */
+export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null }) {
   const id = packIdOf(handle);
   if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id)) throw new Error('the handle must be latin letters and digits, so the pack id can be made from it');
   const dir = path.join(packsDir(), id);
@@ -109,7 +129,9 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
   const approved = candidates.filter((c) => c.approved);
   if (!approved.length) throw new Error('approve at least one source first');
   const about = [seed.niche, seed.audience, ...(seed.topics || [])].join(' ');
-  const theme = newTheme(ctx.packs);
+  const groups = ctx.db ? lookGroups(ctx.db) : () => 'all';
+  const group = ctx.db ? (workspaceId != null ? `ws:${workspaceId}` : 'own') : 'all';
+  const theme = newTheme(ctx.packs, { groupOf: groups, group });
   const words = String(seed.niche).split(/\s+/).filter((w) => w.length > 1);
   const pack = {
     id,
@@ -133,8 +155,12 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     // the stock libraries do not have.
     imagery: { providers: ['pack', 'pexels', 'unsplash', 'commons', 'openverse'] },
   };
-  // The slide style (src/render/styles), from what the account is about and its colours, away from a look-alike.
-  pack.style = { name: suggestStyle({ ...seed, displayName: pack.displayName }, theme.colors, ctx.packs).name };
+  // The slide style (src/render/styles), from what the account is about and its colours, away from a look-alike; and
+  // never one the workspace's other accounts already have in an accent this close (validateAll would refuse it).
+  const ranked = suggestStyle({ ...seed, displayName: pack.displayName }, theme.colors, ctx.packs).ranked;
+  const kin = ctx.packs.filter((p) => groups(p) === group && p.meta?.style?.name);
+  const clashes = (name) => kin.some((p) => p.meta.style.name === name && deltaE(resolveStyle({ name }, theme.colors.accent).colors.accent, resolveStyle(p.meta.style, p.theme?.colors?.accent).colors.accent) < 20);
+  pack.style = { name: ranked.find((n) => !clashes(n)) || ranked[0] };
   const sources = {
     sources: approved.map((c, i) => ({
       id: `${c.type}-${i + 1}-${(() => {
@@ -184,7 +210,7 @@ The bad lines show what the account never sounds like: a few of the NEVER list a
   const problems = [];
   try {
     const p = loadPack(dir);
-    problems.push(...validateAll([...ctx.packs, p]));
+    problems.push(...validateAll([...ctx.packs, p], { groupOf: (x) => (x === p ? group : groups(x)) }));
   } catch (e) {
     problems.push(...(e.problems?.length ? e.problems : [e.message]));
   }
