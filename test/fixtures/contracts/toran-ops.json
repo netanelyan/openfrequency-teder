@@ -35,7 +35,7 @@
                 "message": "היי, ראינו שניסיתם את הדמו של תורן לנעלי הגליל. איך היה?",
                 "target": {
                   "kind": "whatsapp",
-                  "href": "https://wa.me/972500000201",
+                  "href": "https://wa.me/972500000201?text=%D7%94%D7%99%D7%99%2C%20%D7%A8%D7%90%D7%99%D7%A0%D7%95%20%D7%A9%D7%A0%D7%99%D7%A1%D7%99%D7%AA%D7%9D%20%D7%90%D7%AA%20%D7%94%D7%93%D7%9E%D7%95%20%D7%A9%D7%9C%20%D7%AA%D7%95%D7%A8%D7%9F%20%D7%9C%D7%A0%D7%A2%D7%9C%D7%99%20%D7%94%D7%92%D7%9C%D7%99%D7%9C.%20%D7%90%D7%99%D7%9A%20%D7%94%D7%99%D7%94%3F",
                   "label": "להעתיק ולפתוח וואטסאפ"
                 },
                 "direct": false,
@@ -56,14 +56,63 @@
             ],
             "stuck": [
               {
+                "product": "toran",
                 "domain": "wix-store.example",
                 "phone": "972500000204",
                 "at": "2026-10-24T04:00:00.000Z",
                 "why": "האתר על Wix, ותורן בונה דמו רק לחנויות Shopify",
                 "storeId": 40,
+                "message": "היי, כאן OpenFrequency. ביקשתם באתר דמו של תורן ל־wix-store. תורן בונה דמו רק לחנויות Shopify, והחנות על Wix, אז לא יכולנו לבנות אותו. אם יש שאלה, אפשר לענות כאן.",
+                "target": {
+                  "kind": "whatsapp",
+                  "href": "https://wa.me/972500000204?text=%D7%94%D7%99%D7%99%2C%20%D7%9B%D7%90%D7%9F%20OpenFrequency.%20%D7%91%D7%99%D7%A7%D7%A9%D7%AA%D7%9D%20%D7%91%D7%90%D7%AA%D7%A8%20%D7%93%D7%9E%D7%95%20%D7%A9%D7%9C%20%D7%AA%D7%95%D7%A8%D7%9F%20%D7%9C%D6%BEwix-store.%20%D7%AA%D7%95%D7%A8%D7%9F%20%D7%91%D7%95%D7%A0%D7%94%20%D7%93%D7%9E%D7%95%20%D7%A8%D7%A7%20%D7%9C%D7%97%D7%A0%D7%95%D7%99%D7%95%D7%AA%20Shopify%2C%20%D7%95%D7%94%D7%97%D7%A0%D7%95%D7%AA%20%D7%A2%D7%9C%20Wix%2C%20%D7%90%D7%96%20%D7%9C%D7%90%20%D7%99%D7%9B%D7%95%D7%9C%D7%A0%D7%95%20%D7%9C%D7%91%D7%A0%D7%95%D7%AA%20%D7%90%D7%95%D7%AA%D7%95.%20%D7%90%D7%9D%20%D7%99%D7%A9%20%D7%A9%D7%90%D7%9C%D7%94%2C%20%D7%90%D7%A4%D7%A9%D7%A8%20%D7%9C%D7%A2%D7%A0%D7%95%D7%AA%20%D7%9B%D7%90%D7%9F.",
+                  "label": "להעתיק ולפתוח וואטסאפ"
+                },
                 "leadUrl": "https://toran.openfrequency.co.il/lead/40"
               }
             ],
+            "tederDemos": [
+              {
+                "id": "14",
+                "domain": "kelim.example",
+                "name": "חנות הכלים",
+                "status": "failed",
+                "why": "לא נבנה",
+                "error": "לא הצלחנו לקרוא את החנות",
+                "whatsapp": "972500000208",
+                "at": "2026-10-23T09:00:00.000Z",
+                "message": "היי, כאן OpenFrequency. ביקשתם באתר דמו של תדר לחנות הכלים, ולא הצלחנו לבנות אותו. אם יש שאלה, אפשר לענות כאן.",
+                "target": {
+                  "kind": "whatsapp",
+                  "href": "https://wa.me/972500000208?text=%D7%94%D7%99%D7%99%2C%20%D7%9B%D7%90%D7%9F%20OpenFrequency.%20%D7%91%D7%99%D7%A7%D7%A9%D7%AA%D7%9D%20%D7%91%D7%90%D7%AA%D7%A8%20%D7%93%D7%9E%D7%95%20%D7%A9%D7%9C%20%D7%AA%D7%93%D7%A8%20%D7%9C%D7%97%D7%A0%D7%95%D7%AA%20%D7%94%D7%9B%D7%9C%D7%99%D7%9D%2C%20%D7%95%D7%9C%D7%90%20%D7%94%D7%A6%D7%9C%D7%97%D7%A0%D7%95%20%D7%9C%D7%91%D7%A0%D7%95%D7%AA%20%D7%90%D7%95%D7%AA%D7%95.%20%D7%90%D7%9D%20%D7%99%D7%A9%20%D7%A9%D7%90%D7%9C%D7%94%2C%20%D7%90%D7%A4%D7%A9%D7%A8%20%D7%9C%D7%A2%D7%A0%D7%95%D7%AA%20%D7%9B%D7%90%D7%9F.",
+                  "label": "להעתיק ולפתוח וואטסאפ"
+                },
+                "leadUrl": "https://teder.openfrequency.co.il/demos/14"
+              }
+            ],
+            "leads": {
+              "ok": true,
+              "waitlist": [
+                {
+                  "id": 31,
+                  "contact": "972500000209",
+                  "store": "soon-shop.example",
+                  "page": "/toran",
+                  "at": "2026-10-23T08:00:00.000Z"
+                }
+              ],
+              "failed": [
+                {
+                  "id": 32,
+                  "product": "teder",
+                  "source": "teder",
+                  "store": "lost-lead.example",
+                  "contact": "972500000210",
+                  "page": "/teder",
+                  "at": "2026-10-23T07:00:00.000Z"
+                }
+              ]
+            },
             "conversations": [
               {
                 "key": "toran:9",
@@ -101,6 +150,22 @@
                   "month": 4
                 }
               ]
+            },
+            "ourNumber": {
+              "number": "972500000999",
+              "status": "active",
+              "roles": [
+                {
+                  "key": "demo",
+                  "he": "הדמו: מי ששלח קוד מעמוד של חנות, או שהדמו שלו עוד פתוח"
+                }
+              ],
+              "leadUrl": "https://accounts.openfrequency.co.il/admin/toran/lead/1"
+            },
+            "demoLine": {
+              "live": true,
+              "via": "meta",
+              "number": "972500000999"
             }
           },
           "nullable": [
@@ -108,7 +173,17 @@
             "leadUrl",
             "all",
             "month",
-            "page"
+            "page",
+            "ourNumber",
+            "number",
+            "next_step",
+            "storeId",
+            "error",
+            "whatsapp",
+            "href",
+            "kind",
+            "store",
+            "contact"
           ]
         },
         {

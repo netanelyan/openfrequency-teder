@@ -34,15 +34,20 @@ const contracts = Object.fromEntries(
 /**
  * openfrequency-accounts' docs/contracts beside this checkout, looked for next to each of the 6 folders above it: the
  * main checkout's, else one in its .claude/worktrees (the one changed last, when several have it). null when there is
- * none, as in CI.
+ * none, as in CI. A worktree here (.claude/worktrees/<name>) with a namesake in accounts is held to that one's: one
+ * change to a contract on both sides, before either is merged.
  */
 export function accountsContracts(from = ROOT) {
-  let dir = path.resolve(from);
+  const root = path.resolve(from);
+  const ours = path.basename(path.dirname(root)) === 'worktrees' && path.basename(path.dirname(path.dirname(root))) === '.claude' ? path.basename(root) : null;
+  let dir = root;
   for (let i = 0; i < 6; i++) {
     const up = path.dirname(dir);
     if (up === dir) return null;
     dir = up;
     const repo = path.join(dir, 'openfrequency-accounts');
+    const paired = ours ? path.join(repo, '.claude', 'worktrees', ours, 'docs', 'contracts') : null;
+    if (paired && existsSync(paired)) return paired;
     const main = path.join(repo, 'docs', 'contracts');
     if (existsSync(main)) return main;
     const trees = path.join(repo, '.claude', 'worktrees');
