@@ -248,7 +248,8 @@ says which keys are set without showing them.
   plan 15 and 4, as accounts says in its entitlement answer (`plan`). Every account of the workspace draws on the same
   month, so a second account gives more pages, never more posts. Each account's schedule is thinned to its even share
   of the month (src/budget/quota.js monthShare) so they all post through the month. The operator's own accounts, in no
-  workspace, keep a month each, and the operator's numbers on Settings ("לשנות מכסה") apply to them only.
+  workspace or in one of ours (`OF_OWN_WORKSPACES`, below), keep a month each, and the operator's numbers on Settings
+  ("לשנות מכסה") apply to them only.
 - **Where it shows.** The customer's Settings shows the month once, with each account's count under it; the Accounts
   page and the home page say when it is the accounts' month together. The operator's "מכסות ועלות לפי לקוח" shows each
   customer account's own count beside the workspace's, and says the plan comes from accounts.
@@ -260,7 +261,7 @@ says which keys are set without showing them.
 - **What it is.** Editing a post's text is free in the plan, but each edit is checked by the model (tag `edit-check` in
   the spend ledger). A customer's workspace gets 30 such checks a day across its accounts (src/web/actions.js
   EDIT_CHECKS_PER_DAY); past that the edit is refused for the day with a Hebrew line that says so. The operator is not
-  limited.
+  limited, nor is one of our own workspaces (`OF_OWN_WORKSPACES`, below).
 
 ### What is deleted on its own, and when
 
@@ -286,6 +287,29 @@ says which keys are set without showing them.
 - **What to do.** Copy `data/backups/` off the server: on the same disk it is no backup against losing the disk.
 
 ## Settings the operator controls
+
+### OF_OWN_WORKSPACES: the company's own workspaces
+
+- **What it is.** Our own accounts are in a workspace of accounts, put there with `npm run workspace:assign`, so that
+  the people of that workspace see them in Teder. Every rule written for a customer's accounts reads "in a workspace"
+  as "a customer's", so without this setting our accounts would be treated as a customer's: locked to approval and to
+  TikTok drafts with the operator's choices refused, one shared plan of 40 and 10 for all of them with each schedule
+  thinned to its share and the operator's numbers refused, counted under the sample and light-edit caps, asked about
+  the paywall, and disconnected by the retention pass if accounts ever said that workspace's Teder stopped.
+  `OF_OWN_WORKSPACES` (accounts' workspace ids, comma-separated; empty by default) names the company's own workspaces,
+  and an account in one of them is the operator's exactly as an account in no workspace is: the mode and TikTok choice
+  the operator sets stand, it has a month of its own (40 and 10, or the operator's numbers under "לשנות מכסה"), no cap
+  on samples or light edits, accounts is never asked whether it paid (the website, the engine, the WhatsApp assistant
+  and the emails alike), the health table on /all says "שלנו", and the retention pass never disconnects it
+  (src/billing/own.js). Who sees what does not change: the workspace's people see its accounts, another workspace's
+  people do not, and the looks are kept apart among them as before.
+- **What to do.** On the live server, `OF_OWN_WORKSPACES=1` in `private/.env`: our three accounts are in workspace 1
+  (read 2026-10-30), the only workspace in accounts, whose stored answer is comp. A restart of the service picks it
+  up. Check it with `npm run workspace:assign -- --list` (on the server, from `/opt/open-frequency/current` with
+  `$RUN` as in docs/workspace-move.md: `$RUN /opt/node24/bin/node scripts/workspace-assign.js --list`). It reads the
+  same `private/.env` and lists each of our accounts as `workspace 1, ours`; `workspace 1` without `ours` means the
+  setting is not there. A customer's workspace must never be named here.
+- **Needed now?** Yes, before the merged Teder (the plan per workspace, the approval lock, retention) is deployed.
 
 ### OF_SIGNUP_OPEN and OF_SIGNUP_URL: where a demo page sends people
 

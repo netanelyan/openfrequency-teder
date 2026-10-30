@@ -1,5 +1,6 @@
 import { HOUR, monthKey, now, nowIso } from '../core/clock.js';
 import { lastKnown } from '../billing/entitlement.js';
+import { customerWorkspace } from '../billing/own.js';
 import { monthSpend } from './ledger.js';
 
 // A customer's month: how many slideshows it is suggested, how many rejected ones are written again, and what it
@@ -13,7 +14,9 @@ import { monthSpend } from './ledger.js';
 // workspace opens: the paid plan is the ceiling.
 //
 // An account in no workspace (the operator's own) has a month of its own: 40 and 10, or the operator's numbers for it
-// (setPlan). A customer's plan is changed in accounts, never here.
+// (setPlan). So does an account in one of the company's own workspaces (OF_OWN_WORKSPACES, src/billing/own.js): it is
+// ours, in a workspace only so that its people see it, and shares nothing with the workspace's other accounts. A
+// customer's plan is changed in accounts, never here.
 //
 //   suggestion   a post that passed every check and reached the customer for approval. It counts in the month it
 //                reached them, whatever they did with it after: approved, rejected or left to expire
@@ -57,12 +60,13 @@ export function workspacePlan(db, workspaceId) {
 
 /**
  * An account's plan: { suggested, redos, scope, workspaceId, name, set }. A customer's account has its workspace's
- * (scope 'workspace': the month is shared with the workspace's other accounts); the operator's own has its own (scope
- * 'account': the operator's number or the default, 40 and 10, and `set` says which ones the operator set).
+ * (scope 'workspace': the month is shared with the workspace's other accounts); the operator's own, in no workspace or
+ * in one of ours, has its own (scope 'account': the operator's number or the default, 40 and 10, and `set` says which
+ * ones the operator set).
  */
 export function planOf(db, accountId) {
   const row = db.get('SELECT plan_suggested, plan_redos, workspace_id FROM accounts WHERE id = ?', accountId) || {};
-  if (row.workspace_id != null) {
+  if (customerWorkspace(row.workspace_id ?? null)) {
     const w = workspacePlan(db, row.workspace_id);
     return { suggested: w.suggested, redos: w.redos, scope: 'workspace', workspaceId: row.workspace_id, name: w.name, set: { suggested: false, redos: false } };
   }
@@ -114,8 +118,9 @@ export function setPlan(db, accountId, { suggested, redos }) {
   };
   const patch = { plan_suggested: read(suggested, 'suggested'), plan_redos: read(redos, 'redos') };
   if (problems.length) return { problems };
-  // A customer's plan is their workspace's, set in accounts: numbers here would be read by nothing.
-  if (db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id != null) return { problems: ['workspace'] };
+  // A customer's plan is their workspace's, set in accounts: numbers here would be read by nothing. Ours are set here,
+  // in a workspace of ours too.
+  if (customerWorkspace(db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null)) return { problems: ['workspace'] };
   db.update('accounts', accountId, { ...patch, updated_at: nowIso() });
   return planOf(db, accountId);
 }

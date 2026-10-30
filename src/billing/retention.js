@@ -8,6 +8,7 @@ import { j } from '../db/index.js';
 import { israelDate } from '../schedule/israel.js';
 import { deleteProfile, disconnectAccount, zernioConfigured } from '../publish/zernio.js';
 import { workspaceAllowed } from './entitlement.js';
+import { ownWorkspace } from './own.js';
 
 // What Teder keeps, and for how long, as openfrequency.co.il's privacy policy and terms say (openfrequency-web,
 // src/pages/legal.mjs, "כמה זמן המידע נשמר"). One pass a day in the runner (retentionPass, step 7), logged with what it
@@ -25,7 +26,8 @@ import { workspaceAllowed } from './entitlement.js';
 //                         not go through ("אם הוא לא הוסדר תוך 14 יום") are accounts' `due`, which is still allowed, so
 //                         an unpaid answer means they are over. Their posts, sources and settings stay: the policy
 //                         promises nothing about them after a stop, and the customer deletes them by deleting the
-//                         workspace (src/web/workspace-delete.js).
+//                         workspace (src/web/workspace-delete.js). One of the company's own workspaces
+//                         (OF_OWN_WORKSPACES, src/billing/own.js) is never disconnected: its Teder is ours, not sold.
 //   Zernio removals       a disconnect or a profile delete Zernio did not do (a delete, or a stop) is kept in settings
 //                         (REMOVALS) and tried again every day until Zernio does it or says it is gone. One for a stopped
 //                         workspace that has paid again since is dropped: it is theirs again.
@@ -88,8 +90,8 @@ export async function retryRemovals(ctx, { log = ctx.log } = {}) {
   }
   const keep = [];
   for (const it of [...list.filter((x) => x.kind === 'account'), ...list.filter((x) => x.kind !== 'account')]) {
-    // A stopped workspace that is allowed again: what it connected is in use again.
-    if (it.reason === 'stopped' && it.workspace != null && workspaceAllowed(db, it.workspace)) {
+    // A stopped workspace that is allowed again, or one of ours: what it connected is in use.
+    if (it.reason === 'stopped' && it.workspace != null && (workspaceAllowed(db, it.workspace) || ownWorkspace(it.workspace))) {
       out.dropped++;
       continue;
     }
@@ -151,13 +153,16 @@ function disconnectWorkspace(db, workspaceId, { access }) {
   return items.length;
 }
 
-/** The workspaces whose Teder stopped long enough ago, not yet disconnected for that stop: [{ workspace, access, stoppedAt }]. */
+/**
+ * The customers' workspaces whose Teder stopped long enough ago, not yet disconnected for that stop: [{ workspace,
+ * access, stoppedAt }]. One of the company's own is never among them, whatever answer is kept for it.
+ */
 export function stoppedWorkspaces(db, t = now()) {
   const out = [];
   for (const r of db.all("SELECT key, value_json FROM settings WHERE key LIKE 'entitlement:%'")) {
     const ws = Number(r.key.slice('entitlement:'.length));
     const k = j(r.value_json, null);
-    if (!Number.isInteger(ws) || !k || k.allowed !== false || !k.stoppedAt) continue;
+    if (!Number.isInteger(ws) || ownWorkspace(ws) || !k || k.allowed !== false || !k.stoppedAt) continue;
     if (t - Date.parse(k.stoppedAt) < STOP_GRACE_DAYS * DAY) continue;
     if (getSetting(db, `stopped:${ws}`, null)?.stoppedAt === k.stoppedAt) continue;
     out.push({ workspace: ws, access: k.access, stoppedAt: k.stoppedAt });

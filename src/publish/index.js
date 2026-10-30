@@ -124,7 +124,8 @@ export function recheck(db, post, pack) {
  *   direct          published at the slot.
  *
  * A customer's account (one in a workspace) is always draft-now, whatever pack.json says: direct and draft-fallback
- * are the operator's, for the company's own accounts (src/autonomy/rails.js). Without `db` the pack's own setting is
+ * are the operator's, for the company's own accounts, in no workspace or in one of ours (src/autonomy/rails.js
+ * isCustomerAccount, src/billing/own.js). Without `db` the pack's own setting is
  * read, for what only describes the pack; whatever sends, or shows a customer's mode, passes `db`.
  */
 export function tiktokMode(pack, db = null) {

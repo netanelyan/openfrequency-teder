@@ -1,6 +1,7 @@
 import { nowIso } from '../core/clock.js';
 import { audit, settings } from '../core/store.js';
 import { workspaceAllowed } from '../billing/entitlement.js';
+import { customerWorkspace } from '../billing/own.js';
 
 // The safety rails, in every mode:
 //   - a kill switch per account and a global one
@@ -8,7 +9,7 @@ import { workspaceAllowed } from '../billing/entitlement.js';
 //     takedown notices. A failed fact check blocks its post and nothing else: the
 //     account goes on
 // A paused account says why, on the website, and stays paused until the owner
-// resumes it. An account whose workspace has not paid for Teder (src/billing/entitlement.js) is stopped the same
+// resumes it. An account of a customer's workspace that has not paid for Teder (src/billing/entitlement.js) is stopped the same
 // way without being paused: nothing is drafted or published for it until accounts says it is allowed again. Money pauses nothing: there is no cap, and the month's plan (40
 // slideshows, 10 redos) stops the drafting without pausing (src/budget/quota.js).
 
@@ -27,17 +28,18 @@ export const UNPAID = 'התשלום על תדר לא פעיל בחשבון';
 // A CUSTOMER'S POST GOES OUT ONLY WHEN A PERSON APPROVED IT. An account in a workspace is a customer's: it acts in
 // approve mode whatever accounts.mode says, and its TikTok goes to the app's drafts (src/publish/index.js tiktokMode).
 // Digest and auto, and TikTok straight to the profile, are the operator's, for the company's own accounts (no
-// workspace). The rule is read here, where the mode is used, not only where it is set: a mode stored before the rule
-// (a customer could once pick digest or auto on the Accounts page) is ignored, not trusted. The website says Teder
-// never publishes without approval, and TikTok asks for the owner's preview and consent on each post it publishes.
+// workspace, or one of the company's own workspaces, OF_OWN_WORKSPACES: src/billing/own.js). The rule is read here,
+// where the mode is used, not only where it is set: a mode stored before the rule (a customer could once pick digest
+// or auto on the Accounts page) is ignored, not trusted. The website says Teder never publishes without approval, and
+// TikTok asks for the owner's preview and consent on each post it publishes.
 
-/** Is this account a customer's (in a workspace)? */
-export const isCustomerAccount = (db, accountId) => db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id != null;
+/** Is this account a customer's (in a workspace that is not one of the company's own)? */
+export const isCustomerAccount = (db, accountId) => customerWorkspace(db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null);
 
 /** The autonomy mode the engine acts on: approve for a customer's account, the stored one for the operator's own. */
 export function autonomyMode(db, accountId) {
   const row = db.get('SELECT mode, workspace_id FROM accounts WHERE id = ?', accountId);
-  if (!row || row.workspace_id != null) return 'approve';
+  if (!row || customerWorkspace(row.workspace_id)) return 'approve';
   return ['approve', 'digest', 'auto'].includes(row.mode) ? row.mode : 'approve';
 }
 
@@ -80,7 +82,8 @@ export function canRun(db, accountId) {
   const acc = db.get('SELECT status, paused_reason, workspace_id FROM accounts WHERE id = ?', accountId);
   if (!acc) return { ok: false, why: 'אין חשבון כזה' };
   if (acc.status !== 'active') return { ok: false, why: PAUSE_REASONS[acc.paused_reason] || acc.status };
-  if (acc.workspace_id != null && !workspaceAllowed(db, acc.workspace_id)) return { ok: false, why: UNPAID, code: 'unpaid' };
+  // The paywall is a customer's: an account in no workspace, or in one of ours, is never asked about.
+  if (customerWorkspace(acc.workspace_id) && !workspaceAllowed(db, acc.workspace_id)) return { ok: false, why: UNPAID, code: 'unpaid' };
   return { ok: true, why: null };
 }
 
