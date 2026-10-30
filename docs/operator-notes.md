@@ -323,6 +323,18 @@ says which keys are set without showing them.
 - **Needed now?** No. It is the switch for the day self-serve sign-up opens, together with `BRAVE_API_KEY` and
   `ANTHROPIC_API_KEY` above.
 
+### OF_SUPPORT_WA: where "כתבו לנו" leads
+
+- **What it is.** A customer's pages say "כתבו לנו" where only we can help: the error page, a post that did not go
+  out, an account paused that only the operator turns back on, a connect that failed, a new account's search that
+  stopped, the sample rounds used up. With `OF_SUPPORT_WA` (our WhatsApp, international digits, the same value as
+  accounts' `OF_SUPPORT_WA`) those words are a link to `https://wa.me/<the number>` (src/web/ui.js withSupport). A
+  toast, a push and an email keep the words alone, since none of them shows a link. Empty, or not a phone number, and
+  the pages say the words with no link, as they did before.
+- **What to do.** On the live server, the same value as accounts' `OF_SUPPORT_WA` in `private/.env`, then a restart
+  of the service.
+- **Needed now?** Yes: without it a customer told "כתבו לנו" has no way to write from the page.
+
 ### Posting days and times are the customer's
 
 - **What it is.** Each account's owner chooses on Settings (the account shown in the switcher), and before going live

@@ -12,7 +12,7 @@ import { facebookPages, instagramPages, selectFacebookPage, selectInstagram } fr
 import { j } from '../db/index.js';
 import { ActionError } from './actions.js';
 import { connectErrorHe } from '../publish/errors.js';
-import { a11yLink, csrfField, esc, icon, postButton, tederMark, usd } from './ui.js';
+import { a11yLink, csrfField, esc, icon, postButton, tederMark, usd, withSupport } from './ui.js';
 
 // Connecting a customer's TikTok, Instagram and Facebook Page (src/publish/connect.js), on the website:
 //
@@ -220,7 +220,7 @@ function resultPage({ title, text, actions = '', v = 1 }) {
 <body class="login"><main class="card">
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1>${esc(title)}</h1>
-<p>${esc(text)}</p>
+<p>${withSupport(text)}</p>
 ${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
 }
 

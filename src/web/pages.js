@@ -1,4 +1,4 @@
-import { a11yLink, accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, timeHe, usd, weekdayNarrow } from './ui.js';
+import { a11yLink, accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { STUCK_REASON } from '../publish/errors.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
@@ -301,7 +301,7 @@ function stopBanners(ctx, d) {
   const out = [];
   if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${ctx.operator ? postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } }) : ''}</div>`);
   for (const g of d.groups) {
-    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
+    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${withSupport(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     else if (g.quota && g.quota.suggested.used >= g.quota.suggested.limit) out.push(g.quota.shared
       ? `<div class="banner info">${icon('alert')}<div><b>נוצלו כל ${g.quota.suggested.limit} ההצעות של החודש, לכל החשבונות שלכם יחד.</b><p>פוסטים חדשים ייכתבו מתחילת החודש הבא.</p></div></div>`
       : `<div class="banner info">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} ניצל את ${g.quota.suggested.limit} ההצעות של החודש.</b><p>פוסטים חדשים ייכתבו בו מתחילת החודש הבא.</p></div></div>`);
@@ -469,7 +469,7 @@ ${d.groups
     return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
 ${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.'}</div>`}
 ${failedList(ctx, g)}
-${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(reasonHe(ctx, 'blocked', b.reason))}</div></li>`).join('')}</ul></details>` : ''}
+${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${withSupport(reasonHe(ctx, 'blocked', b.reason))}</div></li>`).join('')}</ul></details>` : ''}
 </section>`;
   })
   .join('')}
@@ -523,7 +523,7 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (s.step === 'whatsapp') bits.push(...[WHATSAPP_HE[det.action] || det.action, det.by, det.slide ? `שקף ${det.slide}` : ''].filter(Boolean));
       else if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : det.via === 'whatsapp' ? 'מוואטסאפ' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);
-      return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${esc(bits.join(' · '))}</div>` : ''}</li>`;
+      return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${withSupport(bits.join(' · '))}</div>` : ''}</li>`;
     })
     .join('');
   const scores = post.checks?.scores || [];
@@ -562,7 +562,7 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
     : '';
 
   const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
-${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(reasonHe(ctx, post.status, post.reason))}</b></div></div>` : ''}
+${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${withSupport(reasonHe(ctx, post.status, post.reason))}</b></div></div>` : ''}
 ${redoBanners(d)}
 ${tiktokDraftBanners(ctx, post)}
 <div class="cols">
@@ -616,7 +616,7 @@ export function accountsPage(ctx, rows) {
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
       return `<article class="card acc acc-${esc(pack.id)} acct" id="acc-${esc(pack.id)}">
 <div class="title">${accDot(pack.id)}<div><h2>${esc(pack.meta.displayName)}</h2><span class="muted small ltr">@${esc(pack.meta.handle)}</span></div><span class="end">${paused ? '<span class="chip warn">מושהה</span>' : '<span class="chip ok">פעיל</span>'}</span></div>
-${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${icon(acc.paused_reason === 'kill' ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<div class="small">${esc(acc.paused_detail)}</div>` : ''}${resumable ? '' : '<div class="small">את החשבון הזה מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.</div>'}</div>${resumable ? postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעלה מחדש', { cls: 'btn sm' }) : ''}</div>` : ''}
+${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${icon(acc.paused_reason === 'kill' ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<div class="small">${withSupport(acc.paused_detail)}</div>` : ''}${resumable ? '' : `<div class="small">${withSupport('את החשבון הזה מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.')}</div>`}</div>${resumable ? postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעלה מחדש', { cls: 'btn sm' }) : ''}</div>` : ''}
 ${modeControl(ctx, pack, acc, { mode, customer })}
 ${ctx.operator ? `<div class="row"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}
 ${quota ? quotaRow(quota, pack.id) : ''}
@@ -1185,7 +1185,7 @@ export function errorPage({ kind = 'broken', text = null, back = '/', v = 1 }) {
 <body class="login"><main class="card">
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1 class="err" role="alert">${esc(g.title)}</h1>
-<p>${esc(text || g.text)}</p>
+<p>${withSupport(text || g.text)}</p>
 <div class="links">${links}</div></main></body></html>`;
 }
 

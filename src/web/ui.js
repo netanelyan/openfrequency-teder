@@ -51,6 +51,26 @@ export const ofMark = () => markTile('of', OF_GLYPH);
 export const A11Y_URL = 'https://openfrequency.co.il/accessibility';
 export const a11yLink = () => `<a class="a11y" href="${A11Y_URL}">הצהרת הנגישות</a>`;
 
+/**
+ * Where a customer writes to us: OpenFrequency's WhatsApp, OF_SUPPORT_WA (international digits, 972..., the same value
+ * as accounts'), as a wa.me link. null while it is unset or not a phone number.
+ */
+export function supportUrl(env = process.env) {
+  const digits = String(env.OF_SUPPORT_WA || '').replace(/[\s+-]/g, '');
+  return /^[1-9]\d{7,14}$/.test(digits) ? `https://wa.me/${digits}` : null;
+}
+
+const WRITE_US = 'כתבו לנו';
+
+/**
+ * A line for the customer, escaped, with "כתבו לנו" in it a link to that WhatsApp; without one the words stay as they
+ * were. Only where a page renders it as HTML: a toast, a push and an email get the words alone.
+ */
+export function withSupport(text, env = process.env) {
+  const url = supportUrl(env);
+  return url ? esc(text).replaceAll(WRITE_US, `<a href="${url}" target="_blank" rel="noopener noreferrer">${WRITE_US}</a>`) : esc(text);
+}
+
 export const icon = (name, cls = 'i') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>

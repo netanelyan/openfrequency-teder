@@ -13,7 +13,7 @@ import { ActionError } from './actions.js';
 import { postCard } from './pages.js';
 import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
-import { accDot, csrfField, esc, icon, k, layout, postButton, stamp } from './ui.js';
+import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
 
 // The new-account flow, on the website:
 //
@@ -414,7 +414,7 @@ function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
   const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
   const toSources = failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
   const again = more.ok ? postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' }) : '';
-  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b>${more.ok ? '' : `<p>${esc(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
+  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b>${more.ok ? '' : `<p>${withSupport(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
 }
 
 function detailPage(ctx, pc, r) {
@@ -433,7 +433,7 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
   if (r.status === 'failed') {
     return layout(
       { ...pc, title: 'החיפוש נעצר', active: 'new' },
-      `${head}<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.</div>
+      `${head}<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>${withSupport('אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.')}</div>
 <div class="actions">${postButton(pc, `/new/${r.id}/retry`, `${icon('spark')}לנסות שוב`, { cls: 'btn primary' })}<a class="btn" href="/new">להתחיל מחדש</a></div>${ops}`
     );
   }
@@ -475,7 +475,7 @@ ${formatsPanel}</div></div></form>
     `${head}${samplesSaid(pc, r, pack, { busy, more })}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
-<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : `<span class="muted small">${esc(ROUNDS_HE[more.why])}</span>`}
+<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
 ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>

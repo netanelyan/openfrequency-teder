@@ -439,6 +439,22 @@ test("the account page: each platform's state and its button, which goes on to Z
   assert.equal(Z.calls.filter((c) => c.path === '/connect/tiktok').length, 1);
 });
 
+test('a connect Zernio refused for a reason it does not name: "כתבו לנו" is a link to our WhatsApp when there is one', async () => {
+  const back = new URL(doneLink(SECRET, { base, accountId: 'alpha', platform: 'tiktok' }));
+  const failed = async () => (await get(`${back.pathname}${back.search}&error=unknown_error&platform=tiktok`)).text();
+  delete process.env.OF_SUPPORT_WA;
+  let html = await failed();
+  assert.ok(html.includes('<p>טיקטוק לא אישר את החיבור הפעם. אפשר לנסות שוב, ואם זה חוזר, כתבו לנו ונבדוק.</p>'));
+  assert.doesNotMatch(html, /wa\.me/);
+  process.env.OF_SUPPORT_WA = '972500000001';
+  try {
+    html = await failed();
+    assert.ok(html.includes('ואם זה חוזר, <a href="https://wa.me/972500000001" target="_blank" rel="noopener noreferrer">כתבו לנו</a> ונבדוק.</p>'));
+  } finally {
+    delete process.env.OF_SUPPORT_WA;
+  }
+});
+
 test("a customer's TikTok goes to the drafts; straight to the profile is the operator's, on the company's own accounts, and public", async () => {
   const send = (cookie, form) => fetch(`${base}/accounts/alpha/tiktok`, { method: 'POST', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', origin: base, 'x-of-ajax': '1' }, body: new URLSearchParams(form).toString() });
   const cookie = fake.session(customer(1)).cookie;
