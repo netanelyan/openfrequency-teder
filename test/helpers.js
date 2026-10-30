@@ -118,9 +118,11 @@ export async function fakeAccounts() {
       if (typeof a === 'function') return a(req, res);
       if (a && typeof a === 'object' && a.status) return out(a.status, a.body);
       const access = typeof a === 'string' ? a : a.access || 'paid';
-      // As accounts answers: paidThrough the last millisecond of an Israel day, in UTC.
-      const paid = ['paid', 'comp'].includes(access);
-      return out(200, { workspace: ws, product: url.searchParams.get('product'), enabled: access !== 'off', access, allowed: paid, paidThrough: paid ? '2026-11-30T21:59:59.999Z' : null, cancelAt: null, ...(typeof a === 'object' ? a : {}) });
+      // As accounts answers (its docs/contracts/entitlement.json): paidThrough the last millisecond of an Israel day, in
+      // UTC; `due` is the 14 days of grace after a paid period, still allowed; Teder's answers carry the plan.
+      const paid = ['paid', 'comp', 'due'].includes(access);
+      const product = url.searchParams.get('product');
+      return out(200, { workspace: ws, product, enabled: access !== 'off', access, allowed: paid, paidThrough: paid ? '2026-11-30T21:59:59.999Z' : null, cancelAt: null, graceUntil: access === 'due' ? '2026-12-14T21:59:59.999Z' : null, ...(product === 'teder' ? { plan: { name: 'full', slideshows: 40, redos: 10 } } : {}), ...(typeof a === 'object' ? a : {}) });
     }
     if (url.pathname === '/internal/notify') {
       if (req.method !== 'POST') return out(405, { error: 'method' });

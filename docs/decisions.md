@@ -1918,8 +1918,8 @@ owner's small plan.
    the least used one instead of failing. Ids, handles, names and Zernio accounts stay unique everywhere.
 4. *What the privacy page says is kept, kept for that long.* A daily pass removes demos (a store's request on the
    website, with its WhatsApp number) six months after the last contact, as the page says of form requests; disconnects
-   a workspace's TikTok and Instagram once its Teder stops, as it says of platform permissions ("עד שהשירות נעצר"),
-   after the 14 days the terms give an unpaid month; and keeps trying the Zernio removals that failed, instead of
+   a workspace's TikTok and Instagram a day after its Teder stops, as it says of platform permissions ("עד שהשירות
+   נעצר"), the 14 days the terms give an unpaid month being accounts' `due`, still allowed; and keeps trying the Zernio removals that failed, instead of
    trying once. Deleting a workspace now also takes the people and the free text out of its accounts' audit rows and
    its accounts' names out of the overall summaries. Nothing else is deleted: the page promises nothing about a
    stopped customer's posts and sources, and they leave by deleting the workspace.

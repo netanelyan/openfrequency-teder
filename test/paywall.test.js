@@ -125,7 +125,7 @@ test('allowed is the only thing acted on, and a change is logged once', async ()
   const log = [];
   const mark = db.get('SELECT COALESCE(MAX(id), 0) AS id FROM audit').id;
   const c = client({ log: (m) => log.push(m) });
-  for (const [access, allowed] of [['paid', true], ['comp', true], ['unpaid', false], ['cancelled', false], ['off', false]]) {
+  for (const [access, allowed] of [['paid', true], ['comp', true], ['due', true], ['unpaid', false], ['cancelled', false], ['off', false]]) {
     fake.entitlement(1, access);
     assert.equal((await c.check(1, { live: true })).allowed, allowed, access);
   }
@@ -133,7 +133,7 @@ test('allowed is the only thing acted on, and a change is logged once', async ()
   fake.entitlement(1, { access: 'paid', allowed: false });
   assert.equal((await c.check(1, { live: true })).allowed, false);
   const changes = db.all("SELECT detail_json FROM audit WHERE action = 'entitlement' AND id > ? ORDER BY id", mark).map((r) => JSON.parse(r.detail_json)).filter((d) => d.workspace === 1);
-  assert.deepEqual(changes.map((d) => [d.was, d.allowed]), [[null, true], [true, false]], 'paid, comp: one change; unpaid, cancelled, off, refunded: one more');
+  assert.deepEqual(changes.map((d) => [d.was, d.allowed]), [[null, true], [true, false]], 'paid, comp, due: one change; unpaid, cancelled, off, refunded: one more');
   assert.equal(log.filter((l) => /workspace 1: /.test(l) && /allowed/.test(l)).length, 2);
 });
 
@@ -220,5 +220,5 @@ test('the token is checked: a wrong one is refused by accounts and nobody is all
   const res = await fetch(`${fake.env.OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=1&product=teder`, { headers: { authorization: 'Bearer nope' } });
   assert.equal(res.status, 401);
   const ok = await fetch(`${fake.env.OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=1&product=teder`, { headers: { authorization: `Bearer ${INTERNAL_TOKEN}` } });
-  assert.deepEqual(Object.keys(await ok.json()).sort(), ['access', 'allowed', 'cancelAt', 'enabled', 'paidThrough', 'product', 'workspace'], "the fake answers in the contract's shape");
+  assert.deepEqual(Object.keys(await ok.json()).sort(), ['access', 'allowed', 'cancelAt', 'enabled', 'graceUntil', 'paidThrough', 'plan', 'product', 'workspace'], "the fake answers in the contract's shape");
 });

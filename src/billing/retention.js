@@ -18,13 +18,14 @@ import { workspaceAllowed } from './entitlement.js';
 //                         page's opens and its pictures, LEAD_MONTHS after its last contact: the later of its last
 //                         update (a new request for the same store updates it) and the last time its page was opened.
 //   TikTok and Instagram  "הרשאות של חשבונות ברשתות: עד שמנתקים אותן, או עד שהשירות נעצר". Once a workspace's Teder has
-//                         stopped (accounts' entitlement answer, src/billing/entitlement.js stoppedAt), everything it
-//                         connected through Zernio is disconnected from our team and its connection rows go. Cancelled
-//                         or switched off: at the next pass. Unpaid: after UNPAID_GRACE_DAYS, the 14 days the terms give
-//                         a payment that did not go through before the service may be stopped ("אם הוא לא הוסדר תוך 14
-//                         יום"), so a payment recorded a day late does not cost the customer their connections. Their
-//                         posts, sources and settings stay: the policy promises nothing about them after a stop, and the
-//                         customer deletes them by deleting the workspace (src/web/workspace-delete.js).
+//                         stopped (accounts' entitlement answer says not allowed, src/billing/entitlement.js stoppedAt),
+//                         everything it connected through Zernio is disconnected from our team and its connection rows
+//                         go, STOP_GRACE_DAYS after the stop: a payment recorded a day late, or one answer by mistake,
+//                         does not cost the customer their connections. The 14 days the terms give a payment that did
+//                         not go through ("אם הוא לא הוסדר תוך 14 יום") are accounts' `due`, which is still allowed, so
+//                         an unpaid answer means they are over. Their posts, sources and settings stay: the policy
+//                         promises nothing about them after a stop, and the customer deletes them by deleting the
+//                         workspace (src/web/workspace-delete.js).
 //   Zernio removals       a disconnect or a profile delete Zernio did not do (a delete, or a stop) is kept in settings
 //                         (REMOVALS) and tried again every day until Zernio does it or says it is gone. One for a stopped
 //                         workspace that has paid again since is dropped: it is theirs again.
@@ -35,7 +36,7 @@ import { workspaceAllowed } from './entitlement.js';
 // (seven years, accounts).
 
 export const LEAD_MONTHS = 6;
-export const UNPAID_GRACE_DAYS = 14;
+export const STOP_GRACE_DAYS = 1;
 export const PUBLIC_KEEP_DAYS = 3;
 export const REMOVALS = 'zernio:removals';
 
@@ -157,8 +158,7 @@ export function stoppedWorkspaces(db, t = now()) {
     const ws = Number(r.key.slice('entitlement:'.length));
     const k = j(r.value_json, null);
     if (!Number.isInteger(ws) || !k || k.allowed !== false || !k.stoppedAt) continue;
-    const grace = k.access === 'unpaid' ? UNPAID_GRACE_DAYS * DAY : 0;
-    if (t - Date.parse(k.stoppedAt) < grace) continue;
+    if (t - Date.parse(k.stoppedAt) < STOP_GRACE_DAYS * DAY) continue;
     if (getSetting(db, `stopped:${ws}`, null)?.stoppedAt === k.stoppedAt) continue;
     out.push({ workspace: ws, access: k.access, stoppedAt: k.stoppedAt });
   }

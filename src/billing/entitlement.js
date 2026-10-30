@@ -5,8 +5,12 @@ import { audit, getSetting, setSetting } from '../core/store.js';
 // Whether a workspace has paid for Teder: openfrequency-accounts owns subscriptions, Teder asks.
 //
 //   GET {OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=<id>&product=teder, bearer OF_INTERNAL_TOKEN
-//   -> { workspace, product: "teder", enabled, access: paid | comp | unpaid | cancelled | off, allowed, paidThrough, cancelAt,
-//        plan: { name: "full" | "small", slideshows, redos } }
+//   -> { workspace, product: "teder", enabled, access: paid | comp | due | unpaid | cancelled | off, allowed, paidThrough,
+//        cancelAt, graceUntil, plan: { name: "full" | "small", slideshows, redos } }
+//
+// The contract is openfrequency-accounts' docs/contracts/entitlement.json. `due` (2026-10-29) is a paid period that is
+// over while the 14 days of grace the terms give run (graceUntil, allowed: true); then it is unpaid. An access this file
+// does not know yet is still an answer: the decision is `allowed`'s alone, and `access` only says why.
 //
 // `allowed` is the only thing that opens or stops Teder. `plan` is the size of the workspace's month (src/budget/quota.js:
 // the slideshows and redos all its accounts share); an answer without one, or with one not in that shape, is the full
@@ -31,12 +35,13 @@ export const PRODUCT = 'teder';
 export const FRESH_MS = 5 * 60_000;
 export const STALE_MS = 24 * HOUR;
 export const RETRY_MS = 60_000;
-const ACCESS = ['paid', 'comp', 'unpaid', 'cancelled', 'off'];
+/** The access values the contract lists today. One not listed is still a well-formed answer (it only says why). */
+export const ACCESS = ['paid', 'comp', 'due', 'unpaid', 'cancelled', 'off'];
 const MIN_TOKEN = 32;
 
 const keyOf = (workspaceId) => `entitlement:${workspaceId}`;
 
-/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, plan, stoppedAt, checkedAt }, or null. */
+/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, graceUntil, plan, stoppedAt, checkedAt }, or null. */
 export const lastKnown = (db, workspaceId) => getSetting(db, keyOf(workspaceId), null);
 
 /** Allowed now, from the last answer kept: its `allowed`, while it is under STALE_MS old. Never known is no. */
@@ -70,7 +75,7 @@ export function planOfAnswer(b) {
 function wellFormed(b, workspaceId) {
   if (!b || typeof b !== 'object') return false;
   if (b.workspace !== workspaceId || b.product !== PRODUCT || typeof b.allowed !== 'boolean') return false;
-  if (b.access != null && !ACCESS.includes(b.access)) return false;
+  if (b.access != null && (typeof b.access !== 'string' || !/^[a-z_]{1,20}$/.test(b.access))) return false;
   return true;
 }
 
@@ -92,6 +97,7 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
     known: Boolean(k && t - Date.parse(k.checkedAt) < STALE_MS),
     access: k?.access ?? null,
     paidThrough: k?.paidThrough ?? null,
+    graceUntil: k?.graceUntil ?? null,
     cancelAt: k?.cancelAt ?? null,
     checkedAt: k?.checkedAt ?? null,
     source: k ? source : 'unknown',
@@ -121,7 +127,7 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
     }
     if (r.status === 200 && wellFormed(body, workspaceId)) return body;
     // A workspace accounts never had is an answer, not an error: not allowed. (A deleted one is a 200 with access off.)
-    if (r.status === 404 && body?.error === 'no_workspace') return { workspace: workspaceId, product: PRODUCT, allowed: false, access: null, paidThrough: null, cancelAt: null };
+    if (r.status === 404 && body?.error === 'no_workspace') return { workspace: workspaceId, product: PRODUCT, allowed: false, access: null, paidThrough: null, cancelAt: null, graceUntil: null };
     log(`[entitlement] workspace ${workspaceId}: ${r.status === 200 ? 'a 200 that does not match the contract' : `${r.status} ${body?.error || ''}`.trim()}: the last answer stands`);
     return null;
   }
@@ -138,7 +144,7 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
     // The plan accounts gave; one it no longer gives (or never gave) is the full plan's. When it stopped: kept from the
     // first answer that said not allowed, until one says allowed again.
     const stoppedAt = a.allowed ? null : had && had.allowed === false && had.stoppedAt ? had.stoppedAt : at;
-    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, plan: planOfAnswer(a), stoppedAt, checkedAt: at };
+    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, graceUntil: a.graceUntil ?? null, plan: planOfAnswer(a), stoppedAt, checkedAt: at };
     setSetting(db, keyOf(workspaceId), next);
     // Said once per change, not on every answer: the log and the audit.
     if (!had || had.allowed !== next.allowed) {

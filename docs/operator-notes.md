@@ -241,9 +241,9 @@ says which keys are set without showing them.
 
 - **What it is.** One pass a day in the runner (src/billing/retention.js), from the periods on the privacy page:
   a store's demo six months after its last contact (its last request, or the last time its page was opened), with its
-  opens and pictures; the TikTok and Instagram a workspace connected, once its Teder stopped (cancelled or switched off:
-  the next day; unpaid: 14 days after it stopped, the time the terms give a payment), disconnected from our Zernio team
-  and forgotten here, while its posts, sources and settings stay; the public copies of slides three days after they
+  opens and pictures; the TikTok and Instagram a workspace connected, a day after its Teder stopped (accounts says not
+  allowed: cancelled and past its last day, switched off, or unpaid once the 14 days of grace, `due`, are over),
+  disconnected from our Zernio team and forgotten here, while its posts, sources and settings stay; the public copies of slides three days after they
   were made; and every Zernio removal that failed before (a deleted workspace's, a stopped one's), tried again every day
   until Zernio does it.
 - **Where it shows.** The log, one line a day: "[retention] N demo(s) past 6 months removed, ...". The audit log has

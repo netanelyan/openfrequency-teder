@@ -1,6 +1,6 @@
 import { test, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll, readPack } from '../src/packs/load.js';
@@ -98,6 +98,44 @@ test("the plan accounts gives is kept with its answer, and a malformed one is th
     fake.entitlement(1, 'paid');
     await client.check(1, { live: true });
     assert.equal(lastKnown(db, 1).stoppedAt, null);
+  } finally {
+    await fake.close();
+    cleanup();
+  }
+});
+
+test("every answer in accounts' entitlement contract is read as the contract says: a 200 for Teder acted on by `allowed` alone, with its plan and grace kept; a 404 is no; anything else is accounts not answering", async () => {
+  // A copy of openfrequency-accounts' docs/contracts/entitlement.json (accounts commit 447bb34): the two must agree.
+  const contract = JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'contracts', 'entitlement.json'), 'utf8'));
+  const answers = contract.routes[0].answers;
+  assert.ok(answers.some((a) => a.body.access === 'due'), 'the contract has the grace answer');
+  const { db, cleanup } = three();
+  const fake = await fakeAccounts();
+  try {
+    const t = Date.parse('2026-11-25T10:00:00Z');
+    let ws = 10;
+    for (const a of answers) {
+      ws++;
+      const client = entitlementClient({ db, env: fake.env, clock: () => t });
+      fake.entitlement(ws, { status: a.status, body: a.status === 200 ? { ...a.body, workspace: ws } : a.body });
+      const got = await client.check(ws, { live: true });
+      if (a.status === 200 && a.body.product === 'teder') {
+        assert.deepEqual([got.source, got.allowed, got.access], ['fresh', a.body.allowed, a.body.access], a.case);
+        const kept = lastKnown(db, ws);
+        assert.deepEqual(kept.plan, { name: a.body.plan.name, slideshows: a.body.plan.slideshows, redos: a.body.plan.redos }, a.case);
+        assert.equal(kept.graceUntil, a.body.graceUntil, a.case);
+      } else if (a.status === 200) {
+        assert.equal(got.source, 'unknown', `${a.case}: another product's answer is not Teder's`);
+      } else if (a.status === 404) {
+        assert.deepEqual([got.source, got.allowed], ['fresh', false], a.case);
+      } else {
+        assert.deepEqual([got.source, got.allowed], ['unknown', false], `${a.case}: accounts did not answer, nothing is kept`);
+        assert.equal(lastKnown(db, ws), null);
+      }
+    }
+    // An access the contract does not list yet is still an answer: allowed decides.
+    fake.entitlement(99, { status: 200, body: { workspace: 99, product: 'teder', enabled: true, access: 'trial', allowed: true, paidThrough: null, cancelAt: null, graceUntil: null } });
+    assert.deepEqual([(await entitlementClient({ db, env: fake.env, clock: () => t }).check(99, { live: true })).allowed, lastKnown(db, 99).plan], [true, null]);
   } finally {
     await fake.close();
     cleanup();
@@ -290,7 +328,7 @@ test('retention: a demo six months past its last contact goes with its opens and
   }
 });
 
-test("retention: a workspace whose Teder stopped has its TikTok and Instagram disconnected (cancelled the next day, unpaid after 14 days); a failed removal is tried again until done", async () => {
+test("retention: a workspace whose Teder stopped has its TikTok and Instagram disconnected a day after the stop; a failed removal is tried again until done", async () => {
   const { db, ctx, cleanup } = three();
   const realFetch = globalThis.fetch;
   const calls = [];
@@ -307,11 +345,11 @@ test("retention: a workspace whose Teder stopped has its TikTok and Instagram di
     db.update('accounts', 'alpha', { zernio_profile_id: 'prof-alpha' });
     db.insert('zernio_connections', { account_id: 'alpha', platform: 'tiktok', zernio_account_id: 'tk-alpha', username: 'a', status: 'connected', connected_at: 'x', checked_at: 'x' });
     db.insert('zernio_connections', { account_id: 'loose', platform: 'tiktok', zernio_account_id: 'tk-loose', username: 'l', status: 'connected', connected_at: 'x', checked_at: 'x' });
-    // Unpaid since yesterday: not yet.
-    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
+    // Unpaid (accounts' 14 days of grace, `due`, are over) since an hour ago: not yet, a payment recorded late is not punished.
+    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 3_600_000).toISOString(), checkedAt: new Date(t).toISOString() });
     assert.deepEqual(stoppedWorkspaces(db, t), []);
-    // Unpaid for 15 days: the service stopped.
-    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 15 * 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
+    // Stopped two days ago: the service stopped.
+    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 2 * 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
     const out = await retentionPass(ctx, { t });
     assert.deepEqual(out.stopped, [{ workspace: 1, access: 'unpaid', connections: 1 }]);
     assert.equal(db.get("SELECT COUNT(*) AS n FROM zernio_connections WHERE account_id = 'alpha'").n, 0, 'forgotten here');
