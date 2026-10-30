@@ -322,6 +322,14 @@ test('Facebook joins the accounts customers made before it, once; the operator\'
   db.insert('onboarding', { id: 'o-bravo', seed_json: { niche: 'צמחים' }, status: 'live', pack_id: 'bravo', created_at: at, updated_at: at });
   db.insert('onboarding', { id: 'o-carol', seed_json: { niche: 'צמחים' }, status: 'live', pack_id: 'carol', created_at: at, updated_at: at });
   db.run("DELETE FROM settings WHERE key LIKE 'facebook:offered:%'");
+  // A workspace of ours (OF_OWN_WORKSPACES, where the company's live accounts are): its accounts are the operator's own,
+  // and keep their platforms however they were made.
+  process.env.OF_OWN_WORKSPACES = String(db.get("SELECT workspace_id AS ws FROM accounts WHERE id = 'bravo'").ws);
+  try {
+    assert.deepEqual(offerFacebook(ctx), [], 'bravo is in a workspace of ours');
+  } finally {
+    delete process.env.OF_OWN_WORKSPACES;
+  }
   assert.deepEqual(offerFacebook(ctx), ['bravo'], 'carol is in no workspace: the operator\'s own; alpha has it already');
   const file = JSON.parse(readFileSync(path.join(pack('bravo').dir, 'pack.json'), 'utf8'));
   assert.deepEqual(file.platforms, ['tiktok', 'instagram', 'facebook']);

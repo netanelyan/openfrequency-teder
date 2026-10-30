@@ -5,6 +5,7 @@ import { saveSetup, setupOf } from '../onboarding/setup.js';
 import { CONNECT_PLATFORMS, connectUrl, createProfile, profileConnections, profileSpend, teamAccountIds, zernioConfigured } from './zernio.js';
 import { instagramConfigured } from './instagram.js';
 import { addPackPlatform } from '../packs/write.js';
+import { customerWorkspace } from '../billing/own.js';
 
 // A customer connects their own TikTok, Instagram and Facebook Page to Teder through Zernio:
 //
@@ -365,7 +366,8 @@ export async function recordCosts(ctx, { t = now() } = {}) {
  * Facebook joins the platforms of every account a customer made in the new-account flow before Facebook existed (an
  * account in a workspace, made from an onboarding), so its owner can connect a Page from the account page. Once per
  * account (a setting remembers it), so a platform taken out of pack.json by hand stays out. The operator's own
- * accounts, written by hand and in no workspace, are left as they are. New accounts have it from the start
+ * accounts are left as they are: in no workspace, or in one of ours (OF_OWN_WORKSPACES, src/billing/own.js), where the
+ * company's three live accounts are. New accounts have it from the start
  * (src/onboarding/pack.js). Returns the ids of the accounts it was added to.
  */
 export function offerFacebook(ctx, { actor = 'engine' } = {}) {
@@ -374,7 +376,7 @@ export function offerFacebook(ctx, { actor = 'engine' } = {}) {
   for (const pack of ctx.packs) {
     const key = `facebook:offered:${pack.id}`;
     if (getSetting(db, key, null)) continue;
-    const customer = db.get('SELECT workspace_id AS ws FROM accounts WHERE id = ?', pack.id)?.ws != null && db.get('SELECT 1 AS x FROM onboarding WHERE pack_id = ? LIMIT 1', pack.id);
+    const customer = customerWorkspace(db.get('SELECT workspace_id AS ws FROM accounts WHERE id = ?', pack.id)?.ws) && db.get('SELECT 1 AS x FROM onboarding WHERE pack_id = ? LIMIT 1', pack.id);
     if (!customer) continue;
     if (!pack.meta.platforms.includes('facebook')) {
       addPackPlatform(pack, 'facebook', 'zernio');
