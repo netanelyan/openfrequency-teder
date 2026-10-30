@@ -195,8 +195,10 @@ test('no cost cap: a month that has cost $500 still drafts up to its plan, and t
     setNow(tuesday);
     ctx.db.insert('spend', { account_id: 'demo', api: 'claude', usd: 500, month: '2026-10', at: new Date(tuesday).toISOString() });
     const r = await tick(ctx, { t: tuesday });
-    assert.ok(r.generated.length >= 2, JSON.stringify(r.generated));
-    assert.ok(r.generated.every((g) => g.status === 'queued'), JSON.stringify(r.generated));
+    // Money stops nothing: the day's posts are drafted. One of them may still be blocked by a check of its own content
+    // (the hook and format are picked at random, and a cover that does not fit is refused), which is not about money.
+    assert.ok(r.generated.filter((g) => g.status === 'queued').length >= 2, JSON.stringify(r.generated));
+    assert.ok(r.generated.every((g) => g.status === 'queued' || !/cost|budget|spend|\$|כסף|תקציב/i.test(String(g.reason || ''))), JSON.stringify(r.generated));
     assert.equal(ctx.db.get("SELECT status FROM accounts WHERE id = 'demo'").status, 'active', 'money pauses nothing');
     assert.ok(usage(ctx.db, 'demo').cost.spent > 500, 'what the posts cost is recorded on top, for the operator');
     // The plan is posts only: a cap sent with it is not read, and nothing about money is kept.
