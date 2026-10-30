@@ -120,7 +120,7 @@ export function detect(ctx, { t = now() } = {}) {
     if (enqueue(db, { ...e, t })) found[e.type] = (found[e.type] || 0) + 1;
   };
   const posts = (sql, ...a) => db.all(sql, ...a).map((r) => loadPost(db, r.id));
-  const live = "sample = 0 AND status IN ('approved', 'publishing', 'published')";
+  const live = "sample = 0 AND status IN ('approved', 'publishing', 'drafted', 'published')";
   for (const { pack, workspaceId } of customersOf(ctx)) {
     const base = { workspaceId, accountId: pack.id };
     for (const p of posts("SELECT id FROM posts WHERE account_id = ? AND status = 'queued' AND sample = 0 AND created_at >= ?", pack.id, iso(t - KEEP_MS['post.ready']))) {
@@ -176,17 +176,17 @@ export function payloadOf(ctx, row, link) {
   if (row.account_id && !pack) return null;
   const post = row.post_id ? loadPost(db, row.post_id) : null;
   if (row.post_id && !post) return null;
-  const ready = post && ['approved', 'publishing', 'published'].includes(post.status);
+  const ready = post && ['approved', 'publishing', 'drafted', 'published'].includes(post.status);
   switch (row.type) {
     case 'post.ready':
       if (post.status !== 'queued') return null;
       return { post: postView(post, pack, link), redoOf: post.redo_of || null };
     case 'post.reminder':
       if (!ready || isOut(post, pack) || t - Date.parse(post.slot_at) >= UNPOSTED_MIN * 60_000) return null;
-      return { post: lite(post, pack), delivery: delivery(post, pack), platforms: platformStates(post, pack), sound: soundOf(post) };
+      return { post: lite(post, pack), delivery: delivery(post, pack, db), platforms: platformStates(post, pack), sound: soundOf(post) };
     case 'post.unposted':
       if (!ready || isOut(post, pack)) return null;
-      return { post: lite(post, pack), delivery: delivery(post, pack), platforms: platformStates(post, pack), minutesLate: Math.round((t - Date.parse(post.slot_at)) / 60_000) };
+      return { post: lite(post, pack), delivery: delivery(post, pack, db), platforms: platformStates(post, pack), minutesLate: Math.round((t - Date.parse(post.slot_at)) / 60_000) };
     case 'post.published': {
       const flow = post.publish?.tiktok?.flow;
       return { post: lite(post, pack), platforms: platformStates(post, pack), tiktokUrl: flow?.externalUrl || flow?.fallback?.url || post.publish?.tiktok?.url || null };

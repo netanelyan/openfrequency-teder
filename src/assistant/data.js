@@ -129,9 +129,9 @@ export function isOut(post, pack) {
 }
 
 /** How the customer posts this one now: from TikTok's drafts, or by hand from the bundle. */
-export function delivery(post, pack) {
+export function delivery(post, pack, db = null) {
   const s = platformStates(post, pack);
-  return s.tiktok === 'drafts' && tiktokMode(pack) !== 'direct' ? 'drafts' : 'by_hand';
+  return s.tiktok === 'drafts' && tiktokMode(pack, db) !== 'direct' ? 'drafts' : 'by_hand';
 }
 
 /** Everything a customer who posts by hand needs, per platform: the slides, the caption, the hashtags, and all of it as it goes out. */

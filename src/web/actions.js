@@ -10,8 +10,8 @@ import { lineDraft } from '../rules/overlay.js';
 import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
-import { canRun, pauseAccount, resumeAccount } from '../autonomy/rails.js';
-import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
+import { canRun, isCustomerAccount, mayResume, pauseAccount, resumeAccount } from '../autonomy/rails.js';
+import { publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { rulesFor } from '../schedule/choice.js';
@@ -83,7 +83,7 @@ export function approve(ctx, user, { id }) {
   ctx.db.update('posts', id, { status: 'approved', approved_at: nowIso(), approved_by: user.name, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id, detail: via(user) });
   const pack = ctx.pack(post.account_id);
-  if (pack && tiktokMode(pack) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
+  if (pack && tiktokModeFor(ctx.db, pack, loadPost(ctx.db, id)) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
     const rest = restAt(now(), rulesFor(ctx.db, pack));
     const at = post.slot_at ? ` תזכורת תגיע ב-${timeHe(post.slot_at)}.` : '';
     return draftBeside(ctx, id, { ok: true, message: rest ? `אושר. הטיוטה תישלח לטיקטוק כש${rest} ייגמר.${at}` : `אושר. הטיוטה נשלחת לטיקטוק.${at}` });
@@ -186,11 +186,38 @@ export async function publishNow(ctx, user, { id }) {
     const r = await publishPost(engineOf(ctx), id);
     audit(ctx.db, { actor: user.name, action: 'publish_now', accountId: post.account_id, postId: id, detail: { via: r.via, ok: r.ok } });
     if (r.held) return { ok: false, message: loadPost(ctx.db, id)?.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.' };
-    return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? 'פורסם בפרסום יבש: נכתב לדיסק.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט.' };
+    const drafted = loadPost(ctx.db, id)?.status === 'drafted';
+    return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? 'פורסם בפרסום יבש: נכתב לדיסק.' : drafted ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט, ואפשר לנסות שוב משם.' };
   } catch (e) {
     // The publisher's own words go to the log; the customer reads them in Hebrew (src/publish/errors.js).
     console.error(`[publish-now] ${id}: ${e?.message || e}`);
     throw new ActionError(user.operator ? `לא פורסם: ${e.message}` : publishErrorHe(e));
+  }
+}
+
+/**
+ * A post that did not go out, sent again: the platforms not out yet, through every rail a post at its slot meets
+ * (publishPost), for the customer and the operator alike. A part Zernio had already taken is asked about first, so a
+ * post never goes out twice (src/publish/index.js settled); a send cut off in the middle says so on the post, and the
+ * button asks the owner to look first. A refusal before anything was sent (Shabbat, a pause, a photograph waiting to be
+ * looked at) leaves the post where it was, saying why.
+ */
+export async function retryPublish(ctx, user, { id }) {
+  const post = mustPost(ctx, id);
+  if (post.status !== 'failed') throw new ActionError('אפשר לנסות שוב רק מצגת שלא עלתה.');
+  ctx.db.update('posts', id, { status: 'approved', reason: null, updated_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'publish_again', accountId: post.account_id, postId: id, detail: via(user) });
+  try {
+    const r = await publishPost(engineOf(ctx), id);
+    const after = loadPost(ctx.db, id);
+    if (r.held) return { ok: false, message: after?.reason || 'המצגת מחכה לחיבור של טיקטוק או אינסטגרם.' };
+    if (!r.ok) return { ok: false, message: after?.status === 'approved' ? 'הפלטפורמה ביקשה לחכות. ננסה שוב לבד בדקות הקרובות.' : 'גם הפעם זה לא עלה. הסיבה בדף המצגת.' };
+    return { ok: true, message: r.via === 'dry' ? 'נשלח בפרסום יבש: נכתב לדיסק.' : after?.status === 'drafted' ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'המצגת עלתה.' };
+  } catch (e) {
+    // Refused before anything was sent: back where it was, with the reason in Hebrew. A failed fact check has blocked it.
+    if (loadPost(ctx.db, id)?.status === 'approved') ctx.db.update('posts', id, { status: 'failed', reason: publishErrorHe(e), updated_at: nowIso() });
+    console.error(`[publish-again] ${id}: ${e?.message || e}`);
+    throw new ActionError(user.operator ? `לא נשלח: ${e.message}` : publishErrorHe(e));
   }
 }
 
@@ -384,6 +411,11 @@ export function setQuota(ctx, user, { id }, form) {
 export function setMode(ctx, user, { id }, form) {
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
   if (!MODES.includes(form.mode)) throw new ActionError('מצב לא מוכר');
+  // Digest and auto send posts no person approved: the operator's alone, on the company's own accounts. A customer's
+  // account acts in approve mode whatever is stored (src/autonomy/rails.js autonomyMode); this keeps the store honest.
+  if (form.mode !== 'approve' && (!user.operator || isCustomerAccount(ctx.db, id))) {
+    throw new ActionError(user.operator ? 'בחשבון של לקוח כל פוסט מחכה לאישור שלו.' : 'כל פוסט מחכה לאישור שלכם לפני שהוא עולה, וזה לא משתנה.', 403);
+  }
   ctx.db.update('accounts', id, { mode: form.mode, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'mode', accountId: id, detail: { mode: form.mode } });
   return { ok: true, message: 'המצב עודכן.' };
@@ -398,14 +430,20 @@ export function applyStyle(ctx, user, { id }) {
   return { ok: true, message: 'עברתם לסגנון החדש. הפוסטים הבאים ייצאו בו, ואלה שכבר צוירו לא משתנים.' };
 }
 
+/**
+ * Switch an account off. The operator's switch is the kill switch, and only the operator lifts it; a customer's is
+ * their own pause ('manual'), theirs to lift (src/autonomy/rails.js OPERATOR_PAUSES).
+ */
 export function killAccount(ctx, user, { id }) {
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
-  pauseAccount(ctx.db, id, 'kill', `${user.name} כיבה את החשבון`, user.name);
-  return { ok: true, message: 'החשבון כובה. שום דבר לא ייכתב ולא יפורסם בו.' };
+  pauseAccount(ctx.db, id, user.operator ? 'kill' : 'manual', `${user.name} כיבה את החשבון`, user.name);
+  return { ok: true, message: user.operator ? 'החשבון כובה. שום דבר לא ייכתב ולא יפורסם בו.' : 'החשבון כובה. שום דבר לא ייכתב ולא יפורסם בו עד שתפעילו אותו מחדש.' };
 }
 
+/** Switch an account back on. The operator's kill switch and a platform's strike are lifted by the operator alone. */
 export function resume(ctx, user, { id }) {
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
+  if (!mayResume(ctx.db, id, { operator: user.operator })) throw new ActionError('את החשבון הזה מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.', 403);
   resumeAccount(ctx.db, id, user.name);
   return { ok: true, message: 'החשבון פעיל שוב.' };
 }

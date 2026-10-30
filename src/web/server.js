@@ -106,6 +106,16 @@ const factDates = () => {
 /** The answer to a POST from a read-only session (accounts' view-as). */
 const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.';
 
+/** Where "back" goes on an error page: the page the browser came from, on this site, or home. */
+function backOf(req, host) {
+  try {
+    const ref = req.headers.referer ? new URL(req.headers.referer) : null;
+    return ref && ref.host === host ? ref.pathname + ref.search : '/';
+  } catch {
+    return '/';
+  }
+}
+
 /**
  * `accounts` (src/web/accounts.js) answers who a session is; the tests give one that talks to a fake accounts.
  * `ctx` is the engine's: every account. Each request works on its workspace's view of it.
@@ -155,6 +165,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/post\/([\w-]+)\/slide\/(\d+)\/photo$/, (c, u, m, f) => act.swapPhoto(c, u, { id: m[1], idx: m[2] }, f)],
     ['POST', /^\/post\/([\w-]+)\/slide\/(\d+)\/remove$/, (c, u, m) => act.removeSlide(c, u, { id: m[1], idx: m[2] })],
     ['POST', /^\/post\/([\w-]+)\/publish-now$/, (c, u, m) => act.publishNow(c, u, { id: m[1] })],
+    ['POST', /^\/post\/([\w-]+)\/publish-again$/, (c, u, m) => act.retryPublish(c, u, { id: m[1] })],
     ['POST', /^\/post\/([\w-]+)\/takedown$/, (c, u, m, f) => act.takedown(c, u, { id: m[1] }, f)],
     ['POST', /^\/post\/([\w-]+)\/image-ok$/, (c, u, m) => act.imageOk(c, u, { id: m[1] })],
     ['POST', /^\/takedowns\/(\d+)\/deleted$/, (c, u, m, f) => act.takedownDeleted(c, u, { id: m[1] }, f)],
@@ -332,10 +343,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         const origin = req.headers.origin;
         if (origin && !origins.has(origin)) return json(req, res, 403, { ok: false, message: 'בקשה מאתר אחר נחסמה.' });
         const form = await readForm(req);
-        if (!csrfOk(form._csrf, sid, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, 'stale page, reload it', 'text/plain; charset=utf-8');
+        if (!csrfOk(form._csrf, sid, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, pages.errorPage({ kind: 'stale', back: backOf(req, host), v: V }));
         // View-as (and any session accounts marks read-only) changes nothing, whatever the button: refused here, on
         // the server, not only by the buttons it does not see.
-        if (user.readOnly) return ajax ? json(req, res, 403, { ok: false, message: READ_ONLY }) : send(req, res, 403, READ_ONLY, 'text/plain; charset=utf-8');
+        if (user.readOnly) return ajax ? json(req, res, 403, { ok: false, message: READ_ONLY }) : send(req, res, 403, pages.errorPage({ kind: 'read_only', back: backOf(req, host), v: V }));
         // Developer mode: the settings a developer reads (the server's keys, engine and log), the operator's alone,
         // opened from the version line and kept on this browser.
         if (p === '/settings/dev') {
@@ -385,10 +396,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             return redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
           }
         }
-        return json(req, res, 404, { ok: false, message: 'אין פעולה כזו' });
+        return ajax ? json(req, res, 404, { ok: false, message: 'אין פעולה כזו' }) : send(req, res, 404, pages.errorPage({ kind: 'no_action', back: backOf(req, host), v: V }));
       }
 
-      if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, 'method not allowed', 'text/plain; charset=utf-8');
+      if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, pages.errorPage({ kind: 'method', v: V }));
 
       // ---- media: a post's rendered slides, read only from inside the data folder, and only the workspace's own
       const mm = /^\/media\/([\w-]+)\/(tiktok|instagram)\/(\d+)$/.exec(p);
@@ -476,10 +487,13 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       }
       return page(pages.notFoundPage(pc), 404);
     } catch (e) {
-      // The stack goes to the log, never to the page.
+      // The stack goes to the log, never to the page. Only an ActionError's message is the customer's to read; anything
+      // else is our own, and the page says so in Hebrew, with the way back.
       ctx.log?.(`[web] ${req.method} ${req.url}: ${e.stack || e.message}`);
-      const status = e.status || 500;
-      return send(req, res, status, status === 500 ? 'משהו השתבש אצלנו. נסו שוב בעוד כמה דקות.' : String(e.message), 'text/plain; charset=utf-8');
+      const mine = e instanceof act.ActionError;
+      const status = mine ? e.status || 400 : 500;
+      if (req.headers['x-of-ajax'] === '1') return json(req, res, status, { ok: false, message: mine ? e.message : pages.ERROR_HE.broken.text });
+      return send(req, res, status, pages.errorPage({ kind: 'broken', text: mine ? e.message : null, back: backOf(req, String(req.headers.host || '').toLowerCase()), v: V }));
     }
   };
   // Every route the site answers, for the test that each one keeps to its workspace.

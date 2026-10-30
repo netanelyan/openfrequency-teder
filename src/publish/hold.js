@@ -1,11 +1,12 @@
-import { now, nowIso } from '../core/clock.js';
-import { audit } from '../core/store.js';
+import { HOUR, now, nowIso } from '../core/clock.js';
+import { audit, step } from '../core/store.js';
 import { addDays, israelDate } from '../schedule/israel.js';
 import { slotsFor } from '../schedule/slots.js';
 import { scheduleOf } from '../schedule/choice.js';
 import { zernioAccountId } from './connect.js';
 import { instagramConfigured } from './instagram.js';
-import { wantedPublisher } from './index.js';
+import { retireDraft, wantedPublisher } from './index.js';
+import { loadPost } from '../pipeline/build.js';
 import { zernioConfigured } from './zernio.js';
 
 // A post approved for a platform the customer has not connected yet is held, not failed.
@@ -50,6 +51,22 @@ export const connectLine = (platforms) => `כדי שהמצגות יעלו, מח�
 /** How many free slots ahead a held post may be given. */
 const LOOK_DAYS = 14;
 
+/** The account's next free slots after `t`, up to `n`, earliest first: none another live post holds. */
+function freeSlots(db, pack, n, t) {
+  const taken = new Set(db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status IN ('queued', 'approved', 'publishing')", pack.id).map((r) => r.slot_at));
+  const free = [];
+  const today = israelDate(t);
+  // The account's own schedule: the days and times its owner chose, and Shabbat and the festivals as they chose.
+  const sched = scheduleOf(db, pack);
+  for (let i = 0; i < LOOK_DAYS && free.length < n; i++) {
+    for (const s of slotsFor(addDays(today, i), sched, { notBefore: t + 5 * 60_000 }).slots) {
+      const iso = s.toISOString();
+      if (!taken.has(iso) && !free.includes(iso)) free.push(iso);
+    }
+  }
+  return free.sort().slice(0, n);
+}
+
 /**
  * The runner's pass for one account: a platform is connected now, so every held post is approved again with the
  * account's next free slot (the earliest held first). With no slot in the next two weeks (no schedule), it goes out at
@@ -60,23 +77,48 @@ export function releaseHeld(db, pack, { t = now(), env = process.env } = {}) {
   if (!held.length) return [];
   const missing = new Set(unconnectedPlatforms(db, pack, env));
   if (pack.meta.platforms.every((p) => missing.has(p))) return [];
-  const taken = new Set(db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status IN ('queued', 'approved', 'publishing')", pack.id).map((r) => r.slot_at));
-  const free = [];
-  const today = israelDate(t);
-  // The account's own schedule: the days and times its owner chose, and Shabbat and the festivals as they chose.
-  const sched = scheduleOf(db, pack);
-  for (let i = 0; i < LOOK_DAYS && free.length < held.length; i++) {
-    for (const s of slotsFor(addDays(today, i), sched, { notBefore: t + 5 * 60_000 }).slots) {
-      const iso = s.toISOString();
-      if (!taken.has(iso) && !free.includes(iso)) free.push(iso);
-    }
-  }
-  free.sort();
+  const free = freeSlots(db, pack, held.length, t);
   const out = held.map((p, i) => {
     const slot = free[i] || null;
     db.update('posts', p.id, { status: 'approved', slot_at: slot, reason: null, updated_at: nowIso() });
     return { post: p.id, slotAt: slot };
   });
   audit(db, { action: 'held_released', accountId: pack.id, detail: { posts: out } });
+  return out;
+}
+
+// An approved post whose slot passed while the account could not run (a pause, the kill switch, a month not paid for)
+// used to go out the moment it could, one a minute, however old: posts about "tonight" went out days later, back to
+// back. Now it takes the way a held post takes: the account's next free slot. Lateness counts from the slot, or from
+// the approval when a person approved it after its slot (they chose to send it late, and it goes at once as before).
+
+/** An approved post this late is given a new slot instead of going out at once. */
+export const OVERDUE_MS = 2 * HOUR;
+/** An approved post this late is not sent at all: it expires. */
+export const OVERDUE_EXPIRE_MS = 24 * HOUR;
+export const OVERDUE_REASON = 'השעה של המצגת עברה לפני יותר מיום, בזמן שהחשבון היה עצור, ולכן היא לא עלתה.';
+
+/** The runner's pass for one account that can run: overdue approved posts re-slotted, or expired. Returns what it did. */
+export function reslotOverdue(db, pack, { t = now() } = {}) {
+  const rows = db.all("SELECT id, slot_at, approved_at FROM posts WHERE account_id = ? AND status = 'approved' AND slot_at IS NOT NULL AND slot_at < ? ORDER BY slot_at", pack.id, new Date(t - OVERDUE_MS).toISOString());
+  const late = rows.map((r) => ({ ...r, since: Math.max(Date.parse(r.slot_at), Date.parse(r.approved_at || r.slot_at) || 0) })).filter((r) => t - r.since > OVERDUE_MS);
+  if (!late.length) return [];
+  const out = [];
+  const keep = late.filter((r) => t - r.since <= OVERDUE_EXPIRE_MS);
+  for (const r of late.filter((x) => t - x.since > OVERDUE_EXPIRE_MS)) {
+    // A TikTok draft already in the app stays there: the owner is asked to delete it, as with a cancelled approval.
+    const left = retireDraft(db, loadPost(db, r.id));
+    db.update('posts', r.id, { status: 'expired', reason: OVERDUE_REASON, updated_at: nowIso() });
+    step(db, r.id, 'publish', 'info', { overdue: true, slotAt: r.slot_at, draftLeft: left });
+    out.push({ post: r.id, expired: true });
+  }
+  const free = freeSlots(db, pack, keep.length, t);
+  keep.forEach((r, i) => {
+    const slot = free[i] || null;
+    db.update('posts', r.id, { slot_at: slot, updated_at: nowIso() });
+    step(db, r.id, 'publish', 'info', { overdue: true, from: r.slot_at, to: slot });
+    out.push({ post: r.id, slotAt: slot });
+  });
+  audit(db, { action: 'overdue_reslotted', accountId: pack.id, detail: { posts: out } });
   return out;
 }

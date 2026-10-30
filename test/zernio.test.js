@@ -33,7 +33,7 @@ import {
   zernioCost,
   zernioTick,
 } from '../src/publish/connect.js';
-import { customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
 
 // Zernio as the publisher of customer accounts (src/publish/connect.js, src/publish/zernio.js): one profile per
 // account, the customer's own connect, its health, TikTok drafts and Instagram carousels to the connected accounts,
@@ -439,17 +439,33 @@ test("the account page: each platform's state and its button, which goes on to Z
   assert.equal(Z.calls.filter((c) => c.path === '/connect/tiktok').length, 1);
 });
 
-test('drafts by default, straight to the profile if the account says so; direct is public', async () => {
+test("a customer's TikTok goes to the drafts; straight to the profile is the operator's, on the company's own accounts, and public", async () => {
+  const send = (cookie, form) => fetch(`${base}/accounts/alpha/tiktok`, { method: 'POST', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', origin: base, 'x-of-ajax': '1' }, body: new URLSearchParams(form).toString() });
   const cookie = fake.session(customer(1)).cookie;
   const csrf = await csrfOf(cookie);
-  const res = await fetch(`${base}/accounts/alpha/tiktok`, { method: 'POST', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', origin: base, 'x-of-ajax': '1' }, body: new URLSearchParams({ _csrf: csrf, mode: 'direct', via: 'own-app' }).toString() });
-  assert.equal(res.status, 200);
-  const file = JSON.parse(readFileSync(path.join(pack('alpha').dir, 'pack.json'), 'utf8'));
-  assert.equal(file.zernio.tiktokMode, 'direct');
-  assert.equal(file.zernio.tiktokPrivacy, 'PUBLIC_TO_EVERYONE');
-  assert.equal(file.publishers.tiktok, 'zernio', 'only the operator picks what TikTok is published through');
-  await fetch(`${base}/accounts/alpha/tiktok`, { method: 'POST', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', origin: base, 'x-of-ajax': '1' }, body: new URLSearchParams({ _csrf: csrf, mode: 'draft-now' }).toString() });
+  // A customer cannot send TikTok straight to the profile: refused, and pack.json is as it was.
+  const before = readFileSync(path.join(pack('alpha').dir, 'pack.json'), 'utf8');
+  assert.equal((await send(cookie, { _csrf: csrf, mode: 'direct', via: 'own-app' })).status, 403);
+  assert.equal(readFileSync(path.join(pack('alpha').dir, 'pack.json'), 'utf8'), before);
+  assert.equal((await send(cookie, { _csrf: csrf, mode: 'draft-now' })).status, 200);
   assert.equal(pack('alpha').meta.zernio.tiktokMode, 'draft-now');
+
+  // The operator, on an account of the company's own (no workspace): direct, public, and through what they pick.
+  const ws = db.get("SELECT workspace_id FROM accounts WHERE id = 'alpha'").workspace_id;
+  db.run("UPDATE accounts SET workspace_id = NULL WHERE id = 'alpha'");
+  try {
+    const op = fake.session(operator()).cookie;
+    const opCsrf = await csrfOf(op);
+    assert.equal((await send(op, { _csrf: opCsrf, mode: 'direct', via: 'own-app' })).status, 200);
+    const file = JSON.parse(readFileSync(path.join(pack('alpha').dir, 'pack.json'), 'utf8'));
+    assert.equal(file.zernio.tiktokMode, 'direct');
+    assert.equal(file.zernio.tiktokPrivacy, 'PUBLIC_TO_EVERYONE');
+    assert.equal(file.publishers.tiktok, 'own-app', 'the operator picks what TikTok is published through');
+    await send(op, { _csrf: opCsrf, mode: 'draft-now', via: 'zernio' });
+    assert.equal(pack('alpha').meta.zernio.tiktokMode, 'draft-now');
+  } finally {
+    db.run('UPDATE accounts SET workspace_id = ? WHERE id = ?', ws, 'alpha');
+  }
 });
 
 /* ------------------------------------------------------------------ the WhatsApp assistant */

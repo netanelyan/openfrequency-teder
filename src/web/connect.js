@@ -3,6 +3,7 @@ import { audit } from '../core/store.js';
 import { TIKTOK_MODES } from '../packs/validate.js';
 import { setPackPublishing } from '../packs/write.js';
 import { tiktokMode, wantedPublisher } from '../publish/index.js';
+import { isCustomerAccount } from '../autonomy/rails.js';
 import { OWN_APP } from '../publish/tiktok-app.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { GONE, carryOnboardingZernio, connectLink, connectLinkOk, connectState, doneLink, doneLinkOk, holdPick, onboardingDoneLinkOk, profileIdOf, refreshConnections, refreshOnboardingConnections, selectionOf, startConnect, takePick, zernioCost } from '../publish/connect.js';
@@ -84,7 +85,7 @@ export function connectPanel(ctx, d, { base = null } = {}) {
             : s.state === 'reconnect'
               ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary' })
               : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost' });
-      return `<li><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החשבון כבר לא מחובר ל-Zernio, ופוסטים לא מגיעים ל${esc(name)} עד שמחברים אותו שוב.</div>` : `<div class="muted small ltr">${esc(s.issue)}</div>`) : ''}${button ? `<div class="actions p0 m6">${button}</div>` : ''}</li>`;
+      return `<li><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${button ? `<div class="actions p0 m6">${button}</div>` : ''}</li>`;
     })
     .join('');
   const note = d.configured
@@ -96,9 +97,17 @@ export function connectPanel(ctx, d, { base = null } = {}) {
 ${d.configured ? requirements(d) : ''}<ul class="factlist">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
 }
 
-/** How the account's TikTok posts go out, and (the operator) through what. */
+/**
+ * How the account's TikTok posts go out, and (the operator) through what. A customer's TikTok always lands in the app's
+ * drafts (src/publish/index.js tiktokMode): they read that in one line, with no choice to make. The operator chooses
+ * for the company's own accounts, and sees a customer's as fixed.
+ */
 export function tiktokModePanel(ctx, d) {
   if (!d.pack.meta.platforms.includes('tiktok')) return '';
+  if (!ctx.operator || d.customer) {
+    const line = 'המצגות מגיעות לטיוטות בטיקטוק. בוחרים שם סאונד פופולרי ומפרסמים מהאפליקציה, ותדר מזכיר לכם כשמגיעה השעה.';
+    return `<div class="row"><span>איך פוסטים עולים לטיקטוק</span></div><p class="muted small m0">${esc(line)}${ctx.operator ? ' (חשבון של לקוח: תמיד לטיוטות.)' : ''}</p>`;
+  }
   const id = esc(d.pack.id);
   const modes = ['draft-now', 'direct', ...(d.mode === 'draft-fallback' ? ['draft-fallback'] : [])];
   const choice = modes.map((m) => `<input type="radio" name="mode" value="${m}" id="tt-${id}-${m}"${d.mode === m ? ' checked' : ''}><label for="tt-${id}-${m}">${esc(MODE_CHOICE[m][0])}<small>${esc(MODE_CHOICE[m][1])}</small></label>`).join('');
@@ -115,7 +124,8 @@ export function connectData(ctx, pack, { t = now(), env = process.env } = {}) {
     configured: zernioConfigured(),
     hasProfile: Boolean(ctx.db.get('SELECT zernio_profile_id AS id FROM accounts WHERE id = ?', pack.id)?.id || pack.meta.zernio?.profileId),
     platforms: pack.meta.platforms.map((p) => connectState(ctx.db, pack, p, env)),
-    mode: tiktokMode(pack),
+    mode: tiktokMode(pack, ctx.db),
+    customer: isCustomerAccount(ctx.db, pack.id),
     via: wantedPublisher(pack, 'tiktok'),
     zernio: zernioCost(ctx.db, pack.id, monthKey(t)),
   };
@@ -148,7 +158,7 @@ export function connectRoutes(links) {
         } catch (e) {
           if (e.code === 'not_connectable') throw new ActionError(`${PLATFORM_NAME[m[2]]} לא צריך חיבור בחשבון הזה.`);
           ctx.log?.(`[connect] ${pack.id} ${m[2]}: ${e.message}`);
-          throw new ActionError('Zernio לא ענה, ואי אפשר לפתוח עכשיו את מסך החיבור. נסו שוב בעוד כמה דקות.', 502);
+          throw new ActionError('אי אפשר לפתוח עכשיו את מסך החיבור. נסו שוב בעוד כמה דקות.', 502);
         }
         return { ok: true, message: `עוברים ל${PLATFORM_NAME[m[2]]}`, go: url, goName: PLATFORM_NAME[m[2]] };
       },
@@ -163,9 +173,9 @@ export function connectRoutes(links) {
           await refreshConnections(ctx.db, pack);
         } catch (e) {
           ctx.log?.(`[connect] ${pack.id}: ${e.message}`);
-          throw new ActionError('Zernio לא ענה. נסו שוב בעוד כמה דקות.', 502);
+          throw new ActionError('לא הצלחנו לבדוק את החיבורים עכשיו. נסו שוב בעוד כמה דקות.', 502);
         }
-        return { ok: true, message: 'החיבורים עודכנו מ-Zernio.' };
+        return { ok: true, message: 'החיבורים נבדקו ועודכנו.' };
       },
     ],
     [
@@ -175,6 +185,11 @@ export function connectRoutes(links) {
         const pack = mustPack(ctx, m[1]);
         const mode = String(f.mode || '');
         if (!TIKTOK_MODES.includes(mode)) throw new ActionError('אפשרות לא מוכרת');
+        // Straight to the profile, and draft-fallback's publish at an hour, are the operator's, on the company's own
+        // accounts: a customer's TikTok always goes to the app's drafts (src/publish/index.js tiktokMode).
+        if (mode !== 'draft-now' && (!user.operator || isCustomerAccount(ctx.db, pack.id))) {
+          throw new ActionError(user.operator ? 'בחשבון של לקוח המצגות תמיד מגיעות לטיוטות בטיקטוק.' : 'המצגות מגיעות לטיוטות בטיקטוק, ומשם מפרסמים אותן. זה לא משתנה.', 403);
+        }
         // Straight to the profile is public: a private direct post is one nobody sees.
         const patch = { tiktokMode: mode, ...(mode === 'direct' ? { tiktokPrivacy: 'PUBLIC_TO_EVERYONE' } : {}) };
         if (user.operator && f.via) {
@@ -336,7 +351,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
     } catch (e) {
       if (e.code === 'not_connectable') return [200, resultPage({ title: `${name} כבר מחובר`, text: `${name} של ${pack.meta.displayName} מחובר דרך Meta, ואין פה מה לחבר.` })];
       ctx.log?.(`[connect] ${pack.id} ${platform}: ${e.message}`);
-      return [502, resultPage({ title: 'Zernio לא ענה', text: 'אי אפשר לפתוח עכשיו את מסך החיבור. נסו שוב בעוד כמה דקות.', actions: again() })];
+      return [502, resultPage({ title: 'אי אפשר לחבר כרגע', text: 'מסך החיבור לא נפתח הפעם. נסו שוב בעוד כמה דקות.', actions: again() })];
     }
   }
 
@@ -356,10 +371,10 @@ export async function publicConnect(ctx, { account, platform, done, query, links
     await refreshConnections(ctx.db, pack, { t, prefer });
   } catch (e) {
     ctx.log?.(`[connect] ${pack.id} ${platform} done: ${e.message}`);
-    return [200, resultPage({ title: 'עוד רגע', text: 'החיבור נשלח, אבל Zernio עוד לא ענה מה חובר. תוך שעה זה יופיע בדף החשבון.' })];
+    return [200, resultPage({ title: 'עוד רגע', text: 'החיבור נשלח, ועוד לא קיבלנו אישור מה חובר. תוך שעה זה יופיע בדף החשבון.' })];
   }
   const s = connectState(ctx.db, pack, platform);
-  if (s.state !== 'connected') return [200, resultPage({ title: 'החיבור לא הושלם', text: `Zernio לא רואה ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
+  if (s.state !== 'connected') return [200, resultPage({ title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
   ctx.db.update('accounts', pack.id, { updated_at: nowIso() });
   return [200, resultPage({ title: `${name} מחובר`, text: `${s.username ? `@${s.username}` : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.` })];
 }

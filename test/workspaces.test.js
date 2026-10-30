@@ -222,6 +222,7 @@ const casesFor = () => {
     [`/post/${B.post}/slide/1/photo`, { image: 'none' }],
     [`/post/${B.post}/slide/1/remove`],
     [`/post/${B.post}/publish-now`],
+    [`/post/${B.post}/publish-again`],
     [`/post/${B.post}/takedown`, { notice: 'a takedown notice from A for B', platform: 'tiktok' }],
     [`/post/${B.post}/image-ok`],
     [`/post/${B.post}/old-drafts-deleted`],

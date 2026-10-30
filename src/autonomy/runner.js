@@ -1,5 +1,5 @@
 import { now, nowIso } from '../core/clock.js';
-import { audit, getSetting, setSetting, settings } from '../core/store.js';
+import { audit, getSetting, setSetting, settings, step } from '../core/store.js';
 import { j } from '../db/index.js';
 import { israelDate, israelInstant, addDays, hhmm } from '../schedule/israel.js';
 import { inRest, rulesOf } from '../schedule/shabbat.js';
@@ -10,7 +10,7 @@ import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
-import { canRun } from './rails.js';
+import { autonomyMode, canRun } from './rails.js';
 import { usage } from '../budget/quota.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
 import { collectSignals, scoreTopics } from '../topics/index.js';
@@ -23,9 +23,10 @@ import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 import { assistantTick } from '../assistant/events.js';
 import { zernioTick } from '../publish/connect.js';
 import { accountAllowed, refreshEntitlements } from '../billing/entitlement.js';
-import { releaseHeld } from '../publish/hold.js';
+import { releaseHeld, reslotOverdue } from '../publish/hold.js';
 import { emailTick } from '../notify/email.js';
 import { retentionPass } from '../billing/retention.js';
+import { STUCK_REASON } from '../publish/errors.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -53,9 +54,16 @@ import { retentionPass } from '../billing/retention.js';
 //        auto     it is approved by the engine and goes out; a daily summary
 //                 says what happened
 //      In digest and auto, a post the reviewer scored as sounding a little like
-//      a bot (4 or 5) waits for the owner instead.
+//      a bot (4 or 5) waits for the owner instead. Digest and auto are the
+//      operator's, for the company's own accounts: a customer's account (in a
+//      workspace) is in approve mode whatever is stored (rails.js autonomyMode),
+//      and the engine approves nothing for an account that cannot run.
+//   3a. held posts, once a platform is connected, and approved posts late after
+//      a stop, each to the account's next free slot (src/publish/hold.js)
 //   4. publish what is approved and due, inside the account's windows, outside
 //      Shabbat and the festivals (those the account does not post on)
+//   4z. a send under way for 15 minutes was cut off: the post is failed, for a
+//      person to check and send again (stuckPublishing)
 //   4b. tell the WhatsApp assistant what happened (src/assistant/events.js): a post
 //      that waits, the slot, a post out or still not out an hour on, the month's
 //      last suggestions, Sunday's summary; held through the customer's quiet hours
@@ -102,7 +110,7 @@ export async function generate(ctx, plans, report) {
     try {
       const res = await buildPost(gctx, { pack, slotAt, formatKey, subject, directive });
       if (directive?.id) db.update('directives', directive.id, { used_post_id: res.postId });
-      db.update('posts', res.postId, { mode_at_queue: db.get('SELECT mode FROM accounts WHERE id = ?', pack.id)?.mode });
+      db.update('posts', res.postId, { mode_at_queue: autonomyMode(db, pack.id) });
       // A failed fact check blocks that post alone: the account goes on with the rest of its day.
       report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
     } catch (e) {
@@ -179,6 +187,25 @@ export async function generateRecaps(ctx, report, { t = now() } = {}) {
       await generate({ ...ctx, batchApi: null }, [{ pack, slotAt: slot, formatKey: w.formatKey, subject: w.subject }], report);
     }
   }
+}
+
+/** A send this long under way was cut off: a restart mid-send, or a call that never answered. */
+export const PUBLISH_STUCK_MS = 15 * 60_000;
+
+/**
+ * Posts left 'publishing' longer than PUBLISH_STUCK_MS become 'failed', so they reach the lists and the retry button
+ * instead of showing "עולה עכשיו" forever. Nothing is sent: a platform whose answer was lost may be out, and the retry
+ * checks what Zernio holds before it creates anything (src/publish/index.js). Returns the ids.
+ */
+export function stuckPublishing(db, { t = now() } = {}) {
+  const before = new Date(t - PUBLISH_STUCK_MS).toISOString();
+  const rows = db.all("SELECT id, account_id FROM posts WHERE status = 'publishing' AND updated_at < ?", before);
+  for (const r of rows) {
+    db.update('posts', r.id, { status: 'failed', reason: STUCK_REASON, updated_at: nowIso() });
+    step(db, r.id, 'publish', 'failed', { stuck: true, since: before });
+    audit(db, { action: 'publish_stuck', accountId: r.account_id, postId: r.id });
+  }
+  return rows.map((r) => r.id);
 }
 
 export async function tick(ctx, { t = now() } = {}) {
@@ -279,25 +306,32 @@ export async function tick(ctx, { t = now() } = {}) {
     if (!acc || acc.status === 'onboarding') continue;
     const run = canRun(db, pack.id);
 
-    // ---- 3. modes at the slot
+    // ---- 3. modes at the slot. A customer's account is always in approve mode (rails.js autonomyMode), whatever is
+    // stored; and the engine approves nothing for an account that cannot run now (paused, unpaid, the kill switch), so a
+    // gap does not turn into a pile of posts nobody chose.
+    const mode = autonomyMode(db, pack.id);
     const due = db.all("SELECT * FROM posts WHERE account_id = ? AND status = 'queued' AND slot_at IS NOT NULL AND slot_at <= ?", pack.id, new Date(t).toISOString());
     for (const p of due) {
-      if (acc.mode === 'approve' || (p.review_score ?? 0) >= REWRITE_AT) {
+      if (mode === 'approve' || !run.ok || (p.review_score ?? 0) >= REWRITE_AT) {
         if (israelDate(Date.parse(p.slot_at)) < today) {
-          db.update('posts', p.id, { status: 'expired', reason: acc.mode === 'approve' ? 'לא אושר עד סוף היום' : 'נשמע קצת כמו בוט וחיכה לאישור', updated_at: nowIso() });
+          db.update('posts', p.id, { status: 'expired', reason: mode === 'approve' || !run.ok ? 'לא אושר עד סוף היום' : 'נשמע קצת כמו בוט וחיכה לאישור', updated_at: nowIso() });
           report.expired.push(p.id);
         }
         continue;
       }
-      db.update('posts', p.id, { status: 'approved', approved_at: nowIso(), approved_by: `engine:${acc.mode}`, updated_at: nowIso() });
-      audit(db, { action: 'auto_approved', accountId: pack.id, postId: p.id, detail: { mode: acc.mode } });
+      db.update('posts', p.id, { status: 'approved', approved_at: nowIso(), approved_by: `engine:${mode}`, updated_at: nowIso() });
+      audit(db, { action: 'auto_approved', accountId: pack.id, postId: p.id, detail: { mode } });
       report.approved.push(p.id);
     }
 
-    // ---- 3a. posts held for a platform that was not connected, once one is: each to the account's next free slot
+    // ---- 3a. posts held for a platform that was not connected, once one is: each to the account's next free slot.
+    // Approved posts whose slot passed while the account could not run (a pause, the kill switch, an unpaid gap) take
+    // the same way back: each to a free slot, or expired when it is more than a day late (src/publish/hold.js).
     if (run.ok) {
       const back = releaseHeld(db, pack, { t });
       if (back.length) report.released = [...(report.released || []), ...back.map((x) => ({ account: pack.id, ...x }))];
+      const late = reslotOverdue(db, pack, { t });
+      if (late.length) report.overdue = [...(report.overdue || []), ...late.map((x) => ({ account: pack.id, ...x }))];
     }
 
     // ---- 3b. draft-now: an approved post's TikTok draft goes to the app as soon as the rails let it (the owner's
@@ -322,6 +356,10 @@ export async function tick(ctx, { t = now() } = {}) {
       }
     }
   }
+
+  // ---- 4z. a send that never came back (the process stopped mid-send, or a call hung): failed, for a person to check
+  const stuck = stuckPublishing(db, { t });
+  if (stuck.length) report.stuck = stuck;
 
   // ---- 4a. TikTok drafts after their slot: the owner's post found, a reminder, the fallback, a duplicate
   try {
@@ -436,6 +474,8 @@ export function startRunner(ctx, { everyMs = 60_000 } = {}) {
   // Its batch, if it had one, is recorded by the first tick; the post itself is closed.
   const orphans = ctx.db.run("UPDATE posts SET status = 'blocked', reason = 'הכתיבה נקטעה באתחול של המערכת', updated_at = ? WHERE status = 'drafting'", nowIso()).changes;
   if (orphans) ctx.log?.(`runner: ${orphans} post(s) interrupted by a restart were closed`);
+  const cut = stuckPublishing(ctx.db);
+  if (cut.length) ctx.log?.(`runner: ${cut.length} post(s) stuck sending were marked failed: ${cut.join(', ')}`);
   const go = async () => {
     if (busy || stopped) return;
     busy = true;
