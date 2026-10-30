@@ -203,6 +203,7 @@ export const STATUS_HE = {
   queued: ['מחכה לאישור', 'sig'],
   approved: ['אושר', 'ok'],
   publishing: ['עולה עכשיו', 'ok'],
+  drafted: ['בטיוטות של טיקטוק', 'sig'],
   published: ['פורסם', 'ok'],
   rejected: ['נדחה', 'ghost'],
   blocked: ['נעצר בבדיקות', 'bad'],
@@ -212,6 +213,18 @@ export const STATUS_HE = {
   sample: ['דוגמה', 'warn'],
   taken_down: ['הוסר אחרי הודעה', 'bad'],
 };
+/** What a customer reads for a post whose stored reason is the engine's own English (a model's, a renderer's, a gate's). */
+const REASON_HE = {
+  blocked: 'הבדיקות שלנו עצרו את המצגת הזו בזמן הכתיבה, ולכן היא לא תעלה.',
+  failed: 'המצגת לא עלתה. שמרנו את הפרטים, ואפשר לנסות שוב.',
+};
+
+/**
+ * A post's reason as the page shows it: the operator reads it as it was stored; a customer reads it in Hebrew, and a
+ * reason with English in it (raw text from the engine, kept in the post's steps) is said by its post's status instead.
+ */
+export const reasonHe = (ctx, status, reason) => (!reason || ctx.operator || !/[A-Za-z]{4,}/.test(reason) ? reason : REASON_HE[status] || 'משהו השתבש אצלנו עם המצגת הזו. כתבו לנו ונבדוק.');
+
 export const statusChip = (s) => {
   const [he, cls] = STATUS_HE[s] || [s, ''];
   return `<span class="chip ${cls}">${esc(he)}</span>`;

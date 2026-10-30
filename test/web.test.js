@@ -168,16 +168,19 @@ test('approve in one tap, with the token', async () => {
   assert.deepEqual({ ...row }, { status: 'approved', approved_by: 'owner' });
 });
 
-test('the kill switch and the mode are set from the Accounts page', async () => {
+test("a customer's account switch is theirs to turn off and on; the mode stays approve (only the operator's own accounts change it)", async () => {
   const cookie = await login();
   const csrf = await csrfOf(cookie);
-  await post('/accounts/demo/mode', cookie, { _csrf: csrf, mode: 'digest' });
-  assert.equal(ctx.db.get("SELECT mode FROM accounts WHERE id = 'demo'").mode, 'digest');
+  // Digest sends posts no person approved: a customer is refused, and their account stays in approve mode.
+  const refused = await post('/accounts/demo/mode', cookie, { _csrf: csrf, mode: 'digest' });
+  assert.equal(refused.status, 403);
+  assert.equal(ctx.db.get("SELECT mode FROM accounts WHERE id = 'demo'").mode, 'approve');
+  // Their switch is their own pause ('manual'), not the operator's kill switch, and they lift it.
   await post('/accounts/demo/kill', cookie, { _csrf: csrf });
   const acc = ctx.db.get("SELECT status, paused_reason FROM accounts WHERE id = 'demo'");
-  assert.deepEqual({ ...acc }, { status: 'paused', paused_reason: 'kill' });
+  assert.deepEqual({ ...acc }, { status: 'paused', paused_reason: 'manual' });
   const page = await (await get('/accounts', cookie)).text();
-  assert.match(page, /מתג הכיבוי הופעל/);
+  assert.match(page, /הושהה ידנית/);
   await post('/accounts/demo/resume', cookie, { _csrf: csrf });
   assert.equal(ctx.db.get("SELECT status FROM accounts WHERE id = 'demo'").status, 'active');
 });

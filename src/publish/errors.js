@@ -5,11 +5,32 @@
 const NAME = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
 const nameOf = (platform) => NAME[platform] || 'הפלטפורמה';
 
+/** Said on a post that was cut off mid-send (src/autonomy/runner.js): it may be out, so a person looks before trying again. */
+export const STUCK_REASON = 'השליחה נקטעה באמצע, ולא ברור אם המצגת עלתה. בדקו בפרופיל לפני שמנסים שוב.';
+
+/** Said when the fact gate stops a post at its send: the details (which fact, why) are in the post's steps. */
+export const FACT_CHECK_HE = 'בדיקת העובדות עצרה את המצגת לפני השליחה: עובדה בה כבר לא תואמת למקור שלה, או שהמקור הוסר. המצגת לא תעלה.';
+
+/**
+ * A send refused before anything went (src/publish/index.js PublishRefused), by its code. The ones whose message is
+ * already the customer's (Shabbat, a pause, a photograph to look at) keep it.
+ */
+const REFUSED_HE = {
+  fact_check: FACT_CHECK_HE,
+  not_approved: 'המצגת כבר לא מאושרת, ולכן היא לא נשלחה.',
+  hashtags: 'בכיתוב יש יותר מ-5 האשטגים. מורידים כמה בעריכה, ואז שולחים.',
+  draft_in_flight: 'הטיוטה כבר בדרך לטיקטוק. עוד רגע זה ממשיך לבד.',
+  no_consent: 'בחשבון הזה מצגות מגיעות לטיוטות בטיקטוק, ומשם מפרסמים אותן.',
+  unconfirmed: 'לא הצלחנו לוודא אם המצגת עלתה בפעם הקודמת, ולכן לא שלחנו אותה שוב. בדקו בפרופיל, ואם היא לא שם, כתבו לנו.',
+};
+
 /** One failed send (a ZernioError, an InstagramError, a PublishRefused, a network error) in the customer's words. */
 export function publishErrorHe(e, platform = null) {
   const name = nameOf(platform);
   const code = String(e?.code ?? '');
   const text = `${code} ${e?.category || ''} ${e?.message || ''}`;
+  if (REFUSED_HE[code]) return REFUSED_HE[code];
+  if (e?.name === 'PublishRefused' && ['shabbat', 'paused', 'image_review'].includes(code)) return e.message;
   if (code === 'not_configured') return 'הפרסום עוד לא זמין בשרת הזה. אנחנו מטפלים בזה.';
   if (code === 'no_account') return `${name} לא מחובר לחשבון. מחברים אותו בדף החשבון, והמצגת תעלה אחרי זה.`;
   if (code === 'card_images') return platform === 'instagram' ? 'באינסטגרם מצגת יכולה להכיל עד 10 תמונות, ובמצגת הזו יש יותר.' : 'בטיקטוק מצגת צריכה בין 2 ל-35 תמונות.';

@@ -35,6 +35,7 @@ import { scheduleOf, timesOf } from '../schedule/choice.js';
 import { scheduleData } from './schedule.js';
 import { emailPrefsOf } from '../notify/email.js';
 import { unconnectedPlatforms } from '../publish/hold.js';
+import { autonomyMode, isCustomerAccount, mayResume } from '../autonomy/rails.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -76,7 +77,12 @@ export function accountRows(ctx) {
   return ctx.packs.map((pack) => {
     const acc = ctx.db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
     // The customer's month: suggestions and redos used of their plan. What it cost is the operator's to see.
-    return { pack, acc, spend: monthSpend(ctx.db, pack.id).usd, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id), connect: connectData(ctx, pack) };
+    // The mode the engine acts on (a customer's is approve, whatever is stored: src/autonomy/rails.js), and whether this
+    // session may lift a pause (the operator's kill switch and a strike are the operator's).
+    const mode = autonomyMode(ctx.db, pack.id);
+    const customer = isCustomerAccount(ctx.db, pack.id);
+    const resumable = mayResume(ctx.db, pack.id, { operator: ctx.workspaceId == null });
+    return { pack, acc, mode, customer, resumable, spend: monthSpend(ctx.db, pack.id).usd, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id), connect: connectData(ctx, pack) };
   });
 }
 
@@ -84,6 +90,9 @@ export function accountRows(ctx) {
 export function publishersOf(ctx, pack) {
   return pack.meta.platforms.map((platform) => ({ platform, wants: wantedPublisher(pack, platform), via: publisherFor(pack, platform, { db: ctx.db }) }));
 }
+
+/** How long a post that did not go out stays on the lists, to be sent again. */
+export const FAILED_DAYS = 14;
 
 /** Today: what waits for a decision, what is scheduled, what was refused and what went out. */
 export function today(ctx, t = now()) {
@@ -98,6 +107,8 @@ export function today(ctx, t = now()) {
       scheduled: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' ORDER BY slot_at", id),
       // Approved, and waiting for TikTok or Instagram to be connected (src/publish/hold.js); what is not connected.
       held: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'held' ORDER BY slot_at", id),
+      // Posts that did not go out, the last two weeks, newest first: each with "לנסות שוב" (src/web/actions.js retryPublish).
+      failed: ctx.db.all("SELECT id, hook, topic, reason, slot_at, updated_at, publish_json FROM posts WHERE account_id = ? AND status = 'failed' AND sample = 0 AND updated_at >= ? ORDER BY updated_at DESC", id, new Date(t - FAILED_DAYS * DAY).toISOString()),
       unconnected: unconnectedPlatforms(ctx.db, row.pack),
       blocked: ctx.db.all("SELECT id, hook, topic, reason, format_id, created_at FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC", id, from),
       published: ctx.db.all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? ORDER BY published_at DESC", id, from),
@@ -245,7 +256,7 @@ export function factsFor(ctx, pack) {
 
 /** An account's sound list, how its TikTok posts go out, and which sounds its last drafts had. */
 export function soundsFor(ctx, pack) {
-  return { current: pack, sounds: soundsOf(ctx.db, pack.id), mode: tiktokMode(pack), recent: recentSoundIds(ctx.db, pack.id), limits: SOUNDS };
+  return { current: pack, sounds: soundsOf(ctx.db, pack.id), mode: tiktokMode(pack, ctx.db), recent: recentSoundIds(ctx.db, pack.id), limits: SOUNDS };
 }
 
 /** An account's topics before documents: the bank, the signals with their scores, and what feeds them. */

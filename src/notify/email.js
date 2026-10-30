@@ -1,4 +1,5 @@
 import { DAY, monthKey, now, nowIso } from '../core/clock.js';
+import { OPERATOR_PAUSES } from '../autonomy/rails.js';
 import { localFetch } from '../core/net.js';
 import { getSetting, setSetting, settings } from '../core/store.js';
 import { oneLine } from '../rules/overlay.js';
@@ -198,11 +199,16 @@ export function connectNeededEmail({ per, link }) {
   });
 }
 
-/** publish_failed. */
+/**
+ * publish_failed. `paused` is 'ours' when the account waits for the operator (a platform's strike, the kill switch:
+ * src/autonomy/rails.js OPERATOR_PAUSES), any other truthy value when the owner can switch it on again. A reason with
+ * the engine's English in it is left out: the post's page says it in Hebrew.
+ */
 export function publishFailedEmail({ name, hook, reason, paused, link }) {
+  const said = reason && !/[A-Za-z]{4,}/.test(reason) ? reason : '';
   return message({
     subject: `המצגת "${oneLine(hook || '').slice(0, 60)}" לא עלתה`,
-    body: lines(`המצגת "${oneLine(hook || '')}" של ${name} לא עלתה.`, reason || '', paused ? 'החשבון הושהה, ומצגות לא יעלו עד שמפעילים אותו מחדש בדף החשבון.' : 'בדף המצגת רואים מה קרה, ואפשר לנסות שוב.'),
+    body: lines(`המצגת "${oneLine(hook || '')}" של ${name} לא עלתה.`, said, paused === 'ours' ? 'החשבון הושהה, ומצגות לא עולות בו בינתיים. אנחנו בודקים מה קרה ונחזור אליכם.' : paused ? 'החשבון הושהה, ומצגות לא יעלו עד שמפעילים אותו מחדש בדף החשבון.' : 'בדף המצגת רואים מה קרה, ויש שם כפתור לנסות שוב.'),
     link,
     label: 'לדף המצגת',
   });
@@ -214,10 +220,10 @@ export function publishFailedEmail({ name, hook, reason, paused, link }) {
 function workspacesOf(ctx, t) {
   const by = new Map();
   for (const pack of ctx.packs) {
-    const acc = ctx.db.get('SELECT workspace_id, status FROM accounts WHERE id = ?', pack.id);
+    const acc = ctx.db.get('SELECT workspace_id, status, paused_reason FROM accounts WHERE id = ?', pack.id);
     if (!acc || acc.workspace_id == null || acc.status === 'onboarding' || !workspaceAllowed(ctx.db, acc.workspace_id, t)) continue;
     if (!by.has(acc.workspace_id)) by.set(acc.workspace_id, []);
-    by.get(acc.workspace_id).push({ pack, status: acc.status });
+    by.get(acc.workspace_id).push({ pack, status: acc.status, pausedReason: acc.paused_reason });
   }
   return by;
 }
@@ -299,9 +305,10 @@ function due(ctx, ws, accounts, { t, link }) {
   }
 
   // publish_failed: a post that failed for good in the last two days, once per post.
-  for (const { pack, status } of accounts) {
+  for (const { pack, status, pausedReason } of accounts) {
+    const paused = status === 'paused' ? (OPERATOR_PAUSES.includes(pausedReason) ? 'ours' : 'yours') : null;
     for (const p of db.all("SELECT id, hook, reason FROM posts WHERE account_id = ? AND status = 'failed' AND sample = 0 AND updated_at >= ?", pack.id, iso(t - 2 * DAY))) {
-      out.push({ key: `publish_failed:${p.id}`, kind: 'publish_failed', build: () => publishFailedEmail({ name: name(pack), hook: p.hook, reason: p.reason, paused: status === 'paused', link: link(`/post/${encodeURIComponent(p.id)}`) }) });
+      out.push({ key: `publish_failed:${p.id}`, kind: 'publish_failed', build: () => publishFailedEmail({ name: name(pack), hook: p.hook, reason: p.reason, paused, link: link(`/post/${encodeURIComponent(p.id)}`) }) });
     }
   }
   return out;

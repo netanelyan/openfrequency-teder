@@ -39,13 +39,15 @@ const auth = () => ({ authorization: `Bearer ${String(process.env.ZERNIO_API_KEY
 export const zernioConfigured = () => isSet('ZERNIO_API_KEY');
 
 export class ZernioError extends Error {
-  constructor(message, { step, code = null, status = null, category = null } = {}) {
+  constructor(message, { step, code = null, status = null, category = null, zernioId = null } = {}) {
     super(message);
     this.name = 'ZernioError';
     this.step = step;
     this.code = code;
     this.status = status;
     this.category = category;
+    // The post Zernio had taken when it failed: a retry asks Zernio about it before it creates another.
+    this.zernioId = zernioId;
   }
 }
 
@@ -69,6 +71,10 @@ export function postBody({ platform, accountId, caption, imageUrls, privacy = 'S
         description: String(caption).slice(0, 4000),
         auto_add_music: !track,
         ...(track ? { musicSoundInfo: { musicSoundId: String(sound.id) } } : {}),
+        // TikTok's two consent flags say the account's owner saw this post and agreed to publish it. They are true
+        // because a direct post is sent only for a post a person approved after seeing its slides (publishZernio's
+        // `consented`, src/publish/index.js tiktokModeFor); a draft's own consent is given in the app, where its owner
+        // publishes it or not.
         content_preview_confirmed: true,
         express_consent_given: true,
         ...(aiLabel ? { video_made_with_ai: true } : {}),
@@ -90,15 +96,22 @@ function partOf(post, platform) {
   return { status: p.status || post?.status || null, url: p.platformPostUrl || null, postId: p.platformPostId ? String(p.platformPostId) : null, error: p.errorMessage || null, category: p.errorCategory || null };
 }
 
-/** Create one post on one platform and wait for it, up to timeoutMs. */
-export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true, sound = null, asDraft = false }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
+/**
+ * Create one post on one platform and wait for it, up to timeoutMs. A TikTok post that goes straight to the profile
+ * needs `consented`: a person approved this post (src/autonomy/rails.js approvedByPerson). Without it nothing is sent.
+ */
+export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true, sound = null, asDraft = false, consented = false, idempotencyKey = null }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
   if (!zernioConfigured()) throw new ZernioError('ZERNIO_API_KEY is not set', { step: 'config', code: 'not_configured' });
+  if (platform === 'tiktok' && !(asDraft || (aiLabel && aiAsDraft)) && !consented) throw new ZernioError('a TikTok post goes straight to the profile only when a person approved it', { step: 'config', code: 'no_consent' });
   if (!accountId) throw new ZernioError(`no Zernio ${platform} account id in pack.json`, { step: 'config', code: 'no_account' });
   if (platform === 'tiktok' && (imageUrls.length < 2 || imageUrls.length > 35)) throw new ZernioError(`a TikTok photo post takes 2 to 35 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   if (platform === 'instagram' && imageUrls.length > 10) throw new ZernioError(`an Instagram carousel takes at most 10 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   let created;
   try {
-    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound, asDraft }), { headers: auth(), timeoutMs: 30_000 });
+    // Zernio's Idempotency-Key (docs.zernio.com/guides/idempotency): a create sent again with the same key within 24
+    // hours "creates nothing and returns the original post". A send whose answer was lost is sent again with its key,
+    // so it is made once (src/publish/index.js idempotencyKeyOf).
+    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound, asDraft }), { headers: { ...auth(), ...(idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).slice(0, 255) } : {}) }, timeoutMs: 30_000 });
   } catch (e) {
     throw new ZernioError(e.message, { step: 'create', code: e.code, status: e.status, category: e.body?.error?.errorCategory || null });
   }
@@ -108,14 +121,43 @@ export async function publishZernio({ platform, accountId, caption, imageUrls, p
   const deadline = Date.now() + timeoutMs;
   while (!['published', 'failed', 'cancelled'].includes(part.status) && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, pollMs));
-    const { post } = await getJson(`${BASE()}/posts/${encodeURIComponent(id)}`, { headers: auth() });
-    part = partOf(post, platform);
+    // Zernio has the post: a read that fails now says nothing about it. It is recorded under its id, still processing,
+    // like one the wait ran out on, and read again later; never a failure, which would invite a second post.
+    try {
+      const { post } = await getJson(`${BASE()}/posts/${encodeURIComponent(id)}`, { headers: auth() });
+      part = partOf(post, platform);
+    } catch (e) {
+      part = { ...part, status: part.status || 'pending', pollError: String(e.message).slice(0, 200) };
+      break;
+    }
   }
   if (part.status === 'failed' || part.status === 'cancelled') {
-    throw new ZernioError(`${platform} refused the post: ${part.error || part.status}`, { step: 'status', code: part.category || part.status, category: part.category });
+    throw new ZernioError(`${platform} refused the post: ${part.error || part.status}`, { step: 'status', code: part.category || part.status, category: part.category, zernioId: id });
   }
   const draft = Boolean((asDraft || (aiLabel && aiAsDraft)) && platform === 'tiktok');
-  return { via: 'zernio', zernioId: id, postId: part.postId, url: part.url, status: part.status, pending: part.status !== 'published', draft, ...(platform === 'tiktok' && sound?.id && !draft ? { sound } : {}) };
+  return { via: 'zernio', zernioId: id, postId: part.postId, url: part.url, status: part.status, pending: part.status !== 'published', draft, ...(part.pollError ? { pollError: part.pollError } : {}), ...(platform === 'tiktok' && sound?.id && !draft ? { sound } : {}) };
+}
+
+/** A platform entry's statuses while Zernio is still sending it (docs.zernio.com/guides/post-lifecycle). */
+export const ZERNIO_SENDING = ['pending', 'processing', 'uploading'];
+
+/**
+ * What became of a post Zernio took, on one platform: { status, pending, postId, url }, read with GET /v1/posts/{id},
+ * the read the poll above makes (docs.zernio.com/guides/post-lifecycle: an entry is pending, processing, uploading,
+ * published, failed or cancelled). Read before a failed post is sent again, so a post that is out or still being sent
+ * is never made twice. Throws when Zernio does not answer, or answers anything but a post (a 404 is not described in
+ * Zernio's docs): what cannot be confirmed is never sent again.
+ */
+export async function zernioPostState(zernioId, platform) {
+  let body;
+  try {
+    body = await getJson(`${BASE()}/posts/${encodeURIComponent(zernioId)}`, { headers: auth() });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'status', code: e.code || 'network', status: e.status, zernioId });
+  }
+  if (!body?.post) throw new ZernioError('Zernio answered without the post', { step: 'status', code: 'no_post', zernioId });
+  const part = partOf(body.post, platform);
+  return { status: part.status, pending: ZERNIO_SENDING.includes(part.status), postId: part.postId, url: part.url };
 }
 
 // The chart moves slowly; one read serves an account's posts for a few hours.

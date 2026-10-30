@@ -11,10 +11,10 @@ import { israelDate } from '../schedule/israel.js';
 import { loadPost } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
 import { waitingImages } from '../images/index.js';
-import { canRun } from '../autonomy/rails.js';
+import { approvedByPerson, canRun } from '../autonomy/rails.js';
 import { notify } from '../notify/index.js';
 import { externalPosts, matchDraft, postBody, publishZernio, zernioConfigured } from './zernio.js';
-import { captionOf, publicUrls, publisherFor, recheck, soundFor, tiktokMode } from './index.js';
+import { captionOf, publicUrls, publisherFor, recheck, soundFor, tiktokModeFor } from './index.js';
 import { zernioAccountId } from './connect.js';
 
 const MINUTE = 60_000;
@@ -40,10 +40,22 @@ const MINUTE = 60_000;
 //
 // Draft-now (the default mode) sends its draft at approval and its one reminder at the slot (src/publish/index.js);
 // here its drafts are only matched to the owner's post, so the numbers can be read. Never a fallback.
+//
+// A post whose only part sent is its TikTok draft is 'drafted', not published, until the owner's post is found here
+// (or the fallback publishes it): only then is it out, and only then counted in results, summaries and emails.
+//
+// The fallback publishes a post straight to the profile, which TikTok allows only on its owner's preview and consent:
+// it runs only for a post a person approved, never one the engine approved (src/publish/index.js tiktokModeFor), and
+// never on a customer's account, which is draft-now.
 
 export const REMIND_MIN = 30;
 export const FALLBACK_MIN = 60;
 export const WATCH_HOURS = 24;
+
+/** A drafted post is out once the owner's post is found, or the fallback's: published, as of then. */
+function nowOut(db, post, t) {
+  if (loadPost(db, post.id)?.status === 'drafted') db.update('posts', post.id, { status: 'published', published_at: new Date(t).toISOString(), updated_at: nowIso() });
+}
 
 /** What a TikTok draft post is now, in the owner's words. */
 export const FLOW_HE = {
@@ -139,6 +151,7 @@ export async function watchDrafts(ctx, { t = now(), list = null, send = null } =
         results.tiktok.zernioId = m.id;
         claimed.push(m.id);
         save(db, post.id, results);
+        nowOut(db, post, t);
         step(db, post.id, 'tiktok', 'ok', { flow: 'mine', external: m.id, url: m.url });
         out.push({ post: post.id, state: 'mine' });
         continue;
@@ -172,7 +185,7 @@ async function fallback(ctx, pack, post, { t, said }) {
   const run = canRun(db, pack.id);
   if (!run.ok) return { state: 'waiting', why: run.why };
   if (waitingImages(db, post).length) return { state: 'waiting', why: 'image review' };
-  if (tiktokMode(pack) !== 'draft-fallback') return { state: 'waiting', why: 'the account is no longer in draft-fallback' };
+  if (tiktokModeFor(db, pack, post) !== 'draft-fallback') return { state: 'waiting', why: 'the account is no longer in draft-fallback, or no person approved the post' };
   const problems = recheck(db, post, pack);
   if (problems.length) {
     flow.state = 'stopped';
@@ -195,6 +208,7 @@ async function fallback(ctx, pack, post, { t, said }) {
         platform: 'tiktok', accountId, caption: captionOf(db, post, 'tiktok'), imageUrls: publicUrls(post, 'tiktok'), privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
         // Direct, label and all (HARD RULE 4): a platform that refuses the label refuses the post, never takes it unlabelled.
         aiLabel: Boolean(post.ai_label), aiAsDraft: false, title: oneLine(post.hook), sound: await soundFor(db, pack, accountId),
+        consented: approvedByPerson(post),
       });
     } else {
       const dir = path.join(outDir(), 'published', pack.id, israelDate(t), post.id);
@@ -208,6 +222,7 @@ async function fallback(ctx, pack, post, { t, said }) {
     flow.fallback = { at: new Date(t).toISOString(), via, zernioId: r.zernioId || null, url: r.url || null, sound: r.sound || null };
     if (r.zernioId) results.tiktok.zernioId = r.zernioId;
     save(db, post.id, results);
+    nowOut(db, post, t);
     step(db, post.id, 'tiktok', 'ok', { flow: 'fallback', via, zernioId: r.zernioId || null });
     audit(db, { action: 'tiktok_fallback', accountId: pack.id, postId: post.id, detail: { via } });
     await said('fallback', `${pack.meta.displayName}: פורסם אוטומטית`, `${oneLine(post.hook)}\nהפוסט עלה עם מוזיקה מהספרייה. מחקו את הטיוטה מתיבת הטיוטות בטיקטוק.`);

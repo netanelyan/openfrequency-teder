@@ -32,7 +32,7 @@ const MAX_BODY = 64 * 1024;
 /** The posts a customer may still reject or edit (a sample is the operator's, never the assistant's). */
 const DECIDE = ['queued', 'approved'];
 /** The posts a customer may post by hand. */
-const READY = ['approved', 'publishing', 'published'];
+const READY = ['approved', 'publishing', 'drafted', 'published'];
 const ERROR_OF = { 400: 'bad_request', 403: 'forbidden', 404: 'not_found', 409: 'wrong_state', 413: 'too_large', 422: 'refused' };
 
 export const isAssistantPath = (p) => p.startsWith(PREFIX);

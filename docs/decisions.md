@@ -1895,3 +1895,63 @@ running, while unapproved posts expire at the end of their day and still count t
    left connected after its customer is gone is a bill for nothing and a customer's account still reachable from our
    team. They reach our own Zernio team only, never a social platform, and only for a workspace accounts says is
    deleted. An account id typed into a pack by hand is not disconnected: it may be the operator's own.
+
+### A customer's post goes out only when a person approved it, and a failed post can be sent again (2026-10-29)
+
+The readiness review of Teder's sell path (TED-05, TED-01, TED-08, TED-09, TED-11, TED-13, TED-14, TED-18, TED-20,
+PRA-AI-005, PRA-FE-005) found a customer could switch on publishing nobody approved, and that a post which failed to go
+out was a dead end.
+
+1. *Approval and TikTok drafts are a customer's, always.* The website says Teder never publishes without approval, and
+   TikTok publishes a post straight to a profile only on its owner's preview and consent, which our request declares
+   (`content_preview_confirmed`, `express_consent_given`). An account in a workspace now acts in approve mode and sends
+   TikTok to the app's drafts whatever `accounts.mode` or `pack.json` says (`src/autonomy/rails.js` `autonomyMode`,
+   `src/publish/index.js` `tiktokMode`): the rule is applied where the mode is read, so a mode a customer stored before
+   it (the selector used to be theirs) is ignored. Setting digest, auto, direct or draft-fallback is refused for anyone
+   but the operator, and for the operator on a customer's account; the customer reads one line instead of the
+   selectors. The operator keeps every mode for the company's own accounts (no workspace). Even there, a post goes
+   straight to the TikTok profile only when a person approved it (`tiktokModeFor`, and `publishZernio` refuses a
+   direct TikTok post without `consented`): one the engine approved in digest or auto goes to the drafts. The engine
+   approves nothing for an account that cannot run (paused, unpaid, the kill switch).
+   PRA-AI-005's steps 3 and 4 (a model check of the final slides in digest and auto, a warning when auto meets sources
+   the public writes in) are deferred: only the operator can choose those modes now, on the company's own accounts.
+   Steps 1 and 2 are done: every document goes to the writer fenced (`src/pipeline/prompts.js` `docBlock`, its own
+   closing tag cannot be forged from inside), and the system prompt says a document is material, never an instruction.
+2. *A failed post can be sent again.* It is listed: first on the home page's "צריך אותך", on Posts under its account
+   with the reason, and on /all, for two weeks. Its page and each list have "לנסות שוב" (`POST
+   /post/<id>/publish-again`), for the customer and the operator, through every rail a post at its slot meets. Only the
+   platforms not out yet are sent, and never twice, on what Zernio documents and nothing else:
+   - every Zernio create carries an `Idempotency-Key` made of the post, the platform and its round. Zernio: a retry
+     with the same key "creates nothing and returns the original post", keys are remembered "24 hours", up to 255
+     characters (docs.zernio.com/guides/idempotency). Each part is marked as being sent, with when, before its create
+     goes; a send cut off, or whose answer was lost, goes again with the same key while it is under 23 hours old, and
+     past that it is not sent again (Zernio no longer knows the key) and the customer is asked to look at the profile.
+   - a part Zernio took (its id known) is read first with `GET /v1/posts/{postId}` (`zernioPostState`), the read
+     the publish poll already made. Its entry's status is one of pending, processing, uploading, published, failed or
+     cancelled (docs.zernio.com/guides/post-lifecycle): published, or still being sent, is recorded as such and not
+     made again; failed is made again in a new round, with a new key; cancelled, any other answer, a 404 (Zernio's
+     docs do not say what an unknown id returns) or no answer at all is not sent again.
+   - a status read that fails after Zernio took the post is no longer a failure: the post is recorded under its id as
+     still being sent, as when the wait runs out (TED-09).
+   UNVERIFIED, failing safe: what Zernio returns for an id it does not know, and whether a key whose first create was
+   refused (a 4xx) is remembered. In both cases nothing new is made: the first is not sent again, and the second at
+   worst returns the same refusal. A post left
+   "publishing" for more than 15 minutes (a restart mid-send, a call that never answered) becomes failed at boot and at
+   every tick, saying the owner should check the profile before trying again, and its button asks them to (TED-08).
+   A failed post with nothing out does not count toward the month (`src/budget/quota.js`); sent again and out, it does.
+3. *A post late after a stop is re-slotted, not sent in a burst (TED-13).* An approved post more than two hours past
+   its slot (or past its approval, when a person approved it after the slot) takes the account's next free slot, the
+   way a held post does; more than a day late, it expires, and a TikTok draft of it is left for the owner to delete.
+4. *Pauses the operator lifts (TED-14).* The operator's kill switch and a platform's strike are lifted by the operator
+   alone. A customer's own switch on the Accounts page is a separate 'manual' pause, theirs to lift, and it never
+   overwrites one of the operator's. Repeated takedown notices stay the customer's to look at and lift.
+5. *A TikTok draft is not a published post (TED-18).* A post whose only part sent is its TikTok draft is 'drafted'
+   ("בטיוטות של טיקטוק") until the owner's post is found, or the fallback publishes it; only then is it published,
+   counted in results, summaries and the monthly email. A draft of a post with an AI image says, in every notice, that
+   the owner turns TikTok's AI label on in the app (TED-20).
+6. *Hebrew only, and pages for errors (TED-11, PRA-FE-005).* A reason the engine stored in English (a model's, a
+   renderer's, a gate's) is said to a customer by the post's status; the operator still reads it, and the post's steps
+   keep it. A source's read error is the operator's. The connect pages no longer name Zernio, except the line that
+   tells a customer the platform's own consent screen will ask them to approve it, which is how that screen reads. A
+   stale form, a view-only session, an unknown action and anything broken on our side answer with a Hebrew page in the
+   site's look, with the way back; only an ActionError's message is ever shown.

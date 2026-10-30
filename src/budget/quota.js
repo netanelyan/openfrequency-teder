@@ -22,6 +22,11 @@ import { monthSpend } from './ledger.js';
 // never stops a post.
 
 export const DEFAULT_PLAN = { suggested: 40, redos: 10 };
+/**
+ * Which posts count: every one that reached the customer, except one that failed to publish with nothing of it out
+ * (published_at is when a part went out): that one is not theirs to lose. Sent again and out, it counts again.
+ */
+const COUNTS = "NOT (status = 'failed' AND published_at IS NULL)";
 /** How long a draft in progress holds a place in the quota. */
 export const HOLD_MS = 24 * HOUR;
 /** The most the operator may set, so a typo cannot open an account to thousands of posts. */
@@ -74,7 +79,7 @@ export function usage(db, accountId, t = now()) {
   const month = monthKey(t);
   const plan = planOf(db, accountId);
   const used = Object.fromEntries(
-    db.all("SELECT quota_kind, COUNT(*) AS n FROM posts WHERE account_id = ? AND quota_month = ? AND quota_kind IN ('suggestion', 'redo') GROUP BY quota_kind", accountId, month).map((r) => [r.quota_kind, r.n])
+    db.all(`SELECT quota_kind, COUNT(*) AS n FROM posts WHERE account_id = ? AND quota_month = ? AND quota_kind IN ('suggestion', 'redo') AND ${COUNTS} GROUP BY quota_kind`, accountId, month).map((r) => [r.quota_kind, r.n])
   );
   const since = new Date(t - HOLD_MS).toISOString();
   const held = Object.fromEntries(

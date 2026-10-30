@@ -111,7 +111,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
     else if (!s) steps.push(step(platform, title, 'todo', { ...opt, detail: 'מחברים אחרי שהחשבון נוצר.' }));
     else if (s.state === 'connected') steps.push(step(platform, title, 'done', { ...opt, detail: s.username ? `@${s.username}` : '' }));
     else if (s.state === 'reconnect') steps.push(step(platform, title, 'attention', { ...opt, detail: `החיבור הפסיק לעבוד, ופוסטים לא מגיעים ל${name} עד שמחברים מחדש.`, href: panel }));
-    else steps.push(step(platform, title, 'todo', { ...opt, detail: `מחברים דרך Zernio ומאשרים במסך של ${name}.`, href: panel }));
+    else steps.push(step(platform, title, 'todo', { ...opt, detail: `לוחצים על החיבור ומאשרים במסך של ${name}.`, href: panel }));
   }
 
   return { product: 'teder', ready: steps.every((x) => !x.required || x.status === 'done'), steps };

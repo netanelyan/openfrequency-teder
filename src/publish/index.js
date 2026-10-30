@@ -14,15 +14,15 @@ import { verifyFact } from '../verify/claims.js';
 import { documentYears, formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
 import { imageCredit, waitingImages } from '../images/index.js';
-import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
-import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured } from './zernio.js';
+import { approvedByPerson, canRun, isCustomerAccount, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
+import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured, zernioPostState } from './zernio.js';
 import { assignSound } from '../pipeline/sounds.js';
 import { notify } from '../notify/index.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
 import { zernioAccountId } from './connect.js';
 import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
 import { heldReason, needsConnection } from './hold.js';
-import { publishErrorHe } from './errors.js';
+import { FACT_CHECK_HE, publishErrorHe } from './errors.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
 // platforms, each by the publisher the pack names for it:
@@ -119,17 +119,41 @@ export function recheck(db, post, pack) {
  *   draft-fallback  the draft goes at the slot, a reminder at half an hour, and at an hour a draft still not out is
  *                   published directly (src/publish/draft.js).
  *   direct          published at the slot.
+ *
+ * A customer's account (one in a workspace) is always draft-now, whatever pack.json says: direct and draft-fallback
+ * are the operator's, for the company's own accounts (src/autonomy/rails.js). Without `db` the pack's own setting is
+ * read, for what only describes the pack; whatever sends, or shows a customer's mode, passes `db`.
  */
-export const tiktokMode = (pack) => pack.meta.zernio?.tiktokMode || 'draft-now';
+export function tiktokMode(pack, db = null) {
+  if (db && isCustomerAccount(db, pack.id)) return 'draft-now';
+  return pack.meta.zernio?.tiktokMode || 'draft-now';
+}
+
+/**
+ * The way one post's TikTok part goes out. TikTok publishes a post straight to a profile only on its owner's preview
+ * and consent, and our request says they gave both (src/publish/zernio.js): so a post goes direct (direct, or
+ * draft-fallback's publish at an hour) only when a person approved it. A post the engine approved (digest, auto) goes
+ * to the drafts, for the owner to see and publish in the app.
+ */
+export function tiktokModeFor(db, pack, post) {
+  const mode = tiktokMode(pack, db);
+  return mode !== 'draft-now' && !approvedByPerson(post) ? 'draft-now' : mode;
+}
 
 /** A reminder that comes this late is no use: a server down at the hour sends it later, but not after this. */
 export const REMIND_LATE_HOURS = 12;
+
+/**
+ * A draft's AI image is labelled by its owner: TikTok takes the label on a direct post, and a draft is published in
+ * the app, where the label is theirs to turn on (HARD RULE 4). Said in every notice about such a draft.
+ */
+export const AI_LABEL_HE = 'יש במצגת תמונה שנוצרה ב-AI: לפני שמפרסמים, מסמנים בטיקטוק שהתוכן נוצר ב-AI.';
 
 /** The reminder at the slot, draft-now's only notification: the account, the cover line, the sound. */
 export function reminderNotice(pack, post, sound) {
   return {
     title: `${pack.meta.displayName}: הגיעה השעה לפרסם בטיקטוק`,
-    body: [oneLine(post.hook), 'הטיוטה מחכה בתיבת הטיוטות של טיקטוק.', sound ? `סאונד: ${sound.name} · ${sound.artist}${sound.stale ? ' (ישן, החליפו ברשימה)' : ''}` : ''].filter(Boolean).join('\n'),
+    body: [oneLine(post.hook), 'הטיוטה מחכה בתיבת הטיוטות של טיקטוק.', sound ? `סאונד: ${sound.name} · ${sound.artist}${sound.stale ? ' (ישן, החליפו ברשימה)' : ''}` : '', post.ai_label ? AI_LABEL_HE : ''].filter(Boolean).join('\n'),
   };
 }
 
@@ -140,7 +164,7 @@ export const captionOf = (db, post, platform) => [platform === 'instagram' && po
 export function draftNotice(pack, post, sound) {
   return {
     title: `${pack.meta.displayName}: טיוטה מחכה בטיקטוק`,
-    body: [oneLine(post.hook), sound ? `סאונד: ${sound.name} · ${sound.artist}${sound.stale ? ' (ישן, החליפו ברשימה)' : ''}` : 'אין סאונד ברשימה: הוסיפו בדף הסאונדים', 'אם לא תפרסמו תוך שעה, הפוסט יעלה אוטומטית עם מוזיקה מהספרייה.'].join('\n'),
+    body: [oneLine(post.hook), sound ? `סאונד: ${sound.name} · ${sound.artist}${sound.stale ? ' (ישן, החליפו ברשימה)' : ''}` : 'אין סאונד ברשימה: הוסיפו בדף הסאונדים', post.ai_label ? AI_LABEL_HE : '', 'אם לא תפרסמו תוך שעה, הפוסט יעלה אוטומטית עם מוזיקה מהספרייה.'].filter(Boolean).join('\n'),
   };
 }
 
@@ -194,7 +218,8 @@ function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', be
 
   const problems = recheck(db, post, pack);
   if (problems.length) {
-    db.update('posts', post.id, { status: 'blocked', reason: `בדיקת העובדות נכשלה ${before}: ${problems[0]}`, updated_at: nowIso() });
+    // The customer reads it in Hebrew; which fact and why are in the step, in the gate's own words.
+    db.update('posts', post.id, { status: 'blocked', reason: stepName === 'publish' ? FACT_CHECK_HE : `בדיקת העובדות עצרה את המצגת ${before}: עובדה בה כבר לא תואמת למקור שלה, או שהמקור הוסר.`, updated_at: nowIso() });
     step(db, post.id, stepName, 'failed', { kind: 'fact_check', problems });
     throw new PublishRefused(`fact check failed ${stepName === 'publish' ? 'before publishing' : 'before the TikTok draft'}: ${problems[0]}`, 'fact_check');
   }
@@ -208,6 +233,60 @@ function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', be
 
 /** A platform's part that is out, or a draft in the app: never sent again. */
 const done = (r) => r && !r.error && (r.status === 'published' || r.status === 'written' || r.pending || r.zernioId || r.mediaId || r.flow);
+
+/**
+ * A platform's part that is really out: not a TikTok draft waiting in the app for its owner, not skipped. A dry run's
+ * draft counts, since nobody will ever publish it from an app.
+ */
+const isOut = (r) => Boolean(done(r)) && !r.skipped && (!r.flow || r.via === 'dry');
+
+// NEVER TWICE, on a retry too. Every Zernio post is created with an Idempotency-Key made of the post, the platform and
+// its round (idempotencyKeyOf): Zernio answers a create sent again with the same key, within 24 hours, with the post it
+// already made (docs.zernio.com/guides/idempotency). Before each create, the part is marked as being sent, with when;
+// so a send cut off, or whose answer was lost, is sent again with the same key and made once. Past 24 hours Zernio has
+// forgotten the key: such a send cannot be confirmed, and is not sent again. A part Zernio took (its id is known) is
+// asked about first (zernioPostState): out or still being sent, it is recorded as such; failed there, it is made
+// again in a new round, with a new key; anything else (cancelled, unknown, Zernio not answering) is not sent again.
+
+/** How long Zernio keeps an Idempotency-Key (docs.zernio.com/guides/idempotency), less an hour's margin. */
+export const IDEMPOTENCY_MS = 23 * HOUR;
+
+/** The key of one post's part on one platform, in one round: the same key for every send of that round. */
+export const idempotencyKeyOf = (postId, platform, round = 1) => `teder:${postId}:${platform}:${round}`;
+
+/** Said when a part cannot be confirmed: it is not sent again, and a person looks. */
+export class Unconfirmed extends PublishRefused {
+  constructor(message) {
+    super(message, 'unconfirmed');
+  }
+}
+
+/**
+ * What a retry does with a part sent before: { out } (recorded as out or still being sent), { round } (sent in that
+ * round), or throws Unconfirmed. A part never sent, or a TikTok draft (a draft is only ever the owner's to publish),
+ * is { round: 1 }.
+ */
+async function settled(r, platform, t) {
+  if (!r || r.flow || r.via !== 'zernio') return { round: 1 };
+  const round = Number(r.round) || 1;
+  if (r.zernioId && r.error) {
+    let st;
+    try {
+      st = await zernioPostState(r.zernioId, platform);
+    } catch (e) {
+      throw new Unconfirmed(`Zernio could not say what became of ${r.zernioId}: ${e.message}`);
+    }
+    if (st.status === 'published' || st.pending) return { out: { via: 'zernio', zernioId: r.zernioId, postId: st.postId, url: st.url, status: st.status, pending: st.status !== 'published', round, checkedAgain: true } };
+    if (st.status === 'failed') return { round: round + 1 };
+    throw new Unconfirmed(`Zernio says ${r.zernioId} is ${st.status || 'in no known state'}`);
+  }
+  // Sent before without an id coming back (cut off, or the answer lost): the same key, while Zernio remembers it.
+  if (r.sendingAt && !r.zernioId) {
+    if (t - Date.parse(r.sendingAt) > IDEMPOTENCY_MS) throw new Unconfirmed(`a send at ${r.sendingAt} never answered, and Zernio keeps its key for 24 hours`);
+    return { round };
+  }
+  return { round };
+}
 
 export async function publishPost(ctx, postId, { t = now() } = {}) {
   const { db } = ctx;
@@ -242,8 +321,26 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   let failed = null;
   let failedOn = null;
   const vias = {};
+  // The post's TikTok mode, once: a customer's is draft-now, and only a post a person approved goes direct.
+  const mode = tiktokModeFor(db, pack, post);
   for (const platform of pack.meta.platforms) {
     if (done(results[platform])) continue; // out already: never twice
+    // Sent before: what became of it is settled first, and nothing that cannot be confirmed is sent again.
+    let round = 1;
+    try {
+      const was = await settled(results[platform], platform, t);
+      if (was.out) {
+        results[platform] = was.out;
+        continue;
+      }
+      round = was.round;
+    } catch (e) {
+      results[platform] = { ...results[platform], error: String(e.message).slice(0, 300), code: e.code || 'unconfirmed' };
+      failed = e;
+      failedOn = platform;
+      ctx.log?.(`[publish] ${postId} ${platform}: not sent again: ${e.message}`);
+      break;
+    }
     // Not connected while the post's other platform is: that one goes, this one is skipped.
     if (missing.includes(platform)) {
       results[platform] = { via: 'zernio', skipped: 'not_connected', at: new Date(t).toISOString() };
@@ -253,14 +350,16 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     vias[platform] = via;
     // A TikTok draft (draft-now, or draft-fallback): the post goes to the app's inbox with a sound from the account's
     // list named for it. The draft's Zernio id is not the post's (nothing is out yet).
-    const mode = tiktokMode(pack);
     const asDraft = platform === 'tiktok' && mode !== 'direct';
-    const flow = asDraft ? newFlow(db, pack, post, t) : null;
+    const flow = asDraft ? newFlow(db, pack, post, t, mode) : null;
     try {
       if (asDraft) {
         results[platform] = { ...(await draftRequest(db, pack, post, via, t)), flow };
       } else if (via === 'zernio') {
         const accountId = zernioAccountId(db, pack, platform);
+        // Marked before it is sent, with its round: a send cut off here is found, and sent again with the same key.
+        results[platform] = { via: 'zernio', round, sendingAt: new Date(t).toISOString() };
+        db.update('posts', postId, { publish_json: results, updated_at: nowIso() });
         results[platform] = await publishZernio({
           platform,
           accountId,
@@ -270,7 +369,10 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
           aiLabel: Boolean(post.ai_label),
           title: oneLine(post.hook),
           sound: platform === 'tiktok' ? await soundFor(db, pack, accountId) : null,
+          consented: approvedByPerson(post),
+          idempotencyKey: idempotencyKeyOf(postId, platform, round),
         });
+        results[platform] = { ...results[platform], round };
       } else if (via === 'instagram') {
         results[platform] = await publishInstagram(db, pack, { caption: captionFor(platform), imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });
       } else if (via === OWN_APP) {
@@ -288,7 +390,9 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want };
       }
     } catch (e) {
-      results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null };
+      // A post Zernio took keeps its id, and every send its round and when it went: a retry settles them first
+      // (settled). A draft's id is never a post that is out, and is not kept.
+      results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null, zernioId: asDraft ? null : e.zernioId || results[platform]?.zernioId || null };
       failed = e;
       failedOn = platform;
       ctx.log?.(`[publish] ${postId} ${platform} via ${via}: ${e.message}`);
@@ -313,12 +417,17 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     if (t - Date.parse(tk.flow.slotAt) <= REMIND_LATE_HOURS * HOUR) remind = tk.flow;
     tk.flow[remind ? 'remindedAt' : 'missedAt'] = new Date(t).toISOString();
   }
-  const status = ok ? 'published' : retry ? 'approved' : 'failed';
+  // A post whose only part sent is a TikTok draft (TikTok alone, or Instagram skipped) is not out: it is 'drafted',
+  // waiting for its owner in the app, and becomes published when their post is found (src/publish/draft.js).
+  const anyOut = pack.meta.platforms.some((p) => isOut(results[p]));
+  const status = ok ? (anyOut ? 'published' : 'drafted') : retry ? 'approved' : 'failed';
   db.update('posts', postId, {
     status,
     reason: ok ? null : `${retry ? 'ננסה שוב: ' : ''}${publishErrorHe(failed, failedOn)}`,
     publish_json: { ...results, ...(retry ? { _attempts: attempts } : {}) },
-    published_at: ok ? new Date(t).toISOString() : null,
+    // When it went out; a draft's, when it was sent to the app. A failed post with a part out keeps when that was: it
+    // counts toward the month, and one with nothing out does not (src/budget/quota.js).
+    published_at: ok || (anyOut && !retry) ? new Date(t).toISOString() : null,
     updated_at: nowIso(),
   });
   step(db, postId, 'publish', ok ? 'ok' : 'failed', { via: vias, results, attempt: attempts, retry });
@@ -351,9 +460,9 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
 }
 
 /** A new draft's state: waiting for the owner, with a sound from the account's list named for it. */
-function newFlow(db, pack, post, t) {
+function newFlow(db, pack, post, t, mode = tiktokModeFor(db, pack, post)) {
   const at = new Date(t).toISOString();
-  return { ...(tiktokMode(pack) === 'draft-now' ? { mode: 'now' } : {}), state: 'waiting', sentAt: at, slotAt: post.slot_at || at, sound: assignSound(db, pack.id, { t }), remindedAt: null };
+  return { ...(mode === 'draft-now' ? { mode: 'now' } : {}), state: 'waiting', sentAt: at, slotAt: post.slot_at || at, sound: assignSound(db, pack.id, { t }), remindedAt: null };
 }
 
 /** One TikTok draft through `via`: to Zernio (or our own app, once built), or to disk with the exact request Zernio would have received. */
@@ -391,7 +500,7 @@ export async function sendDraft(ctx, postId, { t = now() } = {}) {
   const { db } = ctx;
   const post = loadPost(db, postId);
   const pack = post && ctx.pack(post.account_id);
-  if (!pack || tiktokMode(pack) !== 'draft-now' || !pack.meta.platforms.includes('tiktok')) return { state: 'skip', why: 'not draft-now' };
+  if (!pack || tiktokModeFor(db, pack, post) !== 'draft-now' || !pack.meta.platforms.includes('tiktok')) return { state: 'skip', why: 'not draft-now' };
   const had = post.publish?.tiktok;
   const tries = Number(had?.tries) || 0;
   if (had?.uploading && t - Date.parse(had.uploading) < UPLOAD_STUCK_MS) return { state: 'skip', why: 'on its way' };
@@ -436,8 +545,10 @@ export async function sendDraft(ctx, postId, { t = now() } = {}) {
 export async function sendWaitingDrafts(ctx, { t = now(), perAccount = 3 } = {}) {
   const out = [];
   for (const pack of ctx.packs) {
-    if (tiktokMode(pack) !== 'draft-now' || !pack.meta.platforms.includes('tiktok')) continue;
-    const rows = ctx.db.all("SELECT id, publish_json FROM posts WHERE account_id = ? AND status = 'approved' ORDER BY slot_at", pack.id);
+    if (!pack.meta.platforms.includes('tiktok')) continue;
+    // A pack that is not draft-now still drafts the posts the engine approved (tiktokModeFor): those alone are asked about.
+    const engineOnly = tiktokMode(pack, ctx.db) !== 'draft-now';
+    const rows = ctx.db.all(`SELECT id, publish_json FROM posts WHERE account_id = ? AND status = 'approved'${engineOnly ? " AND approved_by LIKE 'engine:%'" : ''} ORDER BY slot_at`, pack.id);
     const want = rows.filter((r) => {
       const tk = j(r.publish_json, {}).tiktok;
       return !tk || (tk.error && (Number(tk.tries) || 0) < DRAFT_TRIES) || (tk.uploading && t - Date.parse(tk.uploading) >= UPLOAD_STUCK_MS);

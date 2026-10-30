@@ -24,13 +24,49 @@ export const PAUSE_REASONS = {
 /** Why an account of a workspace that has not paid writes and publishes nothing. */
 export const UNPAID = 'התשלום על תדר לא פעיל בחשבון';
 
+// A CUSTOMER'S POST GOES OUT ONLY WHEN A PERSON APPROVED IT. An account in a workspace is a customer's: it acts in
+// approve mode whatever accounts.mode says, and its TikTok goes to the app's drafts (src/publish/index.js tiktokMode).
+// Digest and auto, and TikTok straight to the profile, are the operator's, for the company's own accounts (no
+// workspace). The rule is read here, where the mode is used, not only where it is set: a mode stored before the rule
+// (a customer could once pick digest or auto on the Accounts page) is ignored, not trusted. The website says Teder
+// never publishes without approval, and TikTok asks for the owner's preview and consent on each post it publishes.
+
+/** Is this account a customer's (in a workspace)? */
+export const isCustomerAccount = (db, accountId) => db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id != null;
+
+/** The autonomy mode the engine acts on: approve for a customer's account, the stored one for the operator's own. */
+export function autonomyMode(db, accountId) {
+  const row = db.get('SELECT mode, workspace_id FROM accounts WHERE id = ?', accountId);
+  if (!row || row.workspace_id != null) return 'approve';
+  return ['approve', 'digest', 'auto'].includes(row.mode) ? row.mode : 'approve';
+}
+
+/** Did a person approve this post? The engine's own approvals (digest, auto) are `engine:<mode>`; a demo's are 'auto'. */
+export const approvedByPerson = (post) => Boolean(post?.approved_by) && !/^engine:/.test(post.approved_by) && post.approved_by !== 'auto';
+
 export function pauseAccount(db, accountId, reason, detail = null, actor = 'engine') {
   const acc = db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', accountId);
   if (!acc) return;
-  // A kill switch outranks any automatic reason; never overwrite it.
+  // A kill switch outranks any automatic reason; never overwrite it. Nor does a customer's own pause overwrite a pause
+  // only the operator lifts: their resume would then lift that one too.
   if (acc.status === 'paused' && acc.paused_reason === 'kill' && reason !== 'kill') return;
+  if (acc.status === 'paused' && OPERATOR_PAUSES.includes(acc.paused_reason) && reason === 'manual') return;
   db.update('accounts', accountId, { status: 'paused', paused_reason: reason, paused_detail: detail ? String(detail).slice(0, 500) : null, paused_at: nowIso(), updated_at: nowIso() });
   audit(db, { actor, action: 'pause', accountId, detail: { reason, detail } });
+}
+
+/**
+ * Pauses only the operator lifts: the operator's kill switch, and a platform's strike (a post refused as a breach of
+ * its rules). The customer's own switch on the Accounts page is a 'manual' pause, and repeated takedown notices wait
+ * for the customer to look: both are theirs to lift (src/web/actions.js).
+ */
+export const OPERATOR_PAUSES = ['kill', 'strike'];
+
+/** May this person resume this paused account? The operator any pause; anyone else not OPERATOR_PAUSES. */
+export function mayResume(db, accountId, { operator = false } = {}) {
+  if (operator) return true;
+  const acc = db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', accountId);
+  return !(acc?.status === 'paused' && OPERATOR_PAUSES.includes(acc.paused_reason));
 }
 
 export function resumeAccount(db, accountId, actor = 'engine') {
