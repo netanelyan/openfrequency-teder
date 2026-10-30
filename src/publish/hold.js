@@ -8,6 +8,7 @@ import { instagramConfigured } from './instagram.js';
 import { retireDraft, wantedPublisher } from './index.js';
 import { loadPost } from '../pipeline/build.js';
 import { zernioConfigured } from './zernio.js';
+import { OPTIONAL_PLATFORMS } from '../core/platforms.js';
 
 // A post approved for a platform the customer has not connected yet is held, not failed.
 //
@@ -18,14 +19,19 @@ import { zernioConfigured } from './zernio.js';
 //     sent, nothing fails, nothing counts toward the publish-error streak. One of two platforms connected: the post goes
 //     to that one, and the other is marked skipped (not_connected) on the post.
 //   - the website shows a banner to connect, and accounts emails the owner once a day (src/notify/email.js).
+//   - a Facebook Page is optional (src/core/platforms.js): a post goes to TikTok and Instagram without one, a Page not
+//     connected is skipped like any platform left unconnected, and no banner or email asks for it while the account
+//     posts anywhere else.
 //   - once a platform is connected, the runner gives each held post the account's next free slot, in order, and it is
 //     approved again: it goes out at that slot like any other post (releaseHeld below).
 //
 // Only a real send can be held: in dry mode (PUBLISH_MODE not live) or without a Zernio key nothing goes to Zernio, and
 // a post is written to disk as before.
 
-export const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
-const both = (platforms) => platforms.map((p) => PLATFORM_HE[p] || p).join(' ואת ');
+export const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
+/** What to ask for, by name: an optional platform only when it is the one to ask for. */
+const asked = (platforms) => (platforms.some((p) => !OPTIONAL_PLATFORMS.includes(p)) ? platforms.filter((p) => !OPTIONAL_PLATFORMS.includes(p)) : platforms);
+const both = (platforms) => asked(platforms).map((p) => PLATFORM_HE[p] || p).join(' ואת ');
 
 /** Would this platform's part go through Zernio, the pack asking for it (auto: Instagram without our own Meta app)? */
 function viaZernio(db, pack, platform, env) {
@@ -37,6 +43,15 @@ function viaZernio(db, pack, platform, env) {
 export function unconnectedPlatforms(db, pack, env = process.env) {
   if (!zernioConfigured()) return [];
   return pack.meta.platforms.filter((p) => viaZernio(db, pack, p, env) && !zernioAccountId(db, pack, p));
+}
+
+/**
+ * What the banner and the email ask the customer to connect: the platforms with nothing connected, less a Facebook Page
+ * while the account has another platform to post to.
+ */
+export function missingConnections(db, pack, env = process.env) {
+  const open = unconnectedPlatforms(db, pack, env);
+  return pack.meta.platforms.some((p) => !OPTIONAL_PLATFORMS.includes(p)) ? open.filter((p) => !OPTIONAL_PLATFORMS.includes(p)) : open;
 }
 
 /** At the slot: is there nothing to send this platform's part to? Live sends only. */

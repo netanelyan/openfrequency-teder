@@ -23,14 +23,17 @@ import { zernioAccountId } from './connect.js';
 import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
 import { heldReason, needsConnection } from './hold.js';
 import { FACT_CHECK_HE, publishErrorHe } from './errors.js';
+import { mediaOf } from '../core/platforms.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
 // platforms, each by the publisher the pack names for it:
 //
-//   "publishers": { "tiktok": "zernio", "instagram": "zernio" }
+//   "publishers": { "tiktok": "zernio", "instagram": "zernio", "facebook": "zernio" }
 //
 // zernio      through Zernio, to the account the customer connected into the
-//             account's Zernio profile (src/publish/connect.js)
+//             account's Zernio profile (src/publish/connect.js). A Facebook
+//             Page's post goes this way only: Instagram's slides and caption,
+//             published at the slot like Instagram's, never a draft
 // instagram   directly through Meta's Graph API, our own Meta app (src/publish/instagram.js)
 // auto        Instagram only: our own Meta app when it is set up for the account,
 //             otherwise Zernio when the customer connected Instagram there
@@ -157,8 +160,13 @@ export function reminderNotice(pack, post, sound) {
   };
 }
 
-/** A platform's caption as it goes out: TikTok the long one, Instagram the short one, then the credits and the tags. */
-export const captionOf = (db, post, platform) => [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+/**
+ * A platform's caption as it goes out: TikTok the long one, Instagram and a Facebook Page the short one, then the
+ * credits and the tags. A Page takes Instagram's because its post is read the same way: the text above the photos,
+ * shown to its first lines before "See more", so it opens on the cover line and ends on the question, which on
+ * Facebook is what brings comments. TikTok's caption is written to sit under a slideshow that already said the hook.
+ */
+export const captionOf = (db, post, platform) => [(platform === 'instagram' || platform === 'facebook') && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
 
 /** The words of the notification that a TikTok draft is waiting: the account, the cover line, the sound. */
 export function draftNotice(pack, post, sound) {
@@ -168,7 +176,7 @@ export function draftNotice(pack, post, sound) {
   };
 }
 
-/** Copy a post's slides to the public media folder Caddy serves; returns their URLs. */
+/** Copy a post's slides to the public media folder Caddy serves; returns their URLs. A Page's are Instagram's. */
 export function publicUrls(post, platform) {
   const base = String(process.env.MEDIA_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   if (!/^https:\/\//.test(base)) throw new PublishRefused('MEDIA_PUBLIC_BASE_URL is not an https address: Zernio and Instagram fetch slides by URL', 'no_media_url');
@@ -178,7 +186,7 @@ export function publicUrls(post, platform) {
   const root = ensureDir(path.join(dataDir(), 'public'));
   const dir = ensureDir(path.join(root, token));
   for (const d of [root, dir]) chmodSync(d, 0o755);
-  return (post.media[platform] || []).map((f) => {
+  return (post.media[mediaOf(platform)] || []).map((f) => {
     const to = path.join(dir, path.basename(f));
     copyFileSync(f, to);
     chmodSync(to, 0o644);
@@ -300,7 +308,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   // One cut off mid-send is sent again below, as a draft.
   const up = post.publish?.tiktok?.uploading;
   if (up && t - Date.parse(up) < UPLOAD_STUCK_MS) throw new PublishRefused('the TikTok draft is on its way', 'draft_in_flight');
-  // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
+  // TikTok gets the long caption; Instagram and a Facebook Page the short one, which repeats the cover line.
   const captionFor = (platform) => captionOf(db, post, platform);
 
   // Nothing connected anywhere the post has to go, and nothing of it out yet: held until the customer connects.
@@ -380,7 +388,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
       } else {
         const dir = path.join(outDir(), 'published', pack.id, israelDate(t), postId);
         exportPost(db, postId, dir);
-        const urls = (post.media[platform] || []).map((f) => `<public url>/${path.basename(f)}`);
+        const urls = (post.media[mediaOf(platform)] || []).map((f) => `<public url>/${path.basename(f)}`);
         const want = dryShape(db, pack, platform);
         const body =
           want === 'instagram'

@@ -682,4 +682,25 @@ export const MIGRATIONS = [
   -- account when it is created: the choice to schedule:<account>, the profile and connections to the account's own.
   ALTER TABLE onboarding ADD COLUMN setup_json TEXT NOT NULL DEFAULT '{}';
   `,
+  `
+  -- facebook-page: a customer's Facebook Page is connected through Zernio like their TikTok and Instagram
+  -- (src/publish/connect.js), so a connection's platform may be facebook. SQLite cannot change a CHECK in place: the
+  -- table is made again with every row it had.
+  CREATE TABLE zernio_connections_next (
+    account_id        TEXT NOT NULL REFERENCES accounts(id),
+    platform          TEXT NOT NULL CHECK (platform IN ('tiktok','instagram','facebook')),
+    zernio_account_id TEXT NOT NULL,
+    username          TEXT,
+    status            TEXT NOT NULL CHECK (status IN ('connected','reconnect')),
+    issue             TEXT,
+    broken_at         TEXT,
+    connected_at      TEXT NOT NULL,
+    checked_at        TEXT NOT NULL,
+    PRIMARY KEY (account_id, platform)
+  );
+  INSERT INTO zernio_connections_next (account_id, platform, zernio_account_id, username, status, issue, broken_at, connected_at, checked_at)
+    SELECT account_id, platform, zernio_account_id, username, status, issue, broken_at, connected_at, checked_at FROM zernio_connections;
+  DROP TABLE zernio_connections;
+  ALTER TABLE zernio_connections_next RENAME TO zernio_connections;
+  `,
 ];

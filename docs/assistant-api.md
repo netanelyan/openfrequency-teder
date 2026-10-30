@@ -166,8 +166,10 @@ connection, as below, without links.
 
 ### `GET /customers/:ws/accounts/:id/connect`
 
-The account's TikTok and Instagram, and for each one that is not connected or stopped working, the link to send the
-customer ("tap here to connect"). Another workspace's account is `404 not_found`.
+The account's TikTok, Instagram and Facebook Page (each platform the account posts to), and for each one that is not
+connected or stopped working, the link to send the customer ("tap here to connect"). A Page is optional: posts go to
+TikTok and Instagram without one, so a Page not connected is worth offering, never worth a reminder. Another
+workspace's account is `404 not_found`.
 
 ```json
 { "ok": true, "account": { "id": "plants", "name": "...", "handle": "..." }, "linksExpireAt": "...",
@@ -183,14 +185,15 @@ to connect). `url` is set for `none` and `reconnect` while Zernio is configured,
 The link opens Teder, not Zernio: Zernio's own connect link works for 30 minutes, so Teder asks for a fresh one at the
 tap and sends the browser on. It opens for 72 hours, for that account and platform only, and needs no sign-in. Whoever
 holds it can connect an account there until it expires, so send it to the customer alone. Zernio's welcome screen comes
-first, then TikTok's or Instagram's consent screen, then a page of Teder's saying whether it connected. What is
+first, then TikTok's, Instagram's or Facebook's consent screen (for Facebook, then Teder's own page to pick the Page,
+when the customer manages more than one), then a page of Teder's saying whether it connected. What is
 connected is read from Zernio, never from that page's address. A reconnect connects the same account again, and its
 history is kept.
 
 ### `GET /customers/:ws/posts/:id/bundle`
 
 For a customer who posts by hand: per platform the post goes to, the slides, the caption (with the photo credits, without
-hashtags), the hashtags, and `text`, all of it as it would go out. Only for an approved, publishing or published post
+hashtags), the hashtags, and `text`, all of it as it would go out. A Facebook Page's are Instagram's slides and caption. Only for an approved, publishing or published post
 (`409 not_approved` otherwise).
 
 ```json

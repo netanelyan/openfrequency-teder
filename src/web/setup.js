@@ -15,8 +15,8 @@ import { forWorkspace } from './workspace.js';
 // where the step is done), or null when there is nothing to open yet. ready is every required step done.
 //
 // The steps follow the new-account flow (src/web/onboarding.js): account, sources, samples, live, then connect (required:
-// at least one of TikTok and Instagram connected, src/publish/connect.js, so the checklist never says ready with nothing
-// to publish to), then the tiktok and instagram connections one by one, optional. A workspace with several accounts is reported on one:
+// at least one platform connected, src/publish/connect.js, so the checklist never says ready with nothing to publish
+// to), then the tiktok, instagram and facebook connections one by one, optional. A workspace with several accounts is reported on one:
 // its newest live account (active, else paused), and without one its newest onboarding still under way. Once a
 // workspace has an account on air its setup is done; a second account being added does not undo it.
 //
@@ -25,7 +25,9 @@ import { forWorkspace } from './workspace.js';
 // onboarding's own Zernio profile (src/publish/connect.js onboardingStates), which the account takes over at create.
 // The days and times are not a step of their own: a new account always has them (the default, or what was chosen).
 
-export const STEP_KEYS = ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram'];
+export const STEP_KEYS = ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram', 'facebook'];
+/** The platforms the checklist reports on, each as its own optional step. */
+const STEP_PLATFORMS = ['tiktok', 'instagram', 'facebook'];
 const STAGE = { none: 0, discovering: 1, failed: 1, review: 2, samples: 3, ready: 4, live: 5 };
 
 /** The account and the onboarding the checklist reports on: { account, ob }, either one null. */
@@ -89,7 +91,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
   // Before the account exists: the onboarding's own panel and what was connected into its profile.
   const early = !pack && ob && ['discovering', 'failed', 'review'].includes(ob.status);
   const panel = account && pack ? at(account.status === 'onboarding' && ob ? `/new/${encodeURIComponent(ob.id)}#connect-${pack.id}` : `/accounts?account=${encodeURIComponent(pack.id)}#connect-${pack.id}`) : early ? at(`/new/${encodeURIComponent(ob.id)}#connect`) : null;
-  const states = pack ? pack.meta.platforms.filter((p) => ['tiktok', 'instagram'].includes(p)).map((p) => connectState(c.db, pack, p, env)) : early ? onboardingStates(c.db, ob.id) : [];
+  const states = pack ? pack.meta.platforms.filter((p) => STEP_PLATFORMS.includes(p)).map((p) => connectState(c.db, pack, p, env)) : early ? onboardingStates(c.db, ob.id) : [];
   const on = states.filter((s) => s.state === 'connected' || s.state === 'meta');
   const CONNECT = 'מחברים את טיקטוק או אינסטגרם';
   if (on.length) steps.push(step('connect', CONNECT, 'done', { detail: on.map((s) => `${PLATFORM_NAME[s.platform]} מחובר${s.username ? ` (@${s.username})` : ''}.`).join(' ') }));
@@ -98,9 +100,9 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
   else if (states.some((s) => s.state === 'reconnect')) steps.push(step('connect', CONNECT, 'attention', { detail: 'החיבור הפסיק לעבוד, ומצגות לא עולות עד שמחברים מחדש.', href: panel }));
   else steps.push(step('connect', CONNECT, 'todo', { detail: `${early ? 'אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. ' : ''}מחברים לפחות אחד מהשניים כדי שהמצגות יעלו. אינסטגרם צריך חשבון מקצועי, עסקי או יוצר.`, href: panel }));
 
-  // TikTok and Instagram, each on its own and optional: each platform the account publishes to (both, before there is
-  // an account).
-  for (const platform of ['tiktok', 'instagram']) {
+  // TikTok, Instagram and a Facebook Page, each on its own and optional: each platform the account publishes to (all
+  // three, before there is an account).
+  for (const platform of STEP_PLATFORMS) {
     if (pack && !pack.meta.platforms.includes(platform)) continue;
     const name = PLATFORM_NAME[platform];
     const title = `מחברים את ${name}`;
@@ -111,6 +113,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
     else if (!s) steps.push(step(platform, title, 'todo', { ...opt, detail: 'מחברים אחרי שהחשבון נוצר.' }));
     else if (s.state === 'connected') steps.push(step(platform, title, 'done', { ...opt, detail: s.username ? `@${s.username}` : '' }));
     else if (s.state === 'reconnect') steps.push(step(platform, title, 'attention', { ...opt, detail: `החיבור הפסיק לעבוד, ופוסטים לא מגיעים ל${name} עד שמחברים מחדש.`, href: panel }));
+    else if (platform === 'facebook') steps.push(step(platform, title, 'todo', { ...opt, detail: 'לא חובה. מחברים עמוד פייסבוק שאתם מנהלים, והמצגות יעלו גם אליו.', href: panel }));
     else steps.push(step(platform, title, 'todo', { ...opt, detail: `לוחצים על החיבור ומאשרים במסך של ${name}.`, href: panel }));
   }
 

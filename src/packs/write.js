@@ -3,8 +3,9 @@ import path from 'node:path';
 import { styleConfigProblems } from '../render/styles/tokens.js';
 
 // The settings of a pack the website writes: its slide style (pack.json "style"), when the owner picks one on the
-// Accounts page or a style test settles, and how its TikTok posts go out (zernio.tiktokMode, zernio.tiktokPrivacy,
-// publishers.tiktok). Everything else in a pack is the owner's to edit by hand. The file is read fresh, only those
+// Accounts page or a style test settles, how its TikTok posts go out (zernio.tiktokMode, zernio.tiktokPrivacy,
+// publishers.tiktok), and a platform added to it (Facebook, offered to the accounts customers made: src/publish/connect.js
+// offerFacebook). Everything else in a pack is the owner's to edit by hand. The file is read fresh, only those
 // keys are replaced, and it is written whole (a temporary file renamed over it), so a hand edit made since the engine
 // started is kept.
 
@@ -36,6 +37,22 @@ export function setPackPublishing(pack, { tiktokMode, tiktokPrivacy, tiktokPubli
   pack.meta.zernio = meta.zernio;
   if (meta.publishers) pack.meta.publishers = meta.publishers;
   return { zernio: meta.zernio, publishers: meta.publishers || null };
+}
+
+/**
+ * Add a platform to the pack's platforms, published through `publisher` (publishers.<platform>). A pack that already
+ * posts there is left as it is. Returns the pack's new platforms.
+ */
+export function addPackPlatform(pack, platform, publisher) {
+  const meta = rewrite(pack, (m) => {
+    if ((m.platforms || []).includes(platform)) return;
+    m.platforms = [...(m.platforms || []), platform];
+    // A pack with only the old single "publisher" gets the map, so its other platforms keep what they had.
+    m.publishers = { ...(m.publishers || (m.publisher ? Object.fromEntries((m.platforms || []).filter((p) => p !== platform).map((p) => [p, m.publisher])) : {})), [platform]: publisher };
+  });
+  pack.meta.platforms = meta.platforms;
+  if (meta.publishers) pack.meta.publishers = meta.publishers;
+  return meta.platforms;
 }
 
 /** Set a pack's style (a patch of { name, accent, bg, panel, test }; null for a key removes it). Returns the new style. */

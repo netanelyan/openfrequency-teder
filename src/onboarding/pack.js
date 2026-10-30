@@ -141,10 +141,11 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     description: `${seed.niche}, for ${seed.audience || 'a Hebrew audience'}. Created from an onboarding.`,
     topics: [seed.niche, ...(seed.topics || [])].filter(Boolean),
     audience: seed.audience || '',
-    platforms: ['tiktok', 'instagram'],
+    platforms: ['tiktok', 'instagram', 'facebook'],
     // Through Zernio, to the accounts the customer connects (src/publish/connect.js): TikTok to its drafts, Instagram
-    // as a carousel. Nothing leaves before PUBLISH_MODE=live and a connected account.
-    publishers: { tiktok: 'zernio', instagram: 'zernio' },
+    // as a carousel, a Facebook Page as a post of Instagram's slides (optional: posts go without a Page connected).
+    // Nothing leaves before PUBLISH_MODE=live and a connected account.
+    publishers: { tiktok: 'zernio', instagram: 'zernio', facebook: 'zernio' },
     zernio: { tiktokMode: 'draft-now', tiktokPrivacy: 'SELF_ONLY' },
     // The new account's days and times (src/schedule/choice.js DEFAULT_CHOICE, about 51 slots a month, so the plan's 40
     // are reached even in a month of festivals). The owner changes them on Settings, and the choice is laid over this.

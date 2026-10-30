@@ -4,6 +4,7 @@ import { j } from '../db/index.js';
 import { pauseAccount } from '../autonomy/rails.js';
 import { loadPost } from '../pipeline/build.js';
 import { deleteMedia, igConfig } from './instagram.js';
+import { unpublishFacebook } from './zernio.js';
 
 // Takedown notices. A notice is recorded on the website; the post it names is
 // taken down at once:
@@ -11,6 +12,9 @@ import { deleteMedia, igConfig } from './instagram.js';
 //   - Instagram, through Facebook Login: deleted through the Graph API (DELETE
 //     /{media-id}, the instagram_manage_contents permission). If Meta refuses,
 //     or the account uses Instagram Login, it is listed to delete by hand.
+//   - a Facebook Page's post (through Zernio): taken down through Zernio's
+//     unpublish (POST /v1/posts/{id}/unpublish, platform facebook). If Zernio
+//     refuses, it is listed to delete by hand.
 //   - TikTok: listed to delete by hand. Neither Zernio nor any official TikTok API
 //     deletes a published post (Zernio's own delete only removes its record).
 //   - a post that never left (dry, not published): nothing to delete.
@@ -41,9 +45,18 @@ async function takeDown(ctx, pack, post, only = null) {
       }
       continue;
     }
+    if (platform === 'facebook' && r.via === 'zernio' && r.zernioId) {
+      try {
+        await (ctx.unpublishFacebook || unpublishFacebook)(r.zernioId);
+        out[platform] = { state: 'deleted', at: nowIso() };
+      } catch (e) {
+        out[platform] = { state: 'by_hand', why: `Zernio did not take it down: ${String(e.message).slice(0, 200)}`, url: r.url || null };
+      }
+      continue;
+    }
     out[platform] = {
       state: 'by_hand',
-      why: platform === 'tiktok' ? 'TikTok has no delete for a published post through any official API: delete it in the TikTok app' : 'delete it in the Instagram app (Instagram Login has no delete through the API)',
+      why: platform === 'tiktok' ? 'TikTok has no delete for a published post through any official API: delete it in the TikTok app' : platform === 'facebook' ? 'delete it on the Facebook Page' : 'delete it in the Instagram app (Instagram Login has no delete through the API)',
       url: r.url || r.permalink || null,
     };
   }

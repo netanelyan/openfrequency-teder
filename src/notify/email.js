@@ -5,7 +5,7 @@ import { getSetting, setSetting, settings } from '../core/store.js';
 import { oneLine } from '../rules/overlay.js';
 import { israelDate, israelInstant, weekday } from '../schedule/israel.js';
 import { workspaceAllowed } from '../billing/entitlement.js';
-import { connectLine, unconnectedPlatforms } from '../publish/hold.js';
+import { connectLine, missingConnections } from '../publish/hold.js';
 
 // What the owner hears by email. Teder writes the words; openfrequency-accounts sends them to the workspace's owners
 // (and keeps their own opt-out):
@@ -298,7 +298,7 @@ function due(ctx, ws, accounts, { t, link }) {
   }
 
   // connect_needed: posts held because nothing is connected, once a day.
-  const held = accounts.map(({ pack }) => ({ pack, name: name(pack), held: count("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'held'", pack.id), platforms: unconnectedPlatforms(db, pack) })).filter((x) => x.held);
+  const held = accounts.map(({ pack }) => ({ pack, name: name(pack), held: count("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'held'", pack.id), platforms: missingConnections(db, pack) })).filter((x) => x.held);
   if (held.length) {
     const first = held[0].pack.id;
     out.push({ key: `connect_needed:${ws}:${today}`, kind: 'connect_needed', build: () => connectNeededEmail({ per: held, link: link(`/accounts?account=${encodeURIComponent(first)}#connect-${encodeURIComponent(first)}`) }) });

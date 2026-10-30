@@ -60,6 +60,8 @@ test("the only writes are Claude, our own post and a customer account's profile 
       'POST zernio.com ^\\/api\\/v1\\/posts$',
       'POST zernio.com ^\\/api\\/v1\\/profiles$',
       'POST zernio.com ^\\/api\\/v1\\/connect\\/instagram\\/select-account$',
+      'POST zernio.com ^\\/api\\/v1\\/connect\\/facebook\\/select-page$',
+      'POST zernio.com ^\\/api\\/v1\\/posts\\/[A-Za-z0-9_-]+\\/unpublish$',
       'DELETE zernio.com ^\\/api\\/v1\\/accounts\\/[A-Za-z0-9_-]+$',
       'DELETE zernio.com ^\\/api\\/v1\\/profiles\\/[A-Za-z0-9_-]+$',
       'POST graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
@@ -85,9 +87,18 @@ test("the only writes are Claude, our own post and a customer account's profile 
   assert.ok(assertAllowed('DELETE', 'https://zernio.com/api/v1/profiles/prof_123'));
   assert.throws(() => assertAllowed('DELETE', 'https://zernio.com/api/v1/accounts/acc_123/posts'), /refused/);
   assert.throws(() => assertAllowed('DELETE', 'https://zernio.com/api/v1/accounts'), /refused/);
-  // The headless connect picks only an Instagram account into our own profile; no other selection is reachable.
+  // The headless connect picks an Instagram account or a Facebook Page into our own profile; no other selection is
+  // reachable (a LinkedIn organisation, a Google Business location).
   assert.ok(assertAllowed('POST', 'https://zernio.com/api/v1/connect/instagram/select-account'));
-  assert.throws(() => assertAllowed('POST', 'https://zernio.com/api/v1/connect/facebook/select-page'), /refused/);
+  assert.ok(assertAllowed('POST', 'https://zernio.com/api/v1/connect/facebook/select-page'));
+  assert.ok(assertAllowed('GET', 'https://zernio.com/api/v1/connect/facebook/select-page?profileId=p1'));
+  assert.ok(assertAllowed('GET', 'https://zernio.com/api/v1/connect/facebook?profileId=p1'));
+  assert.throws(() => assertAllowed('POST', 'https://zernio.com/api/v1/connect/linkedin/select-organization'), /refused/);
+  assert.throws(() => assertAllowed('GET', 'https://zernio.com/api/v1/connect/linkedin'), /refused/);
+  // A takedown unpublishes one post of ours; nothing else under a post is writable.
+  assert.ok(assertAllowed('POST', 'https://zernio.com/api/v1/posts/p_123/unpublish'));
+  assert.throws(() => assertAllowed('POST', 'https://zernio.com/api/v1/posts/p_123/retry'), /refused/);
+  assert.throws(() => assertAllowed('DELETE', 'https://zernio.com/api/v1/posts/p_123'), /refused/);
   for (const r of READ_RULES.filter((x) => isSocial(x.host))) assert.ok(r.path, `${r.host} reads are limited to listed API paths`);
 });
 

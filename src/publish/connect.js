@@ -4,8 +4,9 @@ import { audit, getSetting, setSetting } from '../core/store.js';
 import { saveSetup, setupOf } from '../onboarding/setup.js';
 import { CONNECT_PLATFORMS, connectUrl, createProfile, profileConnections, profileSpend, teamAccountIds, zernioConfigured } from './zernio.js';
 import { instagramConfigured } from './instagram.js';
+import { addPackPlatform } from '../packs/write.js';
 
-// A customer connects their own TikTok and Instagram to Teder through Zernio:
+// A customer connects their own TikTok, Instagram and Facebook Page to Teder through Zernio:
 //
 //   - each account has its own Zernio profile (accounts.zernio_profile_id), made the first time someone asks to
 //     connect, its externalId the pack id. Profiles cost nothing; each connected account does.
@@ -14,6 +15,10 @@ import { instagramConfigured } from './instagram.js';
 //   - what is connected is read from Zernio, never from the address the browser came back on: after a connect, and
 //     once an hour, the profile's accounts and their health (zernio_connections). An expired or revoked token is
 //     status "reconnect"; the same button connects the same account again and it keeps its history.
+//   - a Facebook Page comes back for a pick, always: Zernio posts to a Page the customer manages, never to a person's
+//     profile, and the Page is chosen on our own page (src/web/connect.js), as an Instagram that came back through
+//     Facebook Login is. Facebook is the one platform an account may leave unconnected without anything waiting on it
+//     (src/core/platforms.js OPTIONAL_PLATFORMS).
 //   - Instagram is connected through Zernio only when it is not already through our own Meta app
 //     (src/publish/instagram.js): that one is free, and an account connected twice would be billed for nothing.
 //   - the WhatsApp assistant hands the customer a link to Teder, not to Zernio (a Zernio link would be dead within the
@@ -254,19 +259,21 @@ export function carryOnboardingZernio(db, onboardingId, accountId, { actor = 'en
 export const PICK_TTL_MS = 15 * 60_000;
 
 /**
- * A headless return that still needs an account picked (Instagram through Facebook Login: step=select_account), as
- * { profileId, tempToken, connectToken, userProfile }, else null. userProfile is JSON encoded twice on the wire: the
- * query string is decoded once already, so it is decoded once more and parsed.
+ * A headless return that still needs an account picked (Instagram through Facebook Login: step=select_account; a
+ * Facebook Page: step=select_page), as { step, profileId, tempToken, connectToken, userProfile }, else null. userProfile
+ * is JSON encoded twice on the wire: the query string is decoded once already, so it is decoded once more and parsed.
+ * A Page's pick sends it back to Zernio; an Instagram pick only shows whose sign-in it was.
  */
 export function selectionOf(query) {
-  if (query.get('step') !== 'select_account' || !query.get('tempToken')) return null;
+  const at = query.get('step');
+  if (!['select_account', 'select_page'].includes(at) || !query.get('tempToken')) return null;
   let userProfile = null;
   try {
     userProfile = JSON.parse(decodeURIComponent(query.get('userProfile') || ''));
   } catch {
-    /* only for showing whose sign-in it was */
+    /* Zernio is sent what it gave, or nothing */
   }
-  return { profileId: query.get('profileId') || null, tempToken: query.get('tempToken'), connectToken: query.get('connect_token') || null, userProfile };
+  return { step: at, profileId: query.get('profileId') || null, tempToken: query.get('tempToken'), connectToken: query.get('connect_token') || null, userProfile };
 }
 
 /**
@@ -350,6 +357,33 @@ export async function recordCosts(ctx, { t = now() } = {}) {
     n++;
   }
   return { supported: true, month, accounts: n, total: spend.total };
+}
+
+/* ------------------------------------------------------------------ Facebook, for the accounts made before it */
+
+/**
+ * Facebook joins the platforms of every account a customer made in the new-account flow before Facebook existed (an
+ * account in a workspace, made from an onboarding), so its owner can connect a Page from the account page. Once per
+ * account (a setting remembers it), so a platform taken out of pack.json by hand stays out. The operator's own
+ * accounts, written by hand and in no workspace, are left as they are. New accounts have it from the start
+ * (src/onboarding/pack.js). Returns the ids of the accounts it was added to.
+ */
+export function offerFacebook(ctx, { actor = 'engine' } = {}) {
+  const { db } = ctx;
+  const added = [];
+  for (const pack of ctx.packs) {
+    const key = `facebook:offered:${pack.id}`;
+    if (getSetting(db, key, null)) continue;
+    const customer = db.get('SELECT workspace_id AS ws FROM accounts WHERE id = ?', pack.id)?.ws != null && db.get('SELECT 1 AS x FROM onboarding WHERE pack_id = ? LIMIT 1', pack.id);
+    if (!customer) continue;
+    if (!pack.meta.platforms.includes('facebook')) {
+      addPackPlatform(pack, 'facebook', 'zernio');
+      audit(db, { actor, action: 'platform_added', accountId: pack.id, detail: { platform: 'facebook' } });
+      added.push(pack.id);
+    }
+    setSetting(db, key, nowIso());
+  }
+  return added;
 }
 
 /* ------------------------------------------------------------------ the runner's pass */

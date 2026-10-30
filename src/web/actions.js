@@ -654,9 +654,9 @@ export async function takedown(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
   const notice = String(form.notice || '').trim();
   if (notice.length < 10) throw new ActionError('הדביקו את נוסח ההודעה (לפחות כמה מילים)');
-  const platform = ['tiktok', 'instagram'].includes(form.platform) ? form.platform : null;
+  const platform = ['tiktok', 'instagram', 'facebook'].includes(form.platform) ? form.platform : null;
   const r = await recordTakedown(engineOf(ctx), { postId: id, platform, claimant: String(form.claimant || '').trim(), notice, by: user.name });
-  const hand = Object.entries(r.deleted).filter(([, v]) => v.state === 'by_hand').map(([p]) => (p === 'tiktok' ? 'טיקטוק' : 'אינסטגרם'));
+  const hand = Object.entries(r.deleted).filter(([, v]) => v.state === 'by_hand').map(([p]) => ({ tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' })[p] || p);
   return {
     ok: true,
     message: `ההודעה נרשמה והפוסט ירד.${hand.length ? ` צריך למחוק ידנית ב${hand.join(' וב')}: הפרטים בדף הפוסט.` : ''}${r.paused ? ` החשבון הושהה: ${r.count} הודעות ב-90 יום.` : ''}`,
@@ -666,7 +666,7 @@ export async function takedown(ctx, user, { id }, form) {
 
 /** The owner deleted the post by hand on one platform. */
 export function takedownDeleted(ctx, user, { id }, form) {
-  const platform = ['tiktok', 'instagram'].includes(form.platform) ? form.platform : null;
+  const platform = ['tiktok', 'instagram', 'facebook'].includes(form.platform) ? form.platform : null;
   if (!platform) throw new ActionError('איזו פלטפורמה?');
   const row = ctx.db.get('SELECT account_id FROM takedowns WHERE id = ?', Number(id));
   if (!row || !owns(ctx, row.account_id)) throw new ActionError('אין הודעה כזו', 404);

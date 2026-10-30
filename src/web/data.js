@@ -34,7 +34,7 @@ import { zernioCost } from '../publish/connect.js';
 import { scheduleOf, timesOf } from '../schedule/choice.js';
 import { scheduleData } from './schedule.js';
 import { emailPrefsOf } from '../notify/email.js';
-import { unconnectedPlatforms } from '../publish/hold.js';
+import { missingConnections } from '../publish/hold.js';
 import { autonomyMode, isCustomerAccount, mayResume } from '../autonomy/rails.js';
 
 // What each page shows, as plain queries. Pages never touch the database
@@ -110,7 +110,7 @@ export function today(ctx, t = now()) {
       held: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'held' ORDER BY slot_at", id),
       // Posts that did not go out, the last two weeks, newest first: each with "לנסות שוב" (src/web/actions.js retryPublish).
       failed: ctx.db.all("SELECT id, hook, topic, reason, slot_at, updated_at, publish_json FROM posts WHERE account_id = ? AND status = 'failed' AND sample = 0 AND updated_at >= ? ORDER BY updated_at DESC", id, new Date(t - FAILED_DAYS * DAY).toISOString()),
-      unconnected: unconnectedPlatforms(ctx.db, row.pack),
+      unconnected: missingConnections(ctx.db, row.pack),
       blocked: ctx.db.all("SELECT id, hook, topic, reason, format_id, created_at FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC", id, from),
       published: ctx.db.all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? ORDER BY published_at DESC", id, from),
       // TikTok drafts of the last day and a half, each with where it stands (src/publish/draft.js); a duplicate stays

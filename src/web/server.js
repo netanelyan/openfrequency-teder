@@ -239,8 +239,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
           const file = ok ? slideFile(loadPost(ctx.db, ml[1]), ml[2], ml[3]) : null;
           return file ? sendPostSlide(res, file, 'private, max-age=600') : send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
         }
-        // Connecting a TikTok or Instagram from a link the assistant sent, and back from Zernio (src/web/connect.js).
-        const cn = /^\/connect\/([\w-]+)\/(tiktok|instagram)(\/done)?$/.exec(p);
+        // Connecting a TikTok, Instagram or Facebook Page from a link the assistant sent, and back from Zernio (src/web/connect.js).
+        const cn = /^\/connect\/([\w-]+)\/(tiktok|instagram|facebook)(\/done)?$/.exec(p);
         if (cn) {
           const [status, html, location] = await publicConnect(ctx, { account: cn[1], platform: cn[2], done: Boolean(cn[3]), query: url.searchParams, links: connectLinks() });
           if (location) {
@@ -249,14 +249,14 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
           }
           return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
         }
-        // The Instagram account picked on our own page, after a headless connect that offered several (src/web/connect.js).
+        // The Instagram account or Facebook Page picked on our own page, after a headless connect that offered several (src/web/connect.js).
         const pk = /^\/connect\/pick\/([0-9a-f]{32})$/.exec(p);
         if (pk) {
           const [status, html] = await publicPick(ctx, { id: pk[1], pageId: url.searchParams.get('page') });
           return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
         }
         // Back from Zernio after a connect made while a new account's sources were searched, before the account existed.
-        const oc = /^\/new\/([\w-]+)\/connect\/(tiktok|instagram)\/done$/.exec(p);
+        const oc = /^\/new\/([\w-]+)\/connect\/(tiktok|instagram|facebook)\/done$/.exec(p);
         if (oc) {
           const [status, html] = await publicOnboardingConnect(ctx, { onboardingId: oc[1], platform: oc[2], query: url.searchParams, links: connectLinks() });
           return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });

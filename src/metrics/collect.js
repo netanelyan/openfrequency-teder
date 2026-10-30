@@ -4,12 +4,17 @@ import { zernioAnalytics, zernioConfigured } from '../publish/zernio.js';
 import { insights as instagramInsights } from '../publish/instagram.js';
 import { credit, judge, learnMix } from '../formats/rotation.js';
 import { audit } from '../core/store.js';
+import { PLATFORM_LIST } from '../core/platforms.js';
 
 // What a published post did, read from the platforms, and what that teaches the
 // format rotation: through Zernio's analytics for each platform the post went out
-// on through Zernio (TikTok, and Instagram for an account without our own Meta
-// app), and from Meta's own insights when the post went out directly (reach,
-// views, saves, shares, likes, comments).
+// on through Zernio (TikTok, a Facebook Page, and Instagram for an account without
+// our own Meta app), and from Meta's own insights when the post went out directly
+// (reach, views, saves, shares, likes, comments). A Page's numbers are kept and
+// shown with the rest (Zernio: "Facebook Page analytics work for all posts", the
+// same impressions, reach, likes, comments, shares, clicks, views as the others,
+// docs.zernio.com/analytics/get-analytics); the format rotation scores TikTok and Instagram alone
+// (src/formats/rotation.js postScore), so a Page never moves a format.
 //
 // RECORDS NOTHING IT DID NOT GET. A post whose numbers are not synced yet is
 // left alone rather than written as zeros: a stored zero is indistinguishable
@@ -33,7 +38,7 @@ export async function collectMetrics(ctx, { t = now(), source = null, instagram 
     const pub = j(p.publish_json, {});
     // Each platform that went out through Zernio has its own Zernio post (a draft the owner published has TikTok's own
     // id, which Zernio's analytics take too): { platform: id }.
-    const zids = Object.fromEntries(['tiktok', 'instagram'].filter((pl) => pub[pl]?.zernioId && !(pl === 'instagram' && pub.instagram.via === 'instagram')).map((pl) => [pl, pub[pl].zernioId]));
+    const zids = Object.fromEntries(PLATFORM_LIST.filter((pl) => pub[pl]?.zernioId && !(pl === 'instagram' && pub.instagram.via === 'instagram')).map((pl) => [pl, pub[pl].zernioId]));
     const ig = pub.instagram?.via === 'instagram' && pub.instagram.mediaId ? pub.instagram.mediaId : null;
     if (!(Object.keys(zids).length && read) && !ig) continue; // a dry-published post has no numbers to read
     const last = db.get('SELECT MAX(collected_at) AS at, MAX(age_hours) AS age FROM metrics WHERE post_id = ?', p.id);
