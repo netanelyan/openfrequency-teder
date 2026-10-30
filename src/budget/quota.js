@@ -29,6 +29,11 @@ import { monthSpend } from './ledger.js';
 // never stops a post.
 
 export const DEFAULT_PLAN = { suggested: 40, redos: 10 };
+/**
+ * Which posts count: every one that reached the customer, except one that failed to publish with nothing of it out
+ * (published_at is when a part went out): that one is not theirs to lose. Sent again and out, it counts again.
+ */
+const COUNTS = "NOT (status = 'failed' AND published_at IS NULL)";
 /** How long a draft in progress holds a place in the quota. */
 export const HOLD_MS = 24 * HOUR;
 /** The most the operator may set, so a typo cannot open an account to thousands of posts. */
@@ -115,8 +120,6 @@ export function setPlan(db, accountId, { suggested, redos }) {
   return planOf(db, accountId);
 }
 
-/** Which posts count toward a month: the ones that reached the customer (a suggestion) or replaced one they rejected. */
-const COUNTED = "quota_kind IN ('suggestion', 'redo')";
 
 /**
  * Where an account stands this month: suggestions and redos used, held by drafts in progress, and left, all of the
@@ -129,7 +132,7 @@ export function usage(db, accountId, t = now()) {
   const plan = planOf(db, accountId);
   const ids = sharing(db, accountId, plan);
   const inIds = `(${ids.map(() => '?').join(', ')})`;
-  const rows = db.all(`SELECT account_id, quota_kind, COUNT(*) AS n FROM posts WHERE account_id IN ${inIds} AND quota_month = ? AND ${COUNTED} GROUP BY account_id, quota_kind`, ...ids, month);
+  const rows = db.all(`SELECT account_id, quota_kind, COUNT(*) AS n FROM posts WHERE account_id IN ${inIds} AND quota_month = ? AND quota_kind IN ('suggestion', 'redo') AND ${COUNTS} GROUP BY account_id, quota_kind`, ...ids, month);
   const used = {};
   const accounts = Object.fromEntries(ids.map((id) => [id, { suggested: 0, redos: 0 }]));
   for (const r of rows) {

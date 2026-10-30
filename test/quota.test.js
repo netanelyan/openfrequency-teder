@@ -84,6 +84,31 @@ test('a suggestion counts once it reaches the customer, whatever they do with it
   }
 });
 
+test("a failed post with nothing out is not the customer's to lose; one with a part out counts; a TikTok post drafted in the inbox counts; the same whether the month is the account's or its workspace's", () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const { db } = contextFor(home);
+    setNow(OCT);
+    const at = new Date(OCT).toISOString();
+    row(db, { status: 'published', quota_kind: 'suggestion', quota_month: '2026-10', published_at: at });
+    const failed = row(db, { status: 'failed', quota_kind: 'suggestion', quota_month: '2026-10' });
+    row(db, { status: 'failed', quota_kind: 'suggestion', quota_month: '2026-10', published_at: at });
+    row(db, { status: 'drafted', quota_kind: 'suggestion', quota_month: '2026-10' });
+    row(db, { status: 'failed', quota_kind: 'redo', quota_month: '2026-10' });
+    const count = () => [usage(db, 'demo').suggested.used, usage(db, 'demo').redos.used];
+    assert.deepEqual(count(), [3, 0], 'the one that failed with nothing out, and the failed redo, do not count; the drafted one does');
+    // In a workspace, the same predicate over its accounts together.
+    db.run("UPDATE accounts SET workspace_id = 6 WHERE id = 'demo'");
+    assert.equal(usage(db, 'demo').plan.scope, 'workspace');
+    assert.deepEqual(count(), [3, 0]);
+    // Sent again and out: it counts again.
+    db.update('posts', failed, { status: 'published', published_at: at });
+    assert.deepEqual(count(), [4, 0]);
+  } finally {
+    cleanup();
+  }
+});
+
 test('a new month starts every count again: suggestions, redos and what the customer\'s posts cost', () => {
   const { home, cleanup } = tempHome();
   try {
