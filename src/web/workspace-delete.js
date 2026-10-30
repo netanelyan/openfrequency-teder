@@ -7,6 +7,7 @@ import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
 import { fromWebsite } from './demos.js';
 import { deleteProfile, disconnectAccount, zernioConfigured } from '../publish/zernio.js';
+import { queueRemovals, zernioOf } from '../billing/retention.js';
 
 // POST /internal/workspaces/<id>/delete: a customer deleted their workspace in openfrequency-accounts, and accounts asks
 // Teder to forget it. Under the checks /internal/setup has (src/web/demos.js fromWebsite): this machine only, the bearer
@@ -21,11 +22,15 @@ import { deleteProfile, disconnectAccount, zernioConfigured } from '../publish/z
 //   after it            the rendered slides and their public copies and what dry publishing wrote; on Zernio, each
 //                       TikTok and Instagram connected into the account's own profile disconnected from our team, then
 //                       the profile removed (Zernio bills per connected account). An account typed into pack.json by
-//                       hand is not disconnected: it may be the operator's own. What Zernio did not do is in the audit
-//                       entry (workspace_cleaned) and the log, for the operator.
+//                       hand is not disconnected: it may be the operator's own. What Zernio did not do (an error, or no
+//                       key on this server) is kept and tried again every day until it is done (src/billing/retention.js
+//                       REMOVALS), and is in the audit entry (workspace_cleaned) and the log, for the operator.
 //
 // What stays is ours: the audit log, what the calls cost (spend) and what Zernio billed (zernio_costs), which name the
-// account by its id and nothing else. A workspace with nothing left (asked twice, or never seen) answers 200 with zeros.
+// account by its id and nothing else. The audit rows of the deleted accounts lose who did each thing (a person's name or
+// email becomes "deleted") and their details (niches, addresses, handles, quoted facts); the overall daily summaries
+// lose the lines that named the accounts. A workspace with nothing left (asked twice, or never seen) answers 200 with
+// zeros.
 //
 //   200 { ok: true, deleted: { accounts, posts, sources, documents, onboarding, connections }, after: { files, zernio } }
 //
@@ -68,7 +73,6 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
   const publicDir = path.join(dataDir(), 'public');
   const publicCopies = ids.length && existsSync(publicDir) ? readdirSync(publicDir) : [];
   const files = new Set();
-  const zernio = [];
   for (const r of rows) {
     for (const p of db.all('SELECT id, media_json FROM posts WHERE account_id = ?', r.id)) {
       for (const list of Object.values(j(p.media_json, {}) || {})) for (const f of Array.isArray(list) ? list : []) files.add(f);
@@ -76,18 +80,12 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
       for (const d of publicCopies.filter((n) => n.startsWith(`${p.id}-`))) files.add(path.join(publicDir, d));
     }
     files.add(path.join(outDir(), 'published', r.id));
-    for (const c of db.all('SELECT platform, zernio_account_id FROM zernio_connections WHERE account_id = ?', r.id)) zernio.push({ account: r.id, kind: 'account', id: c.zernio_account_id, platform: c.platform });
-    if (r.zernio_profile_id) zernio.push({ account: r.id, kind: 'profile', id: r.zernio_profile_id });
   }
-  // A new account's onboarding that connected TikTok or Instagram before its account existed has a profile of its own
-  // (src/publish/connect.js): unless an account took it over (listed above), it goes too.
-  const taken = new Set(rows.map((r) => r.zernio_profile_id).filter(Boolean));
-  for (const o of db.all('SELECT id, setup_json FROM onboarding WHERE workspace_id = ?', workspaceId)) {
-    const z = j(o.setup_json, {})?.zernio;
-    if (!z?.profileId || taken.has(z.profileId)) continue;
-    for (const [platform, c] of Object.entries(z.connections || {})) if (c?.id) zernio.push({ account: o.id, kind: 'account', id: c.id, platform });
-    zernio.push({ account: o.id, kind: 'profile', id: z.profileId });
-  }
+  // What it connected on Zernio, its accounts' and what a new account's onboarding connected before its account existed
+  // (src/publish/connect.js), unless an account took that profile over.
+  const zernio = zernioOf(db, workspaceId).map(({ onboarding, ...z }) => z);
+  // The names the overall daily summaries gave the accounts, read before the rows go.
+  const names = ids.map((id) => db.get('SELECT display_name FROM accounts WHERE id = ?', id)?.display_name).filter(Boolean);
 
   // ---- 1. nothing more is written or published for it, then its rows go, children before their parents
   db.tx(() => {
@@ -113,6 +111,15 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
     for (const id of ids) {
       const like = id.replace(/[\\%_]/g, (c) => `\\${c}`);
       db.run("DELETE FROM settings WHERE key LIKE ? ESCAPE '\\' OR key LIKE ? ESCAPE '\\'", `%:${like}`, `%:${like}:%`);
+    }
+    db.run("DELETE FROM settings WHERE key = ?", `stopped:${workspaceId}`);
+    // Our books keep what happened, never who it was or what it said: the person and the details go.
+    db.run(`UPDATE audit SET actor = CASE WHEN actor IN ('engine', 'accounts') OR actor LIKE 'engine:%' THEN actor ELSE 'deleted' END, detail_json = NULL WHERE account_id IN ${inIds}`, ...ids);
+    if (names.length) {
+      for (const s of db.all('SELECT day, text FROM summaries WHERE account_id IS NULL')) {
+        const kept = String(s.text).split('\n').filter((line) => !names.some((n) => line.startsWith(`${n}:`)));
+        if (kept.join('\n') !== s.text) db.run('UPDATE summaries SET text = ? WHERE day = ? AND account_id IS NULL', kept.join('\n') || 'אין חשבונות פעילים', s.day);
+      }
     }
     db.run(`DELETE FROM accounts WHERE id IN ${inIds}`, ...ids);
   });
@@ -144,6 +151,7 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
         log?.(`[workspace delete] ${workspaceId}: ${p} not removed: ${e.message}`);
       }
     }
+    const left = [];
     if (zernio.length && zernioConfigured()) {
       // The accounts first: a profile with an account still in it may be refused.
       for (const z of [...zernio.filter((x) => x.kind === 'account'), ...zernio.filter((x) => x.kind === 'profile')]) {
@@ -152,10 +160,13 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
           out.zernio.removed++;
         } catch (e) {
           out.zernio.failed++;
+          left.push(z);
           log?.(`[workspace delete] ${workspaceId} ${z.account}: Zernio did not remove ${z.kind} ${z.id}${z.platform ? ` (${z.platform})` : ''}: ${e.message}`);
         }
       }
-    }
+    } else left.push(...zernio);
+    // Tried again every day until Zernio does it (src/billing/retention.js).
+    if (left.length) queueRemovals(db, left.map((z) => ({ ...z, workspace: workspaceId, reason: 'deleted' })));
     if (ids.length || zernio.length) audit(db, { actor: 'accounts', action: 'workspace_cleaned', detail: { workspace: workspaceId, ...out, left: zernio.length && !zernioConfigured() ? zernio.map((z) => `${z.kind}:${z.id}`) : [] } });
     return out;
   })().catch((e) => log?.(`[workspace delete] ${workspaceId}: ${e.stack || e.message}`));

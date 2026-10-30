@@ -8,7 +8,8 @@ import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { listen } from '../src/web/server.js';
 import { workspaceCleanups } from '../src/web/workspace-delete.js';
-import { setSetting } from '../src/core/store.js';
+import { audit, getSetting, setSetting } from '../src/core/store.js';
+import { REMOVALS, retentionPass } from '../src/billing/retention.js';
 import { setEmailPrefs } from '../src/notify/email.js';
 import { closeBrowser } from '../src/render/render.js';
 import { INTERNAL_TOKEN, customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
@@ -60,7 +61,7 @@ before(async () => {
     if (gate) await gate;
     zernio.push(`${(init.method || 'GET').toUpperCase()} ${u.pathname}`);
     // One account Zernio no longer has: a 404 is gone already, which is fine.
-    const status = u.pathname.endsWith('/gone1') ? 404 : 200;
+    const status = u.pathname.endsWith('/gone1') ? 404 : u.pathname.endsWith('/fail1') ? 503 : 200;
     return new Response(JSON.stringify(status === 200 ? { message: 'deleted' } : { error: 'not found' }), { status, headers: { 'content-type': 'application/json' } });
   };
   fake = await fakeAccounts();
@@ -171,4 +172,31 @@ test("a workspace's accounts and everything theirs go; Zernio is told; the other
   assert.deepEqual(await (await del(77)).json(), zeros);
   await workspaceCleanups();
   assert.deepEqual(zernio, []);
+});
+
+test("a deleted account's audit rows keep what happened, never who or what it said; the summaries lose its name; what Zernio did not remove is tried again", async () => {
+  process.env.ZERNIO_API_KEY = 'zk_test_key';
+  db.run("DELETE FROM settings WHERE key = ?", REMOVALS);
+  const name = db.get("SELECT display_name FROM accounts WHERE id = 'gamma'").display_name;
+  audit(db, { actor: 'owner4@example.test', action: 'rival', accountId: 'gamma', detail: { handle: '@someone', gaps: 'free text the customer typed' } });
+  audit(db, { action: 'auto_approved', accountId: 'gamma', detail: { mode: 'approve' } });
+  db.run('INSERT OR REPLACE INTO summaries (day, account_id, text, data_json, at) VALUES (?, NULL, ?, NULL, ?)', '2026-10-20', `${name}: 2 פורסמו, 0 נחסמו
+אחר: 1 פורסמו, 0 נחסמו`, 'x');
+  db.insert('zernio_connections', { account_id: 'gamma', platform: 'tiktok', zernio_account_id: 'fail1', username: 'g', status: 'connected', connected_at: 'x', checked_at: 'x' });
+  const res = await del(4);
+  assert.equal(res.status, 200);
+  await workspaceCleanups();
+  const rows = db.all("SELECT actor, detail_json FROM audit WHERE account_id = 'gamma'");
+  assert.ok(rows.length >= 2);
+  assert.ok(rows.every((r) => r.detail_json == null), 'no details');
+  assert.ok(rows.some((r) => r.actor === 'deleted') && rows.some((r) => r.actor === 'engine'), 'a person is "deleted", the engine stays the engine');
+  assert.ok(!rows.some((r) => /example\.test/.test(r.actor)));
+  assert.equal(db.get("SELECT text FROM summaries WHERE day = '2026-10-20' AND account_id IS NULL").text, 'אחר: 1 פורסמו, 0 נחסמו');
+  // Zernio refused the disconnect: kept, and the daily pass tries it again.
+  assert.deepEqual(getSetting(db, REMOVALS).map((x) => [x.kind, x.id, x.reason]), [['account', 'fail1', 'deleted']]);
+  zernio.length = 0;
+  const out = await retentionPass(ctx, { force: true });
+  assert.deepEqual(zernio, ['DELETE /api/v1/accounts/fail1']);
+  assert.equal(out.removals.failed, 1);
+  assert.equal(getSetting(db, REMOVALS)[0].tries, 1);
 });

@@ -25,6 +25,7 @@ import { zernioTick } from '../publish/connect.js';
 import { accountAllowed, refreshEntitlements } from '../billing/entitlement.js';
 import { releaseHeld } from '../publish/hold.js';
 import { emailTick } from '../notify/email.js';
+import { retentionPass } from '../billing/retention.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -60,6 +61,8 @@ import { emailTick } from '../notify/email.js';
 //      last suggestions, Sunday's summary; held through the customer's quiet hours
 //   5. read metrics, credit them to formats at 72 hours, judge the formats
 //   6. write yesterday's summary
+//   7. once a day, what the privacy policy says goes (src/billing/retention.js): demos past six months, the TikTok and
+//      Instagram of a workspace whose Teder stopped, the Zernio removals still to do, old public copies of slides
 //
 // The rails (kill switches, pauses, and a workspace that has not paid: src/billing/entitlement.js, asked at the start
 // of every tick and kept 5 minutes) are checked before every generation and every publish. A post approved where
@@ -396,6 +399,14 @@ export async function tick(ctx, { t = now() } = {}) {
   const yesterday = addDays(today, -1);
   if (!db.get('SELECT id FROM summaries WHERE day = ? AND account_id IS NULL', yesterday) && t >= israelInstant(today, cfg.generateAt).getTime()) {
     writeSummaries(ctx, yesterday);
+  }
+
+  // ---- 7. retention, once a day (src/billing/retention.js): never in the way of the rest
+  try {
+    const kept = await retentionPass(ctx, { t });
+    if (kept) report.retention = kept;
+  } catch (e) {
+    report.errors.push({ step: 'retention', error: e.message });
   }
   return report;
 }
