@@ -148,7 +148,7 @@ test('the waiting page never reloads itself: a script asks a JSON status, and th
   // The connect panel keeps what each platform needs.
   assert.match(html, /אינסטגרם מתחבר רק כחשבון מקצועי/);
   assert.match(html, /המצגות מגיעות לטיוטות בטיקטוק בכוונה/);
-  assert.match(html, /טיקטוק ואינסטגרם יבקשו לאשר את Zernio, השירות שמפרסם בשבילנו\./);
+  assert.match(html, /בחיבור מאשרים את Zernio, השירות שמפרסם בשבילנו\./);
 
   const res = await get('/new/o-wait/status', cookie);
   assert.equal(res.status, 200);
@@ -268,7 +268,7 @@ test('the setup checklist, while the sources are searched: the connect steps lin
   const out = await (await fetch(`${base}/internal/setup?workspace=5`, { headers: { authorization: `Bearer ${INTERNAL_TOKEN}` } })).json();
   const s = Object.fromEntries(out.steps.map((x) => [x.key, x]));
   assert.equal(s.account.status, 'working');
-  assert.match(s.account.detail, /בינתיים אפשר לבחור שם, ימים ושעות ולחבר את טיקטוק ואינסטגרם/);
+  assert.match(s.account.detail, /בינתיים אפשר לבחור שם, ימים ושעות ולחבר את טיקטוק, אינסטגרם ופייסבוק/);
   assert.equal(s.connect.status, 'todo');
   assert.equal(s.connect.href, 'https://teder.test/new/o-steps#connect');
   assert.equal(s.tiktok.href, 'https://teder.test/new/o-steps#connect');

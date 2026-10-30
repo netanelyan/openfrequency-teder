@@ -296,7 +296,7 @@ export function demoPage(demo, { offer, join = joinUrl() }) {
 <div class="lead${shelfHtml ? ' with-shelf' : ''}">
 <section class="hero">
 <div class="marks">${mark()}${tederMark()}</div>
-<h1>הכנו ${esc(le(name))}<span class="hl"><bdi>${esc(name)}</bdi></span> מצגת לטיקטוק ולאינסטגרם</h1>
+<h1>הכנו ${esc(le(name))}<span class="hl"><bdi>${esc(name)}</bdi></span> מצגת לטיקטוק, לאינסטגרם ולפייסבוק</h1>
 <p class="lede">עברנו על האתר שלכם${st.products ? `, על ${esc(st.products)} המוצרים` : ''}. תדר בחר נושא מהתחום שלכם, כתב עליו מצגת ועיצב אותה.</p>
 <section class="read" aria-labelledby="read-h"><h2 id="read-h">מה קראנו באתר שלכם</h2>
 ${stats ? `<dl class="stats">${stats}</dl>` : ''}

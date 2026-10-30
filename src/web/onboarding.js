@@ -342,7 +342,7 @@ const obConnectData = (ctx, r) => ({
 });
 
 function connectSection(ctx, pc, r) {
-  return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק ולאינסטגרם</h2></header>
+  return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header>
 <p class="muted">אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. כשהחשבון ייווצר החיבור יעבור אליו, ולא תצטרכו לחבר שוב.</p>
 ${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`;
 }
@@ -426,7 +426,7 @@ function detailPage(ctx, pc, r) {
       `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
 <p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
 ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
-<p class="muted mt12">בינתיים אפשר לסדר כאן את השם, את הימים והשעות ואת החיבור לטיקטוק ולאינסטגרם. מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
+<p class="muted mt12">בינתיים אפשר לסדר כאן את השם, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק. מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
 <div class="cols"><div class="grid12">${namePanel(pc, r)}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
     );
   }
@@ -481,7 +481,7 @@ ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות �
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
 ${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
 <p class="muted small mt12">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p>
-${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק ולאינסטגרם, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
+${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
 ${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
 ${ops}
 <div class="posts mt16">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>`

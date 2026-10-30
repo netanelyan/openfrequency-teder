@@ -58,7 +58,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
 
   // The account: the seed, the search for sources, and the pack written once its name is picked.
   if (stage === 'none') steps.push(step('account', 'פותחים חשבון', 'todo', { detail: 'כותבים במה החשבון יעסוק, ותדר מחפש לו מקורות.', href: at('/new') }));
-  else if (stage === 'discovering') steps.push(step('account', 'פותחים חשבון', 'working', { detail: 'מחפשים מקורות לחשבון. בינתיים אפשר לבחור שם, ימים ושעות ולחבר את טיקטוק ואינסטגרם.', href: obPage }));
+  else if (stage === 'discovering') steps.push(step('account', 'פותחים חשבון', 'working', { detail: 'מחפשים מקורות לחשבון. בינתיים אפשר לבחור שם, ימים ושעות ולחבר את טיקטוק, אינסטגרם ופייסבוק.', href: obPage }));
   else if (stage === 'failed') steps.push(step('account', 'פותחים חשבון', 'attention', { detail: 'החיפוש נעצר באמצע. בדף אפשר לנסות שוב עם אותם פרטים.', href: obPage }));
   else if (stage === 'review') steps.push(step('account', 'פותחים חשבון', 'todo', { detail: 'בוחרים שם לחשבון, באותו דף של המקורות.', href: obPage }));
   else steps.push(step('account', 'פותחים חשבון', 'done', { detail: pack?.meta.displayName || account?.display_name || '' }));

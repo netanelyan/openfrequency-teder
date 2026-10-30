@@ -35,6 +35,8 @@ import { a11yLink, csrfField, esc, icon, postButton, tederMark, usd } from './ui
 //     connected by itself, several are listed on the same page.
 
 export const PLATFORM_NAME = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
+// Names in a row, as Hebrew writes them: טיקטוק, אינסטגרם ופייסבוק.
+export const heList = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} ו${names.at(-1)}`);
 const STATE_CHIP = {
   connected: ['ok', 'מחובר'],
   reconnect: ['warn', 'צריך לחבר מחדש'],
@@ -58,7 +60,7 @@ const MODE_CHOICE = {
 export function requirements(d) {
   const open = d.platforms.filter((s) => s.state !== 'meta' && s.state !== 'connected').map((s) => s.platform);
   const lines = [];
-  if (open.length) lines.push('טיקטוק ואינסטגרם יבקשו לאשר את Zernio, השירות שמפרסם בשבילנו.');
+  if (open.length) lines.push('בחיבור מאשרים את Zernio, השירות שמפרסם בשבילנו.');
   if (open.includes('instagram')) lines.push('אינסטגרם מתחבר רק כחשבון מקצועי, עסקי או יוצר. חשבון פרטי מעבירים לחשבון מקצועי בהגדרות של אינסטגרם, בלי תשלום, ואז מחברים כאן.');
   if (open.includes('tiktok')) {
     lines.push('בטיקטוק נכנסים עם החשבון שאליו המצגות יעלו, ומאשרים את ההרשאות במסך של טיקטוק.');
@@ -96,11 +98,11 @@ export function connectPanel(ctx, d, { base = null } = {}) {
     })
     .join('');
   const note = d.configured
-    ? 'נפתח מסך של טיקטוק או של אינסטגרם, מאשרים שם וחוזרים לכאן.'
+    ? 'נפתח המסך של הרשת, מאשרים שם וחוזרים לכאן.'
     : ctx.operator
       ? 'אי אפשר לחבר עכשיו: בשרת לא מוגדר ZERNIO_API_KEY.'
       : 'החיבור עוד לא זמין בשרת הזה.';
-  return `<div class="connect" id="connect-${esc(pack.id)}"><div class="row"><span>טיקטוק ואינסטגרם</span>${d.configured && d.hasProfile ? `<span class="end">${postButton(ctx, `${at}/connections`, 'לבדוק שוב', { cls: 'btn sm ghost' })}</span>` : ''}</div>
+  return `<div class="connect" id="connect-${esc(pack.id)}"><div class="row"><span>${esc(heList(d.platforms.map((s) => PLATFORM_NAME[s.platform] || s.platform)))}</span>${d.configured && d.hasProfile ? `<span class="end">${postButton(ctx, `${at}/connections`, 'לבדוק שוב', { cls: 'btn sm ghost' })}</span>` : ''}</div>
 ${d.configured ? requirements(d) : ''}<ul class="factlist">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
 }
 
@@ -325,7 +327,7 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
   const ob = ctx.db.get('SELECT id, pack_id, seed_json FROM onboarding WHERE id = ?', onboardingId);
   if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ title: 'הלינק הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לטיקטוק ולאינסטגרם עוד לא זמין. אנחנו מטפלים בזה.' })];
+  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
   const back = `<a class="btn primary" href="/new/${esc(encodeURIComponent(ob.id))}#connect">חזרה להקמת החשבון</a>`;
   const error = query.get('error');
   if (error) {
@@ -367,7 +369,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const sig = { accountId: account, platform, e: query.get('e'), s: query.get('s'), t };
   if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, resultPage(EXPIRED)];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לטיקטוק ולאינסטגרם עוד לא זמין. אנחנו מטפלים בזה.' })];
+  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;
 
   if (!done) {
