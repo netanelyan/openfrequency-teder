@@ -92,7 +92,7 @@ test('a new workspace with nothing: open an account, at /new; the rest waits, an
   assert.deepEqual(Object.keys(out), ['product', 'ready', 'steps']);
   assert.equal(out.product, 'teder');
   assert.equal(out.ready, false);
-  assert.deepEqual(out.steps.map((s) => s.key), ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram']);
+  assert.deepEqual(out.steps.map((s) => s.key), ['account', 'sources', 'samples', 'live', 'connect', 'tiktok', 'instagram', 'facebook']);
   for (const s of out.steps) {
     assert.deepEqual(Object.keys(s), ['key', 'title', 'status', 'detail', 'href', 'required']);
     assert.match(s.title, /[א-ת]/, 'a Hebrew title');

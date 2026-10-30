@@ -281,7 +281,7 @@ test('userProfile comes encoded twice: decoded once more, then parsed', () => {
   const profile = { id: '42', name: 'דנה כהן' };
   const wire = `?step=select_account&tempToken=tmp-1&profileId=prof9&connect_token=ct&userProfile=${encodeURIComponent(encodeURIComponent(JSON.stringify(profile)))}`;
   const sel = selectionOf(new URL(`https://teder.test/x${wire}`).searchParams);
-  assert.deepEqual(sel, { profileId: 'prof9', tempToken: 'tmp-1', connectToken: 'ct', userProfile: profile });
+  assert.deepEqual(sel, { step: 'select_account', profileId: 'prof9', tempToken: 'tmp-1', connectToken: 'ct', userProfile: profile });
   assert.equal(selectionOf(new URLSearchParams('connected=tiktok&accountId=1')), null, 'a direct connect needs no pick');
 });
 

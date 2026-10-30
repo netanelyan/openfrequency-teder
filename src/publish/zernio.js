@@ -1,11 +1,11 @@
 import { deleteJson, getJson, postJson } from '../core/net.js';
 import { isSet } from '../core/env.js';
 
-// Posting through Zernio: one Zernio profile per account (a customer's), with its TikTok and Instagram connected into
-// it by the customer themselves (src/publish/connect.js).
+// Posting through Zernio: one Zernio profile per account (a customer's), with its TikTok, Instagram and Facebook Page
+// connected into it by the customer themselves (src/publish/connect.js).
 //
-// What it can do to an account: create a post on it. Besides that it creates a profile (an empty folder on our own
-// Zernio team), disconnects a deleted customer's accounts from our team and removes their profile, and reads: the connect link, the connected accounts and their health, analytics, and the bill. Nothing
+// What it can do to an account: create a post on it, and take a Facebook post of ours down after a takedown notice.
+// Besides that it creates a profile (an empty folder on our own Zernio team), disconnects a deleted customer's accounts from our team and removes their profile, and reads: the connect link, the connected accounts and their health, analytics, and the bill. Nothing
 // here reads an inbox, comments, likes, follows or messages anyone; the network door refuses those Zernio paths by
 // name (src/core/net.js), so this file could not if it tried.
 //
@@ -77,13 +77,21 @@ export function postBody({ platform, accountId, caption, imageUrls, privacy = 'S
       publishNow: true,
     };
   }
+  // Instagram and a Facebook Page take the same body: the caption, the slides as images, published at once. For a Page
+  // it is Zernio's own Facebook example, field for field: content, mediaItems of { type: 'image', url }, platforms of
+  // { platform: 'facebook', accountId }, publishNow (docs.zernio.com/platforms/facebook, docs.zernio.com/posts/create-post).
+  // No contentType or other Facebook option is set: the docs do not say which post type Zernio makes without one
+  // (UNVERIFIED), and a field they do not name is not guessed.
   return {
-    content: `${String(caption)}${aiLabel ? `\n\n${AI_CAPTION_LINE}` : ''}`.slice(0, 2200),
+    content: `${String(caption)}${aiLabel ? `\n\n${AI_CAPTION_LINE}` : ''}`.slice(0, CAPTION_MAX[platform] || 2200),
     mediaItems: imageUrls.map((url) => ({ type: 'image', url })),
     platforms: [{ platform, accountId }],
     publishNow: true,
   };
 }
+
+/** The longest caption each platform takes: Instagram's 2,200, a Facebook post's 63,206 (docs.zernio.com/platforms/facebook). */
+const CAPTION_MAX = { instagram: 2200, facebook: 63206 };
 
 function partOf(post, platform) {
   const p = (post?.platforms || []).find((x) => x.platform === platform) || {};
@@ -96,6 +104,8 @@ export async function publishZernio({ platform, accountId, caption, imageUrls, p
   if (!accountId) throw new ZernioError(`no Zernio ${platform} account id in pack.json`, { step: 'config', code: 'no_account' });
   if (platform === 'tiktok' && (imageUrls.length < 2 || imageUrls.length > 35)) throw new ZernioError(`a TikTok photo post takes 2 to 35 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   if (platform === 'instagram' && imageUrls.length > 10) throw new ZernioError(`an Instagram carousel takes at most 10 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
+  // A Facebook post takes 10 images at most (docs.zernio.com/platforms/facebook).
+  if (platform === 'facebook' && imageUrls.length > 10) throw new ZernioError(`a Facebook post takes at most 10 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   let created;
   try {
     created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound, asDraft }), { headers: auth(), timeoutMs: 30_000 });
@@ -283,9 +293,9 @@ export async function createProfile({ name, externalId }) {
   }
 }
 
-/* ------------------------------------------------------------------ connecting TikTok and Instagram */
+/* ------------------------------------------------------------------ connecting TikTok, Instagram and a Facebook Page */
 
-export const CONNECT_PLATFORMS = ['tiktok', 'instagram'];
+export const CONNECT_PLATFORMS = ['tiktok', 'instagram', 'facebook'];
 
 /**
  * Zernio's link to connect (or reconnect) one platform into a profile, headless (docs.zernio.com, GET
@@ -294,8 +304,12 @@ export const CONNECT_PLATFORMS = ['tiktok', 'instagram'];
  * account is connected at once and the return carries connected=, accountId=, username= (or error=). Zernio still
  * passes the return through its own one-click notice (zernio.com/connect/continue) for an address on another site. An
  * Instagram account that comes back through Facebook Login instead (a reconnect of one connected that way) returns
- * step=select_account with a tempToken, and is finished here (instagramPages, selectInstagram). The link works for 30
- * minutes, so it is asked for at the moment someone taps, never stored or sent on.
+ * step=select_account with a tempToken, and is finished here (instagramPages, selectInstagram). Facebook always comes
+ * back for a pick: Zernio posts to a Page, never to a person's profile ("Personal profiles cannot post through the
+ * API", docs.zernio.com/platforms/facebook), so the headless return is step=select_page with profileId, tempToken,
+ * connect_token and the signed-in person's userProfile, JSON encoded twice (docs.zernio.com/connect/get-connect-url),
+ * and the Page is picked here (facebookPages, selectFacebookPage). The link works for 30 minutes, so it is asked for
+ * at the moment someone taps, never stored or sent on.
  */
 export async function connectUrl(platform, { profileId, redirectUrl, reconnectAccountId = null }) {
   if (!CONNECT_PLATFORMS.includes(platform)) throw new ZernioError(`not a platform to connect: ${platform}`, { step: 'connect', code: 'bad_platform' });
@@ -345,7 +359,47 @@ export async function selectInstagram({ profileId, pageId, tempToken, connectTok
 }
 
 /**
- * Each connected TikTok and Instagram account in a profile, with its health: [{ id, platform, username, status, issue }].
+ * The Facebook Pages a headless Facebook return can connect: [{ pageId, name, username }], the Pages the signed-in
+ * person manages. GET /v1/connect/facebook/select-page?profileId=, the tempToken in X-Temp-Token, answering
+ * { pages: [{ id, name, username, access_token, category, tasks }] } (docs.zernio.com/connect/list-facebook-pages).
+ * Only the headers that page names are sent. A Page whose tasks leave out CREATE_CONTENT is left out: Meta's own Page
+ * task for "Publish content as the Page on the Page" (developers.facebook.com/docs/pages-api/overview); a Page listed
+ * with no tasks at all is offered, and a refusal at the slot is said in Hebrew like any other. Each Page's own token in
+ * Zernio's answer stays here: only its id, name and username go on.
+ */
+export async function facebookPages({ profileId, tempToken }) {
+  let body;
+  try {
+    body = await getJson(`${BASE()}/connect/facebook/select-page?${new URLSearchParams({ profileId })}`, { headers: { ...auth(), 'x-temp-token': String(tempToken) } });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'select', code: e.code, status: e.status });
+  }
+  const canPost = (p) => !Array.isArray(p.tasks) || p.tasks.includes('CREATE_CONTENT');
+  return (body?.pages || []).filter((p) => p?.id && canPost(p)).map((p) => ({ pageId: String(p.id), name: String(p.name || ''), username: String(p.username || '') }));
+}
+
+/**
+ * Connect the Page picked: { accountId, username }. POST /v1/connect/facebook/select-page with { profileId, pageId,
+ * userProfile, redirect_url? }, the tempToken in X-Temp-Token and the connect_token in X-Connect-Token, answering
+ * { account: { accountId, platform, username, displayName, selectedPageName } }
+ * (docs.zernio.com/connect/select-facebook-page). userProfile is required there, as the return carried it (decoded:
+ * selectionOf in src/publish/connect.js). Without it nothing is sent: Zernio is never handed an empty one.
+ */
+export async function selectFacebookPage({ profileId, pageId, tempToken, connectToken = null, userProfile = null, redirectUrl = null }) {
+  if (!userProfile || typeof userProfile !== 'object') throw new ZernioError('the Facebook return carried no userProfile', { step: 'select', code: 'no_user_profile' });
+  let body;
+  try {
+    body = await postJson(`${BASE()}/connect/facebook/select-page`, { profileId, pageId, userProfile, ...(redirectUrl ? { redirect_url: redirectUrl } : {}) }, { headers: selectionHeaders({ tempToken, connectToken }), timeoutMs: 30_000 });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'select', code: e.code, status: e.status });
+  }
+  const a = body?.account;
+  if (!a?.accountId) throw new ZernioError('Zernio connected nothing', { step: 'select', code: 'no_account' });
+  return { accountId: String(a.accountId), username: String(a.username || a.selectedPageName || a.displayName || '') };
+}
+
+/**
+ * Each connected TikTok, Instagram and Facebook account in a profile, with its health: [{ id, platform, username, status, issue }].
  * status is 'connected', or 'reconnect' when Zernio says the token expired or was revoked, a permission is missing,
  * or the account is inactive. The health read is the finer one; when it cannot be read, the listing's flag decides.
  */
@@ -402,6 +456,21 @@ export async function disconnectAccount(accountId) {
   } catch (e) {
     if (e.status === 404) return { ok: true, gone: true };
     throw new ZernioError(e.message, { step: 'disconnect', code: e.code, status: e.status });
+  }
+}
+
+/**
+ * Take one of our own Facebook posts down from the Page after a takedown notice: POST /v1/posts/{postId}/unpublish with
+ * { platform: 'facebook' }, which "deletes a published post from the specified platform"; Zernio keeps its record,
+ * marked cancelled (docs.zernio.com/posts/unpublish-post). It is "not supported on Instagram, TikTok, or Snapchat":
+ * theirs are deleted by hand (src/publish/takedown.js). Zernio's DELETE /v1/posts/{postId} is not this: it cannot
+ * delete a published post (docs.zernio.com/posts/delete-post).
+ */
+export async function unpublishFacebook(zernioId, accountId = null) {
+  try {
+    await postJson(`${BASE()}/posts/${encodeURIComponent(zernioId)}/unpublish`, { platform: 'facebook', ...(accountId ? { accountId } : {}) }, { headers: auth(), timeoutMs: 30_000 });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'unpublish', code: e.code, status: e.status });
   }
 }
 

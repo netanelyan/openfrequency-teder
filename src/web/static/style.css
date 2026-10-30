@@ -918,6 +918,7 @@ details.more[open] > summary { background: var(--fill-2); }
 .c-base { stroke: var(--line-2); stroke-width: 1; }
 .c-tt, .c-up { fill: var(--ok); background: var(--ok); }
 .c-ig { fill: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 40%, transparent); }
+.c-fb { fill: color-mix(in srgb, var(--ok) 18%, transparent); background: color-mix(in srgb, var(--ok) 18%, transparent); }
 .c-down { fill: var(--ink-3); background: var(--ink-3); opacity: 0.55; }
 .chart a rect:hover, .chart g:hover rect { opacity: 0.75; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 0; font-size: 13px; color: var(--ink-2); }

@@ -11,6 +11,7 @@ import { DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budge
 import { connectPanel, tiktokModePanel } from './connect.js';
 import { schedulePanel } from './schedule.js';
 import { connectLine } from '../publish/hold.js';
+import { PLATFORM_LIST } from '../core/platforms.js';
 import { EMAIL_HE } from '../notify/email.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
@@ -112,7 +113,7 @@ const ROLE_NAME = {
   stat: 'נתון', verdict: 'השורה התחתונה', ranks: 'מקומות 10 עד 6', rank: 'מקום', layer: 'שכבה', case: 'נימוק', ask: 'השאלה', myth: 'מיתוס', fact: 'עובדה', joke: 'בדיחה', truth: 'בלי צחוק',
 };
 const PLATFORM_DELETE = { deleted: 'נמחק אוטומטית', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
-const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
+const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
@@ -527,8 +528,8 @@ ${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכ
     ? `<section class="panel"><header><h2>הודעות הסרה</h2></header>
 ${tds.map((t) => `<div class="banner bad">${icon('alert')}<div><b>${esc(stamp(t.received_at))}${t.claimant ? ` · ${esc(t.claimant)}` : ''}</b><p dir="auto">${esc(t.notice.slice(0, 300))}</p><ul class="factlist">${Object.entries(t.deleted).map(([pl, x]) => `<li>${esc(PLATFORM_HE[pl] || pl)}: <b>${esc(PLATFORM_DELETE[x.state] || x.state)}</b>${x.why ? `<div class="muted small">${esc(x.why)}</div>` : ''}${x.state === 'by_hand' ? postButton(ctx, `/takedowns/${t.id}/deleted`, 'מחקתי ידנית', { cls: 'btn sm', fields: { platform: pl } }) : ''}</li>`).join('')}</ul></div></div>`).join('')}
 ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert')}התקבלה הודעת הסרה על הפוסט הזה</summary><form method="post" action="/post/${esc(post.id)}/takedown" class="formgrid">${csrfField(ctx)}
-<p class="muted small">הפוסט יורד מיד: באינסטגרם הוא נמחק לבד כשאפשר, ובטיקטוק צריך למחוק אותו ידנית באפליקציה. הודעה שנייה תוך 90 יום משהה את החשבון.</p>
-<label class="f">פלטפורמה<select name="platform"><option value="">שתיהן</option><option value="tiktok">טיקטוק</option><option value="instagram">אינסטגרם</option></select></label>
+<p class="muted small">הפוסט יורד מיד: באינסטגרם ובפייסבוק הוא נמחק לבד כשאפשר, ובטיקטוק צריך למחוק אותו ידנית באפליקציה. הודעה שנייה תוך 90 יום משהה את החשבון.</p>
+<label class="f">פלטפורמה<select name="platform"><option value="">בכולן</option><option value="tiktok">טיקטוק</option><option value="instagram">אינסטגרם</option><option value="facebook">פייסבוק</option></select></label>
 <label class="f">ממי<input type="text" name="claimant" maxlength="200"></label>
 <label class="f">נוסח ההודעה<textarea name="notice" maxlength="4000" required></textarea></label>
 <div><button class="btn danger" type="submit">לרשום ולהוריד את הפוסט</button></div></form></details>` : ''}</section>`
@@ -686,33 +687,35 @@ const bars = (last) =>
 const DAY_MS = 86_400_000;
 const CHART_DAYS = 30;
 
-/** Views of the posts that went out each day of the last 30, TikTok under Instagram; oldest on the right. */
+/** Views of the posts that went out each day of the last 30, TikTok under Instagram under Facebook; oldest on the right. */
 function viewsChart(posts, t = Date.now()) {
-  const days = Array.from({ length: CHART_DAYS }, (_, i) => ({ key: dayHe(t - (CHART_DAYS - 1 - i) * DAY_MS), at: t - (CHART_DAYS - 1 - i) * DAY_MS, tiktok: 0, instagram: 0, n: 0 }));
+  const days = Array.from({ length: CHART_DAYS }, (_, i) => ({ key: dayHe(t - (CHART_DAYS - 1 - i) * DAY_MS), at: t - (CHART_DAYS - 1 - i) * DAY_MS, tiktok: 0, instagram: 0, facebook: 0, n: 0 }));
   const byKey = new Map(days.map((x) => [x.key, x]));
   for (const p of posts) {
     const x = byKey.get(dayHe(p.published_at));
     if (!x) continue;
     x.n++;
-    for (const pl of ['tiktok', 'instagram']) x[pl] += p.metrics[pl]?.views || 0;
+    for (const pl of PLATFORM_LIST) x[pl] += p.metrics[pl]?.views || 0;
   }
-  const max = Math.max(1, ...days.map((x) => x.tiktok + x.instagram));
+  const max = Math.max(1, ...days.map((x) => x.tiktok + x.instagram + x.facebook));
   const W = 10;
   const h = (v) => (v / max) * 96;
   const bars = days
     .map((x, i) => {
-      if (!x.tiktok && !x.instagram) return '';
+      if (!x.tiktok && !x.instagram && !x.facebook) return '';
       const at = (CHART_DAYS - 1 - i) * W + 1.5;
       const tt = h(x.tiktok);
       const ig = h(x.instagram);
-      return `<g><title>${esc(shortDate(x.at))}: ${x.n} ${x.n === 1 ? 'פוסט' : 'פוסטים'}, ${k(x.tiktok + x.instagram)} צפיות (טיקטוק ${k(x.tiktok)}, אינסטגרם ${k(x.instagram)})</title><rect class="c-tt" x="${at}" y="${(100 - tt).toFixed(2)}" width="7" height="${tt.toFixed(2)}"/><rect class="c-ig" x="${at}" y="${(100 - tt - ig).toFixed(2)}" width="7" height="${ig.toFixed(2)}"/></g>`;
+      const fb = h(x.facebook);
+      const fbBar = x.facebook ? `<rect class="c-fb" x="${at}" y="${(100 - tt - ig - fb).toFixed(2)}" width="7" height="${fb.toFixed(2)}"/>` : '';
+      return `<g><title>${esc(shortDate(x.at))}: ${x.n} ${x.n === 1 ? 'פוסט' : 'פוסטים'}, ${k(x.tiktok + x.instagram + x.facebook)} צפיות (טיקטוק ${k(x.tiktok)}, אינסטגרם ${k(x.instagram)}${x.facebook ? `, פייסבוק ${k(x.facebook)}` : ''})</title><rect class="c-tt" x="${at}" y="${(100 - tt).toFixed(2)}" width="7" height="${tt.toFixed(2)}"/><rect class="c-ig" x="${at}" y="${(100 - tt - ig).toFixed(2)}" width="7" height="${ig.toFixed(2)}"/>${fbBar}</g>`;
     })
     .join('');
   const grid = [25, 50, 75].map((y) => `<line class="c-grid" x1="0" x2="${CHART_DAYS * W}" y1="${y}" y2="${y}" vector-effect="non-scaling-stroke"/>`).join('');
   const ticks = [0, 10, 20, CHART_DAYS - 1].map((i) => `<span>${esc(shortDate(days[i].at))}</span>`).join('');
   const sum = (pl) => days.reduce((a, x) => a + x[pl], 0);
   return `<div class="chart"><span class="ymax num">${k(max)}</span><svg viewBox="0 0 ${CHART_DAYS * W} 100" preserveAspectRatio="none" role="img" aria-label="צפיות לפי יום הפרסום">${grid}${bars}<line class="c-base" x1="0" x2="${CHART_DAYS * W}" y1="100" y2="100" vector-effect="non-scaling-stroke"/></svg><div class="xt">${ticks}</div></div>
-<p class="legend"><span><i class="c-tt"></i>טיקטוק <b class="num">${k(sum('tiktok'))}</b></span><span><i class="c-ig"></i>אינסטגרם <b class="num">${k(sum('instagram'))}</b></span></p>`;
+<p class="legend"><span><i class="c-tt"></i>טיקטוק <b class="num">${k(sum('tiktok'))}</b></span><span><i class="c-ig"></i>אינסטגרם <b class="num">${k(sum('instagram'))}</b></span>${sum('facebook') ? `<span><i class="c-fb"></i>פייסבוק <b class="num">${k(sum('facebook'))}</b></span>` : ''}</p>`;
 }
 
 /** Each measured post against the median, oldest on the right: green over 1×, grey under; a bar is its post's link. */
@@ -747,7 +750,7 @@ ${test.result ? `<p>${test.result.winner ? `<b>${esc(test.result.winner)} ניצ
 
 export function resultsPage(ctx, d) {
   // What the published posts did leads. The formats, and what the checks stopped, wait behind a button each.
-  const sum = (p, f) => ['tiktok', 'instagram'].reduce((a, pl) => a + (p.metrics[pl]?.[f] || 0), 0);
+  const sum = (p, f) => PLATFORM_LIST.reduce((a, pl) => a + (p.metrics[pl]?.[f] || 0), 0);
   const measured = d.posts.filter((p) => Object.keys(p.metrics).length);
   const total = (f) => measured.reduce((a, p) => a + sum(p, f), 0);
   const top = measured.slice().sort((a, b) => sum(b, 'views') - sum(a, 'views'))[0];
@@ -762,7 +765,7 @@ export function resultsPage(ctx, d) {
     const has = Object.keys(p.metrics).length > 0;
     const v = sum(p, 'views');
     const r = rels.get(p.id);
-    const per = ['tiktok', 'instagram'].filter((pl) => p.metrics[pl]).map((pl) => `${PLATFORM_HE[pl]} ${k(p.metrics[pl].views)}`).join(' · ');
+    const per = PLATFORM_LIST.filter((pl) => p.metrics[pl]).map((pl) => `${PLATFORM_HE[pl]} ${k(p.metrics[pl].views)}`).join(' · ');
     const cell = (f) => (has ? k(sum(p, f)) : '–');
     return `<tr><td class="title" data-k="">${accDot(p.account_id)} <a href="/post/${esc(p.id)}">${esc(p.hook)}</a><div class="muted small">${esc(shortDate(p.published_at))}${per ? ` · ${esc(per)}` : ''}</div></td>
 <td class="n views" data-k="צפיות">${has ? `<span class="vbar" aria-hidden="true"><i class="w${Math.max(1, Math.round((v / most) * 10))}"></i></span>${k(v)}` : '<span class="muted">עוד לא נמדד</span>'}</td><td class="n" data-k="לייקים">${cell('likes')}</td><td class="n" data-k="שיתופים">${cell('shares')}</td><td class="n" data-k="תגובות">${cell('comments')}</td><td class="n" data-k="מול החציון">${r != null ? `<span class="cnt${r >= 1 ? ' ok' : ''}">${r.toFixed(2)}×</span>` : '–'}</td></tr>`;

@@ -161,7 +161,7 @@ says which keys are set without showing them.
 - **What to do.** Read the log lines. "no samples written: nofacts" is sources with nothing to write from (often the
   off-topic ones above, or a home page with no articles); "(error)" lines are the model or the renderer.
 
-### Connecting TikTok and Instagram: headless, and before the account exists
+### Connecting TikTok, Instagram and a Facebook Page: headless, and before the account exists
 
 - **What it is.** The connect is Zernio's headless mode: the customer goes straight to TikTok's or Instagram's own
   consent screen (Instagram Login), with no Zernio welcome screen or picker. Zernio still shows its own one-click
@@ -172,6 +172,31 @@ says which keys are set without showing them.
   externalId the onboarding id, kept in onboarding.setup_json), and the new account takes it over at create. On
   Zernio that profile keeps the onboarding's name and externalId; Teder finds it by the id it keeps.
 - **What to do.** Nothing. A workspace deleted before its account was created has that profile removed too.
+
+### Connecting a Facebook Page
+
+- **What it is.** A customer's Facebook Page is the third platform, connected from the same panel through Zernio's
+  headless connect. Facebook always comes back for a pick (step=select_page): Zernio posts to a Page, never to a
+  person's profile. One Page the customer can post to is connected by itself; several are listed on our own page, as
+  Instagram's Facebook Login accounts are. A Page they cannot publish to (no CREATE_CONTENT task, Meta's task for
+  publishing as the Page) is not offered. At the slot the Page gets Instagram's slides (4:5) and Instagram's caption, published at once; nothing
+  is rendered for Facebook, and there is no draft flow. A takedown notice takes the Page's post down through Zernio's
+  unpublish. Its numbers come from Zernio's analytics with the rest; the format rotation does not score them.
+- **Optional.** A post goes to TikTok and Instagram without a Page. No banner, email or setup step asks for one while
+  another platform is connected; the Page step on accounts' /setup is optional and says so.
+- **Which accounts have it.** New accounts from the new-account flow have `facebook` in pack.json's platforms. At the
+  first start after this change, every account a customer made in that flow (in a workspace, with an onboarding row)
+  gets it once (the log says "facebook: added as a platform to N customer account(s)"); a platform taken out of
+  pack.json by hand afterwards stays out (the setting `facebook:offered:<id>` remembers). The operator's own accounts,
+  written by hand, are left as they are: add `"facebook"` to platforms and `"facebook": "zernio"` to publishers to
+  give one a Page.
+- **What to do.** In Zernio: nothing to switch on, but each connected Page is one more connected account on Zernio's
+  bill, like a TikTok or an Instagram. Check the plan's account limit before many customers connect a Page. In Meta:
+  nothing of ours; the Page connects through Zernio's own Facebook app, whose consent screen asks for pages_show_list,
+  pages_read_engagement, pages_manage_metadata, pages_manage_posts, and for the numbers pages_read_user_content and
+  read_insights. Zernio says Facebook tokens expire often: a Page that needs reconnecting shows "צריך לחבר מחדש" on
+  the account page like the others, from the hourly health check.
+- **Needed now?** No. Nothing changes for an account until its owner connects a Page.
 
 ### Something went wrong on our side (500)
 

@@ -9,8 +9,10 @@
 //     messages and batches endpoints, Zernio's create-post endpoint and its
 //     create-profile endpoint (an empty folder on our own Zernio team, one per
 //     customer account, that the customer connects their own accounts into),
+//     the Instagram account or Facebook Page the customer picked on our own page,
 //     Meta's two publishing endpoints for an Instagram account (create a media container,
-//     publish it), deleting a post of ours after a takedown notice, disconnecting a
+//     publish it), deleting a post of ours after a takedown notice (Meta's delete,
+//     or Zernio's unpublish for a Facebook Page's post), disconnecting a
 //     deleted customer's accounts and profile from our own Zernio team, and an empty
 //     Web Push to the owner's own browser through the browsers' push services
 //     (src/notify: it carries no words). Nothing else.
@@ -68,7 +70,9 @@ export const WRITE_RULES = [
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts$/, why: 'Zernio: create a post on our own account' },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/profiles$/, why: "Zernio: a customer account's profile, the folder its TikTok and Instagram are connected into" },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/connect\/instagram\/select-account$/, why: 'Zernio (headless connect): the Instagram account the customer picked, when Instagram came back through Facebook Login' },
-  { method: 'DELETE', host: 'zernio.com', path: /^\/api\/v1\/accounts\/[A-Za-z0-9_-]+$/, why: 'Zernio: disconnecting a TikTok or Instagram from our own team, once its customer deleted their workspace' },
+  { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/connect\/facebook\/select-page$/, why: 'Zernio (headless connect): the Facebook Page the customer picked to post to' },
+  { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts\/[A-Za-z0-9_-]+\/unpublish$/, why: "Zernio: taking our own Facebook post down from the customer's Page after a takedown notice" },
+  { method: 'DELETE', host: 'zernio.com', path: /^\/api\/v1\/accounts\/[A-Za-z0-9_-]+$/, why: 'Zernio: disconnecting a TikTok, Instagram or Facebook Page from our own team, once its customer deleted their workspace' },
   { method: 'DELETE', host: 'zernio.com', path: /^\/api\/v1\/profiles\/[A-Za-z0-9_-]+$/, why: "Zernio: removing a deleted customer's emptied profile from our own team" },
   { method: 'POST', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Facebook Login): a media container on our own account, and publishing it' },
   { method: 'POST', host: 'graph.instagram.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Instagram Login): a media container on our own account, and publishing it' },
@@ -84,8 +88,9 @@ export const WRITE_RULES = [
 export const READ_RULES = [
   { host: 'www.googleapis.com', path: /^\/youtube\/v3\/(search|videos)$/, why: 'YouTube Data API: Shorts and their public counts, read only' },
   { host: 'zernio.com', path: /^\/api\/v1\/(posts\/[A-Za-z0-9_-]+|accounts|accounts\/health|analytics|profiles)$/, why: 'Zernio: our own posts, profiles, connected accounts and their health, and analytics' },
-  { host: 'zernio.com', path: /^\/api\/v1\/connect\/(tiktok|instagram)$/, why: 'Zernio: the link a customer opens to connect their own TikTok or Instagram' },
+  { host: 'zernio.com', path: /^\/api\/v1\/connect\/(tiktok|instagram|facebook)$/, why: 'Zernio: the link a customer opens to connect their own TikTok, Instagram or Facebook Page' },
   { host: 'zernio.com', path: /^\/api\/v1\/connect\/instagram\/select-account$/, why: 'Zernio (headless connect): the Instagram accounts to pick from, when Instagram came back through Facebook Login' },
+  { host: 'zernio.com', path: /^\/api\/v1\/connect\/facebook\/select-page$/, why: 'Zernio (headless connect): the Facebook Pages the customer manages, to pick the one to post to' },
   { host: 'zernio.com', path: /^\/api\/v1\/usage$/, why: "Zernio: what it bills, split per customer's profile" },
   { host: 'zernio.com', path: /^\/api\/v1\/accounts\/[A-Za-z0-9_-]+\/tiktok\/commercial-music$/, why: "Zernio: TikTok's trending Commercial Music Library chart, for a post's sound" },
   { host: 'i.ytimg.com', why: 'YouTube thumbnails' },

@@ -20,16 +20,17 @@ import { FLOOR } from '../voice/tells.js';
 // packWarnings(pack) is a third list: what the engine changed on its own and the owner should know.
 
 export const MODES = ['approve', 'digest', 'auto'];
-export const PLATFORMS = ['tiktok', 'instagram'];
+export const PLATFORMS = ['tiktok', 'instagram', 'facebook'];
 export const PUBLISHERS = ['dry', 'zernio'];
 // TikTok as a draft the moment a post is approved and a reminder at its hour (the default), straight out, or as a draft
 // at the hour posted directly an hour late if the owner does not.
 export const TIKTOK_MODES = ['draft-now', 'direct', 'draft-fallback'];
 /**
  * Who can publish to each platform. Instagram also directly, through Meta's own Graph API, or "auto": that one when it is
- * set up for the account, else Zernio. TikTok also through our own TikTok app ("own-app"), not built yet.
+ * set up for the account, else Zernio. TikTok also through our own TikTok app ("own-app"), not built yet. A Facebook
+ * Page through Zernio alone, with Instagram's slides (src/core/platforms.js).
  */
-export const PLATFORM_PUBLISHERS = { tiktok: ['dry', 'zernio', 'own-app'], instagram: ['dry', 'zernio', 'instagram', 'auto'] };
+export const PLATFORM_PUBLISHERS = { tiktok: ['dry', 'zernio', 'own-app'], instagram: ['dry', 'zernio', 'instagram', 'auto'], facebook: ['dry', 'zernio'] };
 export const SOURCE_TYPES = ['rss', 'web', 'api'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID = /^[a-z0-9][a-z0-9-]{1,39}$/;

@@ -20,11 +20,15 @@ const { listen } = await import('../src/web/server.js');
 const { startRunner } = await import('../src/autonomy/runner.js');
 
 const { recoverOnboarding } = await import('../src/web/onboarding.js');
+const { offerFacebook } = await import('../src/publish/connect.js');
 
 const ctx = makeContext({ log: (m) => console.log(`[${new Date().toISOString()}] ${m}`) });
 // A new account's search for sources that a restart cut off is failed, and its page offers to search again.
 const cut = recoverOnboarding(ctx.db);
 if (cut) console.log(`onboarding: ${cut} search(es) for sources interrupted by a restart, marked to try again`);
+// The accounts customers made before Facebook existed get it as a platform, once, so they can connect a Page.
+const fb = offerFacebook(ctx);
+if (fb.length) console.log(`facebook: added as a platform to ${fb.length} customer account(s), to connect a Page from the account page`);
 const { port } = await listen(ctx);
 console.log(`open-frequency: http://127.0.0.1:${port}  (${ctx.packs.length} accounts, mode ${ctx.mode})`);
 // Sign-in is openfrequency-accounts' (src/web/accounts.js): without the shared token nobody gets in.

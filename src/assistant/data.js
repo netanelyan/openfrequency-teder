@@ -8,6 +8,7 @@ import { oneLine } from '../rules/overlay.js';
 import { mediaLink } from './sign.js';
 import { connectLink, connectState } from '../publish/connect.js';
 import { zernioConfigured } from '../publish/zernio.js';
+import { mediaOf } from '../core/platforms.js';
 
 // What the WhatsApp assistant reads (docs/assistant-api.md), in the shapes it gets them. Every function here takes a
 // workspace's context (src/web/workspace.js) or rows already checked against one; nothing here decides who may see
@@ -84,6 +85,7 @@ export function connectionsOf(db, pack, link = null) {
 
 /** Signed links to a platform's slides. `link` is { secret, base, t }. */
 export const slideLinks = (post, platform, link) => (post.media?.[platform] || []).map((_, idx) => mediaLink(link.secret, { base: link.base, postId: post.id, platform, idx, t: link.t }));
+// A Facebook Page's part is sent Instagram's slides (src/core/platforms.js): its links are to those.
 
 /** A post as the assistant shows it: the cover line, the slot, every slide with its text and a link to its image, the caption. */
 export function postView(post, pack, link) {
@@ -139,9 +141,9 @@ export function bundleOf(db, post, pack, link) {
   const credit = imageCredit(db, post);
   const platforms = {};
   for (const platform of pack.meta.platforms) {
-    if (!post.media?.[platform]?.length) continue;
-    const caption = [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, credit].filter(Boolean).join('\n\n');
-    platforms[platform] = { images: slideLinks(post, platform, link), caption, hashtags: post.hashtags || [], text: captionOf(db, post, platform) };
+    if (!post.media?.[mediaOf(platform)]?.length) continue;
+    const caption = [(platform === 'instagram' || platform === 'facebook') && post.caption_ig ? post.caption_ig : post.caption, credit].filter(Boolean).join('\n\n');
+    platforms[platform] = { images: slideLinks(post, mediaOf(platform), link), caption, hashtags: post.hashtags || [], text: captionOf(db, post, platform) };
   }
   return { id: post.id, account: accountOf(pack), status: post.status, coverLine: oneLine(post.hook || ''), slotAt: post.slot_at || null, aiLabel: Boolean(post.ai_label), platforms };
 }

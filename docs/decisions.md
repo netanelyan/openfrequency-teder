@@ -1895,3 +1895,63 @@ running, while unapproved posts expire at the end of their day and still count t
    left connected after its customer is gone is a bill for nothing and a customer's account still reachable from our
    team. They reach our own Zernio team only, never a social platform, and only for a workspace accounts says is
    deleted. An account id typed into a pack by hand is not disconnected: it may be the operator's own.
+
+### A customer's Facebook Page, the third platform (2026-10-29)
+
+The owner chose to add Facebook posting: each slideshow also goes to the customer's Facebook Page, connected the way
+Instagram is.
+
+1. *Through Zernio, to a Page.* Zernio posts to a Facebook Page the person manages, never to a personal profile, so a
+   headless Facebook connect always returns for a pick (step=select_page with a tempToken, a connect_token and the
+   signed-in person's userProfile). The Pages are listed with `GET /v1/connect/facebook/select-page` and the one picked
+   is connected with `POST` to the same path, which needs the userProfile Zernio sent back; it is kept with the pick on
+   the server, never sent to the browser, and neither is any Page token. One Page they can post to is connected by
+   itself; several are offered on our own page, the same picker Instagram's Facebook Login uses
+   (`src/web/connect.js` PICKS). The network door opens for exactly that select, and for a takedown's unpublish.
+2. *Instagram's slides and caption.* A Page's multi-photo post shows a 4:5 portrait whole in the feed, so the Page is
+   sent the slides rendered for Instagram and nothing is rendered for Facebook (`src/core/platforms.js` mediaOf,
+   mediaSizes): a third set of renders would cost a render of every slide for the same picture. The caption is
+   Instagram's too: a Page post is read as the text above the photos, cut at its first lines before "See more", so it
+   should open on the cover line and end on the question, which on Facebook is what brings comments. TikTok's caption
+   is written to sit under slides that already said the hook. A Page takes up to 10 images and 63,206 characters.
+3. *Published at the slot, never a draft.* Like Instagram, after the customer's approval. TikTok's drafts exist so the
+   owner can add a popular sound; a Page has none to add.
+4. *Optional.* A post goes to TikTok and Instagram whether or not a Page is connected, and a Page not connected is
+   skipped like any platform left unconnected. So nothing asks for a Page while the account posts elsewhere: the
+   banner, the "connect" email and the held reason name TikTok and Instagram only (`src/publish/hold.js`
+   missingConnections), and the /setup step for the Page is optional. A Page alone is enough for the required
+   "connected" step, since posts then do go out.
+5. *Which accounts.* New accounts have it from the start. The accounts customers made before it get it once, at the
+   next start (`offerFacebook`): an account in a workspace that came from the new-account flow. The operator's own
+   three accounts were written by hand and are in no customer flow, so they are left as
+   they are; they get a Page when the operator adds it to their pack.json. A platform taken out by hand stays out.
+6. *Its numbers and a takedown.* Zernio's analytics give a Page's numbers like the others', and they are kept and
+   shown on Results (a third, lighter bar). The format rotation scores TikTok and Instagram only, so a Page never moves
+   a format until there is a Facebook measure worth scoring. Zernio's unpublish (`POST /v1/posts/{id}/unpublish`,
+   platform facebook) takes a Page's post down after a takedown notice; it is the one platform where Zernio can.
+7. *One migration.* `zernio_connections.platform` had a CHECK of TikTok and Instagram; SQLite cannot change a CHECK in
+   place, so the table is made again with its rows.
+8. *Where each piece comes from.* Every Zernio path, field and value here is from Zernio's docs, read 2026-10-29:
+   - a Page only, never a personal profile; 10 images and 63,206 characters a post; the example post body (content,
+     mediaItems, platforms, publishNow); the OAuth scopes; "Facebook tokens expire frequently":
+     docs.zernio.com/platforms/facebook
+   - the headless connect and its return (step=select_page, profileId, tempToken, connect_token, userProfile encoded
+     twice): docs.zernio.com/connect/get-connect-url
+   - listing the Pages (GET /v1/connect/facebook/select-page, profileId, X-Temp-Token; pages with id, name, username,
+     access_token, category, tasks): docs.zernio.com/connect/list-facebook-pages
+   - connecting the one picked (POST to the same path; profileId, pageId, userProfile required; X-Temp-Token,
+     X-Connect-Token; the account answered): docs.zernio.com/connect/select-facebook-page
+   - mediaItems, publishNow and the post's per-platform status, platformPostId, platformPostUrl:
+     docs.zernio.com/posts/create-post
+   - a Page's numbers ("Facebook Page analytics work for all posts"; impressions, reach, likes, comments, shares,
+     clicks, views): docs.zernio.com/analytics/get-analytics
+   - the takedown: docs.zernio.com/posts/unpublish-post (Facebook supported; not Instagram, TikTok or Snapchat), and
+     docs.zernio.com/posts/delete-post (a published post cannot be deleted that way)
+   - each Page one connected account on the bill ("One Facebook Page"): docs.zernio.com/pricing
+   - the Page task that publishes (CREATE_CONTENT, "Publish content as the Page on the Page"): Meta's
+     developers.facebook.com/docs/pages-api/overview
+9. *What the docs leave open (UNVERIFIED, each behind a check that fails safely).* Which post type Zernio makes with no
+   contentType: the body is Zernio's own Facebook example and nothing more is set, no field the docs do not name. The
+   numbers' field names for a Page beyond the shared list: a reading with no views and no reach is not stored. A Page
+   listed with no tasks: offered, and a refusal at the slot is said in Hebrew. None of it was tried against Zernio
+   itself; the first live connect and post are the check.

@@ -290,7 +290,7 @@ function namePanel(pc, r) {
 
 /** What the connect panel reads for an onboarding with no account yet. */
 const obConnectData = (ctx, r) => ({
-  pack: { id: r.id, meta: { platforms: ['tiktok', 'instagram'] } },
+  pack: { id: r.id, meta: { platforms: ['tiktok', 'instagram', 'facebook'] } },
   configured: zernioConfigured(),
   hasProfile: Boolean(r.setup.zernio?.profileId),
   platforms: onboardingStates(ctx.db, r.id),
@@ -542,7 +542,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
     ],
     [
       'POST',
-      /^\/new\/([\w-]+)\/connect\/(tiktok|instagram)$/,
+      /^\/new\/([\w-]+)\/connect\/(tiktok|instagram|facebook)$/,
       async (ctx, user, m) => {
         const r = row(ctx, m[1]);
         if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');

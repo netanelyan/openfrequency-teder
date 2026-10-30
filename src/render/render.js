@@ -12,6 +12,7 @@ import { focusOf } from '../images/safety.js';
 import { overlayOf } from '../rules/overlay.js';
 import { fillsCover, imageSize } from '../images/size.js';
 import { stylePage } from './styles/index.js';
+import { mediaSizes } from '../core/platforms.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
 // bidirectional layout and shaping and the browser is the thing that has it.
@@ -652,7 +653,8 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const { plan, uses, sceneKeys } = planPhotos({ slides, byIdx, postKind });
   // The closing slide, when the account has one, stands on the least-used scene (or photograph) of the post.
   const endKey = [...sceneKeys, ...[...uses.keys()]].sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0] ?? null;
-  for (const size of platforms || pack.meta.platforms) {
+  // Each size once: a Facebook Page's post is sent Instagram's slides (src/core/platforms.js).
+  for (const size of platforms || mediaSizes(pack.meta.platforms)) {
     out[size] = [];
     const drawn = [];
     let n = 0;
