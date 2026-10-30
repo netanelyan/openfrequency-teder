@@ -7,7 +7,7 @@ import { NAME_HE, checkName, handleFromUsername, saveSetup, setupOf } from '../o
 import { buildPost, candidateDocs, loadPost } from '../pipeline/build.js';
 import { carryOnboardingZernio, doneLink, onboardingDoneLink, onboardingStates, refreshOnboardingConnections, startConnect, startOnboardingConnect } from '../publish/connect.js';
 import { zernioConfigured } from '../publish/zernio.js';
-import { DEFAULT_CHOICE, readChoice, saveChoice } from '../schedule/choice.js';
+import { defaultChoiceFor, readChoice, saveChoice } from '../schedule/choice.js';
 import { ActionError } from './actions.js';
 import { postCard } from './pages.js';
 import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
@@ -308,7 +308,7 @@ ${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`;
 /** The days and times, before the account exists: the onboarding's choice, else the one a new account starts with. */
 function scheduleSection(ctx, pc, r) {
   const pseudo = { id: r.id, meta: { displayName: r.setup.displayName || r.seed.niche, schedule: {} } };
-  const d = scheduleData(ctx.db, pseudo, { choice: r.setup.choice?.byDay ? r.setup.choice : { byDay: DEFAULT_CHOICE } });
+  const d = scheduleData(ctx.db, pseudo, { choice: r.setup.choice?.byDay ? r.setup.choice : { byDay: defaultChoiceFor(r.id) } });
   return schedulePanel(pc, d, { action: `/new/${r.id}/schedule`, back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${d.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` });
 }
 
@@ -598,11 +598,12 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         }
         // The account starts in onboarding: the runner leaves it alone until it goes live.
         ctx.db.insert('accounts', { id: made.id, display_name: made.pack.meta.displayName, handle: made.pack.meta.handle, mode: 'approve', status: 'onboarding', workspace_id: r.workspace_id ?? null, created_at: nowIso(), updated_at: nowIso() });
-        // Its days and times: what the owner chose while the sources were searched, else the default, which reaches
-        // the month's plan. The owner may change them before it goes live.
+        // Its days and times: what the owner chose while the sources were searched, else the default the page showed
+        // (moved a few minutes by this onboarding, so customers do not all post on the same minute), which reaches the
+        // month's plan. The owner may change them before it goes live.
         const choice = setupOf(ctx.db, r.id).choice;
         if (choice?.byDay) saveChoice(ctx.db, made.id, choice.byDay, { actor: user.name, shabbat: Boolean(choice.shabbat), holidays: Boolean(choice.holidays) });
-        else saveChoice(ctx.db, made.id, DEFAULT_CHOICE, { actor: user.name });
+        else saveChoice(ctx.db, made.id, defaultChoiceFor(r.id), { actor: user.name });
         // TikTok and Instagram connected before the account existed: the account takes the profile over.
         carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
         ctx.reloadPacks();

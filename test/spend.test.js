@@ -148,6 +148,50 @@ test('the day is drafted in batches: one batch per round for every post at once,
   }
 });
 
+test('a batch that does not end by its deadline is cancelled, and the run is drafted directly at the full price', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    keepOnly(path.join(home, 'packs', 'demo'), ['basil-containers']);
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    const sizes = [];
+    const cancelled = [];
+    const fake = fakeBatchApi(pack, { onCreate: (reqs) => sizes.push(reqs.length) });
+    // A batch that never ends, and a status that cannot even be read some of the time.
+    let polls = 0;
+    const stuck = { ...fake, async retrieve(id) {
+      if (++polls % 2) throw new Error('overloaded');
+      return { id, status: 'in_progress' };
+    }, async cancel(id) {
+      cancelled.push(id);
+      return { id, status: 'canceling' };
+    } };
+    // Direct answers, from the same recording the batch would have given.
+    let direct = 0;
+    const llm = { kind: 'claude', backend: 'api', async json(req) {
+      direct++;
+      const answer = (await fake.results(fake.create && (await fake.create([{ custom_id: 'x', params: req.params }])).id).next()).value;
+      return { data: JSON.parse(answer.result.message.content[0].text), usage: answer.result.message.usage, model: req.params.model, estimated: false };
+    } };
+    const logs = [];
+    const batcher = makeBatcher({ ...ctx, llm }, { api: stuck, pollMs: [5], deadlineMs: 40, log: (m) => logs.push(m) });
+    const bctx = { ...ctx, llm: batcher };
+    const res = await Promise.all([0, 1].map(() => batcher.run(() => buildPost(bctx, { pack, formatKey: 'care-guide' }))));
+    assert.deepEqual(res.map((r) => r.status), ['queued', 'queued'], JSON.stringify(res.map((r) => r.reason)));
+    assert.equal(sizes[0], 2, 'the outlines went as one batch');
+    assert.equal(cancelled.length, 1, 'the batch past its deadline was cancelled, once');
+    assert.match(logs.join('\n'), /still not ended after .* cancelled, its 2 request\(s\) asked directly/);
+    assert.equal(direct, 8, 'its two requests, and every request after it, asked directly');
+    const rows = ctx.db.all("SELECT * FROM spend WHERE api = 'claude'");
+    assert.equal(rows.length, 8, 'each direct call recorded once');
+    assert.ok(rows.every((r) => r.batch === 0 && !r.estimated), 'at the full price, from its usage');
+    assert.equal(batcher.owned.size, 0, 'the given-up batch is left for recoverBatches to record what it did');
+    assert.equal(ctx.db.get('SELECT status FROM batches').status, 'in_progress');
+  } finally {
+    cleanup();
+  }
+});
+
 test('a batch a restart left behind is still recorded, once', async () => {
   const { home, cleanup } = tempHome();
   try {

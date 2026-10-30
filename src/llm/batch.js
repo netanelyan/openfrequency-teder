@@ -2,6 +2,7 @@ import { nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { claudeCost, record } from '../budget/ledger.js';
 import { ClaudeError, requestParams, readMessage } from './claude.js';
+import { alertOperator } from '../notify/operator.js';
 
 // Drafting through the Message Batches API, at half price.
 //
@@ -23,8 +24,17 @@ import { ClaudeError, requestParams, readMessage } from './claude.js';
 // what each request was for. recoverBatches() finds the ones not recorded yet,
 // reads their results when they end, and records what they cost, even though
 // the posts they were for are gone. The ledger never misses a paid call.
+//
+// A BATCH THAT DOES NOT END. Most end within the hour; the API gives one up to 24. A batch still running after
+// BATCH_DEADLINE_MS (or one whose status cannot be read that long) is cancelled, its requests are asked directly at
+// the full price, and every request the run makes after it goes directly too, so the day's posts are written while
+// their slots are still ahead and the day's generation (which waits on this run) is never held for a day. What the
+// cancelled batch had already done is billed: recoverBatches() records it when it ends, as for a restart.
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** How long a batch may run before its requests are asked directly. */
+export const BATCH_DEADLINE_MS = 2 * 3_600_000;
 
 /** What one batch result cost and what it says, as { ok, data, usage, model, usd, error }. */
 function readResult(r, meta) {
@@ -51,13 +61,45 @@ function account(db, meta, res) {
   });
 }
 
-export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log = ctx.log } = {}) {
+export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], deadlineMs = BATCH_DEADLINE_MS, direct = ctx.llm, log = ctx.log } = {}) {
   const { db } = ctx;
   const pending = [];
   let active = 0;
   let waiting = 0;
   let seq = 0;
   const owned = new Set();
+  // Set once a batch ran past its deadline: from then on every request of the run is asked directly.
+  let fallen = false;
+
+  /** One request asked directly, at the full price, recorded here as the batcher records its own (askJson does not again). */
+  async function askDirect(it) {
+    try {
+      const res = await direct.json(it.req);
+      const usd = res.usage ? claudeCost(res.usage, res.model || it.meta.model) : 0;
+      if (res.usage) record(db, { accountId: it.meta.account_id, postId: it.meta.post_id, api: 'claude', model: res.model || it.meta.model, usd, tag: it.meta.tag, batch: false, usage: res.usage });
+      return { data: res.data, usage: res.usage, model: res.model, usd, estimated: false, batch: false, settled: true };
+    } catch (e) {
+      if (e?.usage) record(db, { accountId: it.meta.account_id, postId: it.meta.post_id, api: 'claude', model: e.model || it.meta.model, usd: claudeCost(e.usage, e.model || it.meta.model), tag: it.meta.tag, batch: false, usage: e.usage });
+      throw Object.assign(e, { settled: true });
+    }
+  }
+
+  /** The batch ran past its deadline: cancel it, and ask each of its requests directly. */
+  async function giveUp(id, items) {
+    fallen = Boolean(direct?.json);
+    log?.(`batch ${id}: still not ended after ${Math.round(deadlineMs / 60_000)} minutes; cancelled, its ${items.length} request(s) asked directly`);
+    try {
+      await api.cancel?.(id);
+    } catch (e) {
+      log?.(`batch ${id}: cancel: ${e.message}`);
+    }
+    await alertOperator(ctx, 'batch-deadline', { title: 'Teder: a batch ran past its deadline', body: `batch ${id} (${items.length} request(s)) was cancelled and asked directly at the full price` }, { every: 6 * 3_600_000 }).catch(() => {});
+    if (!fallen) {
+      for (const it of items) it.reject(Object.assign(new ClaudeError('the batch ran past its deadline, and there is no direct client to ask', 'batch_deadline'), { settled: true }));
+      return;
+    }
+    await Promise.all(items.map((it) => askDirect(it).then(it.resolve, it.reject)));
+  }
 
   async function send(items) {
     const requests = items.map((it) => ({ custom_id: it.customId, params: it.params }));
@@ -74,8 +116,10 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
     log?.(`batch ${created.id}: ${items.length} request(s) sent`);
     try {
       let i = 0;
+      const deadline = Date.now() + deadlineMs;
       for (;;) {
-        await sleep(pollMs[Math.min(i++, pollMs.length - 1)]);
+        if (Date.now() >= deadline) return await giveUp(created.id, items);
+        await sleep(Math.min(pollMs[Math.min(i++, pollMs.length - 1)], Math.max(0, deadline - Date.now())));
         let b;
         try {
           b = await api.retrieve(created.id);
@@ -123,6 +167,11 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
     if (pending.length && waiting >= active) send(pending.splice(0));
   }
 
+  /** A request made after a batch was given up: asked directly at once. */
+  function askNow(it) {
+    askDirect(it).then(it.resolve, it.reject);
+  }
+
   return {
     kind: 'claude',
     // The paid API, at the batch rate: every request it carries is recorded here when its batch ends.
@@ -145,11 +194,13 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
       const meta = { account_id: req.meta?.accountId ?? null, post_id: req.meta?.postId ?? null, model: params.model, tag: req.tag || req.task || null };
       waiting++;
       return new Promise((resolve, reject) => {
-        pending.push({
-          customId, params, meta,
+        const it = {
+          customId, params, meta, req,
           resolve: (v) => (waiting--, resolve(v)),
           reject: (e) => (waiting--, reject(e)),
-        });
+        };
+        if (fallen && direct) return askNow(it);
+        pending.push(it);
         kick();
       });
     },

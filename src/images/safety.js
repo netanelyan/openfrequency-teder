@@ -1,5 +1,5 @@
 import { askJson } from '../llm/index.js';
-import { getBrowser } from '../render/render.js';
+import { getBrowser, renderSlot } from '../render/render.js';
 
 // The image screen: no blood, no injury close-ups, no fighter down and out, no
 // watermark, no belt, no promotion's logo or poster. TikTok takes a post with
@@ -35,8 +35,10 @@ export function refusingWord(text, extra = []) {
   return [...REFUSE_WORDS, ...extra].find((w) => t.includes(` ${String(w).toLowerCase()} `)) || null;
 }
 
-/** A see-through PNG drawn onto a solid colour, as a JPEG, through the render browser's canvas (nothing is fetched). */
-export async function flatten(buf, ground = '#111111') {
+/** A see-through PNG drawn onto a solid colour, as a JPEG, through the render browser's canvas (nothing is fetched), in its turn. */
+export const flatten = (buf, ground) => renderSlot(() => flattenNow(buf, ground));
+
+async function flattenNow(buf, ground = '#111111') {
   const browser = await getBrowser();
   const context = await browser.newContext({ viewport: { width: 200, height: 200 } });
   await context.route('**/*', (route) => route.abort());
@@ -64,7 +66,9 @@ export async function flatten(buf, ground = '#111111') {
  * The share of deep, saturated red pixels in an image, through the render
  * browser's canvas (nothing is fetched: the image is inlined).
  */
-export async function redShare(buf, type = 'image/jpeg') {
+export const redShare = (buf, type) => renderSlot(() => redShareNow(buf, type));
+
+async function redShareNow(buf, type = 'image/jpeg') {
   const browser = await getBrowser();
   const context = await browser.newContext({ viewport: { width: 200, height: 200 } });
   await context.route('**/*', (route) => route.abort());
