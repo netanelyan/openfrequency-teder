@@ -120,6 +120,17 @@ function clone(fromId, accountId = null, patch = {}) {
 }
 
 const by = { name: 'דנה', userId: 101 };
+
+/** Every route that names a post or an account, as customer 1 tries it on customer 2's: each is not found. */
+const crossCases = () => [
+  ['POST', `posts/${B.post}/approve`, { by }],
+  ['POST', `posts/${B.post}/reject`, { by, reason: 'topic' }],
+  ['POST', `posts/${B.post}/edit`, { by, slide: 1, newText: 'כותרת אחרת' }],
+  ['GET', `posts/${B.post}/bundle`, null],
+  ['GET', 'accounts/bravo/connect', null],
+];
+/** The routes that name nothing: answered for the customer in the path, with that customer's alone (checked below). */
+const SCOPED = [['GET', 'posts/pending'], ['GET', 'status'], ['GET', 'settings'], ['POST', 'settings']];
 const c1 = (rest) => `/internal/assistant/customers/1/${rest}`;
 const c2 = (rest) => `/internal/assistant/customers/2/${rest}`;
 
@@ -203,15 +214,9 @@ test("one customer never sees or touches another's posts", async () => {
   const theirs = await call('GET', c2('posts/pending'));
   assert.deepEqual(theirs.body.posts.map((p) => p.id), [B.post]);
 
-  // Customer 1 names B's post on every route: not found, the same answer as a post that never was.
+  // Customer 1 names B's post and account on every route that takes one: not found, the same answer as one that never was.
   const before = db.get('SELECT status, hook, updated_at FROM posts WHERE id = ?', B.post);
-  for (const [method, rest, body] of [
-    ['POST', `posts/${B.post}/approve`, { by }],
-    ['POST', `posts/${B.post}/reject`, { by, reason: 'topic' }],
-    ['POST', `posts/${B.post}/edit`, { by, slide: 1, newText: 'כותרת אחרת' }],
-    ['GET', `posts/${B.post}/bundle`, null],
-    ['POST', 'posts/no-such-post/approve', { by }],
-  ]) {
+  for (const [method, rest, body] of [...crossCases(), ['POST', 'posts/no-such-post/approve', { by }]]) {
     const r = await call(method, c1(rest), body);
     assert.deepEqual([r.status, r.body.error], [404, 'not_found'], `${method} ${rest}`);
   }
@@ -232,6 +237,13 @@ test("one customer never sees or touches another's posts", async () => {
   assert.equal((await fetch(link.replace(/s=[0-9a-f]+/, `s=${'0'.repeat(64)}`))).status, 404);
   const old = mediaLink(SECRET, { base, postId: A.post, platform: 'tiktok', idx: 0, t: Date.now() - 2 * 86_400_000 });
   assert.equal((await fetch(old)).status, 404, 'an expired link');
+});
+
+test('every route of the API has an isolation case here', () => {
+  const cases = [...crossCases(), ...SCOPED];
+  for (const [method, re] of handler.assistant.routes) {
+    assert.ok(cases.some(([m, rest]) => m === method && re.test(rest)), `${method} ${re} has no isolation case: add one to crossCases or SCOPED in test/assistant.test.js`);
+  }
 });
 
 /* ------------------------------------------------------------------ the buttons */

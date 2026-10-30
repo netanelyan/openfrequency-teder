@@ -10,6 +10,7 @@ import { ActionError } from './actions.js';
 import { contrast } from '../render/color.js';
 import { LOGOS } from './logos.js';
 import { esc, layout, ofMark, postButton, stamp, tederMark } from './ui.js';
+import { a11yLink } from './ui.js';
 
 // Stores' demos on the website (src/demos):
 //
@@ -310,13 +311,13 @@ ${priced ? `<p class="figure"><span class="num">${esc(Number(offer.monthly).toLo
 <div class="price-incl"><h3>${priced ? 'מה כלול במחיר' : 'מה תדר עושה'}</h3><ul class="checks">${INCLUDES.map((x) => `<li>${x}</li>`).join('')}</ul></div>
 </div>
 </section>
-<footer class="foot"><span class="by">${ofMark()}OpenFrequency</span></footer>
+<footer class="foot"><span class="by">${ofMark()}OpenFrequency</span>${a11yLink()}</footer>
 </div>
 </body></html>`;
 }
 
 export const goneHtml = () =>
-  `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>העמוד לא כאן | תדר</title><link rel="stylesheet" href="/static/demo.css"></head><body class="d-page"><div class="wrap"><section class="hero"><h1>העמוד הזה לא כאן</h1><p class="lede">אולי הקישור ישן. אם קיבלתם אותו מאיתנו, אפשר לענות להודעה ונשלח קישור חדש.</p></section></div></body></html>`;
+  `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>העמוד לא כאן | תדר</title><link rel="stylesheet" href="/static/demo.css"></head><body class="d-page"><div class="wrap"><section class="hero"><h1>העמוד הזה לא כאן</h1><p class="lede">אולי הקישור ישן. אם קיבלתם אותו מאיתנו, אפשר לענות להודעה ונשלח קישור חדש.</p></section><footer class="foot">${a11yLink()}</footer></div></body></html>`;
 
 // ---------------------------------------------------------------- the operator's pages
 

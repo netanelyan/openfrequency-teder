@@ -11,7 +11,7 @@ import { instagramPages, selectInstagram } from '../publish/zernio.js';
 import { j } from '../db/index.js';
 import { ActionError } from './actions.js';
 import { connectErrorHe } from '../publish/errors.js';
-import { csrfField, esc, icon, postButton, tederMark, usd } from './ui.js';
+import { a11yLink, csrfField, esc, icon, postButton, tederMark, usd } from './ui.js';
 
 // Connecting a customer's TikTok and Instagram (src/publish/connect.js), on the website:
 //
@@ -197,7 +197,7 @@ function resultPage({ title, text, actions = '', v = 1 }) {
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1>${esc(title)}</h1>
 <p>${esc(text)}</p>
-${actions ? `<div class="links">${actions}</div>` : ''}</main></body></html>`;
+${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
 }
 
 /**
@@ -206,7 +206,7 @@ ${actions ? `<div class="links">${actions}</div>` : ''}</main></body></html>`;
  */
 export function goPage(url, { name = '', v = 1 } = {}) {
   return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${esc(url)}"><title>עוברים ל${esc(name)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"></head>
-<body class="login"><main class="card"><div class="hero">${tederMark()}<b>תדר</b></div><h1>עוברים ל${esc(name)}</h1><p>אם הדף לא עובר לבד, אפשר ללחוץ כאן.</p><div class="links"><a class="btn primary" href="${esc(url)}" rel="noreferrer">להמשיך</a></div></main></body></html>`;
+<body class="login"><main class="card"><div class="hero">${tederMark()}<b>תדר</b></div><h1>עוברים ל${esc(name)}</h1><p>אם הדף לא עובר לבד, אפשר ללחוץ כאן.</p><div class="links"><a class="btn primary" href="${esc(url)}" rel="noreferrer">להמשיך</a></div><p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
 }
 
 const EXPIRED = { title: 'הלינק הזה כבר לא בתוקף', text: 'לינק לחיבור עובד 72 שעות. אפשר לבקש לינק חדש בוואטסאפ, או לחבר מדף החשבון באתר.' };

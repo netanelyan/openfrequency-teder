@@ -1,4 +1,5 @@
 import { accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, shortDate, stamp, statusChip, tederMark, timeHe, usd, weekdayNarrow } from './ui.js';
+import { a11yLink } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
 import { CATALOG } from '../sources/catalog.js';
@@ -427,7 +428,8 @@ ${stopBanners(ctx, d)}
 <section class="panel home-panel" id="waiting"><header><h2>מחכים לאישור</h2>${waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `${icon('check')}לאשר את כל ה-${waiting.length}`, { cls: 'btn primary', fields: { ids: ids(waiting) }, confirm: `לחצו שוב לאישור ${waiting.length} פוסטים` })}</span>` : ''}</header>
 ${queue || '<p class="muted">אף חשבון לא מחכה לאישור.</p>'}
 </section>
-${others.length ? `<section class="panel home-panel"><header><h2>עוד דברים שמחכים לך</h2></header>${postLines(others)}</section>` : ''}`;
+${others.length ? `<section class="panel home-panel"><header><h2>עוד דברים שמחכים לך</h2></header>${postLines(others)}</section>` : ''}
+${d.healthHtml || ''}`;
   return layout({ ...ctx, title: 'כל החשבונות', active: 'all' }, body);
 }
 
@@ -1100,7 +1102,7 @@ export function gatePage({ kind, links, v = 1 }) {
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1 class="err" role="alert">${esc(g.title)}</h1>
 <p>${esc(g.text)}</p>
-<div class="links">${actions}</div></main></body></html>`;
+<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
 }
 
 export function notFoundPage(ctx) {

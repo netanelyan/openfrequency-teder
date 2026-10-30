@@ -26,6 +26,7 @@ import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
 import { entitlementClient } from '../billing/entitlement.js';
+import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -214,7 +215,12 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         if (p === '/static/icon-180.png' || p === '/static/icon-512.png') return send(req, res, 200, readFileSync(path.join(STATIC, path.basename(p))), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/fonts/Assistant.ttf') return send(req, res, 200, readFileSync(path.join(assetsDir, 'fonts', 'Assistant.ttf')), 'font/ttf', { 'cache-control': 'public, max-age=31536000, immutable' });
-        if (p === '/healthz') return send(req, res, 200, 'ok', 'text/plain; charset=utf-8');
+        // Liveness, with the commit this build is; readiness (the database, the runner) is /readyz (src/web/health.js).
+        if (p === '/healthz') return send(req, res, 200, `ok ${REVISION}`, 'text/plain; charset=utf-8');
+        if (p === '/readyz') {
+          const r = readiness(ctx);
+          return json(req, res, r.ok ? 200 : 503, r);
+        }
         // A slide behind a signed link (src/assistant/sign.js mediaLink): that slide, until the link expires, nothing else.
         const ml = /^\/m\/([\w-]+)\/(tiktok|instagram)\/(\d+)$/.exec(p);
         if (ml) {
@@ -432,7 +438,11 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (p === '/') return page(pages.todayPage(pc, data.today(sc)));
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
       // The one page that is not one account's: every account of the workspace, and what waits in all of them.
-      if (p === '/all') return page(pages.allPage(pc, data.today(c)));
+      if (p === '/all') {
+        // The operator also sees every workspace's health (src/web/health.js): payment, failures, connections, drafts.
+        const health = healthFor(c, user);
+        return page(pages.allPage(pc, { ...data.today(c), healthHtml: health ? healthPanel(health.rows, health.alerts) : '' }));
+      }
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {
         const d = data.postFull(c, pm[1]);

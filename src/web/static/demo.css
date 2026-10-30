@@ -193,3 +193,6 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
   .marks .initial { font-size: 23px; }
   .lede { font-size: 17px; line-height: 1.55; max-width: 34ch; }
 }
+
+/* The accessibility statement, at the foot of the page. */
+.foot .a11y { color: inherit; }

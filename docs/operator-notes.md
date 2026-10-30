@@ -242,3 +242,31 @@ says which keys are set without showing them.
 - **What to do.** Nothing. When the day's posts are written (`generateAt`, 07:00) is still the operator's, on
   Settings. An account with no choice saved (the accounts made before this) keeps its pack.json schedule exactly as
   before, until its owner saves one. To undo an owner's choice, delete the `schedule:<account id>` row from `settings`.
+
+## Running it: health, alerts, deploys
+
+### The health table on /all, and the alerts
+
+- **What it is.** Under the accounts on /all, the operator sees "מצב הלקוחות": one line per business (workspace), with
+  its payment as accounts last gave it, failed posts in 7 days, connections to make again, what was blocked today, its
+  paused accounts and how long since a post reached the customer (src/web/health.js). Under it, the alerts of the week.
+- **The alerts.** An account that should be posting and drafted nothing in 24 hours (checked four hours after the
+  day's generation), and a batch that ran past its two hours and was asked directly, go to the operator through the
+  server's alert command, `/usr/local/bin/of-alert "<title>" "<body>"` (openfrequency-ops; `OF_ALERT_CMD` names
+  another). The same command is what the systemd units call when the service or the backup fails. Without it, the
+  alert is in the log ("[alert] ...") and in the table, and nothing reaches the phone.
+- **What to do.** docs/first-customer.md, section by section.
+- **Needed now?** The command is, before the first customer: UNVERIFIED that it is installed on the VPS
+  (`ls -l /usr/local/bin/of-alert && systemctl cat of-alert@.service`).
+
+### /healthz and /readyz
+
+- `/healthz` says `ok` and the commit the build is. `/readyz` answers 200 when the database answers and the runner's
+  timer fired in the last two minutes with no tick running for twenty, else 503 with which one failed: what
+  deploy/deploy.sh waits for, and what an uptime monitor should watch. Both need `Host: 127.0.0.1:4700` straight to
+  the port, or the public name through Caddy.
+
+### Deploying and rolling back
+
+- docs/deploy-releases.md: release folders, `deploy/deploy.sh`, `deploy/rollback.sh`, restoring a backup, and the
+  one-time move of the live server (for the owner to approve).
