@@ -43,10 +43,10 @@ TimeoutStopSec=20
 
 # Memory. The process and its Chromium share one cgroup, on a 3.9 GB server that Toran, accounts and other apps share
 # too. Measured on the VPS: a run's peak was 113 to 561 MB from 2026-10-19, and 713 MB in the run from 2026-10-28
-# (renders included; at most two pages are drawn at once since OF_RENDER_SLOTS). The owner decides the limits; the
-# proposal, with room over the 713 MB seen:
-#MemoryHigh=900M
-#MemoryMax=1100M
+# (renders included; at most two pages are drawn at once since OF_RENDER_SLOTS). The owner chose these limits on
+# 2026-10-30, with room over the 713 MB seen:
+MemoryHigh=900M
+MemoryMax=1100M
 # Under memory pressure the kernel kills this before Toran (the customers' WhatsApp) or Postgres.
 OOMScoreAdjust=300
 
