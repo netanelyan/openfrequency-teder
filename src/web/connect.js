@@ -233,7 +233,15 @@ export function goPage(url, { name = '', v = 1 } = {}) {
 <body class="login"><main class="card"><div class="hero">${tederMark()}<b>תדר</b></div><h1>עוברים ל${esc(name)}</h1><p>אם הדף לא עובר לבד, אפשר ללחוץ כאן.</p><div class="links"><a class="btn primary" href="${esc(url)}" rel="noreferrer">להמשיך</a></div><p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
 }
 
-const EXPIRED = { title: 'הלינק הזה כבר לא בתוקף', text: 'לינק לחיבור עובד 72 שעות. אפשר לבקש לינק חדש בוואטסאפ, או לחבר מדף החשבון באתר.' };
+/**
+ * A connect link past its 72 hours (or a return address past its two). A new one is the account page's: its button
+ * asks Zernio for a fresh link at every tap (connectRoutes above). The page sends nobody to WhatsApp for one: the
+ * assistant hands links on only where it runs, and it did not on 2026-10-30.
+ */
+const EXPIRED = { title: 'הלינק הזה כבר לא בתוקף', text: 'לינק לחיבור עובד 72 שעות. מחברים מדף החשבון בתדר, והכפתור שם פותח חיבור חדש בכל לחיצה.' };
+// The account the address names, whether or not it exists: the page is the same either way, and the account page shows
+// only the workspace's own.
+const expired = (account) => resultPage({ ...EXPIRED, actions: `<a class="btn primary" href="/accounts?account=${esc(encodeURIComponent(account))}">לדף החשבון</a>` });
 
 /** The page that lists the Instagram accounts (or Facebook Pages) to pick from, each a link that connects it. */
 function pickerPage(pages, id, { who = '', platform = 'instagram' } = {}) {
@@ -367,7 +375,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const { base, secret } = links;
   const pack = ctx.pack(account);
   const sig = { accountId: account, platform, e: query.get('e'), s: query.get('s'), t };
-  if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, resultPage(EXPIRED)];
+  if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, expired(account)];
   const name = PLATFORM_NAME[platform];
   if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;

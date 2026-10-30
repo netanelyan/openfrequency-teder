@@ -439,6 +439,22 @@ test("the account page: each platform's state and its button, which goes on to Z
   assert.equal(Z.calls.filter((c) => c.path === '/connect/tiktok').length, 1);
 });
 
+test('an expired connect link sends the customer to the account page, whose button opens a fresh connect, and not to WhatsApp', async () => {
+  const old = new URL(connectLink(SECRET, { base, accountId: 'alpha', platform: 'tiktok', t: Date.now() - 73 * 3_600_000 }));
+  const res = await get(`${old.pathname}${old.search}`);
+  assert.equal(res.status, 404);
+  const html = await res.text();
+  assert.match(html, /<h1>הלינק הזה כבר לא בתוקף<\/h1>/);
+  assert.ok(html.includes('<p>לינק לחיבור עובד 72 שעות. מחברים מדף החשבון בתדר, והכפתור שם פותח חיבור חדש בכל לחיצה.</p>'));
+  assert.ok(html.includes('<a class="btn primary" href="/accounts?account=alpha">לדף החשבון</a>'));
+  assert.doesNotMatch(html, /וואטסאפ|WhatsApp/);
+  assert.equal(Z.calls.length, 0, 'Zernio is not asked');
+  // An account that is not there: the same page, so the address tells nobody which accounts exist.
+  const none = await get(`/connect/nosuch/tiktok?e=${old.searchParams.get('e')}&s=${old.searchParams.get('s')}`);
+  assert.equal(none.status, 404);
+  assert.equal((await none.text()).replaceAll('nosuch', 'alpha'), html);
+});
+
 test('a connect Zernio refused for a reason it does not name: "כתבו לנו" is a link to our WhatsApp when there is one', async () => {
   const back = new URL(doneLink(SECRET, { base, accountId: 'alpha', platform: 'tiktok' }));
   const failed = async () => (await get(`${back.pathname}${back.search}&error=unknown_error&platform=tiktok`)).text();
