@@ -9,7 +9,6 @@ import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
 import { now, setNow } from '../src/core/clock.js';
-import { setPlan } from '../src/budget/quota.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { DIR, signature, verify, mediaLink } from '../src/assistant/sign.js';
 import { prefsOf, setPrefs } from '../src/assistant/data.js';
@@ -281,7 +280,8 @@ test('approve, edit and the ready-to-post bundle, each recorded as the person vi
 });
 
 test('a rejection uses a redo per the quota, as on the website, and the status counts it', async () => {
-  setPlan(db, 'bravo', { redos: 1 });
+  // A customer's month is their workspace's plan, from accounts (src/budget/quota.js): one redo.
+  paidWorkspaces(db, [2], { plan: { name: 'full', slideshows: 40, redos: 1 } });
   const first = (await call('GET', c2('posts/pending'))).body.posts[0];
   const r = await call('POST', c2(`posts/${first.id}/reject`), { by, reason: 'shorter', freeText: 'שלוש שורות לכל היותר' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -457,7 +457,7 @@ test('quota.low once a month at 8 left, and the weekly summary on Sunday at 09:0
   const t = israelInstant('2026-11-01', '09:30').getTime(); // a Sunday
   setNow(t);
   clone(A.post, null, { quota_kind: 'suggestion', quota_month: '2026-11' });
-  setPlan(db, 'alpha', { suggested: 9 });
+  paidWorkspaces(db, [1], { plan: { name: 'full', slideshows: 9, redos: 10 } });
   const c = catcher();
   await assistantTick(ctx, { t, env: ENV, send: c.send });
   const low = c.got.filter((g) => g.type === 'quota.low');
@@ -479,4 +479,17 @@ test('nothing is found or sent while the secret is not set', async () => {
   clone(A.post);
   assert.equal(await assistantTick(ctx, { env: {} }), null);
   assert.equal(db.get('SELECT COUNT(*) AS n FROM assistant_events').n, before);
+});
+
+test("a customer who has not paid gets nothing through the assistant either, as on the website", async () => {
+  db.run('INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)', 'entitlement:1', JSON.stringify({ allowed: false, access: 'unpaid', paidThrough: null, cancelAt: null, plan: null, stoppedAt: new Date().toISOString(), checkedAt: new Date().toISOString() }), new Date().toISOString());
+  try {
+    for (const [method, p, body] of [['GET', c1('status')], ['GET', c1('posts/pending')], ['POST', c1(`posts/${A.post}/approve`), { by }]]) {
+      const r = await call(method, p, body);
+      assert.deepEqual([r.status, r.body.error], [403, 'not_paid'], p);
+    }
+    assert.equal((await call('GET', c2('status'))).status, 200, 'another customer, who has paid, is answered');
+  } finally {
+    paidWorkspaces(db, [1]);
+  }
 });

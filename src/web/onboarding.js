@@ -1,4 +1,4 @@
-import { newId, nowIso } from '../core/clock.js';
+import { monthKey, newId, now, nowIso } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
 import { FEW, discover, offered, strong } from '../onboarding/discover.js';
@@ -64,6 +64,38 @@ export const DISCOVERY_TIMEOUT_MS = 3 * 60_000;
 export const SAMPLE_TARGET = 5;
 export const SAMPLE_ENOUGH = 3;
 export const SAMPLE_ATTEMPTS = 9;
+
+/**
+ * How many rounds of samples a customer may ask for: two for each new account (the first five, and one more press), and
+ * six in a calendar month across all their new accounts. Each round is up to SAMPLE_ATTEMPTS full-price builds outside
+ * the month's plan, so the plan alone would not bound it. A round counts once it starts writing; one that wrote nothing
+ * because something broke on our side (failure 'error') does not. None once the account is live: its posts come from the
+ * plan. The operator is not limited.
+ */
+export const SAMPLE_ROUNDS = { perOnboarding: 2, perWorkspaceMonth: 6 };
+
+const counted = (found) => (found?.rounds || []).filter((x) => x.counted !== false);
+
+/** May this onboarding's customer start another round of samples? { ok, why: null | 'live' | 'onboarding' | 'month' }. */
+export function sampleRoom(db, r, t = now()) {
+  if (r.status === 'live') return { ok: false, why: 'live' };
+  if (counted(r.found).length >= SAMPLE_ROUNDS.perOnboarding) return { ok: false, why: 'onboarding' };
+  if (r.workspace_id != null) {
+    const month = monthKey(t);
+    const used = db
+      .all('SELECT candidates_json FROM onboarding WHERE workspace_id = ?', r.workspace_id)
+      .reduce((n, o) => n + counted(j(o.candidates_json, {})).filter((x) => monthKey(Date.parse(x.at)) === month).length, 0);
+    if (used >= SAMPLE_ROUNDS.perWorkspaceMonth) return { ok: false, why: 'month' };
+  }
+  return { ok: true, why: null };
+}
+
+/** Why no more samples, as the customer reads it. */
+export const ROUNDS_HE = {
+  live: 'החשבון כבר באוויר. מעכשיו הפוסטים שלו נכתבים כל יום, לפי הימים והשעות שבחרתם.',
+  onboarding: `כבר כתבנו לחשבון הזה פוסטים לדוגמה ${SAMPLE_ROUNDS.perOnboarding} פעמים, וזה המקסימום לחשבון חדש. אם צריך עוד דוגמאות, כתבו לנו.`,
+  month: `החודש כבר כתבנו לכם פוסטים לדוגמה ${SAMPLE_ROUNDS.perWorkspaceMonth} פעמים, בכל החשבונות החדשים יחד, וזה המקסימום לחודש. אם צריך עוד, כתבו לנו.`,
+};
 const running = new Map();
 /** What a running job is doing now: { step, done, total } (src/onboarding/discover.js onProgress, and the samples). */
 const progress = new Map();
@@ -132,9 +164,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * The samples, in the background: the sources read first, then one sample at a time. `ctx.samplesOpts` ({ build, read,
- * retryMs }) stands in for buildPost and the read in the tests.
+ * retryMs }) stands in for buildPost and the read in the tests. The round is recorded on the onboarding when it starts
+ * writing (sampleRoom counts it), `counted` false for the operator's, which limit nobody.
  */
-function startSamples(ctx, id) {
+function startSamples(ctx, id, { counted: counts = true } = {}) {
   if (running.has(id)) return;
   const r = row(ctx, id);
   ctx = engine(ctx);
@@ -145,9 +178,12 @@ function startSamples(ctx, id) {
   const say = (m) => ctx.log?.(`[onboarding] ${id} (${pack.id}): ${m}`);
   const count = () => ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", pack.id).n;
   const notes = [];
+  let round = null;
   const save = (samples) => {
     const now = row(ctx, id, { recover: false });
-    ctx.db.update('onboarding', id, { status: now.status === 'ready' || now.status === 'live' ? now.status : 'samples', candidates_json: { ...now.found, samplesFailed: Boolean(samples.failure), samples }, notes_json: [...now.notes, ...notes], updated_at: nowIso() });
+    // A round that wrote nothing because something broke on our side is not the customer's.
+    const rounds = (now.found.rounds || []).map((x) => (x.at === round && samples.failure === 'error' && !samples.made ? { ...x, counted: false } : x.at === round ? { ...x, made: samples.made } : x));
+    ctx.db.update('onboarding', id, { status: now.status === 'ready' || now.status === 'live' ? now.status : 'samples', candidates_json: { ...now.found, rounds, samplesFailed: Boolean(samples.failure), samples }, notes_json: [...now.notes, ...notes], updated_at: nowIso() });
   };
   const job = (async () => {
     const before = count();
@@ -165,6 +201,10 @@ function startSamples(ctx, id) {
     let tries = 0;
     let errors = 0;
     let empty = 0;
+    // The round starts writing: from here it costs, and it is counted (sampleRoom).
+    round = nowIso();
+    const at = row(ctx, id, { recover: false });
+    ctx.db.update('onboarding', id, { candidates_json: { ...at.found, rounds: [...(at.found.rounds || []), { at: round, by: counts ? 'customer' : 'operator', ...(counts ? {} : { counted: false }) }] }, updated_at: nowIso() });
     progress.set(id, { step: 'write', done: 0, total: SAMPLE_TARGET });
     while (count() - before < SAMPLE_TARGET && tries < SAMPLE_ATTEMPTS) {
       tries++;
@@ -363,15 +403,16 @@ const SAMPLES_HE = {
   refused: 'הפוסטים שכתבנו לא עברו את הבדיקות שלנו, ולכן לא הראינו אותם. אפשר לנסות שוב, או להוסיף מקורות עם יותר עובדות.',
 };
 
-/** The samples' outcome, said with what helps. */
-function samplesSaid(pc, r, pack, { busy }) {
+/** The samples' outcome, said with what helps. `more` is sampleRoom's answer: whether another round may be asked for. */
+function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
   const s = r.found.samples;
   const failed = busy ? null : s ? s.failure : r.found.samplesFailed ? 'error' : null;
   if (!failed) return '';
   const made = s?.made || 0;
   const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
   const toSources = failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
-  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b></div><div class="actions p0">${toSources}${postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' })}</div></div>`;
+  const again = more.ok ? postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' }) : '';
+  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b>${more.ok ? '' : `<p>${esc(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
 }
 
 function detailPage(ctx, pc, r) {
@@ -424,13 +465,15 @@ ${formatsPanel}</div></div></form>
   const good = samples.filter((p) => p.status === 'sample').length;
   const busy = running.has(r.id);
   const reviewed = r.status === 'ready';
+  // Another round of samples: the customer's are limited (sampleRoom), the operator's are not.
+  const more = pc.operator ? { ok: true, why: null } : sampleRoom(ctx.db, r);
   const sched = pack && r.status !== 'live' ? scheduleData(ctx.db, pack) : null;
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `${head}${samplesSaid(pc, r, pack, { busy })}
+    `${head}${samplesSaid(pc, r, pack, { busy, more })}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
-<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' })}
+<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : `<span class="muted small">${esc(ROUNDS_HE[more.why])}</span>`}
 ${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
 ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
@@ -592,7 +635,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
         let made;
         try {
-          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples });
+          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null });
         } catch (e) {
           throw createError(ctx, e);
         }
@@ -614,10 +657,14 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
     [
       'POST',
       /^\/new\/([\w-]+)\/samples$/,
-      (ctx, _user, m) => {
+      (ctx, user, m) => {
         const r = row(ctx, m[1]);
         if (!r.pack_id) throw new ActionError('קודם יוצרים את החשבון');
-        startSamples(ctx, r.id);
+        if (!user.operator) {
+          const more = sampleRoom(ctx.db, r);
+          if (!more.ok) throw new ActionError(ROUNDS_HE[more.why], 409);
+        }
+        startSamples(ctx, r.id, { counted: !user.operator });
         return { ok: true, message: 'כותבים פוסטים לדוגמה.', redirect: `/new/${r.id}` };
       },
     ],

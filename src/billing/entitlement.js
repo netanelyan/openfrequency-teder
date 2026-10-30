@@ -5,9 +5,16 @@ import { audit, getSetting, setSetting } from '../core/store.js';
 // Whether a workspace has paid for Teder: openfrequency-accounts owns subscriptions, Teder asks.
 //
 //   GET {OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=<id>&product=teder, bearer OF_INTERNAL_TOKEN
-//   -> { workspace, product: "teder", enabled, access: paid | comp | unpaid | cancelled | off, allowed, paidThrough, cancelAt }
+//   -> { workspace, product: "teder", enabled, access: paid | comp | unpaid | cancelled | off, allowed, paidThrough, cancelAt,
+//        plan: { name: "full" | "small", slideshows, redos } }
 //
-// `allowed` is the only thing acted on. The answer is kept in the settings table (entitlement:<workspace>), so the
+// `allowed` is the only thing that opens or stops Teder. `plan` is the size of the workspace's month (src/budget/quota.js:
+// the slideshows and redos all its accounts share); an answer without one, or with one not in that shape, is the full
+// plan (40 and 10), and the rest of the answer stands. The day the workspace stopped being allowed is kept with the
+// answer (`stoppedAt`, cleared when it is allowed again): the retention pass (src/billing/retention.js) disconnects its
+// TikTok and Instagram once the service has stopped, as the privacy policy says.
+//
+// `allowed` is the only thing acted on here. The answer is kept in the settings table (entitlement:<workspace>), so the
 // website and the runner read the same one and a restart keeps it:
 //
 //   - an answer under FRESH_MS (5 minutes) old is used as it is, nothing is asked
@@ -29,7 +36,7 @@ const MIN_TOKEN = 32;
 
 const keyOf = (workspaceId) => `entitlement:${workspaceId}`;
 
-/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, checkedAt }, or null. */
+/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, plan, stoppedAt, checkedAt }, or null. */
 export const lastKnown = (db, workspaceId) => getSetting(db, keyOf(workspaceId), null);
 
 /** Allowed now, from the last answer kept: its `allowed`, while it is under STALE_MS old. Never known is no. */
@@ -42,6 +49,21 @@ export function workspaceAllowed(db, workspaceId, t = now()) {
 export function accountAllowed(db, accountId, t = now()) {
   const ws = db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null;
   return ws == null || workspaceAllowed(db, ws, t);
+}
+
+/** The most slideshows or redos a plan from accounts may give a month: a typo there must not open thousands of posts. */
+export const MAX_PLAN_SIZE = 1000;
+
+/**
+ * The plan in an answer, as kept: { name, slideshows, redos }, or null when there is none or it is not in the contract's
+ * shape (the full plan's numbers stand then, src/budget/quota.js). Never a reason to doubt the rest of the answer.
+ */
+export function planOfAnswer(b) {
+  const p = b?.plan;
+  if (!p || typeof p !== 'object') return null;
+  const n = (v) => Number.isInteger(v) && v >= 0 && v <= MAX_PLAN_SIZE;
+  if (typeof p.name !== 'string' || !/^[a-z][a-z0-9-]{0,19}$/.test(p.name) || !n(p.slideshows) || !n(p.redos)) return null;
+  return { name: p.name, slideshows: p.slideshows, redos: p.redos };
 }
 
 /** A 200 is believed only in the shape the contract gives it, and for the workspace asked about. */
@@ -112,7 +134,11 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
       return view(workspaceId, had, 'stale', t);
     }
     failedAt.delete(workspaceId);
-    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, checkedAt: new Date(t).toISOString() };
+    const at = new Date(t).toISOString();
+    // The plan accounts gave; one it no longer gives (or never gave) is the full plan's. When it stopped: kept from the
+    // first answer that said not allowed, until one says allowed again.
+    const stoppedAt = a.allowed ? null : had && had.allowed === false && had.stoppedAt ? had.stoppedAt : at;
+    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, plan: planOfAnswer(a), stoppedAt, checkedAt: at };
     setSetting(db, keyOf(workspaceId), next);
     // Said once per change, not on every answer: the log and the audit.
     if (!had || had.allowed !== next.allowed) {

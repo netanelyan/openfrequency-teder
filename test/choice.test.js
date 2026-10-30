@@ -5,13 +5,12 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { listen } from '../src/web/server.js';
-import { setPlan } from '../src/budget/quota.js';
 import { generationTargets } from '../src/autonomy/runner.js';
 import { DEFAULT_CHOICE, choiceOf, monthOf, readChoice, saveChoice, scheduleOf, timesOf } from '../src/schedule/choice.js';
 import { datesOf, monthSlots, slotsFor } from '../src/schedule/slots.js';
 import { restAt } from '../src/schedule/shabbat.js';
 import { hhmm, israelDate, israelInstant, weekday } from '../src/schedule/israel.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // The days and times an account posts on, chosen by its owner (src/schedule/choice.js): validated, laid over the
 // pack's schedule, never on Shabbat or a festival, and thinned to the month's plan so the plan lasts the month.
@@ -114,9 +113,10 @@ test("an account without a choice keeps its pack's schedule; with one, the choic
   assert.equal(s.perMonth, 40);
   assert.deepEqual(s.windows, []);
   assert.deepEqual(timesOf(s), ['09:00', '20:00']);
-  setPlan(db, 'demo', { suggested: '12', redos: '' });
-  assert.equal(scheduleOf(db, pack).perMonth, 12, 'the plan the operator set');
-  setPlan(db, 'demo', { suggested: '', redos: '' });
+  // A customer's account is thinned to the plan accounts gives its workspace (src/budget/quota.js).
+  paidWorkspaces(db, [1], { plan: { name: 'small', slideshows: 12, redos: 4 } });
+  assert.equal(scheduleOf(db, pack).perMonth, 12, "the workspace's plan");
+  db.run("DELETE FROM settings WHERE key = 'entitlement:1'");
   // Tuesday 2026-10-13 at 07:05: today's 09:00 and tomorrow's (Wednesday, nothing chosen) none. 09:00 is outside the
   // pack's windows (12-14, 19-22) and is drafted all the same: the customer chose it.
   const t = israelInstant('2026-10-13', '07:05').getTime();

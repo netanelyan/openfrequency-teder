@@ -537,3 +537,53 @@ test('samples: an error is tried once more by itself; refused ones are followed 
   assert.doesNotMatch(await (await get('/new/o-s5', fake.session(customer(1)).cookie)).text(), /banner warn/);
   assert.equal(JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-s5'").candidates_json).samples.made, 3);
 });
+
+test('samples: two rounds for each new account, six a month for the customer, none once it is live; the operator is not limited', async () => {
+  // The rounds the tests above wrote are this workspace's month too: start it empty.
+  db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 1 AND status <> 'review'");
+  const packId = await atSamples('o-r1', 'rounds.one');
+  const { cookie } = fake.session(customer(1));
+  // One list of calls for every round: the stand-in names each sample by its call's number.
+  const calls = [];
+  const five = () => ({ read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'ok', 'ok'], calls), retryMs: 0 });
+  ctx.samplesOpts = five();
+  await runSamples('o-r1');
+  ctx.samplesOpts = five();
+  await runSamples('o-r1');
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", packId).n, 10);
+  // A third press by the customer: refused, plainly, and the page offers no button for it.
+  const third = await post('/new/o-r1/samples', cookie, {}, { ajax: true });
+  assert.equal(third.status, 409);
+  assert.match((await third.json()).message, /כבר כתבנו לחשבון הזה פוסטים לדוגמה 2 פעמים, וזה המקסימום לחשבון חדש\. אם צריך עוד דוגמאות, כתבו לנו\./);
+  const page = await (await get('/new/o-r1', cookie)).text();
+  assert.doesNotMatch(page, /עוד פוסטים לדוגמה/);
+  assert.match(page, /וזה המקסימום לחשבון חדש/);
+  // The operator may give one more, and it is not counted against the customer.
+  ctx.samplesOpts = five();
+  await post('/new/o-r1/samples', fake.session(operator()).cookie);
+  await Promise.all([...__onboarding.running.values()]);
+  const rounds = JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-r1'").candidates_json).rounds;
+  assert.deepEqual(rounds.map((x) => [x.by, x.counted !== false]), [['customer', true], ['customer', true], ['operator', false]]);
+
+  // Live: no more samples, its posts come from the plan.
+  db.update('onboarding', 'o-r1', { status: 'live' });
+  const live = await post('/new/o-r1/samples', cookie, {}, { ajax: true });
+  assert.equal(live.status, 409);
+  assert.match((await live.json()).message, /החשבון כבר באוויר/);
+
+  // Six rounds this month across the customer's new accounts: a new one's first press is refused too.
+  const month = new Date().toISOString();
+  db.insert('onboarding', { id: 'o-r-many', seed_json: {}, status: 'samples', workspace_id: 1, candidates_json: { rounds: Array.from({ length: 6 }, () => ({ at: month, by: 'customer' })) }, created_at: AT, updated_at: AT });
+  await atSamples('o-r2', 'rounds.two');
+  const over = await post('/new/o-r2/samples', cookie, {}, { ajax: true });
+  assert.equal(over.status, 409);
+  assert.match((await over.json()).message, /החודש כבר כתבנו לכם פוסטים לדוגמה 6 פעמים/);
+  // A round that broke on our side and wrote nothing is not the customer's.
+  db.run("DELETE FROM onboarding WHERE id = 'o-r-many'");
+  db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 1 AND id <> 'o-r2'");
+  ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['throw', 'throw']), retryMs: 0 };
+  await runSamples('o-r2');
+  const r2 = JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-r2'").candidates_json).rounds;
+  assert.deepEqual(r2.map((x) => x.counted), [false]);
+  delete ctx.samplesOpts;
+});

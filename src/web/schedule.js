@@ -42,9 +42,11 @@ function rulesLine({ shabbat, holidays }) {
 
 /** The month a choice gives, said plainly. */
 function monthLine(m) {
-  if (m.all > m.plan) return `לפי הבחירה הזו יש בחודש הבא מקום ל-${m.all} פוסטים. החבילה שלכם היא ${m.plan} פוסטים בחודש, ולכן בחלק מהימים ייצא פוסט אחד במקום שניים.`;
-  if (m.all === m.plan) return `לפי הבחירה הזו יוצאים בחודש הבא ${m.plan} פוסטים, כל החבילה.`;
-  return `לפי הבחירה הזו יוצאים בחודש הבא ${m.all} פוסטים, פחות מ-${m.plan} שבחבילה. אפשר להוסיף ימים או שעה שנייה.`;
+  // An account that shares the plan with the workspace's other accounts is thinned to its part of it.
+  const part = m.shared ? `החלק של החשבון הזה בחבילה הוא ${m.plan} פוסטים בחודש, מתוך ${m.whole} לכל החשבונות שלכם` : `החבילה שלכם היא ${m.plan} פוסטים בחודש`;
+  if (m.all > m.plan) return `לפי הבחירה הזו יש בחודש הבא מקום ל-${m.all} פוסטים. ${part}, ולכן בחלק מהימים ייצא פוסט אחד במקום שניים.`;
+  if (m.all === m.plan) return m.shared ? `לפי הבחירה הזו יוצאים בחודש הבא ${m.plan} פוסטים, כל החלק של החשבון הזה בחבילה.` : `לפי הבחירה הזו יוצאים בחודש הבא ${m.plan} פוסטים, כל החבילה.`;
+  return `לפי הבחירה הזו יוצאים בחודש הבא ${m.all} פוסטים, פחות מ-${m.plan} ${m.shared ? 'שבחלק של החשבון הזה בחבילה' : 'שבחבילה'}. אפשר להוסיף ימים או שעה שנייה.`;
 }
 
 /** How many chosen times next month fall on a day the account does not post on, naming only the days that count. */

@@ -1,6 +1,6 @@
 import { audit, getSetting, setSetting } from '../core/store.js';
 import { nowIso } from '../core/clock.js';
-import { planOf } from '../budget/quota.js';
+import { monthShare, planOf } from '../budget/quota.js';
 import { addDays, israelDate } from './israel.js';
 import { datesOf, monthSlots, slotsFor } from './slots.js';
 import { rulesOf } from './shabbat.js';
@@ -20,8 +20,10 @@ import { rulesOf } from './shabbat.js';
 //     in pack.json; a saved choice wins over the pack. A choice saved before the flags existed keeps the pack's.
 //
 // One rule the choice cannot change:
-//   - The month's plan (src/budget/quota.js, 40 posts) is the most a month gets. A choice with more slots than that is
-//     thinned evenly over the month, a day's second time first (monthSlots), so the posts last the whole month.
+//   - The month's plan (src/budget/quota.js, 40 posts, or 15 on the small plan) is the most a month gets. A choice with
+//     more slots than that is thinned evenly over the month, a day's second time first (monthSlots), so the posts last
+//     the whole month. An account that shares its workspace's plan with other running accounts is thinned to its even
+//     share of it (monthShare), so one account does not use the month up before the others.
 //
 // An account without a choice keeps its pack's schedule, exactly as before.
 
@@ -72,7 +74,7 @@ export function scheduleOf(db, pack) {
   const choice = choiceOf(db, pack.id);
   const r = choiceRules(db, pack.id);
   if (!choice) return r.shabbat == null && r.holidays == null ? base : { ...base, ...withRules(base, r) };
-  return { ...base, slots: [], slotsByDay: Object.fromEntries(Object.entries(choice).map(([d, list]) => [d, list])), windows: [], postsPerDay: MAX_PER_DAY, perMonth: planOf(db, pack.id).suggested, chosen: true, ...withRules(base, r) };
+  return { ...base, slots: [], slotsByDay: Object.fromEntries(Object.entries(choice).map(([d, list]) => [d, list])), windows: [], postsPerDay: MAX_PER_DAY, perMonth: monthShare(db, pack.id), chosen: true, ...withRules(base, r) };
 }
 
 /** The pack's two flags with the choice's over them: { shabbat, holidays }, booleans. */
@@ -136,14 +138,15 @@ export function saveChoice(db, accountId, byDay, { actor = 'engine', shabbat = f
 }
 
 /**
- * What a choice gives in a month, for the page to say: { month, slots (kept), all (before the plan), plan, rest (how
+ * What a choice gives in a month, for the page to say: { month, slots (kept), all (before the plan), plan (this account's
+ * part of the month's plan), whole (the plan), shared (whether other accounts share it), rest (how
  * many of the chosen times fall on Shabbat or a festival the account does not post on), restBy: { shabbat, holidays }
  * (the same, split), rules: { shabbat, holidays } (whether it posts on them) }. `byDay`, `shabbat` and `holidays` stand
  * in for the saved choice (a flag left out is the account's).
  */
 export function monthOf(db, pack, { t = Date.now(), byDay = null, shabbat = null, holidays = null } = {}) {
   const own = scheduleOf(db, pack);
-  const base = byDay ? { ...own, slots: [], slotsByDay: normal(byDay), windows: [], postsPerDay: MAX_PER_DAY, perMonth: planOf(db, pack.id).suggested } : own;
+  const base = byDay ? { ...own, slots: [], slotsByDay: normal(byDay), windows: [], postsPerDay: MAX_PER_DAY, perMonth: monthShare(db, pack.id) } : own;
   const sched = { ...base, ...withRules(base, { shabbat: flag(shabbat), holidays: flag(holidays) }) };
   // Next month, a whole one: this month is partly gone already.
   const today = israelDate(t);
@@ -153,5 +156,9 @@ export function monthOf(db, pack, { t = Date.now(), byDay = null, shabbat = null
   const kept = sched.perMonth != null ? monthSlots(month, sched).slots.length : all;
   const restBy = { shabbat: 0, holidays: 0 };
   for (const d of datesOf(month)) for (const x of slotsFor(d, plain).dropped) if (x.why !== 'מחוץ לשעות הפרסום') restBy[x.why === 'שבת' ? 'shabbat' : 'holidays']++;
-  return { month, slots: kept, all, plan: planOf(db, pack.id).suggested, rest: restBy.shabbat + restBy.holidays, restBy, rules: rulesOf(sched) };
+  // `plan` is what this account's month is thinned to: the plan, or its share of a plan its workspace's accounts share
+  // (`whole` is then the plan itself).
+  const share = monthShare(db, pack.id);
+  const whole = planOf(db, pack.id).suggested;
+  return { month, slots: kept, all, plan: share, whole, shared: share !== whole, rest: restBy.shabbat + restBy.holidays, restBy, rules: rulesOf(sched) };
 }

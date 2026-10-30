@@ -88,6 +88,10 @@ All answers are JSON. A refusal is `{ "ok": false, "error": "<code>", "message":
 one of the website's own checks (an edit the fact check stopped), `message` is the Hebrew line the website shows, and
 `problems` lists what was found.
 
+Every request is for a customer who has paid, as the website's paywall asks (src/billing/entitlement.js): a workspace
+accounts says has not is refused `not_paid` (403), whatever the request, and one accounts has not answered for yet
+`entitlement_unknown` (503, try again later).
+
 ### `GET /customers/:ws/posts/pending`
 
 Every post of the customer's accounts that waits for their decision, the soonest slot first.

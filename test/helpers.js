@@ -209,10 +209,11 @@ export async function fakeAccounts() {
 
 /**
  * Mark workspaces paid in the database, as the entitlement client keeps accounts' answer (src/billing/entitlement.js):
- * for a test that runs the engine for a workspace's accounts without a website request having asked first.
+ * for a test that runs the engine for a workspace's accounts without a website request having asked first. `plan` is
+ * the plan accounts gave ({ name, slideshows, redos }); none is the full plan's 40 and 10.
  */
-export function paidWorkspaces(db, ids, { at = new Date().toISOString() } = {}) {
-  for (const ws of ids) db.run('INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)', `entitlement:${ws}`, JSON.stringify({ allowed: true, access: 'paid', paidThrough: null, cancelAt: null, checkedAt: at }), at);
+export function paidWorkspaces(db, ids, { at = new Date().toISOString(), plan = null } = {}) {
+  for (const ws of ids) db.run('INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)', `entitlement:${ws}`, JSON.stringify({ allowed: true, access: 'paid', paidThrough: null, cancelAt: null, plan, stoppedAt: null, checkedAt: at }), at);
 }
 
 const LATER = '2099-01-01T00:00:00.000Z';

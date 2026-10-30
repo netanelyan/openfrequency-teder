@@ -6,7 +6,7 @@ import { KEYS, isSet } from '../core/env.js';
 import { settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { costPerPost, monthSpend } from '../budget/ledger.js';
-import { lastMonths, ledger, usage } from '../budget/quota.js';
+import { lastMonths, ledger, monthsOf, usage } from '../budget/quota.js';
 import { loadPost } from '../pipeline/build.js';
 import { photoChoices } from '../pipeline/light.js';
 import { israelDate, israelInstant, addDays } from '../schedule/israel.js';
@@ -61,8 +61,9 @@ export function header(ctx) {
   const waiting = ctx.packs.reduce((a, p) => a + (per[p.id] || 0), 0);
   const all = (ctx.root || ctx).packs;
   const accounts = all.map((p) => ({ id: p.id, name: p.meta.displayName, handle: p.meta.handle, waiting: per[p.id] || 0 }));
-  // The month's suggestions of the accounts shown, against their plans (src/budget/quota.js): the header's number.
-  const quota = ctx.packs.map((p) => usage(ctx.db, p.id).suggested).reduce((a, x) => ({ used: a.used + x.used, limit: a.limit + x.limit }), { used: 0, limit: 0 });
+  // The month's suggestions of the accounts shown, against their plans (src/budget/quota.js): the header's number. A
+  // workspace's accounts share one month, counted once.
+  const quota = monthsOf(ctx.db, ctx.packs.map((p) => p.id));
   return {
     quota,
     waiting,

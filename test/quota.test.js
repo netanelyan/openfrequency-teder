@@ -15,7 +15,7 @@ import { redoDirective } from '../src/pipeline/redo.js';
 import { steerLine } from '../src/pipeline/prompts.js';
 import { docKeyOf } from '../src/metrics/feedback.js';
 import { recheck } from '../src/publish/index.js';
-import { edit, reject, removeSlide, setQuota, swapPhoto } from '../src/web/actions.js';
+import { EDIT_CHECKS_PER_DAY, edit, editChecksToday, reject, removeSlide, setQuota, swapPhoto } from '../src/web/actions.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { accountRows, postFull, quotasData, week } from '../src/web/data.js';
 import { accountsPage, postPage, quotasPanel } from '../src/web/pages.js';
@@ -177,7 +177,8 @@ test('no cost cap: a month that has cost $500 still drafts up to its plan, and t
     // The plan is posts only: a cap sent with it is not read, and nothing about money is kept.
     const saved = setQuota(ctx, owner, { id: 'demo' }, { suggested: '45', redos: '', cap: '0.01' });
     assert.equal(saved.message, 'נשמר: 45 הצעות ו-10 החלפות בחודש.');
-    assert.deepEqual(Object.keys(planOf(ctx.db, 'demo')).sort(), ['redos', 'set', 'suggested']);
+    assert.deepEqual(Object.keys(planOf(ctx.db, 'demo')).sort(), ['name', 'redos', 'scope', 'set', 'suggested', 'workspaceId']);
+    assert.equal(planOf(ctx.db, 'demo').scope, 'account', "the operator's own account has a month of its own");
     assert.ok(!ctx.db.all('PRAGMA table_info(accounts)').some((c) => c.name === 'cap_usd'), 'the column is gone');
     // A customer cannot set their own plan.
     assert.throws(() => setQuota(ctx, customer, { id: 'demo' }, { suggested: '100' }), /רק מי שמפעיל את תדר/);
@@ -397,6 +398,40 @@ test('light edits: a photograph the post already has, a slide removed, and text 
     const u = usage(ctx.db, 'demo');
     assert.deepEqual([u.suggested.used, u.redos.used], [1, 0], 'light edits are neither a suggestion nor a redo');
     assert.equal(ledger(ctx.db, 'demo', '2026-10').rows.find((r) => r.kind === 'edit').calls, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test("a customer's light edits are fact-checked up to 30 times a day across their accounts; the operator's are not limited", async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    setNow(OCT);
+    ctx.db.run("UPDATE accounts SET workspace_id = 5 WHERE id = 'demo'");
+    const res = await buildPost(ctx, { pack, formatKey: 'care-guide' });
+    const id = res.postId;
+    const asked = [];
+    const llm = { kind: 'claude', async json(req) { asked.push(req.user); return { data: { reviews: [{ index: 0, botScore: 2, tells: [], factIssue: false, factProblem: '' }] }, usage: { input_tokens: 400, output_tokens: 60 }, model: req.model }; } };
+    const form = () => {
+      const p = loadPost(ctx.db, id);
+      const f = { hook: p.hook, sub: p.sub || '', caption: p.caption, caption_short: p.data?.captionShort || '' };
+      p.slides.filter((s) => s.kind === 'item').forEach((s, i) => Object.assign(f, { [`title_${i}`]: s.title, [`body_${i}`]: s.body }));
+      return f;
+    };
+    // 30 checks billed today for the workspace's accounts.
+    for (let i = 0; i < EDIT_CHECKS_PER_DAY; i++) ctx.db.insert('spend', { account_id: 'demo', post_id: id, api: 'anthropic', usd: 0.001, tag: 'edit-check', month: '2026-10', at: new Date(OCT).toISOString() });
+    assert.equal(editChecksToday(ctx.db, 5, OCT), EDIT_CHECKS_PER_DAY);
+    const changed = () => ({ ...form(), title_1: form().title_1.replace('השעון', 'הלוח') });
+    const customerCtx = { ...ctx, llm, workspaceId: 5 };
+    await assert.rejects(edit(customerCtx, customer, { id }, changed()), (e) => e.status === 429 && /היום כבר בדקנו 30 עריכות טקסט בחשבונות שלכם/.test(e.message));
+    assert.equal(asked.length, 0, 'refused before the model is asked');
+    // The operator's context (no workspace) is not limited.
+    await edit({ ...ctx, llm }, customer, { id }, changed());
+    assert.equal(asked.length, 1);
+    // The next day counts again.
+    assert.equal(editChecksToday(ctx.db, 5, OCT + 86_400_000), 0);
   } finally {
     cleanup();
   }

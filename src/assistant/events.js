@@ -141,7 +141,9 @@ export function detect(ctx, { t = now() } = {}) {
       keep({ ...base, type: 'account.reconnect', key: `account.reconnect:${pack.id}:${r.platform}:${r.broken_at}`, data: { platform: r.platform } });
     }
     const u = usage(db, pack.id, t);
-    if (u.suggested.used > 0 && u.suggested.left <= QUOTA_LOW) keep({ ...base, type: 'quota.low', key: `quota.low:${pack.id}:${u.month}`, data: { month: u.month } });
+    // A month the workspace's accounts share runs low for all of them at once: said once, not once per account.
+    const whose = u.plan.scope === 'workspace' ? `ws${u.plan.workspaceId}` : pack.id;
+    if (u.suggested.used > 0 && u.suggested.left <= QUOTA_LOW) keep({ ...base, type: 'quota.low', key: `quota.low:${whose}:${u.month}`, data: { month: u.month } });
   }
   // Sunday morning: one summary per customer, of the seven days before it.
   const today = israelDate(t);

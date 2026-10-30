@@ -7,6 +7,7 @@ import { forWorkspace, owns } from '../web/workspace.js';
 import { assistantSecret, linkBase, LINK_TTL_S, verify } from './sign.js';
 import { accountOf, accountStatus, bundleOf, connectionsOf, postView, prefsOf, quotaOf, setPrefs } from './data.js';
 import { CONNECT_LINK_TTL_S } from '../publish/connect.js';
+import { entitlementsOf } from '../billing/entitlement.js';
 
 // The WhatsApp assistant's door into Teder (openfrequency-toran; the contract is docs/assistant-api.md).
 //
@@ -18,6 +19,9 @@ import { CONNECT_LINK_TTL_S } from '../publish/connect.js';
 //   - it is signed with it, now, and never seen before (src/assistant/sign.js)
 //   - the customer is a workspace (openfrequency-accounts' id), and the request works on that workspace's context
 //     (src/web/workspace.js): another workspace's post is not found, the same answer as a post that never was
+//   - the workspace has paid for Teder, asked as the website asks (src/billing/entitlement.js): one that has not is
+//     answered 403 not_paid, and one accounts never answered for 503 entitlement_unknown. Nothing is read, approved,
+//     rejected or edited for it here either: an edit is a model call.
 //
 // The assistant is trusted to say which customer and which person it acts for: it is ours, it holds the secret, and
 // it binds a phone number to a person in a workspace on its side. Every change names the person (`by`), and is
@@ -128,6 +132,8 @@ export function assistantApi(ctx, { env = process.env, port }) {
         if (!r) continue;
         known = true;
         if (method !== req.method) continue;
+        const ent = await entitlementsOf(ctx, env).check(workspaceId);
+        if (!ent.allowed) throw ent.known ? new ApiError(403, 'not_paid', "the customer's Teder subscription is not active") : new ApiError(503, 'entitlement_unknown', 'accounts has not said whether the customer has paid');
         const c = forWorkspace(ctx, workspaceId);
         const link = { secret, base: linkBase({ env, port }), t: now() };
         return send(res, 200, await fn({ c, workspaceId, params: r.slice(1), body, link, query: url.searchParams }));

@@ -23,7 +23,7 @@ import { isBusiness, removeSound, saveSound } from '../pipeline/sounds.js';
 import { subscribe, unsubscribe } from '../notify/index.js';
 import { catalogSource } from '../sources/catalog.js';
 import { robotsAllows } from '../sources/robots.js';
-import { israelDate } from '../schedule/israel.js';
+import { israelDate, israelInstant } from '../schedule/israel.js';
 import { postSpend } from '../budget/ledger.js';
 import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budget/quota.js';
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
@@ -258,6 +258,19 @@ export async function edit(ctx, user, { id }, form) {
 }
 
 /**
+ * A light edit's fact check is a model call the month's plan does not count (src/budget/quota.js: small changes are
+ * free), so a customer's are bounded by day instead: this many calls a day across the workspace's accounts. Plenty for
+ * a person editing their posts; a loop of edits stops here. The operator is not limited.
+ */
+export const EDIT_CHECKS_PER_DAY = 30;
+
+/** The edit checks a workspace's accounts made today (Israel day), from what was billed for them (spend, tag edit-check). */
+export function editChecksToday(db, workspaceId, t = now()) {
+  const from = israelInstant(israelDate(t), '00:00').toISOString();
+  return db.get("SELECT COUNT(*) AS n FROM spend WHERE tag = 'edit-check' AND at >= ? AND account_id IN (SELECT id FROM accounts WHERE workspace_id = ?)", from, workspaceId).n;
+}
+
+/**
  * The one model call a light edit makes: the reviewer's fact check, on the texts the customer changed and nothing
  * else, billed to the post (tag edit-check, src/budget/quota.js ledger). A text that says more than its facts is
  * refused, as the engine's own would be; how much it sounds like a bot is the customer's call. Offline the reviewer
@@ -267,6 +280,10 @@ async function factCheckChanged(ctx, { post, pack, draft, form }) {
   const before = new Map(textsOf(postDraft(post)).map((t) => [t.where, String(t.text || '')]));
   const changed = textsOf(draft).filter((t) => before.get(t.where) !== String(t.text || ''));
   if (!changed.length) return;
+  // A customer's checks of the day (src/web/actions.js EDIT_CHECKS_PER_DAY): the plan does not count them, this does.
+  if (ctx.workspaceId != null && editChecksToday(ctx.db, ctx.workspaceId) >= EDIT_CHECKS_PER_DAY) {
+    throw new ActionError(`היום כבר בדקנו ${EDIT_CHECKS_PER_DAY} עריכות טקסט בחשבונות שלכם, וזה המקסימום ליום. אפשר לערוך שוב מחר, או לדחות את הפוסט עם סיבה ולקבל פוסט חלופי.`, 429, { values: { ...form } });
+  }
   const engine = engineOf(ctx);
   let review;
   try {
@@ -358,6 +375,7 @@ export function setQuota(ctx, user, { id }, form) {
   operatorOnly(user);
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
   const r = setPlan(ctx.db, id, { suggested: form.suggested, redos: form.redos });
+  if (r.problems?.includes('workspace')) throw new ActionError('החבילה של חשבון של לקוח נקבעת במנוי שלו ב-accounts, ומשותפת לכל החשבונות שלו. כאן משנים רק את החשבונות שלנו.', 409);
   if (r.problems) throw new ActionError(`לא נשמר. הצעות והחלפות הן מספר שלם עד ${MAX_PLAN.suggested}.`, 422);
   audit(ctx.db, { actor: user.name, action: 'quota', accountId: id, detail: { suggested: r.suggested, redos: r.redos } });
   return { ok: true, message: `נשמר: ${r.suggested} הצעות ו-${r.redos} החלפות בחודש.` };
