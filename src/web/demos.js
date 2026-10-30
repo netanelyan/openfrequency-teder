@@ -73,6 +73,23 @@ export function fromWebsite(req, env) {
   return local && got.length === want.length && timingSafeEqual(got, want);
 }
 
+/**
+ * Why an internal call from accounts is refused, as accounts' contracts say it (test/fixtures/contracts, setup.json and
+ * workspaces-delete.json, the same answers Toran gives): [503, not_configured] when OF_INTERNAL_TOKEN is not set here,
+ * [403, forbidden] when the call is not from this machine or came through the proxy, [401, bad_token] when the bearer
+ * is missing or wrong; null when it may go on.
+ */
+export function internalRefusal(req, env) {
+  const token = String(env.OF_INTERNAL_TOKEN || '').trim();
+  if (token.length < 32) return [503, { error: 'not_configured' }];
+  const local = /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress || '');
+  if (!local || req.headers['x-forwarded-for']) return [403, { error: 'forbidden' }];
+  const got = Buffer.from(String(req.headers.authorization || ''));
+  const want = Buffer.from(`Bearer ${token}`);
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return [401, { error: 'bad_token' }];
+  return null;
+}
+
 async function readJson(req, limit = 20_000) {
   let size = 0;
   const chunks = [];

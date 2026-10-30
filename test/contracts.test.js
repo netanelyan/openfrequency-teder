@@ -187,27 +187,20 @@ const NOT_HERE = {
   [`${DELETE}no such route: a failure, accounts deletes nothing`]: "What a product without the route answers. Teder has the route, so no request to it can answer this without taking the route out of Teder's own code; accounts' test holds its client to reading it as a failure (ACC-06)",
 };
 
-// Where Teder's real route answers otherwise than its contract: each difference exactly as found (2026-10-30). Neither
-// side was changed, because accounts' docs (docs/setup.md, "/setup" and "Deleting a workspace") do not say which is
-// right; they are reported. A difference that goes away, or a new one, fails its case: the contract or the route
-// changed, and this list follows it.
+// Where Teder's real route answers beyond its contract's example, exactly as found. A difference that goes away, or a new
+// one, fails its case: the contract or the route changed, and this list follows it.
 //
-// - The refusals. Teder answers 403 { ok: false, error: "forbidden" } to anything that is not this machine with the
-//   token (src/web/demos.js fromWebsite), a wrong token and none set here alike; the contracts have accounts' own 401
-//   bad_token and 503 not_configured. accounts acts the same on both: any status but 200 (setup) or a 2xx (delete) is a
-//   failure there.
 // - The delete's 200. Teder counts more than the contract's example and says what is left after the answer
-//   (src/web/workspace-delete.js); the contract's note says the body is the product's own count and accounts reads only
-//   the status, but its example has { ok, deleted: { accounts, posts } } alone.
-const REFUSED = (code) => [`status 403 where the contract has ${code === 'bad_token' ? 401 : 503}`, `body {"ok":false,"error":"forbidden"} where the contract has {"error":"${code}"}`];
+//   (src/web/workspace-delete.js). The contract allows it: its note says "The body of a 200 is the product's own count
+//   of what it deleted; accounts reads only the status". Its example, { ok, deleted: { accounts, posts } }, is one
+//   product's.
+//
+// The refusals answer as the contracts say since 2026-10-30 (src/web/demos.js internalRefusal: 401 bad_token, 503
+// not_configured), the same as Toran's; until then Teder answered 403 forbidden to all of them.
 const COUNTED = ['$: after not in the contract', '$.deleted: sources, documents, onboarding, connections not in the contract'];
 const DIFFERS = {
-  [`${SETUP}no token, or the wrong one`]: REFUSED('bad_token'),
-  [`${SETUP}OF_INTERNAL_TOKEN unset or short here`]: REFUSED('not_configured'),
   [`${DELETE}deleted`]: COUNTED,
   [`${DELETE}nothing of that workspace here (never seen, or deleted already)`]: COUNTED,
-  [`${DELETE}no token, or the wrong one`]: REFUSED('bad_token'),
-  [`${DELETE}OF_INTERNAL_TOKEN unset or short here`]: REFUSED('not_configured'),
 };
 
 test("the contracts Teder serves are setup and workspaces-delete, and every case of theirs is asked here or says why it cannot be", (t) => {

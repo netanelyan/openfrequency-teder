@@ -1,13 +1,14 @@
 import { connectState, onboardingStates } from '../publish/connect.js';
 import { zernioConfigured } from '../publish/zernio.js';
-import { fromWebsite } from './demos.js';
+import { internalRefusal } from './demos.js';
 import { PLATFORM_NAME } from './connect.js';
 import { onboardingBusy } from './onboarding.js';
 import { forWorkspace } from './workspace.js';
 
 // GET /internal/setup?workspace=<id>: a workspace's setup steps in Teder, for the checklist on accounts' /setup page
-// (openfrequency-accounts). Under the checks /internal/demos has (src/web/demos.js fromWebsite): this machine only,
-// the bearer OF_INTERNAL_TOKEN, nothing that came through Caddy. JSON, Cache-Control: no-store.
+// (openfrequency-accounts). Under the checks of src/web/demos.js internalRefusal: this machine only,
+// the bearer OF_INTERNAL_TOKEN, nothing that came through Caddy, refused as accounts' contract says (401 bad_token,
+// 503 not_configured, 403 otherwise). JSON, Cache-Control: no-store.
 //
 //   { "product": "teder", "ready": bool, "steps": [{ key, title, status, detail, href, required }] }
 //
@@ -122,7 +123,8 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
 
 /** GET /internal/setup. Returns [status, body]. */
 export function setupFeed(ctx, req, env, { base, query }) {
-  if (!fromWebsite(req, env)) return [403, { ok: false, error: 'forbidden' }];
+  const refused = internalRefusal(req, env);
+  if (refused) return refused;
   const raw = String(query.get('workspace') || '');
   const workspaceId = /^[1-9]\d{0,9}$/.test(raw) ? Number(raw) : null;
   if (!Number.isSafeInteger(workspaceId)) return [400, { ok: false, error: 'bad_workspace' }];

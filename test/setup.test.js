@@ -73,11 +73,12 @@ const samples = (accountId, n, from = 0) => {
 const connection = (accountId, platform, status, username = 'someone') => db.insert('zernio_connections', { account_id: accountId, platform, zernio_account_id: `z-${platform}`, username, status, issue: status === 'reconnect' ? 'token expired' : null, connected_at: AT, checked_at: AT });
 
 test('from this machine alone, with the token, not through the proxy, and for a workspace id', async () => {
-  for (const [headers, why] of [[{ authorization: '' }, 'no token'], [{ authorization: 'Bearer wrong' }, 'a wrong token'], [{ authorization: `Bearer ${INTERNAL_TOKEN}x` }, 'a longer one'], [{ 'x-forwarded-for': '203.0.113.9' }, 'through Caddy']]) {
+  // Refused as accounts' contract says (test/fixtures/contracts/setup.json): 401 bad_token, 403 through the proxy.
+  for (const [headers, why, status, error] of [[{ authorization: '' }, 'no token', 401, 'bad_token'], [{ authorization: 'Bearer wrong' }, 'a wrong token', 401, 'bad_token'], [{ authorization: `Bearer ${INTERNAL_TOKEN}x` }, 'a longer one', 401, 'bad_token'], [{ 'x-forwarded-for': '203.0.113.9' }, 'through Caddy', 403, 'forbidden']]) {
     const res = await setup(1, headers);
-    assert.equal(res.status, 403, why);
+    assert.equal(res.status, status, why);
     assert.equal(res.headers.get('cache-control'), 'no-store');
-    assert.deepEqual(await res.json(), { ok: false, error: 'forbidden' }, why);
+    assert.deepEqual(await res.json(), { error }, why);
   }
   for (const ws of ['', 'abc', '0', '-1', '1.5', '99999999999']) assert.equal((await setup(ws)).status, 400, `workspace=${ws}`);
   assert.notEqual((await fetch(`${base}/internal/setup?workspace=1`, { method: 'POST', headers: { authorization: `Bearer ${INTERNAL_TOKEN}` } })).status, 200, 'a GET only');

@@ -5,13 +5,14 @@ import { dataDir, mediaDir, ofHome, outDir, packsDir } from '../core/paths.js';
 import { nowIso } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
-import { fromWebsite } from './demos.js';
+import { internalRefusal } from './demos.js';
 import { deleteProfile, disconnectAccount, zernioConfigured } from '../publish/zernio.js';
 import { queueRemovals, zernioOf } from '../billing/retention.js';
 
 // POST /internal/workspaces/<id>/delete: a customer deleted their workspace in openfrequency-accounts, and accounts asks
-// Teder to forget it. Under the checks /internal/setup has (src/web/demos.js fromWebsite): this machine only, the bearer
-// OF_INTERNAL_TOKEN, nothing that came through Caddy. Accounts waits 10 seconds and aborts the whole deletion on any
+// Teder to forget it. Under the checks of src/web/demos.js internalRefusal: this machine only, the bearer
+// OF_INTERNAL_TOKEN, nothing that came through Caddy, refused as accounts' contract says (401 bad_token, 503
+// not_configured, 403 otherwise). Accounts waits 10 seconds and aborts the whole deletion on any
 // failure, so the answer comes from what is fast and certain, and the slow part follows it:
 //
 //   before the answer   every account of the workspace paused, then its rows deleted in one transaction: the posts and
@@ -178,7 +179,8 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
 
 /** POST /internal/workspaces/<id>/delete. Returns [status, body]; what follows the answer runs on its own. */
 export function workspaceDeleteRoute(ctx, req, env, rawId) {
-  if (!fromWebsite(req, env)) return [403, { ok: false, error: 'forbidden' }];
+  const refused = internalRefusal(req, env);
+  if (refused) return refused;
   const workspaceId = /^[1-9]\d{0,9}$/.test(String(rawId)) ? Number(rawId) : null;
   if (!Number.isSafeInteger(workspaceId)) return [400, { ok: false, error: 'bad_workspace' }];
   return [200, deleteWorkspace(ctx, workspaceId).body];

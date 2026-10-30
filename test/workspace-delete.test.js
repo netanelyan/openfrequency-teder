@@ -84,10 +84,11 @@ const del = (ws, headers = {}) => fetch(`${base}/internal/workspaces/${ws}/delet
 const count = (sql, ...a) => db.get(sql, ...a).n;
 
 test('from this machine alone, with the token, not through the proxy, a POST, for a workspace id', async () => {
-  for (const [headers, why] of [[{ authorization: '' }, 'no token'], [{ authorization: 'Bearer wrong' }, 'a wrong token'], [{ 'x-forwarded-for': '203.0.113.9' }, 'through Caddy']]) {
+  // Refused as accounts' contract says (test/fixtures/contracts/workspaces-delete.json): 401 bad_token, 403 through the proxy.
+  for (const [headers, why, status, error] of [[{ authorization: '' }, 'no token', 401, 'bad_token'], [{ authorization: 'Bearer wrong' }, 'a wrong token', 401, 'bad_token'], [{ 'x-forwarded-for': '203.0.113.9' }, 'through Caddy', 403, 'forbidden']]) {
     const res = await del(3, headers);
-    assert.equal(res.status, 403, why);
-    assert.deepEqual(await res.json(), { ok: false, error: 'forbidden' });
+    assert.equal(res.status, status, why);
+    assert.deepEqual(await res.json(), { error }, why);
   }
   for (const ws of ['abc', '0', '-1', '99999999999']) assert.equal((await del(ws)).status, 400, ws);
   assert.notEqual((await fetch(`${base}/internal/workspaces/3/delete`, { headers: { authorization: `Bearer ${INTERNAL_TOKEN}` }, redirect: 'manual' })).status, 200, 'a POST only');
