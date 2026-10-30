@@ -28,6 +28,7 @@ import { postSpend } from '../budget/ledger.js';
 import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budget/quota.js';
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
+import { customerWorkspace } from '../billing/own.js';
 import { EVENT_TYPES, setPrefs } from '../assistant/data.js';
 import { EMAIL_KINDS, setEmailPrefs } from '../notify/email.js';
 
@@ -287,7 +288,8 @@ export async function edit(ctx, user, { id }, form) {
 /**
  * A light edit's fact check is a model call the month's plan does not count (src/budget/quota.js: small changes are
  * free), so a customer's are bounded by day instead: this many calls a day across the workspace's accounts. Plenty for
- * a person editing their posts; a loop of edits stops here. The operator is not limited.
+ * a person editing their posts; a loop of edits stops here. The operator is not limited, nor are the people of one of
+ * the company's own workspaces (OF_OWN_WORKSPACES, src/billing/own.js).
  */
 export const EDIT_CHECKS_PER_DAY = 30;
 
@@ -308,7 +310,7 @@ async function factCheckChanged(ctx, { post, pack, draft, form }) {
   const changed = textsOf(draft).filter((t) => before.get(t.where) !== String(t.text || ''));
   if (!changed.length) return;
   // A customer's checks of the day (src/web/actions.js EDIT_CHECKS_PER_DAY): the plan does not count them, this does.
-  if (ctx.workspaceId != null && editChecksToday(ctx.db, ctx.workspaceId) >= EDIT_CHECKS_PER_DAY) {
+  if (customerWorkspace(ctx.workspaceId ?? null) && editChecksToday(ctx.db, ctx.workspaceId) >= EDIT_CHECKS_PER_DAY) {
     throw new ActionError(`היום כבר בדקנו ${EDIT_CHECKS_PER_DAY} עריכות טקסט בחשבונות שלכם, וזה המקסימום ליום. אפשר לערוך שוב מחר, או לדחות את הפוסט עם סיבה ולקבל פוסט חלופי.`, 429, { values: { ...form } });
   }
   const engine = engineOf(ctx);
@@ -411,8 +413,9 @@ export function setQuota(ctx, user, { id }, form) {
 export function setMode(ctx, user, { id }, form) {
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
   if (!MODES.includes(form.mode)) throw new ActionError('מצב לא מוכר');
-  // Digest and auto send posts no person approved: the operator's alone, on the company's own accounts. A customer's
-  // account acts in approve mode whatever is stored (src/autonomy/rails.js autonomyMode); this keeps the store honest.
+  // Digest and auto send posts no person approved: the operator's alone, on the company's own accounts (in no workspace,
+  // or in one of ours: src/billing/own.js). A customer's account acts in approve mode whatever is stored
+  // (src/autonomy/rails.js autonomyMode); this keeps the store honest.
   if (form.mode !== 'approve' && (!user.operator || isCustomerAccount(ctx.db, id))) {
     throw new ActionError(user.operator ? 'בחשבון של לקוח כל פוסט מחכה לאישור שלו.' : 'כל פוסט מחכה לאישור שלכם לפני שהוא עולה, וזה לא משתנה.', 403);
   }

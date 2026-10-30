@@ -1,6 +1,7 @@
 import { HOUR, now } from '../core/clock.js';
 import { localFetch } from '../core/net.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
+import { customerWorkspace } from './own.js';
 
 // Whether a workspace has paid for Teder: openfrequency-accounts owns subscriptions, Teder asks.
 //
@@ -29,7 +30,8 @@ import { audit, getSetting, setSetting } from '../core/store.js';
 //
 // What stops (src/autonomy/rails.js canRun, the website's paywall in src/web/server.js): an account whose workspace is
 // not allowed writes nothing, drafts nothing to TikTok and publishes nothing; its posts, sources and settings stay as
-// they are. An account in no workspace (the operator's own) is never asked about.
+// they are. An account in no workspace (the operator's own) is never asked about, and neither is one in a workspace
+// OF_OWN_WORKSPACES names (src/billing/own.js): the company's own accounts, put there so its people see them.
 
 export const PRODUCT = 'teder';
 export const FRESH_MS = 5 * 60_000;
@@ -50,10 +52,10 @@ export function workspaceAllowed(db, workspaceId, t = now()) {
   return Boolean(k && k.allowed === true && t - Date.parse(k.checkedAt) < STALE_MS);
 }
 
-/** May this account's engine run? Its workspace allowed, or no workspace (the operator's). */
+/** May this account's engine run? Its workspace allowed, or no customer's workspace (the operator's: none, or one of ours). */
 export function accountAllowed(db, accountId, t = now()) {
   const ws = db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null;
-  return ws == null || workspaceAllowed(db, ws, t);
+  return !customerWorkspace(ws) || workspaceAllowed(db, ws, t);
 }
 
 /** The most slideshows or redos a plan from accounts may give a month: a typo there must not open thousands of posts. */
@@ -176,9 +178,9 @@ export function entitlementsOf(ctx, env = process.env) {
   return root.entitlements;
 }
 
-/** The runner's pass: every workspace that has an account, asked (or answered from the cache). Never throws. */
+/** The runner's pass: every customer's workspace that has an account, asked (or answered from the cache). Never throws. */
 export async function refreshEntitlements(ctx, { env = process.env } = {}) {
-  const ids = ctx.db.all('SELECT DISTINCT workspace_id AS ws FROM accounts WHERE workspace_id IS NOT NULL').map((r) => r.ws);
+  const ids = ctx.db.all('SELECT DISTINCT workspace_id AS ws FROM accounts WHERE workspace_id IS NOT NULL').map((r) => r.ws).filter((ws) => customerWorkspace(ws));
   const client = entitlementsOf(ctx, env);
   const out = {};
   for (const ws of ids) {

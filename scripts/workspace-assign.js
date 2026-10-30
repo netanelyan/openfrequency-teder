@@ -7,7 +7,8 @@
 // nobody else does (src/web/workspace.js). The id is the workspace's number in accounts (the superadmin console,
 // or `workspace.id` in /internal/session).
 //
-//   --list      every account and the workspace it is in. Reads only.
+//   --list      every account and the workspace it is in, "ours" beside a workspace OF_OWN_WORKSPACES names (the
+//               company's own: its accounts are the operator's, src/billing/own.js). Reads only.
 //   --dry-run   what would change, and nothing else: the database is opened read-only, not even migrated.
 //   --move      also move an account that is already in another workspace (without it, that is refused: it
 //               would take the account, and everything in it, away from that workspace's people).
@@ -20,6 +21,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { backupsDir, dbPath, requireHome } from '../src/core/paths.js';
 import { loadEnv } from '../src/core/env.js';
+import { ownWorkspace } from '../src/billing/own.js';
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(`--${n}`);
@@ -53,7 +55,7 @@ function readOnly() {
 if (flag('list')) {
   const { has, rows } = readOnly();
   if (!has) console.log('(the workspace column does not exist yet: it is added when the new Teder first opens the database)');
-  for (const r of rows) console.log(`${r.id.padEnd(24)} ${where(r.workspace_id).padEnd(16)} ${r.status}  ${r.display_name}`);
+  for (const r of rows) console.log(`${r.id.padEnd(24)} ${`${where(r.workspace_id)}${ownWorkspace(r.workspace_id) ? ', ours' : ''}`.padEnd(22)} ${r.status}  ${r.display_name}`);
   process.exit(0);
 }
 

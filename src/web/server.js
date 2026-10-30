@@ -26,6 +26,7 @@ import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
 import { entitlementClient } from '../billing/entitlement.js';
+import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
@@ -45,8 +46,8 @@ import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 //     that is ours; a read-only session (the operator viewing as a customer)
 //     changes nothing
 //   - a customer's workspace that has not paid for Teder (accounts' /internal/entitlement, src/billing/entitlement.js)
-//     gets the paywall page instead of the product, its onboarding included; the operator, and the operator viewing
-//     as a customer, never do
+//     gets the paywall page instead of the product, its onboarding included; the operator, the operator viewing
+//     as a customer, and the people of one of the company's own workspaces (OF_OWN_WORKSPACES), never do
 // /internal/lead, /internal/demos, /internal/setup and /internal/workspaces/<id>/delete are for services on this machine
 // with OF_INTERNAL_TOKEN (src/web/demos.js fromWebsite, src/web/setup.js, src/web/workspace-delete.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
 // API (src/assistant/api.js): this machine only, never through the proxy, every
@@ -323,8 +324,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
       // The paywall: a customer whose workspace has not paid sees where to pay, not the product. With no answer to go by
       // (accounts has not answered for a day, or never), the page says the check failed rather than ask them to pay. The
-      // operator viewing as the customer (read-only) sees what is there.
-      const ent = !operator && !user.viewAs && a.workspace ? await paid.check(a.workspace.id) : null;
+      // operator viewing as the customer (read-only) sees what is there. One of the company's own workspaces is not a
+      // customer's, and accounts is not asked about it (src/billing/own.js).
+      const ent = !operator && !user.viewAs && a.workspace && customerWorkspace(a.workspace.id) ? await paid.check(a.workspace.id) : null;
       if (ent && !ent.allowed) {
         const kind = ent.known ? 'unpaid' : 'error';
         if (!reading) return json(req, res, ent.known ? 402 : 503, { ok: false, message: pages.GATE[kind].text, ...(ent.known ? { pay: links.setup } : {}) });

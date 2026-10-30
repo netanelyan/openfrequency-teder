@@ -5,6 +5,7 @@ import { getSetting, setSetting, settings } from '../core/store.js';
 import { oneLine } from '../rules/overlay.js';
 import { israelDate, israelInstant, weekday } from '../schedule/israel.js';
 import { workspaceAllowed } from '../billing/entitlement.js';
+import { customerWorkspace } from '../billing/own.js';
 import { connectLine, missingConnections } from '../publish/hold.js';
 
 // What the owner hears by email. Teder writes the words; openfrequency-accounts sends them to the workspace's owners
@@ -216,12 +217,12 @@ export function publishFailedEmail({ name, hook, reason, paused, link }) {
 
 /* ------------------------------------------------------------------ what is due */
 
-/** The accounts of each workspace there is an owner to tell: on air, of a workspace that has paid. */
+/** The accounts of each workspace there is an owner to tell: on air, of a workspace that has paid or is one of ours. */
 function workspacesOf(ctx, t) {
   const by = new Map();
   for (const pack of ctx.packs) {
     const acc = ctx.db.get('SELECT workspace_id, status, paused_reason FROM accounts WHERE id = ?', pack.id);
-    if (!acc || acc.workspace_id == null || acc.status === 'onboarding' || !workspaceAllowed(ctx.db, acc.workspace_id, t)) continue;
+    if (!acc || acc.workspace_id == null || acc.status === 'onboarding' || (customerWorkspace(acc.workspace_id) && !workspaceAllowed(ctx.db, acc.workspace_id, t))) continue;
     if (!by.has(acc.workspace_id)) by.set(acc.workspace_id, []);
     by.get(acc.workspace_id).push({ pack, status: acc.status, pausedReason: acc.paused_reason });
   }

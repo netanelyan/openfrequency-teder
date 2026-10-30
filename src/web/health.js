@@ -3,6 +3,7 @@ import path from 'node:path';
 import { now } from '../core/clock.js';
 import { ROOT } from '../core/paths.js';
 import { lastKnown } from '../billing/entitlement.js';
+import { ownWorkspace } from '../billing/own.js';
 import { connectState } from '../publish/connect.js';
 import { israelDate, israelInstant } from '../schedule/israel.js';
 import { recentAlerts } from '../notify/operator.js';
@@ -53,8 +54,9 @@ const DAY = 86_400_000;
 
 /**
  * One row per workspace of the server (the operator's own accounts, in none, first): its accounts, what accounts last
- * said of its payment, failed posts in 7 days, connections to make again, posts blocked today, paused accounts, and the
- * days since its last post that reached the customer.
+ * said of its payment (ours for one of the company's own workspaces, OF_OWN_WORKSPACES: never asked), failed posts in 7
+ * days, connections to make again, posts blocked today, paused accounts, and the days since its last post that reached
+ * the customer.
  */
 export function workspaceHealth(ctx, { t = now() } = {}) {
   const { db } = ctx;
@@ -64,8 +66,9 @@ export function workspaceHealth(ctx, { t = now() } = {}) {
   for (const acc of db.all("SELECT id, display_name, workspace_id, status, paused_reason FROM accounts WHERE status != 'onboarding' ORDER BY workspace_id IS NOT NULL, workspace_id, id")) {
     const ws = acc.workspace_id ?? null;
     if (!rows.has(ws)) {
-      const k = ws == null ? null : lastKnown(db, ws);
-      rows.set(ws, { workspace: ws, accounts: [], access: ws == null ? 'ours' : k?.access || (k ? (k.allowed ? 'paid' : 'unpaid') : 'unknown'), allowed: ws == null ? true : Boolean(k?.allowed), checkedAt: k?.checkedAt || null, failed: 0, reconnect: [], blocked: 0, paused: [], lastDraft: null });
+      const ours = ws == null || ownWorkspace(ws);
+      const k = ours ? null : lastKnown(db, ws);
+      rows.set(ws, { workspace: ws, accounts: [], access: ours ? 'ours' : k?.access || (k ? (k.allowed ? 'paid' : 'unpaid') : 'unknown'), allowed: ours ? true : Boolean(k?.allowed), checkedAt: k?.checkedAt || null, failed: 0, reconnect: [], blocked: 0, paused: [], lastDraft: null });
     }
     const row = rows.get(ws);
     row.accounts.push(acc.display_name);

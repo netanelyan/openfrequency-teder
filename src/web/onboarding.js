@@ -1,4 +1,5 @@
 import { monthKey, newId, now, nowIso } from '../core/clock.js';
+import { customerWorkspace } from '../billing/own.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
 import { FEW, discover, offered, strong } from '../onboarding/discover.js';
@@ -70,7 +71,8 @@ export const SAMPLE_ATTEMPTS = 9;
  * six in a calendar month across all their new accounts. Each round is up to SAMPLE_ATTEMPTS full-price builds outside
  * the month's plan, so the plan alone would not bound it. A round counts once it starts writing; one that wrote nothing
  * because something broke on our side (failure 'error') does not. None once the account is live: its posts come from the
- * plan. The operator is not limited.
+ * plan. The operator is not limited, and the month's six do not count in one of the company's own workspaces
+ * (OF_OWN_WORKSPACES, src/billing/own.js), as in none.
  */
 export const SAMPLE_ROUNDS = { perOnboarding: 2, perWorkspaceMonth: 6 };
 
@@ -80,7 +82,7 @@ const counted = (found) => (found?.rounds || []).filter((x) => x.counted !== fal
 export function sampleRoom(db, r, t = now()) {
   if (r.status === 'live') return { ok: false, why: 'live' };
   if (counted(r.found).length >= SAMPLE_ROUNDS.perOnboarding) return { ok: false, why: 'onboarding' };
-  if (r.workspace_id != null) {
+  if (customerWorkspace(r.workspace_id ?? null)) {
     const month = monthKey(t);
     const used = db
       .all('SELECT candidates_json FROM onboarding WHERE workspace_id = ?', r.workspace_id)

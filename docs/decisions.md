@@ -2048,3 +2048,16 @@ Instagram is.
    numbers' field names for a Page beyond the shared list: a reading with no views and no reach is not stored. A Page
    listed with no tasks: offered, and a refusal at the slot is said in Hebrew. None of it was tried against Zernio
    itself; the first live connect and post are the check.
+
+### The company's own workspace is not a customer's (2026-10-29, follow-up)
+
+The rules above read "an account in a workspace" as "a customer's account", but our own accounts are in a workspace
+too: they were put in workspace 1 with `npm run workspace:assign` so that its people see them in Teder, and they must
+stay there. Left alone, the merge would have locked them to approval and TikTok drafts, made them share one plan of 40
+and 10 with each schedule thinned to a third and the operator's numbers refused, counted them under the sample and
+light-edit caps, put them behind the paywall, and let the retention pass disconnect them if accounts ever said that
+workspace stopped. `OF_OWN_WORKSPACES` (accounts' workspace ids, empty by default) names the company's own workspaces,
+and one helper (`src/billing/own.js`) is asked by every customer rule, so an account in one of them is the operator's
+exactly as an account in no workspace is. A setting, not a rule such as "workspace 1" or "a workspace with access
+comp", because which workspace is ours is a fact about the server, and a comp customer is still a customer. Who sees
+what is not touched: the workspace's people see its accounts, nobody else does, and their looks are kept apart.
