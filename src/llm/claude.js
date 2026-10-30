@@ -5,7 +5,8 @@ import { doorFetch } from '../core/net.js';
 //
 // The SDK is handed the engine's own doorFetch, so its requests pass through the
 // same allowlist as everything else (src/core/net.js): POST /v1/messages and
-// /v1/messages/batches on api.anthropic.com, and reads of our own batches.
+// /v1/messages/batches on api.anthropic.com, cancelling one of our own batches,
+// and reads of our own batches.
 //
 // Every call asks for JSON against a schema (output_config.format). The system
 // prompt is a list of blocks, stable first: the pack's voice, rules and formats,
@@ -115,7 +116,7 @@ export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY, workspace
   };
 }
 
-/** The Message Batches API, through the same door: create, poll, read results. */
+/** The Message Batches API, through the same door: create, poll, read results, and cancel one that runs too long. */
 export function claudeBatchApi({ apiKey = process.env.ANTHROPIC_API_KEY, workspaceId = process.env.ANTHROPIC_WORKSPACE_ID, gate = () => {} } = {}) {
   const sdk = sdkFor({ apiKey, workspaceId });
   return {
@@ -131,6 +132,12 @@ export function claudeBatchApi({ apiKey = process.env.ANTHROPIC_API_KEY, workspa
     },
     async *results(id) {
       for await (const r of await sdk.messages.batches.results(id)) yield r;
+    },
+    /** A batch that ran past its deadline (src/llm/batch.js): what it has not done yet is not done, nor billed. */
+    async cancel(id) {
+      gate(`cancelling batch ${id}`);
+      const b = await sdk.messages.batches.cancel(id);
+      return { id: b.id, status: b.processing_status };
     },
   };
 }

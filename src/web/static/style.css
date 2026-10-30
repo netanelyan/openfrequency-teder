@@ -1074,3 +1074,7 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .sk-styles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .sk-styles .sk { height: auto; aspect-ratio: 9 / 16; border-radius: 12px; }
 @media (max-width: 700px) { .sk-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* The accessibility statement, under the card of the pages with no session. */
+.a11y-foot { margin: 4px 0 0; text-align: center; font-size: 12px; }
+.a11y-foot a { color: var(--ink-3); }

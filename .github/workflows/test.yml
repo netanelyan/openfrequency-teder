@@ -1,0 +1,32 @@
+# Every push to main and every pull request: the whole suite and the public check, on the Node the VPS runs (24)
+# and the oldest this code supports (22.13, node:sqlite). A skipped or todo test fails the run as well
+# (scripts/release-check.js): a test that silently skips is a test that does not run. Deploy only a commit this run
+# marked green (deploy/deploy.sh). No secrets: the tests run on recordings and fakes, and need none.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.13', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # The renderer is Chromium: the tests draw real slides, and the browser tests open real pages.
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/release-check.js

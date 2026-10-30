@@ -44,3 +44,6 @@ Thumbs.db
 
 # AI coding tools: settings and worktrees, local to this machine
 .claude/
+
+# The commit a release is, written by deploy/deploy.sh into each release folder.
+/REVISION

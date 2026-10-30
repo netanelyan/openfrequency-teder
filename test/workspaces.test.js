@@ -11,6 +11,7 @@ import { notify, subscribe } from '../src/notify/index.js';
 import { __onboarding } from '../src/web/onboarding.js';
 import { monthKey, nowIso } from '../src/core/clock.js';
 import { closeBrowser } from '../src/render/render.js';
+import { ROOT } from '../src/core/paths.js';
 import { customer, fakeAccounts, operator, opened, tempHome, viewingAs } from './helpers.js';
 
 // Workspace A sees nothing of workspace B, and changes nothing of it.
@@ -301,6 +302,40 @@ test('every route the site answers has a case here', () => {
     const list = method === 'POST' ? cases : gets;
     assert.ok(list.some((p) => re.test(p)), `${method} ${re} has no isolation case: add one to test/workspaces.test.js`);
   }
+});
+
+// The routes written inline in src/web/server.js that need no session or name no account: each with the test file that
+// covers it, or null for a file of ours with nothing of anyone's in it. A session's pages are in pagesFor, its buttons
+// in casesFor.
+const DOORS = [
+  ['/healthz', 'test/ops.test.js'],
+  ['/readyz', 'test/ops.test.js'],
+  ['/favicon.ico', 'test/web.test.js'],
+  ['/sw.js', 'test/web.test.js'],
+  ...['/static/style.css', '/static/app.js', '/static/icon.svg', '/static/icon-180.png', '/static/icon-512.png', '/static/manifest.webmanifest', '/static/fonts/Assistant.ttf', '/static/demo.css'].map((p) => [p, null]),
+  ['/theme', null], // the browser's light or dark, a cookie of its own
+  ['/m/p1/tiktok/0', 'test/assistant.test.js'],
+  ['/connect/alpha/tiktok', 'test/zernio.test.js'],
+  ['/connect/alpha/tiktok/done', 'test/zernio.test.js'],
+  ['/connect/pick/0123456789abcdef0123456789abcdef', 'test/parallel-setup.test.js'],
+  ['/new/o1/connect/tiktok/done', 'test/parallel-setup.test.js'],
+  ['/s/a-store', 'test/demos.test.js'],
+  ['/internal/lead', 'test/demos.test.js'],
+  ['/internal/demos', 'test/demos.test.js'],
+  ['/internal/setup', 'test/setup.test.js'],
+  ['/internal/workspaces/1/delete', 'test/workspace-delete.test.js'],
+];
+
+test('every route written inline in src/web/server.js has a case: a page or a button here, or a door and the test that covers it', () => {
+  const src = readFileSync(path.join(ROOT, 'src', 'web', 'server.js'), 'utf8');
+  const literals = [...src.matchAll(/\bp === '([^']+)'/g)].map((m) => m[1]);
+  // A regular expression literal tested against the path: its body, escapes and character classes included.
+  const patterns = [...src.matchAll(/\/(\^(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\n\\[])*)\/[a-z]*\.(?:exec|test)\(p\)/g)].map((m) => new RegExp(m[1]));
+  assert.ok(literals.length > 20 && patterns.length > 8, `the source was read (${literals.length} paths, ${patterns.length} patterns)`);
+  const known = [...pagesFor().map((p) => p.split('?')[0]), ...casesFor().map(([p]) => p), ...DOORS.map(([p]) => p)];
+  for (const l of literals) assert.ok(known.includes(l), `${l} has no case: add it to pagesFor, casesFor or DOORS in test/workspaces.test.js`);
+  for (const re of patterns) assert.ok(known.some((p) => re.test(p)), `${re} has no case: add it to pagesFor, casesFor or DOORS in test/workspaces.test.js`);
+  for (const [p, file] of DOORS) if (file) assert.ok(existsSync(path.join(ROOT, file)), `${p}: ${file} is the test that covers it`);
 });
 
 test('workspace A changes nothing of workspace B: every button, with B\'s ids, is refused and B is as it was', async () => {

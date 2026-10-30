@@ -27,8 +27,10 @@ import { releaseHeld, reslotOverdue } from '../publish/hold.js';
 import { emailTick } from '../notify/email.js';
 import { retentionPass } from '../billing/retention.js';
 import { STUCK_REASON } from '../publish/errors.js';
+import { alertOperator } from '../notify/operator.js';
 
-// The engine running on its own: one tick a minute.
+// The engine running on its own: one tick a minute. Each tick publishes first (3 to 4a below), and only then starts
+// the day's slower work (0, 1, 2, then 4b on), so a long morning of drafting never makes a due post late.
 //
 //   1. the calendars of the packs that follow events
 //   1b. the morning's feedback, at settings.feedbackAt (never after generateAt):
@@ -46,6 +48,11 @@ import { STUCK_REASON } from '../publish/errors.js';
 //      (src/budget/quota.js, 40 suggestions and 10 redos): when its suggestions
 //      are used up, nothing until the next month. No money cap stops or slows
 //      anything.
+//   2b. a slot whose post was blocked is drafted again the same day, directly, once, while it is 90 minutes away or
+//      more (redraftBlocked); a batch that has not ended in two hours is given up and drafted directly
+//      (src/llm/batch.js BATCH_DEADLINE_MS), so a stuck batch never holds a day's generation
+//   2c. an account that should be posting and drafted nothing in 24 hours is told to the operator, once a day
+//      (nothingDrafted, src/notify/operator.js)
 //   3. modes, at each post's slot:
 //        approve  the post waits for the owner; unapproved by the end of its
 //                 day, it expires
@@ -217,6 +224,75 @@ export async function tick(ctx, { t = now() } = {}) {
   // ---- 0a. which workspaces have paid: canRun reads the answers kept here
   await refreshEntitlements(ctx).catch((e) => report.errors.push({ step: 'entitlement', error: e.message }));
 
+  // ---- publishing first (3 to 4a): what is due goes out before the day's slow work (the calendars, the feedback, the
+  // topics, the drafting, the learning) is started, so a long morning never makes a post late
+  for (const pack of ctx.packs) {
+    const acc = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
+    if (!acc || acc.status === 'onboarding') continue;
+    const run = canRun(db, pack.id);
+
+    // ---- 3. modes at the slot. A customer's account is always in approve mode (rails.js autonomyMode), whatever is
+    // stored; and the engine approves nothing for an account that cannot run now (paused, unpaid, the kill switch), so a
+    // gap does not turn into a pile of posts nobody chose.
+    const mode = autonomyMode(db, pack.id);
+    const due = db.all("SELECT * FROM posts WHERE account_id = ? AND status = 'queued' AND slot_at IS NOT NULL AND slot_at <= ?", pack.id, new Date(t).toISOString());
+    for (const p of due) {
+      if (mode === 'approve' || !run.ok || (p.review_score ?? 0) >= REWRITE_AT) {
+        if (israelDate(Date.parse(p.slot_at)) < today) {
+          db.update('posts', p.id, { status: 'expired', reason: mode === 'approve' || !run.ok ? 'לא אושר עד סוף היום' : 'נשמע קצת כמו בוט וחיכה לאישור', updated_at: nowIso() });
+          report.expired.push(p.id);
+        }
+        continue;
+      }
+      db.update('posts', p.id, { status: 'approved', approved_at: nowIso(), approved_by: `engine:${mode}`, updated_at: nowIso() });
+      audit(db, { action: 'auto_approved', accountId: pack.id, postId: p.id, detail: { mode } });
+      report.approved.push(p.id);
+    }
+
+    // ---- 3a. posts held for a platform that was not connected, once one is: each to the account's next free slot.
+    // Approved posts whose slot passed while the account could not run (a pause, the kill switch, an unpaid gap) take
+    // the same way back: each to a free slot, or expired when it is more than a day late (src/publish/hold.js).
+    if (run.ok) {
+      const back = releaseHeld(db, pack, { t });
+      if (back.length) report.released = [...(report.released || []), ...back.map((x) => ({ account: pack.id, ...x }))];
+      const late = reslotOverdue(db, pack, { t });
+      if (late.length) report.overdue = [...(report.overdue || []), ...late.map((x) => ({ account: pack.id, ...x }))];
+    }
+
+    // ---- 3b. draft-now: an approved post's TikTok draft goes to the app as soon as the rails let it (the owner's
+    // approval sends it at once; this catches the engine's approvals, and drafts held by Shabbat, a pause or a picture)
+    try {
+      const sent = await sendWaitingDrafts({ ...ctx, packs: [pack] }, { t });
+      if (sent.length) report.drafted = [...(report.drafted || []), ...sent.map((x) => ({ account: pack.id, ...x }))];
+    } catch (e) {
+      report.errors.push({ account: pack.id, step: 'tiktok draft', error: e.message });
+    }
+
+    // ---- 4. publish what is approved and due
+    const sched = scheduleOf(db, pack);
+    if (!run.ok || inRest(t, rulesOf(sched)) || !inWindows(t, sched.windows)) continue;
+    const ready = db.all("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' AND (slot_at IS NULL OR slot_at <= ?) ORDER BY slot_at", pack.id, new Date(t).toISOString());
+    for (const p of ready.slice(0, 1)) {
+      try {
+        const r = await publishPost(ctx, p.id, { t });
+        report.published.push({ account: pack.id, post: p.id, ok: r.ok, via: r.via });
+      } catch (e) {
+        report.errors.push({ account: pack.id, post: p.id, step: 'publish', error: e.message });
+      }
+    }
+  }
+
+  // ---- 4z. a send that never came back (the process stopped mid-send, or a call hung): failed, for a person to check
+  const stuck = stuckPublishing(db, { t });
+  if (stuck.length) report.stuck = stuck;
+
+  // ---- 4a. TikTok drafts after their slot: the owner's post found, a reminder, the fallback, a duplicate
+  try {
+    report.drafts = await watchDrafts(ctx, { t });
+  } catch (e) {
+    report.errors.push({ step: 'drafts', error: e.message });
+  }
+
   // ---- 0. a batch a restart left behind is recorded, so no paid call goes unbilled
   if (ctx.batchApi && db.get("SELECT id FROM batches WHERE status != 'recorded' LIMIT 1")) {
     const last = getSetting(db, 'batches:recovered');
@@ -301,72 +377,12 @@ export async function tick(ctx, { t = now() } = {}) {
   // ---- 2a. the morning after a card: its recap, once the results exist
   await generateRecaps(ctx, report, { t }).catch((e) => report.errors.push({ step: 'recap', error: e.message }));
 
-  for (const pack of ctx.packs) {
-    const acc = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
-    if (!acc || acc.status === 'onboarding') continue;
-    const run = canRun(db, pack.id);
+  // ---- 2b. a slot whose post was blocked (a model, batch or render failure, a restart, a check it did not pass) is
+  // drafted again the same day, directly, once, while it is still REDRAFT_LEAD_MS away: not the next morning
+  if (!ctx.generating) await redraftBlocked(ctx, report, { t }).catch((e) => report.errors.push({ step: 'redraft', error: e.message }));
 
-    // ---- 3. modes at the slot. A customer's account is always in approve mode (rails.js autonomyMode), whatever is
-    // stored; and the engine approves nothing for an account that cannot run now (paused, unpaid, the kill switch), so a
-    // gap does not turn into a pile of posts nobody chose.
-    const mode = autonomyMode(db, pack.id);
-    const due = db.all("SELECT * FROM posts WHERE account_id = ? AND status = 'queued' AND slot_at IS NOT NULL AND slot_at <= ?", pack.id, new Date(t).toISOString());
-    for (const p of due) {
-      if (mode === 'approve' || !run.ok || (p.review_score ?? 0) >= REWRITE_AT) {
-        if (israelDate(Date.parse(p.slot_at)) < today) {
-          db.update('posts', p.id, { status: 'expired', reason: mode === 'approve' || !run.ok ? 'לא אושר עד סוף היום' : 'נשמע קצת כמו בוט וחיכה לאישור', updated_at: nowIso() });
-          report.expired.push(p.id);
-        }
-        continue;
-      }
-      db.update('posts', p.id, { status: 'approved', approved_at: nowIso(), approved_by: `engine:${mode}`, updated_at: nowIso() });
-      audit(db, { action: 'auto_approved', accountId: pack.id, postId: p.id, detail: { mode } });
-      report.approved.push(p.id);
-    }
-
-    // ---- 3a. posts held for a platform that was not connected, once one is: each to the account's next free slot.
-    // Approved posts whose slot passed while the account could not run (a pause, the kill switch, an unpaid gap) take
-    // the same way back: each to a free slot, or expired when it is more than a day late (src/publish/hold.js).
-    if (run.ok) {
-      const back = releaseHeld(db, pack, { t });
-      if (back.length) report.released = [...(report.released || []), ...back.map((x) => ({ account: pack.id, ...x }))];
-      const late = reslotOverdue(db, pack, { t });
-      if (late.length) report.overdue = [...(report.overdue || []), ...late.map((x) => ({ account: pack.id, ...x }))];
-    }
-
-    // ---- 3b. draft-now: an approved post's TikTok draft goes to the app as soon as the rails let it (the owner's
-    // approval sends it at once; this catches the engine's approvals, and drafts held by Shabbat, a pause or a picture)
-    try {
-      const sent = await sendWaitingDrafts({ ...ctx, packs: [pack] }, { t });
-      if (sent.length) report.drafted = [...(report.drafted || []), ...sent.map((x) => ({ account: pack.id, ...x }))];
-    } catch (e) {
-      report.errors.push({ account: pack.id, step: 'tiktok draft', error: e.message });
-    }
-
-    // ---- 4. publish what is approved and due
-    const sched = scheduleOf(db, pack);
-    if (!run.ok || inRest(t, rulesOf(sched)) || !inWindows(t, sched.windows)) continue;
-    const ready = db.all("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' AND (slot_at IS NULL OR slot_at <= ?) ORDER BY slot_at", pack.id, new Date(t).toISOString());
-    for (const p of ready.slice(0, 1)) {
-      try {
-        const r = await publishPost(ctx, p.id, { t });
-        report.published.push({ account: pack.id, post: p.id, ok: r.ok, via: r.via });
-      } catch (e) {
-        report.errors.push({ account: pack.id, post: p.id, step: 'publish', error: e.message });
-      }
-    }
-  }
-
-  // ---- 4z. a send that never came back (the process stopped mid-send, or a call hung): failed, for a person to check
-  const stuck = stuckPublishing(db, { t });
-  if (stuck.length) report.stuck = stuck;
-
-  // ---- 4a. TikTok drafts after their slot: the owner's post found, a reminder, the fallback, a duplicate
-  try {
-    report.drafts = await watchDrafts(ctx, { t });
-  } catch (e) {
-    report.errors.push({ step: 'drafts', error: e.message });
-  }
+  // ---- 2c. an account that should be posting and drafted nothing in a day: the operator hears, once a day
+  await nothingDrafted(ctx, report, { t }).catch((e) => report.errors.push({ step: 'nothing drafted', error: e.message }));
 
   // ---- 4b. what the WhatsApp assistant tells the customer, once OF_ASSISTANT_SECRET is set
   try {
@@ -449,6 +465,67 @@ export async function tick(ctx, { t = now() } = {}) {
   return report;
 }
 
+/** How far ahead a blocked slot must still be to be drafted again the same day: a direct draft takes minutes. */
+export const REDRAFT_LEAD_MS = 90 * 60_000;
+/** The most slots drafted again in one tick: the rest wait for the next, so publishing is not held up. */
+export const REDRAFT_PER_TICK = 2;
+
+/**
+ * The slots of today and tomorrow whose post was blocked and that have no other post, at least REDRAFT_LEAD_MS away,
+ * each drafted again once (settings redraft:<account>:<slot>), directly, within the month's suggestions left. Only for
+ * an account whose day was generated: before that, the day's generation drafts them.
+ */
+export async function redraftBlocked(ctx, report, { t = now() } = {}) {
+  const { db } = ctx;
+  const today = israelDate(t);
+  const plans = [];
+  for (const pack of ctx.packs) {
+    const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
+    if (!acc || acc.status === 'onboarding' || !getSetting(db, `generated:${pack.id}:${today}`) || !canRun(db, pack.id).ok) continue;
+    let left = usage(db, pack.id, t).suggested.left;
+    if (left <= 0) continue;
+    const from = new Date(t + REDRAFT_LEAD_MS).toISOString();
+    const until = israelInstant(addDays(today, 2), '00:00').toISOString();
+    const live = new Set(db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status NOT IN ('blocked', 'drafting')", pack.id).map((r) => r.slot_at));
+    for (const { slot_at: slotAt } of db.all("SELECT DISTINCT slot_at FROM posts WHERE account_id = ? AND status = 'blocked' AND slot_at > ? AND slot_at < ? ORDER BY slot_at", pack.id, from, until)) {
+      if (live.has(slotAt) || left <= 0 || plans.length >= REDRAFT_PER_TICK) continue;
+      const key = `redraft:${pack.id}:${slotAt}`;
+      if (getSetting(db, key)) continue;
+      setSetting(db, key, nowIso());
+      plans.push({ pack, slotAt });
+      left--;
+    }
+  }
+  if (!plans.length) return report;
+  report.redrafted = plans.map((p) => ({ account: p.pack.id, slotAt: p.slotAt }));
+  return generate({ ...ctx, batchApi: null }, plans, report);
+}
+
+/** Past the day's generation by this much, an account that drafted nothing is worth the operator's look. */
+export const NOTHING_AFTER_MS = 4 * 3_600_000;
+
+/**
+ * Once a day, NOTHING_AFTER_MS after the day's generation: an account that runs, has suggestions left and slots still
+ * to fill, and whose last 24 hours drafted nothing that reached the customer (only blocked posts, or none), is told to
+ * the operator (src/notify/operator.js), with the reasons of its last blocked posts.
+ */
+export async function nothingDrafted(ctx, report, { t = now() } = {}) {
+  const { db } = ctx;
+  const today = israelDate(t);
+  if (ctx.generating || t < israelInstant(today, settings(db).generateAt).getTime() + NOTHING_AFTER_MS) return report;
+  for (const pack of ctx.packs) {
+    const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
+    if (!acc || acc.status === 'onboarding' || !canRun(db, pack.id).ok || usage(db, pack.id, t).suggested.left <= 0) continue;
+    const since = new Date(t - 86_400_000).toISOString();
+    if (db.get("SELECT id FROM posts WHERE account_id = ? AND created_at >= ? AND sample = 0 AND status NOT IN ('blocked', 'drafting') LIMIT 1", pack.id, since)) continue;
+    if (!generationTargets(db, pack, { t }).length) continue;
+    const why = db.all("SELECT reason FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC LIMIT 3", pack.id, since).map((r) => r.reason).filter(Boolean);
+    const sent = await alertOperator(ctx, `nothing-drafted:${pack.id}`, { title: `Teder: ${pack.meta.displayName} drafted nothing in 24 hours`, body: why.length ? `blocked: ${why.join(' | ')}` : 'no post was drafted at all' }, { t, every: 20 * 3_600_000 });
+    if (sent) (report.alerts ||= []).push({ account: pack.id, kind: 'nothing-drafted' });
+  }
+  return report;
+}
+
 /** One summary per account and one overall, for a past Israel date. */
 export function writeSummaries(ctx, day) {
   const { db } = ctx;
@@ -476,9 +553,14 @@ export function startRunner(ctx, { everyMs = 60_000 } = {}) {
   if (orphans) ctx.log?.(`runner: ${orphans} post(s) interrupted by a restart were closed`);
   const cut = stuckPublishing(ctx.db);
   if (cut.length) ctx.log?.(`runner: ${cut.length} post(s) stuck sending were marked failed: ${cut.join(', ')}`);
+  // What /readyz reads (src/web/server.js): the timer fires every minute whether or not a tick is still running, and
+  // a tick that started and never ended is a stuck runner.
+  const state = (ctx.runnerState = { beatAt: Date.now(), startedAt: null, endedAt: null });
   const go = async () => {
+    state.beatAt = Date.now();
     if (busy || stopped) return;
     busy = true;
+    state.startedAt = Date.now();
     try {
       const r = await tick(ctx);
       const n = r.generated.length + r.published.length + r.expired.length + r.approved.length + r.errors.length;
@@ -487,6 +569,7 @@ export function startRunner(ctx, { everyMs = 60_000 } = {}) {
       ctx.log?.(`runner: ${e.stack || e.message}`);
     } finally {
       busy = false;
+      state.endedAt = Date.now();
     }
   };
   const timer = setInterval(go, everyMs);
@@ -494,5 +577,6 @@ export function startRunner(ctx, { everyMs = 60_000 } = {}) {
   return () => {
     stopped = true;
     clearInterval(timer);
+    ctx.runnerState = null;
   };
 }

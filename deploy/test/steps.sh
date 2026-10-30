@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The README's "Deploying" steps, verbatim, on a clean Ubuntu 24.04 with systemd.
+# The README's "Deploying" steps, verbatim, on a clean Ubuntu 24.04 with systemd, in the release layout
+# (docs/deploy-releases.md).
 # Run as root inside the test container (deploy/test/run.sh does it). The two
 # repositories are cloned from /repos/public.git and /repos/private.git, which
 # stand in for GitHub; on the VPS they are the real remotes.
@@ -17,13 +18,15 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/
 apt-get update -qq && apt-get install -y -qq caddy >/dev/null
 node --version && caddy version | sed -n 1p
 
-step "2. The service user, the two repositories, the dependencies, Chromium"
+step "2. The service user, the two repositories, Chromium's system libraries"
 useradd --system --create-home --home-dir /var/lib/openfrequency --shell /usr/sbin/nologin openfrequency
-git clone -q /repos/public.git /opt/open-frequency
+mkdir -p /opt/open-frequency/releases
+git clone -q --mirror /repos/public.git /opt/open-frequency/repo.git
 git clone -q /repos/private.git /opt/open-frequency/private
 cd /opt/open-frequency
-npm ci --omit=dev --no-audit --no-fund --loglevel=error
-PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install --with-deps chromium >/dev/null
+npx -y playwright install-deps chromium >/dev/null
+# This container has Node from NodeSource at /usr/bin; the units and deploy.sh name the VPS's /opt/node24.
+mkdir -p /opt/node24/bin && ln -sf "$(command -v node)" /opt/node24/bin/node && ln -sf "$(command -v npm)" /opt/node24/bin/npm
 mkdir -p private/data
 chown -R openfrequency:openfrequency private
 
@@ -36,16 +39,19 @@ step "3. private/.env, mode 600"
 } > private/.env
 chown openfrequency:openfrequency private/.env && chmod 600 private/.env
 
-step "4. The systemd unit, and the site answering on 127.0.0.1"
-cp deploy/openfrequency.service /etc/systemd/system/
+step "4. The systemd unit, the first release, and the site answering on 127.0.0.1"
+git -C repo.git show main:deploy/openfrequency.service > /etc/systemd/system/openfrequency.service
 systemctl daemon-reload
-systemctl enable --now openfrequency
-for i in $(seq 1 60); do curl -fs -H 'Host: 127.0.0.1:4700' http://127.0.0.1:4700/healthz >/dev/null && break; sleep 1; done
+systemctl enable openfrequency
+git -C repo.git show main:deploy/deploy.sh > /root/deploy.sh
+bash /root/deploy.sh --first main
 curl -fs -H 'Host: 127.0.0.1:4700' http://127.0.0.1:4700/healthz && echo ' <- /healthz'
+curl -fs -H 'Host: 127.0.0.1:4700' http://127.0.0.1:4700/readyz && echo ' <- /readyz'
 systemctl is-active openfrequency
+readlink current
 
 step "5. Caddy in front, with the example Caddyfile (local names and an internal certificate)"
-sed -e 's/teder.example.com {/teder.test {\n\ttls internal/' -e 's/media.example.com {/media.test {\n\ttls internal/' deploy/Caddyfile.example >> /etc/caddy/Caddyfile
+sed -e 's/teder.example.com {/teder.test {\n\ttls internal/' -e 's/media.example.com {/media.test {\n\ttls internal/' current/deploy/Caddyfile.example >> /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile >/dev/null && echo 'caddy validate: ok'
 systemctl reload caddy || systemctl restart caddy
 sleep 2
@@ -58,7 +64,7 @@ mkdir -p private/data/public/t && echo hello > private/data/public/t/x.txt && ch
 curl -fsk --resolve media.test:443:127.0.0.1 https://media.test/t/x.txt | grep -q hello && echo 'media.test serves private/data/public'
 
 step "6. The nightly backup timer, and one backup now"
-cp deploy/openfrequency-backup.service deploy/openfrequency-backup.timer /etc/systemd/system/
+cp current/deploy/openfrequency-backup.service current/deploy/openfrequency-backup.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now openfrequency-backup.timer
 systemctl start openfrequency-backup.service
@@ -69,7 +75,7 @@ step "7. The engine renders on this machine: recorded posts for each pack, as th
 # A dry run exits 2 when a post is blocked by the checks, which is the checks
 # working: what this step proves is that Chromium renders Hebrew slides here.
 for pack in $(ls private/packs); do
-  sudo -u openfrequency env OF_HOME=/opt/open-frequency/private PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npm run -s dry -- --pack "$pack" --count 2 | tail -2 || true
+  (cd current && sudo -u openfrequency env OF_HOME=/opt/open-frequency/private PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npm run -s dry -- --pack "$pack" --count 2 | tail -2) || true
 done
 rendered=$(find private/data/dry-media -name 'tiktok-01.jpg' | wc -l)
 echo "$rendered post(s) rendered"
@@ -80,4 +86,9 @@ systemctl restart openfrequency
 sleep 3
 systemctl is-active openfrequency
 journalctl -u openfrequency --no-pager -n 5 | tail -3
+
+step "9. A second deploy of the same commit, and a rollback with nowhere to go is refused"
+bash current/deploy/deploy.sh main
+if bash current/deploy/rollback.sh 2>/dev/null; then echo 'a rollback with no previous release ran'; exit 1; fi
+echo 'rollback with no previous release: refused'
 echo ALL STEPS PASSED

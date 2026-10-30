@@ -56,6 +56,7 @@ test("the only writes are Claude, our own post and a customer account's profile 
     [
       'POST api.anthropic.com ^\\/v1\\/messages$',
       'POST api.anthropic.com ^\\/v1\\/messages\\/batches$',
+      'POST api.anthropic.com ^\\/v1\\/messages\\/batches\\/[A-Za-z0-9_-]+\\/cancel$',
       'POST zernio.com ^\\/api\\/v1\\/posts$',
       'POST zernio.com ^\\/api\\/v1\\/profiles$',
       'POST zernio.com ^\\/api\\/v1\\/connect\\/instagram\\/select-account$',

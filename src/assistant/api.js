@@ -254,6 +254,8 @@ export function assistantApi(ctx, { env = process.env, port }) {
   }
 
   handler.jobs = jobs;
+  // Every route, for the test that each one keeps to its customer (test/assistant.test.js).
+  handler.routes = ROUTES.map(([method, re]) => [method, re]);
   return handler;
 }
 

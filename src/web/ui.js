@@ -47,6 +47,10 @@ export const tederMark = () => markTile('teder', TEDER_GLYPH);
 /** The company's mark: a halftone on blue. Only the footer, next to the name. */
 export const ofMark = () => markTile('of', OF_GLYPH);
 
+/** The accessibility statement (openfrequency.co.il/accessibility), linked from every page with no session. The product's own foot stays the mark and the name, as the owner chose. */
+export const A11Y_URL = 'https://openfrequency.co.il/accessibility';
+export const a11yLink = () => `<a class="a11y" href="${A11Y_URL}">הצהרת הנגישות</a>`;
+
 export const icon = (name, cls = 'i') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>

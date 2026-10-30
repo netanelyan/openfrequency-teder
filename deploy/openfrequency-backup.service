@@ -1,10 +1,15 @@
 # /etc/systemd/system/openfrequency-backup.service (run by the timer below)
 [Unit]
 Description=open-frequency: back up the database
+# A backup that fails, or a copy that does not open (scripts/backup-check.js), tells the operator.
+OnFailure=of-alert@%n.service
 
 [Service]
 Type=oneshot
 User=openfrequency
-WorkingDirectory=/opt/open-frequency
+WorkingDirectory=/opt/open-frequency/current
 Environment=OF_HOME=/opt/open-frequency/private
-ExecStart=/usr/bin/node scripts/backup.js --keep 14
+ExecStart=/opt/node24/bin/node scripts/backup.js --keep 14
+# The copy just written is opened and read: integrity_check, and the accounts and posts tables answer. A bad copy
+# fails the unit.
+ExecStartPost=/opt/node24/bin/node scripts/backup-check.js

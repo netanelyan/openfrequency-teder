@@ -56,6 +56,31 @@ export async function closeBrowser() {
   await b?.close().catch(() => {});
 }
 
+/**
+ * At most this many pages are drawn at once (OF_RENDER_SLOTS, 2 by default). Every build shares the one Chromium,
+ * and when a day's batch ends every post resumes together: without a queue each opened its own page at once, and the
+ * memory went with it, on a server the website, the runner and the other services share.
+ */
+export const RENDER_SLOTS = Math.max(1, Math.floor(Number(process.env.OF_RENDER_SLOTS)) || 2);
+let inUse = 0;
+const waiting = [];
+
+/** Run fn with one of the render slots, waiting for one when all are taken; first come, first served. */
+export async function renderSlot(fn) {
+  if (inUse < RENDER_SLOTS) inUse++;
+  else await new Promise((r) => waiting.push(r)); // the slot is handed over by the one that leaves
+  try {
+    return await fn();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else inUse--;
+  }
+}
+
+/** The slots taken and the pages waiting for one, for the tests and the log. */
+export const renderLoad = () => ({ inUse, waiting: waiting.length });
+
 function keepWarm() {
   if (idle) clearTimeout(idle);
   idle = setTimeout(() => closeBrowser(), 120_000);
@@ -74,8 +99,10 @@ const FIT_FLOOR = 0.6;
 // The smallest size a post's content slides are evened down to (renderPost): below it, a slide keeps its own.
 const EVEN_FLOOR = 0.8;
 
-/** One HTML page to one JPEG. Returns { file, fitted }. */
-export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenient = false }) {
+/** One HTML page to one JPEG, in its turn (renderSlot). Returns { file, fitted }. */
+export const renderHtml = (html, opts) => renderSlot(() => drawHtml(html, opts));
+
+async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenient = false }) {
   // A preview (the style picker, a review) is drawn even when it does not fit, and says so: { warnings }.
   const warnings = [];
   const refuse = (message, code) => {

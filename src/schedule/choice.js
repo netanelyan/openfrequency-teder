@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { audit, getSetting, setSetting } from '../core/store.js';
 import { nowIso } from '../core/clock.js';
 import { monthShare, planOf } from '../budget/quota.js';
@@ -39,6 +40,24 @@ export const MIN_GAP_MIN = 60;
  * the plan the rest of the year.
  */
 export const DEFAULT_CHOICE = { 0: ['12:30', '19:30'], 1: ['12:30', '19:30'], 2: ['12:30', '19:30'], 3: ['12:30', '19:30'], 4: ['12:30', '19:30'], 5: ['12:30'], 6: ['21:00'] };
+
+/** The most a new account's default times are moved by (defaultChoiceFor), in steps of five minutes. */
+export const STAGGER_MIN = 25;
+
+/**
+ * The default a new account starts with, its times moved later by 0 to STAGGER_MIN minutes in 5-minute steps, by the
+ * account's own key: with every customer on the same default, every account's posts fell on the same minute and were
+ * published one after another, the last of them late. Later, never earlier: Saturday night stays after nightfall,
+ * Friday stays hours before Shabbat, and the two times of a day keep their gap.
+ */
+export function defaultChoiceFor(key) {
+  const shift = (createHash('sha256').update(String(key)).digest()[0] % (STAGGER_MIN / 5 + 1)) * 5;
+  const later = (t) => {
+    const m = minutes(t) + shift;
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  };
+  return Object.fromEntries(Object.entries(DEFAULT_CHOICE).map(([d, list]) => [d, list.map(later)]));
+}
 
 export const DAY_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 

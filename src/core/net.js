@@ -1,3 +1,6 @@
+import { BlockList, isIP } from 'node:net';
+import { lookup as dnsLookup } from 'node:dns/promises';
+
 // The only door to the network.
 //
 // HARD RULE 1: the engine never likes, follows, comments, DMs, or reads other
@@ -6,7 +9,7 @@
 // place the door opens onto:
 //
 //   - WRITES (anything but GET) are allowed to exactly these endpoints: Claude's
-//     messages and batches endpoints, Zernio's create-post endpoint and its
+//     messages and batches endpoints (and cancelling a batch of ours), Zernio's create-post endpoint and its
 //     create-profile endpoint (an empty folder on our own Zernio team, one per
 //     customer account, that the customer connects their own accounts into),
 //     Meta's two publishing endpoints for an Instagram account (create a media container,
@@ -20,7 +23,13 @@
 //     publishing quota and our own token). A social host is never fetched as a
 //     web page, so nothing here can scrape a profile or a feed.
 //   - READS from the open web (approved sources, feed discovery, image libraries)
-//     are allowed for any https host that is not a social platform.
+//     are allowed for any https host that is not a social platform and is on the
+//     public internet: the name is resolved first, refused when any of its
+//     addresses is this machine, a private network, link-local (a cloud's
+//     metadata service), CGNAT, unique-local or unspecified, in any spelling
+//     (2130706433, 0x7f000001, [::ffff:127.0.0.1]), and the request is then made
+//     to the address that was checked and no other, so a second DNS answer cannot
+//     turn it to one (src/core/net.js publicAddresses, pinned). On every hop.
 //   - A service on this machine (openfrequency-toran, the WhatsApp assistant) is
 //     reached through localFetch, which refuses every host but the loopback. The
 //     assistant talks to the customer; Teder never reaches WhatsApp itself.
@@ -65,6 +74,7 @@ export function graphRefusal(u) {
 export const WRITE_RULES = [
   { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages$/, why: 'Claude: drafting, review, scoring' },
   { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages\/batches$/, why: "Claude: the day's drafts as one batch, at half price" },
+  { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages\/batches\/[A-Za-z0-9_-]+\/cancel$/, why: 'Claude: cancelling a batch of ours that ran past its deadline, to ask its requests directly' },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts$/, why: 'Zernio: create a post on our own account' },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/profiles$/, why: "Zernio: a customer account's profile, the folder its TikTok and Instagram are connected into" },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/connect\/instagram\/select-account$/, why: 'Zernio (headless connect): the Instagram account the customer picked, when Instagram came back through Facebook Login' },
@@ -132,7 +142,119 @@ export function assertAllowed(method, url) {
   if (isSocial(host) || onHost(host, 'zernio.com')) {
     throw new NetError(`refused GET ${host}${u.pathname}: a social platform is read only through its official API`, { code: 'refused' });
   }
-  return { host, why: 'the open web: a source, a feed, an image library' };
+  return { host, why: 'the open web: a source, a feed, an image library', open: true };
+}
+
+// ---- the open web is the public internet: no address of this machine or of a private network
+
+const BLOCKED = new BlockList();
+// IPv4: this network, private (10/8, 172.16/12, 192.168/16), CGNAT, loopback, link-local (169.254.169.254 is a
+// cloud's metadata service), the IETF and documentation blocks, benchmarking, multicast and reserved. Node checks an
+// IPv4-mapped IPv6 address ([::ffff:127.0.0.1]) against these too.
+for (const [a, p] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]]) BLOCKED.addSubnet(a, p, 'ipv4');
+// IPv6: loopback and unspecified, NAT64 (an IPv4 address inside), discard, the IETF block (Teredo among it), 6to4,
+// documentation, unique-local, link-local, site-local and multicast.
+for (const [a, p] of [['::1', 128], ['::', 128], ['64:ff9b::', 96], ['64:ff9b:1::', 48], ['100::', 64], ['2001::', 23], ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8]]) BLOCKED.addSubnet(a, p, 'ipv6');
+
+/** The eight 16-bit groups of an IPv6 address, or null. */
+function groups6(ip) {
+  let s = ip.toLowerCase();
+  const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  if (v4) s = `${s.slice(0, v4.index)}${((+v4[1] << 8) | +v4[2]).toString(16)}:${((+v4[3] << 8) | +v4[4]).toString(16)}`;
+  const [head, tail] = s.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail != null && tail !== '' ? tail.split(':') : [];
+  const g = s.includes('::') ? [...h, ...Array(8 - h.length - t.length).fill('0'), ...t] : h;
+  return g.length === 8 ? g.map((x) => parseInt(x, 16)) : null;
+}
+
+/** Why this address is not on the public internet, or null when it is. */
+export function blockedAddress(ip) {
+  const bare = String(ip).replace(/^\[|\]$/g, '');
+  const family = isIP(bare);
+  if (!family) return 'not an IP address';
+  if (BLOCKED.check(bare, family === 4 ? 'ipv4' : 'ipv6')) return 'not a public address';
+  // An IPv4-compatible IPv6 address (::a.b.c.d, ::7f00:1) carries an IPv4 one: the first 96 bits are zero.
+  if (family === 6 && groups6(bare)?.slice(0, 6).every((x) => x === 0)) return 'not a public address';
+  return null;
+}
+
+// What resolves a name, and (for the tests alone) names that are let through to this machine and how a test
+// server's certificate is taken: src/core/net.js __testNet. Production never changes them.
+const policy = { lookup: (host) => dnsLookup(host, { all: true, verbatim: true }), exempt: () => false, tls: null };
+const NATIVE_FETCH = globalThis.fetch;
+
+/**
+ * The addresses a host may be reached at, every one of them public, or a throw (code 'private_address'). A name with
+ * one address that is not public is refused whole: a DNS answer that mixes them is how rebinding is tried.
+ */
+export async function publicAddresses(hostname) {
+  const host = String(hostname).toLowerCase().replace(/^\[|\]$/g, '');
+  const literal = isIP(host);
+  let addrs;
+  if (literal) addrs = [{ address: host, family: literal }];
+  else {
+    try {
+      addrs = await policy.lookup(host);
+    } catch (e) {
+      throw new NetError(`${host} did not resolve: ${e.code || e.message}`, { code: 'network' });
+    }
+  }
+  if (!addrs?.length) throw new NetError(`${host} has no address`, { code: 'network' });
+  if (policy.exempt(host)) return addrs;
+  for (const a of addrs) {
+    const why = blockedAddress(a.address);
+    if (why) throw new NetError(`refused ${host} (${a.address}): ${why}; the engine reads the public internet only`, { code: 'private_address' });
+  }
+  return addrs;
+}
+
+// The connection goes to the address that was checked, never to a second lookup's: one undici Agent (Node's own fetch
+// runs on undici) whose lookup answers from the pins set right before each request. A name with no pin fails.
+let pinning = null;
+const MAX_PINS = 1000;
+
+async function pinned() {
+  if (pinning) return pinning;
+  // Node creates undici's global Agent on the first fetch; a data: URL makes it without the network.
+  await NATIVE_FETCH('data:,');
+  const Agent = globalThis[Symbol.for('undici.globalDispatcher.1')]?.constructor;
+  if (typeof Agent !== 'function') throw new NetError('cannot pin the address a request goes to: this Node has no undici Agent', { code: 'refused' });
+  const pins = new Map();
+  const lookup = (hostname, opts, cb) => {
+    const p = pins.get(String(hostname).toLowerCase());
+    if (!p) return cb(Object.assign(new Error(`no checked address for ${hostname}`), { code: 'ENOTFOUND' }));
+    if (opts?.all) return cb(null, p.map((a) => ({ address: a.address, family: a.family })));
+    return cb(null, p[0].address, p[0].family);
+  };
+  pinning = { agent: new Agent({ connect: { lookup, ...(policy.tls || {}) } }), pins };
+  return pinning;
+}
+
+/** The dispatcher for one open-web hop: the host resolved, every address public, and the connection pinned to them. */
+async function openWebDispatcher(url) {
+  const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const addrs = await publicAddresses(host);
+  const p = await pinned();
+  if (p.pins.size >= MAX_PINS && !p.pins.has(host)) p.pins.delete(p.pins.keys().next().value);
+  p.pins.set(host, addrs);
+  return p.agent;
+}
+
+/**
+ * The tests' door to the resolver: `lookup(host)` returns [{ address, family }], `exempt(host)` lets a test server on
+ * this machine through, `tls` is how its certificate is taken. Returns a function that puts everything back.
+ */
+export function __testNet({ lookup, exempt, tls } = {}) {
+  const was = { ...policy };
+  Object.assign(policy, { ...(lookup ? { lookup } : {}), ...(exempt ? { exempt } : {}), ...(tls ? { tls } : {}) });
+  pinning?.agent.close().catch(() => {});
+  pinning = null;
+  return () => {
+    Object.assign(policy, was);
+    pinning?.agent.close().catch(() => {});
+    pinning = null;
+  };
 }
 
 // Who is reading, for the sites that ask (Wikimedia, SEC): OF_USER_AGENT in .env,
@@ -153,7 +275,10 @@ export async function doorFetch(input, init = {}) {
 
   let waited = 0;
   for (let hop = 0; hop < 6; hop++) {
-    assertAllowed(method, url);
+    const rule = assertAllowed(method, url);
+    // The open web, every hop: resolved, every address public, and the connection made to those addresses alone. (A
+    // test that put its own fetch in place reaches no network, and is left to it.)
+    const dispatcher = rule.open && globalThis.fetch === NATIVE_FETCH ? await openWebDispatcher(url) : undefined;
     let res;
     try {
       res = await fetch(url, {
@@ -162,6 +287,7 @@ export async function doorFetch(input, init = {}) {
         headers,
         redirect: 'manual',
         signal: init.signal || AbortSignal.timeout(timeoutMs),
+        ...(dispatcher ? { dispatcher } : {}),
       });
     } catch (e) {
       throw new NetError(e.name === 'TimeoutError' ? `timed out: ${url}` : `${e.message}: ${url}`, { code: 'network' });
