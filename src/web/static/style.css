@@ -1075,7 +1075,6 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .sk-styles .sk { height: auto; aspect-ratio: 9 / 16; border-radius: 12px; }
 @media (max-width: 700px) { .sk-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-/* The accessibility statement, at the foot of every page (and of the pages with no session, under their card). */
-.foot .a11y { color: inherit; margin-inline-start: 8px; text-decoration: underline; text-underline-offset: 3px; }
+/* The accessibility statement, under the card of the pages with no session. */
 .a11y-foot { margin: 4px 0 0; text-align: center; font-size: 12px; }
 .a11y-foot a { color: var(--ink-3); }

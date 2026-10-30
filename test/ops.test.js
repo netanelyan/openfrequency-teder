@@ -151,8 +151,6 @@ test('the pages with no session link to the accessibility statement', async () =
     const html = await (await get(p)).text();
     assert.match(html, /href="https:\/\/openfrequency\.co\.il\/accessibility">הצהרת הנגישות<\/a>/, p);
   }
-  // And every page of the product, at its foot.
-  assert.match(await (await get('/', fake.session(customer(1)).cookie)).text(), /<footer class="foot">.*הצהרת הנגישות/s);
 });
 
 /* ------------------------------------------------------------------ the tick */
