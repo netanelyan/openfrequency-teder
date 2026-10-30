@@ -672,15 +672,16 @@ On a VPS (Ubuntu 24.04 here) behind Caddy, as a small Node service. The steps ar
 tested end to end in a clean container by `deploy/test/run.sh`.
 
 1. **Node 24 and Caddy**, from their own repositories.
-2. **The service user, the code, Chromium:**
+2. **The service user, the code, Chromium's system libraries:**
    ```bash
    sudo useradd --system --create-home --home-dir /var/lib/openfrequency --shell /usr/sbin/nologin openfrequency
-   sudo git clone <this repo> /opt/open-frequency
-   cd /opt/open-frequency && sudo npm ci --omit=dev
-   sudo PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install --with-deps chromium
+   sudo mkdir -p /opt/open-frequency/releases
+   sudo git clone --mirror <this repo> /opt/open-frequency/repo.git
+   sudo npx playwright install-deps chromium
    ```
    Then put the private folder at `/opt/open-frequency/private` (a clone of its
-   repository, or a copy of `packs/` and `.env`), owned by `openfrequency`.
+   repository, or a copy of `packs/` and `.env`), owned by `openfrequency`. Each
+   release is built by `deploy/deploy.sh` (step 4), Chromium included.
 3. **`private/.env`**, mode 600: at least `SESSION_SECRET` (`openssl rand -hex 32`),
    `OF_INTERNAL_TOKEN` (the same value as openfrequency-accounts'; sign-in is that
    service's, see [docs/workspace-move.md](docs/workspace-move.md)), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
@@ -688,13 +689,19 @@ tested end to end in a clean container by `deploy/test/run.sh`.
    For the WhatsApp assistant, `OF_ASSISTANT_SECRET` (the same value as openfrequency-toran's; see
    [docs/assistant-api.md](docs/assistant-api.md)).
 4. **The service:** copy `deploy/openfrequency.service` to `/etc/systemd/system/`,
-   `systemctl daemon-reload`, `systemctl enable --now openfrequency`. `/healthz` says `ok`.
+   `systemctl daemon-reload`, `systemctl enable openfrequency`, then the first release with
+   `deploy/deploy.sh --first` ([docs/deploy-releases.md](docs/deploy-releases.md)): the service runs from
+   `/opt/open-frequency/current`, a release folder. `/healthz` says `ok` and the commit; `/readyz` says whether the
+   database answers and the runner ticks.
 5. **Caddy:** append `deploy/Caddyfile.example` with your two names (the website, and
    the media host that serves `private/data/public` for the platforms to fetch
    slides from), validate, reload.
 6. **The nightly backup:** `deploy/openfrequency-backup.{service,timer}`.
 
-**Updating the engine:** `git pull`, `npm ci --omit=dev`, restart the service.
+**Updating the engine:** `deploy/deploy.sh` as root, a commit CI marked green: a new release folder, a schema check,
+a backup, the switch, and `/readyz` within 60 seconds or the previous release back (`deploy/rollback.sh` by hand).
+[docs/deploy-releases.md](docs/deploy-releases.md) has the layout, the rollback, restoring a backup, and the one-time
+move of a server that runs from a plain checkout.
 **Updating an account:** replace its folder under `private/packs/`, restart; the
 database follows the pack's files on start.
 

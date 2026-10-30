@@ -4,14 +4,12 @@
 # (Caddy in front, see Caddyfile.example) and the runner that generates,
 # publishes and reads metrics once a minute.
 #
-#   sudo useradd --system --create-home --home-dir /var/lib/openfrequency --shell /usr/sbin/nologin openfrequency
-#   sudo git clone <public repo> /opt/open-frequency
-#   sudo git clone <your PRIVATE repo> /opt/open-frequency/private      # packs, recordings
-#   sudo -u openfrequency mkdir -p /opt/open-frequency/private/data
-#   cd /opt/open-frequency && sudo npm ci --omit=dev
-#   sudo PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install --with-deps chromium
-#   sudo cp deploy/openfrequency.service /etc/systemd/system/ && sudo systemctl daemon-reload
-#   sudo systemctl enable --now openfrequency
+# The code runs from /opt/open-frequency/current, a link to the release
+# deploy/deploy.sh built (/opt/open-frequency/releases/<commit>). What is not
+# code stays outside the releases, where every release finds it: private/ (keys,
+# packs, the database, media) and .browsers/ (Playwright's Chromium). The first
+# install, and the move of a server that runs from a plain checkout, are in
+# docs/deploy-releases.md.
 #
 # Keys go in /opt/open-frequency/private/.env, mode 600, owned by openfrequency.
 
@@ -19,22 +17,38 @@
 Description=open-frequency (Teder): the engine and the approval website
 After=network-online.target
 Wants=network-online.target
+# A crash loop, or a start the database refuses (src/db/index.js schemaProblem), tells the operator: the template
+# unit and /usr/local/bin/of-alert come from the openfrequency-ops repository. Five failed starts in five minutes
+# leave the unit failed, which is what OnFailure acts on (Restart= alone would retry forever and never say so).
+OnFailure=of-alert@%n.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=openfrequency
 Group=openfrequency
-WorkingDirectory=/opt/open-frequency
+WorkingDirectory=/opt/open-frequency/current
 Environment=NODE_ENV=production
 # Production drafts through the Anthropic API (batched and cached); a laptop is dev.
 Environment=OF_ENV=prod
 Environment=OF_HOME=/opt/open-frequency/private
 Environment=PORT=4700
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers
-ExecStart=/usr/bin/node scripts/web.js --runner
+# Node 24 lives here on the VPS; /usr/bin/node there is v20, too old for node:sqlite.
+ExecStart=/opt/node24/bin/node scripts/web.js --runner
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20
+
+# Memory. The process and its Chromium share one cgroup, on a 3.9 GB server that Toran, accounts and other apps share
+# too. Measured on the VPS: a run's peak was 113 to 561 MB from 2026-10-19, and 713 MB in the run from 2026-10-28
+# (renders included; at most two pages are drawn at once since OF_RENDER_SLOTS). The owner decides the limits; the
+# proposal, with room over the 713 MB seen:
+#MemoryHigh=900M
+#MemoryMax=1100M
+# Under memory pressure the kernel kills this before Toran (the customers' WhatsApp) or Postgres.
+OOMScoreAdjust=300
 
 # Hardening: the process can write only to the private folder.
 NoNewPrivileges=true

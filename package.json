@@ -11,6 +11,7 @@
   "scripts": {
     "test": "node --test --test-concurrency=1 \"test/*.test.js\" && node scripts/check-public.js",
     "check:public": "node scripts/check-public.js",
+    "release-check": "node scripts/release-check.js",
     "dry": "node scripts/dry.js",
     "redraw": "node scripts/redraw.js",
     "web": "node scripts/web.js",
