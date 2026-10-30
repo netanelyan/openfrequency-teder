@@ -1895,3 +1895,36 @@ running, while unapproved posts expire at the end of their day and still count t
    left connected after its customer is gone is a bill for nothing and a customer's account still reachable from our
    team. They reach our own Zernio team only, never a social platform, and only for a workspace accounts says is
    deleted. An account id typed into a pack by hand is not disconnected: it may be the operator's own.
+
+### The plan is the customer's, looks are kept apart per customer, and what the privacy page promises is done (2026-10-29)
+
+The readiness review of Teder's sell path (TED-02, TED-03, TED-04, TED-12, TED-16, TED-19, PRA-DB-005, ACC-04) and the
+owner's small plan.
+
+1. *One month per customer.* The 40 slideshows and 10 redos were per account, and a workspace may open as many
+   accounts as it likes (the owner's call: the paid plan is the ceiling, not a count of accounts). So one customer could
+   draw several times what they pay for. Now the month is the workspace's, shared by its accounts, and its size comes
+   from accounts' entitlement answer (`plan: { name, slideshows, redos }`): the full plan 40 and 10, the small one (₪490
+   a month) 15 and 4. No dollar ceiling was added: there is none on purpose ("The budget is gone, the plan is the
+   limit"). The operator's own accounts keep a month each. Each account's schedule is thinned to its even share of the
+   month, so a customer's second account does not leave the first with nothing in the last week.
+2. *Samples are bounded.* A round of samples is up to nine full-price builds that the plan does not count; a customer
+   gets two rounds per new account and six a month, none once the account is live. A light edit's fact check, free in
+   the plan, is bounded at 30 a day per customer.
+3. *Looks are kept apart per customer.* Every new account had to take a template and a display face no other account
+   on the server used: eight faces, three taken by our own accounts, so the ninth account on the server could not be
+   created. The rule exists so one owner's accounts do not look like one brand repeated; two businesses may look alike.
+   It now holds within a workspace (and among our own accounts), and a workspace with more accounts than looks takes
+   the least used one instead of failing. Ids, handles, names and Zernio accounts stay unique everywhere.
+4. *What the privacy page says is kept, kept for that long.* A daily pass removes demos (a store's request on the
+   website, with its WhatsApp number) six months after the last contact, as the page says of form requests; disconnects
+   a workspace's TikTok and Instagram once its Teder stops, as it says of platform permissions ("עד שהשירות נעצר"),
+   after the 14 days the terms give an unpaid month; and keeps trying the Zernio removals that failed, instead of
+   trying once. Deleting a workspace now also takes the people and the free text out of its accounts' audit rows and
+   its accounts' names out of the overall summaries. Nothing else is deleted: the page promises nothing about a
+   stopped customer's posts and sources, and they leave by deleting the workspace.
+5. *The backup has the customer's setup.* The nightly backup copied the database only, and a customer's pack (voice,
+   theme, the facts they checked by hand) is written on the server by onboarding, so no copy of it existed. The packs
+   are now copied beside each database copy, and the database copy is opened and checked before the run counts.
+6. *The assistant asks the paywall too.* The WhatsApp assistant's door answered before the entitlement check, so an
+   unpaid customer could approve or edit through it; it now asks as the website does.

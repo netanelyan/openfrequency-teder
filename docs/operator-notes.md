@@ -117,16 +117,18 @@ says which keys are set without showing them.
 
 ### The account could not be created
 
-- **What it is.** Writing the new pack failed for a reason the customer cannot fix: every template and variant or
-  every display font is already used by another account, or the pack would not validate.
+- **What it is.** Writing the new pack failed for a reason the customer cannot fix: the pack would not validate.
+  Templates and display fonts no longer run out: a new account's look is kept apart from the same customer's other
+  accounts only (and the operator's own accounts from each other), never from other customers', and when the
+  customer's accounts already use every template or face, the least used one on the server is taken
+  (src/onboarding/pack.js newTheme, src/packs/validate.js validateAll).
 - **Where it shows.** The customer reads "לא הצלחנו ליצור את החשבון הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו
   לנו." The details go to the service's log, as "[onboarding] the pack was not written: ...". (What the customer can
   fix is said to them: a taken user name or account name, one with other than Latin letters and digits, no source
   approved. A name another account already has used to fail here; it is now checked before the pack is written.)
-- **What to do.** Read the log line. "every template and variant is in use" needs one more template file in
-  src/render/templates; "every display face is in use" needs a font in src/render/fonts.js; validation problems are
-  listed one by one.
-- **Needed now?** Only when it happens. With many customers the templates and fonts will run out: plan for it.
+- **What to do.** Read the log line: validation problems are listed one by one.
+- **Needed now?** Only when it happens. More templates (src/render/templates) or display faces (src/render/fonts.js
+  DISPLAY_FACES) only make a customer with many accounts look more varied; nothing waits on them.
 
 ### Sources the customer is not offered: relevance, authority, terms
 
@@ -160,6 +162,12 @@ says which keys are set without showing them.
   "[onboarding] <onboarding id> (<account>): ...".
 - **What to do.** Read the log lines. "no samples written: nofacts" is sources with nothing to write from (often the
   off-topic ones above, or a home page with no articles); "(error)" lines are the model or the renderer.
+- **How many.** A round of samples is up to nine full-price builds outside the month's plan, so a customer gets two
+  rounds for each new account (the first five and one more press) and six rounds a calendar month across all their
+  new accounts, and none once the account is live (src/web/onboarding.js SAMPLE_ROUNDS). A round counts once it starts
+  writing; one that broke on our side and wrote nothing does not. Past the limit the customer reads that it is the
+  most, and to write to us. The operator's presses are not limited and not counted: to give a customer another round,
+  press "עוד פוסטים לדוגמה" as the operator on their `/new/<id>` page.
 
 ### Connecting TikTok and Instagram: headless, and before the account exists
 
@@ -209,6 +217,49 @@ says which keys are set without showing them.
   Zernio by name in the connect copy and in accounts' setup checklist ("מחברים דרך Zernio"). Once that branch is in,
   check that none of these reach a customer.
 
+### The month's plan is the customer's, shared by their accounts
+
+- **What it is.** A customer's slideshows and redos a month are their workspace's: the full plan 40 and 10, the small
+  plan 15 and 4, as accounts says in its entitlement answer (`plan`). Every account of the workspace draws on the same
+  month, so a second account gives more pages, never more posts. Each account's schedule is thinned to its even share
+  of the month (src/budget/quota.js monthShare) so they all post through the month. The operator's own accounts, in no
+  workspace, keep a month each, and the operator's numbers on Settings ("לשנות מכסה") apply to them only.
+- **Where it shows.** The customer's Settings shows the month once, with each account's count under it; the Accounts
+  page and the home page say when it is the accounts' month together. The operator's "מכסות ועלות לפי לקוח" shows each
+  customer account's own count beside the workspace's, and says the plan comes from accounts.
+- **What to do.** To change a customer's plan, change their subscription's plan in accounts (/admin). Teder reads it
+  within five minutes. An answer without a plan (an older accounts) is the full plan.
+
+### A light edit's fact check: 30 a day per customer
+
+- **What it is.** Editing a post's text is free in the plan, but each edit is checked by the model (tag `edit-check` in
+  the spend ledger). A customer's workspace gets 30 such checks a day across its accounts (src/web/actions.js
+  EDIT_CHECKS_PER_DAY); past that the edit is refused for the day with a Hebrew line that says so. The operator is not
+  limited.
+
+### What is deleted on its own, and when
+
+- **What it is.** One pass a day in the runner (src/billing/retention.js), from the periods on the privacy page:
+  a store's demo six months after its last contact (its last request, or the last time its page was opened), with its
+  opens and pictures; the TikTok and Instagram a workspace connected, once its Teder stopped (cancelled or switched off:
+  the next day; unpaid: 14 days after it stopped, the time the terms give a payment), disconnected from our Zernio team
+  and forgotten here, while its posts, sources and settings stay; the public copies of slides three days after they
+  were made; and every Zernio removal that failed before (a deleted workspace's, a stopped one's), tried again every day
+  until Zernio does it.
+- **Where it shows.** The log, one line a day: "[retention] N demo(s) past 6 months removed, ...". The audit log has
+  `retention`, `connections_removed` and `zernio_removals` entries. What is still to remove on Zernio is in `settings`,
+  key `zernio:removals`.
+- **What to do.** Nothing. A removal that keeps failing (its `lastError` in that row) is worth a look on Zernio. A
+  stopped customer who pays again connects their TikTok and Instagram again; their profile is kept for that.
+
+### The nightly backup
+
+- **What it is.** `scripts/backup.js` (openfrequency-backup.timer, 03:30 UTC, as the user openfrequency) copies the database and every pack folder (the customer's
+  setup: voice, theme, formats, rules, the facts they checked and their photographs) into `data/backups/`, 14 of each,
+  and opens the database copy and checks it. A copy that fails the check is removed and the unit fails. `.env` is not
+  copied: keep it off the server (a password manager). How to restore is at the top of src/db/backup.js.
+- **What to do.** Copy `data/backups/` off the server: on the same disk it is no backup against losing the disk.
+
 ## Settings the operator controls
 
 ### OF_SIGNUP_OPEN and OF_SIGNUP_URL: where a demo page sends people
@@ -235,8 +286,9 @@ says which keys are set without showing them.
   (its slots, posting windows, posts a day and the two flags; a fight week stays the pack's). A new account
   starts with two posts Sunday to Thursday (12:30, 19:30), Friday 12:30 and Saturday 21:00: about 45 to 54 slots a
   month, at least 45 in every month of 2026 to 2028, festivals included. A month with more slots than the account's
-  plan (40, or what the operator set) is thinned evenly to the plan, a day's second slot first, so the posts last the
-  whole month; the quota still caps it.
+  plan (40, 15 on the small plan, or what the operator set for one of our own accounts; for a customer with several
+  running accounts, each one's even share of it) is thinned evenly to it, a day's second slot first, so the posts last
+  the whole month; the quota still caps it.
 - **Where it shows.** Settings, "מתי מפרסמים", says how many posts next month gets and how many chosen times fall on
   a Shabbat or a festival the account does not post on.
 - **What to do.** Nothing. When the day's posts are written (`generateAt`, 07:00) is still the operator's, on
