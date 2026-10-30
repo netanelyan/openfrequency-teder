@@ -42,7 +42,7 @@ export function accountsLinks(env = process.env) {
     login: (next) => `${base}/login?next=${encodeURIComponent(next)}`,
     logout: `${base}/logout`,
     admin: `${base}/admin`,
-    // Where a customer pays for Teder and sets it up: the paywall's button.
+    // Where a customer sets Teder up and reads how to pay for it: the paywall's button.
     setup: `${base}/setup`,
   };
 }

@@ -322,10 +322,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // workspace viewed, read-only, like everyone with a workspace.
       const operator = a.role === 'superadmin' && !a.workspace;
       const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
-      // The paywall: a customer whose workspace has not paid sees where to pay, not the product. With no answer to go by
-      // (accounts has not answered for a day, or never), the page says the check failed rather than ask them to pay. The
-      // operator viewing as the customer (read-only) sees what is there. One of the company's own workspaces is not a
-      // customer's, and accounts is not asked about it (src/billing/own.js).
+      // The paywall: a customer whose workspace has not paid sees where to read how to pay, not the product. With no
+      // answer to go by (accounts has not answered for a day, or never), the page says the check failed rather than ask
+      // them to pay. The operator viewing as the customer (read-only) sees what is there. One of the company's own
+      // workspaces is not a customer's, and accounts is not asked about it (src/billing/own.js).
       const ent = !operator && !user.viewAs && a.workspace && customerWorkspace(a.workspace.id) ? await paid.check(a.workspace.id) : null;
       if (ent && !ent.allowed) {
         const kind = ent.known ? 'unpaid' : 'error';

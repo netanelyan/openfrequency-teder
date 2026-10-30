@@ -137,7 +137,9 @@ test('allowed is the only thing acted on, and a change is logged once', async ()
   assert.equal(log.filter((l) => /workspace 1: /.test(l) && /allowed/.test(l)).length, 2);
 });
 
-test('the website: a workspace that has not paid sees where to pay, its new-account flow too; the operator never does', async () => {
+const GATE_TEXT = 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.';
+
+test('the website: a workspace that has not paid sees where to read how to pay, its new-account flow too; the operator never does', async () => {
   fake.entitlement(2, 'unpaid');
   const unpaid = fake.session(customer(2)).cookie;
   for (const p of ['/', '/posts', '/new', '/settings', '/accounts']) {
@@ -145,7 +147,11 @@ test('the website: a workspace that has not paid sees where to pay, its new-acco
     assert.equal(res.status, 402, p);
     const html = await res.text();
     assert.match(html, /תדר מחכה לתשלום/, p);
-    assert.match(html, /href="https:\/\/accounts\.test\/setup"/, `${p}: a link to pay in accounts`);
+    // True whichever way accounts takes the payment: Teder opens once it is in, and how to pay is on accounts' setup
+    // page, where the button goes.
+    assert.ok(html.includes(`<p>${GATE_TEXT}</p>`), p);
+    assert.ok(html.includes('<a class="btn primary" href="https://accounts.test/setup">איך משלמים</a>'), `${p}: the way to accounts' setup page`);
+    assert.doesNotMatch(html, /משלמים בחשבון|לתשלום בחשבון/, `${p}: no promise of paying in the account`);
     assert.doesNotMatch(html, /bravo/i, `${p}: nothing of the product`);
     assert.doesNotMatch(html, /[—–]/);
   }
@@ -154,6 +160,7 @@ test('the website: a workspace that has not paid sees where to pay, its new-acco
   assert.equal(res.status, 402);
   const body = await res.json();
   assert.equal(body.ok, false);
+  assert.equal(body.message, GATE_TEXT);
   assert.equal(body.pay, 'https://accounts.test/setup');
 
   // The paying workspace, the operator, and the operator viewing the unpaid one as its customer: the product.
@@ -174,7 +181,7 @@ test('the website: a workspace that has not paid sees where to pay, its new-acco
   assert.equal(lost.status, 503);
   const page = await lost.text();
   assert.match(page, /אי אפשר לבדוק כרגע/);
-  assert.doesNotMatch(page, /לתשלום/);
+  assert.doesNotMatch(page, /איך משלמים|לתשלום/);
 });
 
 test('the engine: nothing is written, drafted or published for an account whose workspace has not paid; nothing is deleted', async () => {

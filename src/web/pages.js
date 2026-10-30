@@ -1142,8 +1142,9 @@ export const GATE = {
   closed: { title: 'החשבון סגור', text: 'החשבון הזה סגור, ואי אפשר להיכנס דרכו לתדר.' },
   not_in_plan: { title: 'תדר לא מופעל בחשבון שלכם', text: 'החשבון שלכם פתוח, אבל תדר לא כלול בו.' },
   error: { title: 'אי אפשר לבדוק כרגע מי נכנס', text: 'שירות הכניסה לא ענה. נסו שוב בעוד דקה.' },
-  // The paywall (src/billing/entitlement.js): signed in, but the workspace has not paid for Teder.
-  unpaid: { title: 'תדר מחכה לתשלום', text: 'כדי להתחיל או להמשיך עם תדר, משלמים בחשבון שלכם. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
+  // The paywall (src/billing/entitlement.js): signed in, but the workspace has not paid for Teder. How to pay is
+  // accounts' to say (its /setup page), whichever way it takes payment, so this says only what is true either way.
+  unpaid: { title: 'תדר מחכה לתשלום', text: 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
 };
 
 export function gatePage({ kind, links, v = 1 }) {
@@ -1152,7 +1153,7 @@ export function gatePage({ kind, links, v = 1 }) {
     kind === 'error'
       ? '<a class="btn primary" href="">לנסות שוב</a>'
       : kind === 'unpaid'
-        ? `<a class="btn primary" href="${esc(links.setup)}">לתשלום בחשבון</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
+        ? `<a class="btn primary" href="${esc(links.setup)}">איך משלמים</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'not_in_plan'
         ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
         : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;
