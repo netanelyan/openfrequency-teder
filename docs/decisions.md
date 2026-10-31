@@ -2064,3 +2064,22 @@ and one helper (`src/billing/own.js`) is asked by every customer rule, so an acc
 exactly as an account in no workspace is. A setting, not a rule such as "workspace 1" or "a workspace with access
 comp", because which workspace is ours is a fact about the server, and a comp customer is still a customer. Who sees
 what is not touched: the workspace's people see its accounts, nobody else does, and their looks are kept apart.
+
+### Sources for any niche (2026-10-31)
+
+The owner: "i want the engine to find sources for every nieche. i cant find sources for every account, so when a
+customer writes his nieche the engine will find the sources". The setup's search was built around our first niches and
+around official sites: Brave was asked "<niche> site:gov.il", "<niche> רשמי" and "<niche> official guide", which suits
+rights and taxes and finds nothing for baking; only six of the hosts found were read, each at its home page; a site
+whose page did not declare its feed gave a single page as a source, which runs out ("אף מסמך חדש לא הספיק"); and Claude
+scored authority by who publishes, so a recognized specialist site ranked like a blog. Now (src/onboarding/discover.js):
+the model names the niche's own sites, up to 12 (specialist publications, experts, schools and makers, bodies, the
+niche's section of a large outlet), and 4 searches, in one small call beside the English niche; Brave runs those
+searches (else the niche's own words: the niche, "<niche> מגזין", "<en> blog", "<en> news"), then two of the
+customer's topics; the examples, the named sites and Brave's hosts are read for feeds, up to 14 besides the examples,
+and a page that declares no feed has the section's /feed and the usual feed addresses tried at once (feedGuesses).
+Nothing the model names is trusted until it is read: a site that is not there, or has nothing about the niche, is never
+offered. A site whose robots.txt keeps this engine or Claude out is not read, and a page Brave found on one is kept for
+the operator and never offered, since it could never be read. Authority now counts a recognized specialist publication
+as an established one, whatever the subject. The search may run four minutes (it was three). Not yet proven on a live
+niche: the first real setup of a new niche is the test (test/discover-any.test.js is the baking case, offline).

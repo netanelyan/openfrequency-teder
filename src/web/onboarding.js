@@ -59,8 +59,9 @@ const STATUS_HE = { discovering: 'מחפשים מקורות', review: 'בוחר�
 const TERMS_HE = { ok: 'תנאים בסדר', check: 'לבדוק תנאי שימוש', no: 'אסור לשימוש' };
 const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'נתונים' };
 const FAILURE_HE = { timeout: 'החיפוש לקח יותר מדי זמן ונעצר.', restart: 'החיפוש נקטע באמצע.', error: 'משהו השתבש בחיפוש.' };
-/** The most a discovery may run before it is stopped and marked failed (retryable). */
-export const DISCOVERY_TIMEOUT_MS = 3 * 60_000;
+/** The most a discovery may run before it is stopped and marked failed (retryable). Four minutes since it reads the
+ * sites the model names for the niche too (src/onboarding/discover.js nicheSites), up to 14 besides the examples. */
+export const DISCOVERY_TIMEOUT_MS = 4 * 60_000;
 
 /**
  * A list typed in the form, a new account's topics or sites: one item a line, as the page's pills send them (static/app.js

@@ -6,16 +6,23 @@ import { cachedLookup } from '../core/store.js';
 import { askJson } from '../llm/index.js';
 import { declaredFeeds, parseFeed } from '../sources/rss.js';
 import { decodeEntities, titleOf } from '../sources/text.js';
+import { robotsAllows } from '../sources/robots.js';
 import { youtubeClient, youtubeConfigured } from '../trends/index.js';
 import { suggestApis } from './apis.js';
 
 // Finding sources for a new account, from a seed: a niche, a language, an
 // audience, and a few example sites.
 //
-//   1. Brave Search for authority sites: government, official docs, established
-//      publications (needs BRAVE_API_KEY; $5 per 1,000 queries, recorded in the ledger)
-//   2. the feeds those sites and the example sites declare about themselves
-//      (<link rel="alternate">), read by fetching the home page
+//   0. the niche's own sites, named by Claude (nicheSites): the specialist publications, expert sites, bodies and
+//      sections of large outlets that write about it, and the searches that find more. Any niche, not only ours: the
+//      owner, 2026-10-31, "i want the engine to find sources for every nieche. i cant find sources for every account,
+//      so when a customer writes his nieche the engine will find the sources". Every site named is read before it is
+//      offered, so one that does not exist, or has nothing about the niche, is never offered.
+//   1. Brave Search with those searches, or, without a model, the niche's own words (needs BRAVE_API_KEY; $5 per
+//      1,000 queries, recorded in the ledger). It once searched for official sites alone ("<niche> site:gov.il",
+//      "<niche> רשמי"), which fits rights and taxes and finds nothing for baking.
+//   2. the feeds of the example sites, the named sites and the sites found, read from each page (<link
+//      rel="alternate">, else the addresses sites keep feeds at, feedGuesses), where robots.txt lets us in
 //   3. structured APIs from a catalog, where the niche has one
 //   4. formats that work in the niche on YouTube Shorts, with their real numbers
 //   5. a score for each candidate: authority, freshness, terms of use, relevance
@@ -52,7 +59,7 @@ export const FEW = 3;
  */
 export function offered(c) {
   const s = c.score || {};
-  if (s.terms === 'no') return false;
+  if (s.terms === 'no' || c.blocked) return false;
   if (c.origin === 'example') return true;
   return (s.relevance == null || s.relevance >= RELEVANT) && s.authority >= DECENT;
 }
@@ -144,7 +151,7 @@ async function scoreWithClaude(ctx, seed, list) {
   const system = `You vet sources for a Hebrew social account about "${seed.niche}" for ${seed.audience || 'Hebrew speakers in Israel'}. Every fact the account posts must be quoted from an approved source, so a source is only as good as its authority.
 
 For each candidate return:
-- authority 0-10: who publishes it. Government, regulators, official documentation and the subject's own governing bodies score high; established publications next; anonymous blogs, content farms, affiliate and SEO sites low.
+- authority 0-10: who publishes it, and its standing in this subject. Government, regulators, official documentation and the subject's own governing and professional bodies score high; established publications next, and a recognized specialist publication or a site run by known experts in this subject counts as an established publication (6-8), whatever the subject; anonymous blogs, content farms, affiliate and SEO sites low.
 - freshness 0-10: how current it is likely to be for this niche.
 - terms: "ok" if quoting short facts from it is clearly fine, "check" if its terms are unknown or restrictive, "no" if it forbids reuse or is a social platform.
 - reason: one short Hebrew line, the deciding fact.
@@ -181,32 +188,66 @@ export function descriptionOf(html) {
   return '';
 }
 
+/** A feed of readers' comments, not of what the site publishes. Pure. */
+export const commentsFeed = (f) => /\/comments?\/(?:feed|rss)|[?&]feed=comments|comments-rss/i.test(f.url || '') || /\bcomments\b|תגובות/i.test(f.title || '');
+
 /**
- * Read a site's home page for its declared feeds; returns feed candidates with their newest item, the page's
- * description and the titles of the latest items (what relevance is judged by).
+ * Where a site keeps a feed it does not declare on its page: the section's own /feed first (a WordPress category or
+ * tag, the way a food site's "baking" section has one), then the addresses most sites use. Pure.
  */
-async function feedsOf(url, notes) {
+export function feedGuesses(pageUrl) {
+  const u = new URL(pageUrl);
+  const base = u.pathname.replace(/\/+$/, '');
+  return [...new Set([...(base ? [`${u.origin}${base}/feed`] : []), ...['/feed', '/rss', '/feed.xml', '/rss.xml', '/atom.xml', '/index.xml'].map((p) => `${u.origin}${p}`)])];
+}
+
+/**
+ * Read a site's page for its feeds; returns feed candidates with their newest item, the page's description and the
+ * titles of the latest items (what relevance is judged by). A site whose robots.txt keeps this engine or Claude out is
+ * not read (its sources could never be read either). A page that declares no feed has the usual addresses tried, all
+ * at once, the first in feedGuesses' order that holds items taken: most sites have a feed and only some say so.
+ */
+async function feedsOf(url, notes, { robots = robotsAllows } = {}) {
   const out = [];
   try {
+    const allowed = await robots(url);
+    if (!allowed.ok) return notes.push(`${url}: ${allowed.why}`), out;
     const page = await getText(url, { timeoutMs: 12_000 });
     const about = descriptionOf(page.body);
-    // The site's two feeds at once, kept in the order the page declares them.
+    const name = (f) => f?.title || titleOf(page.body) || new URL(url).hostname;
+    const candidate = (f, items) => ({ type: 'rss', url: f.url, name: name(f), newest: items.map((x) => x.publishedAt).filter(Boolean).sort().pop() || null, items: items.length, about, sample: items.slice(0, 6).map((x) => x.title).filter(Boolean) });
+    // The site's two feeds at once, kept in the order the page declares them. Never its readers' comments: a WordPress
+    // site declares "Comments Feed" beside its posts' (read on real baking sites, 2026-10-31).
     const feeds = await Promise.all(
       declaredFeeds(page.body, page.finalUrl)
+        .filter((f) => !commentsFeed(f))
         .slice(0, 2)
         .map(async (f) => {
           try {
-            const items = parseFeed((await getText(f.url, { timeoutMs: 12_000 })).body);
-            const newest = items.map((x) => x.publishedAt).filter(Boolean).sort().pop() || null;
-            return { type: 'rss', url: f.url, name: f.title || titleOf(page.body) || new URL(url).hostname, newest, items: items.length, about, sample: items.slice(0, 6).map((x) => x.title).filter(Boolean) };
+            return candidate(f, parseFeed((await getText(f.url, { timeoutMs: 12_000 })).body));
           } catch (e) {
             notes.push(`${f.url}: ${e.message}`);
             return null;
           }
         })
     );
-    out.push(...feeds.filter(Boolean));
-    if (!out.length) out.push({ type: 'web', url: page.finalUrl, name: titleOf(page.body) || new URL(url).hostname, newest: null, about });
+    // The same items twice (a site's RSS and its Atom, as BBC Good Food declares) is one source.
+    for (const c of feeds.filter(Boolean)) if (!out.some((o) => o.sample.length && o.sample.join('\n') === c.sample.join('\n'))) out.push(c);
+    if (!out.length) {
+      const guessed = await Promise.all(
+        feedGuesses(page.finalUrl).map(async (u) => {
+          try {
+            const items = parseFeed((await getText(u, { timeoutMs: 8_000 })).body);
+            return items.length ? candidate({ url: u }, items) : null;
+          } catch {
+            return null; // most of the guesses are not there
+          }
+        })
+      );
+      const hit = guessed.find(Boolean);
+      if (hit) out.push(hit);
+    }
+    if (!out.length) out.push({ type: 'web', url: page.finalUrl, name: name(null), newest: null, about });
   } catch (e) {
     notes.push(`${url}: ${e.message}`);
   }
@@ -215,6 +256,10 @@ async function feedsOf(url, notes) {
 
 /** How many sites (and Brave queries) are read at once. Each fetch has its own timeout (12 seconds, feedsOf). */
 export const PARALLEL = 4;
+/** How many sites are read for feeds besides the customer's examples: the ones the model named first, then Brave's. */
+export const PROBED = 14;
+/** A reader given in feedsOf's place (the tests) answers for robots.txt itself. */
+const allowAll = async () => ({ ok: true, why: null });
 
 /** fn over every item, at most `n` at a time; the results in the items' order. Stops starting new ones once `signal` aborts. */
 export async function mapLimit(items, n, fn, signal = null) {
@@ -248,6 +293,61 @@ export async function nicheInEnglish(ctx, niche) {
   return en || null;
 }
 
+const SITES_SCHEMA = {
+  type: 'object',
+  properties: {
+    sites: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, name: { type: 'string' }, why: { type: 'string' } }, required: ['url', 'name', 'why'], additionalProperties: false } },
+    queries: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['sites', 'queries'],
+  additionalProperties: false,
+};
+
+/** How many of the sites the model names are read, how many of its searches are run, and how many searches in all. */
+export const NAMED_SITES = 12;
+export const NAMED_QUERIES = 4;
+export const SEARCHES = 6;
+
+/**
+ * The niche's own sites and searches, from the model: { sites: [{ url, name, why }], queries }. Empty without a model.
+ * Only the address is trusted, and only after it is read (discover step 2): a model can name a site that is not there.
+ */
+export async function nicheSites(ctx, seed) {
+  if (ctx.llm?.kind !== 'claude' || !seed.niche) return { sites: [], queries: [] };
+  const { data } = await askJson(ctx, {
+    task: 'niche_sites', role: 'judge', effort: 'low', maxTokens: 4000, expectOut: 1500, tag: 'onboarding', schema: SITES_SCHEMA,
+    system: `A Hebrew social account posts about a subject. Every fact it posts is quoted from a website it reads every day, through the site's RSS or Atom feed. Name the websites worth reading for this subject.
+
+- sites: up to ${NAMED_SITES} real websites that publish often and specifically about this subject: specialist magazines and news sites, sites of recognized experts, schools or makers in the field, professional and governing bodies when the subject has them, and the subject's own section of a large outlet (give the section's address, not the home page). Hebrew sites first where good ones exist, then English. Only sites you are confident exist, at their real address. Never a social network, a video platform, a forum, a shop's product pages, or a site that only collects other sites' links. For each: url, name, and why in one short English line.
+- queries: ${NAMED_QUERIES} web searches, in Hebrew and in English, that would find more such publications (sites that write about the subject), not single articles or shops.`,
+    user: [`Subject: ${seed.niche}`, seed.audience ? `Audience: ${seed.audience}` : '', seed.topics?.length ? `Topics they care about: ${seed.topics.join(', ')}` : '', `Account language: ${seed.language || 'he'}`].filter(Boolean).join('\n'),
+  });
+  const hosts = new Set();
+  const sites = [];
+  for (const s of data?.sites || []) {
+    let u;
+    try {
+      u = new URL(String(s.url || '').trim());
+    } catch {
+      continue;
+    }
+    const host = u.hostname.replace(/^www\./, '');
+    if (!/^https?:$/.test(u.protocol) || isSocial(u.hostname) || hosts.has(host)) continue;
+    hosts.add(host);
+    sites.push({ url: u.href, name: String(s.name || host).slice(0, 80), why: String(s.why || '').slice(0, 200) });
+    if (sites.length >= NAMED_SITES) break;
+  }
+  const queries = [...new Set((data?.queries || []).map((q) => String(q).replace(/\s+/g, ' ').trim().slice(0, 100)).filter(Boolean))].slice(0, NAMED_QUERIES);
+  return { sites, queries };
+}
+
+/** The searches run on Brave: the model's, else the niche's own words; then the customer's first two topics. Pure. */
+export function searchesFor(seed, { nicheEn = null, named = [] } = {}) {
+  const en = nicheEn || seed.niche;
+  const base = named.length ? named : [seed.niche, `${seed.niche} מגזין`, `${en} blog`, `${en} news`];
+  return [...new Set([...base, ...(seed.topics || []).slice(0, 2)].map((q) => String(q || '').trim()).filter(Boolean))].slice(0, SEARCHES);
+}
+
 /**
  * The whole discovery for a seed. Returns { candidates, formats, notes, said, nicheEn }: `notes` are the operator's
  * (what was skipped and why, every failed fetch); `said` is what the customer is told, in plain Hebrew; `nicheEn` the
@@ -255,7 +355,7 @@ export async function nicheInEnglish(ctx, niche) {
  * seed: { niche, language, audience, examples: [urls or @handles], topics }
  * onProgress({ step, done, total }): 'search', 'sites' (with counts), 'formats', 'score'.
  */
-export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() ? youtubeClient() : null, onProgress = () => {}, signal = null, parallel = PARALLEL, readSite = feedsOf } = {}) {
+export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() ? youtubeClient() : null, onProgress = () => {}, signal = null, parallel = PARALLEL, readSite = feedsOf, robots = readSite === feedsOf ? robotsAllows : allowAll } = {}) {
   const notes = [];
   const said = [];
   const byUrl = new Map();
@@ -269,14 +369,20 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
     byUrl.set(c.url, c);
   };
 
-  // 0. the niche in English (the owner writes it in Hebrew alone): for the catalog's words and YouTube's search
+  // 0. the niche in English (the owner writes it in Hebrew alone), for the catalog's words and YouTube's search; and
+  // the niche's own sites and searches, named by the model (nicheSites). The two at once.
   onProgress({ step: 'search' });
-  const nicheEn = seed.nicheEn || (await nicheInEnglish(ctx, seed.niche).catch((e) => (notes.push(`תרגום הנישה לאנגלית נכשל: ${e.message}`), null)));
+  const [nicheEn, named] = await Promise.all([
+    seed.nicheEn || nicheInEnglish(ctx, seed.niche).catch((e) => (notes.push(`תרגום הנישה לאנגלית נכשל: ${e.message}`), null)),
+    nicheSites(ctx, seed).catch((e) => (notes.push(`Claude לא הציע אתרים לנישה: ${e.message}`), { sites: [], queries: [] })),
+  ]);
+  const hostOf = (u) => new URL(u).hostname.replace(/^www\./, '');
+  if (named.sites.length) notes.push(`Claude הציע ${named.sites.length} אתרים לנישה: ${named.sites.map((s) => hostOf(s.url)).join(', ')}`);
 
-  // 1. authority sites through Brave, the queries at once, their results taken in the queries' order
+  // 1. sites through Brave, the searches at once, their results taken in the searches' order
   const hosts = new Set();
   if (isSet('BRAVE_API_KEY')) {
-    const qs = [`${seed.niche} site:gov.il`, `${seed.niche} רשמי`, `${nicheEn || seed.niche} official guide`, ...(seed.topics || []).slice(0, 2).map((x) => `${x} מידע רשמי`)];
+    const qs = searchesFor(seed, { nicheEn, named: named.queries });
     const results = await mapLimit(qs, parallel, (q) => brave(ctx, q, notes).catch((e) => (notes.push(`Brave "${q}": ${e.message}`), [])), signal);
     for (const list of results) {
       for (const r of list || []) {
@@ -295,12 +401,15 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   }
   stopped(signal);
 
-  // 2. feeds: the example sites, and the top authority hosts found, a few at a time
+  // 2. feeds: the example sites, then the sites the model named, then the sites Brave found, a few at a time; at most
+  // PROBED besides the examples, so a discovery keeps inside its time
   const examples = (seed.examples || []).map((x) => String(x).trim()).filter((x) => /^https?:\/\//.test(x));
   const social = (seed.examples || []).filter((x) => /^@|instagram|tiktok|youtube/.test(String(x)));
   for (const h of social) notes.push(`${h}: חשבון ברשת חברתית, נשמר כדוגמה לסגנון בלבד ולא נקרא`);
   if (social.length) said.push('את החשבונות ברשתות החברתיות שנתתם שמרנו כדוגמה לסגנון. עובדות לוקחים רק מאתרים.');
-  const probe = [...examples, ...[...hosts].slice(0, 6).map((h) => `https://${h}/`)];
+  const namedHosts = new Set(named.sites.map((s) => hostOf(s.url)));
+  const others = [...named.sites.map((s) => s.url), ...[...hosts].filter((h) => !namedHosts.has(h.replace(/^www\./, ''))).map((h) => `https://${h}/`)].slice(0, PROBED);
+  const probe = [...new Set([...examples, ...others])];
   let done = 0;
   onProgress({ step: 'sites', done, total: probe.length });
   const read = await mapLimit(
@@ -308,7 +417,7 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
     parallel,
     async (url) => {
       const before = notes.length;
-      const found = await readSite(url, notes);
+      const found = await readSite(url, notes, { robots });
       done += 1;
       onProgress({ step: 'sites', done, total: probe.length });
       return { url, found, failed: !found.length && notes.length > before };
@@ -365,7 +474,17 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
     }
   }
   scores ??= list.map((c) => heuristicScore(c, t, { ...seed, nicheEn }));
+  const all = list.map((c, i) => ({ id: `c${i + 1}`, ...c, score: scores[i], approved: false }));
+  // 6. a page Brave found is offered only where its site's robots.txt lets this engine and Claude in: it was never
+  // read here, and a source that cannot be read gives no posts (a feed's site was asked when it was read, step 2).
+  const unchecked = all.filter((c) => c.origin === 'brave' && offered(c));
+  const answers = await mapLimit(unchecked, parallel, (c) => robots(c.url).catch((e) => ({ ok: false, why: e.message })), signal);
+  unchecked.forEach((c, i) => {
+    if (answers[i]?.ok) return;
+    c.blocked = answers[i]?.why || 'robots.txt';
+    notes.push(`${c.url}: ${c.blocked}`);
+  });
   // The ones the customer is offered first, then by authority and freshness.
-  const candidates = list.map((c, i) => ({ id: `c${i + 1}`, ...c, score: scores[i], approved: false })).sort((a, b) => offered(b) - offered(a) || b.score.authority - a.score.authority || b.score.freshness - a.score.freshness);
+  const candidates = all.sort((a, b) => offered(b) - offered(a) || b.score.authority - a.score.authority || b.score.freshness - a.score.freshness);
   return { candidates, formats: formats.slice(0, 8), notes, said, nicheEn };
 }
