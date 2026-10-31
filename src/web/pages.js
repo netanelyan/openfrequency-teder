@@ -16,6 +16,7 @@ import { PLATFORM_LIST } from '../core/platforms.js';
 import { EMAIL_HE } from '../notify/email.js';
 import { libraryFormat } from '../formats/library.js';
 import { formatsPanel, picksFormats } from './formats.js';
+import { designPanel } from './styles.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -663,7 +664,6 @@ ${networks}
 ${modePanel(ctx, pack, { mode, customer })}
 ${connect ? tiktokModePanel(ctx, connect) : ''}
 ${stylePanel(ctx, pack, style)}
-${picksFormats(pack, customer) ? formatsPanel(ctx, pack) : ''}
 </div>
 ${foot}
 </section>`;
@@ -728,7 +728,7 @@ function stylePanel(ctx, pack, style) {
     : '';
   return `<section class="panel acct-style"><header><h3>סגנון</h3></header>
 <p class="m0"><b>${name}</b> <span class="muted small">נעול מ-${esc(shortDate(style.at))}</span></p>
-<div class="actions p0 m6"><a class="btn sm" href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></div>${pending}</section>`;
+<div class="actions p0 m6"><a class="btn sm" href="/styles?account=${esc(pack.id)}">לראות את כל העיצובים</a></div>${pending}</section>`;
 }
 
 /**
@@ -1117,30 +1117,33 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <section class="panel"><header><h2>יומן פעולות</h2></header><ol class="trace">${d.audit.map((a) => `<li class="ok"><b>${esc(AUDIT_HE[a.action] || a.action)}</b> <span class="muted small">${esc(a.actor)} · ${esc(stamp(a.at))}${a.account_id ? ` · ${esc(a.account_id)}` : ''}</span></li>`).join('')}</ol></section>
 </div></div>`
     : '';
+  // One flow of panels, two columns on a desk, each panel whole (style.css .set-cols): in two fixed columns most of a
+  // customer's panels stood one under the other on one side (the owner, 2026-10-31: "on settings, many blocks go on top
+  // of each other on the right side, instead of also going to the left"). What the account posts like comes first.
+  const acct = d.account;
   const body = `<div class="head"><h1>הגדרות</h1></div>
-<div class="cols even">
-<div>
+<div class="set-cols">
+${acct && picksFormats(acct.pack, acct.customer) ? formatsPanel(ctx, acct.pack, { heading: 'h2' }) : ''}
+${acct ? designPanel(acct.pack, acct.style, { back: '/settings' }) : ''}
+${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
+${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
+${d.quotas ? quotasPanel(ctx, d.quotas) : ''}
 <section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
 <p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
 <p class="muted small">באייפון: פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
-${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
 ${d.email ? emailPanel(ctx, d.email) : ''}
 ${d.assistant ? assistantPanel(ctx, d.assistant) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
-</div>
-<div>
-${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
-${d.quotas ? quotasPanel(ctx, d.quotas) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>` : ''}
 <section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
 ${ctx.operator ? `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
 <p class="muted">עוצר את כל החשבונות מיד. אף פוסט לא נכתב ולא מתפרסם עד שמפעילים מחדש.</p>
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}לעצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'לחצו שוב כדי לעצור הכל' })}
 </section>` : ''}
-</div></div>
+</div>
 ${devPanels}
 ${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.operator ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
   return layout({ ...ctx, title: 'הגדרות', active: 'settings' }, body);

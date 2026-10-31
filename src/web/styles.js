@@ -97,7 +97,32 @@ function warnLine(ws = []) {
   return `<p class="small warnline">${icon('alert')}${esc(list)} ${what.length > 1 ? 'ארוכים' : 'ארוך'} מדי לסגנון הזה. בפוסט שייכתב בו, הכותב יקצר.</p>`;
 }
 
-function accountPanel(pc, pack, { lock, prev, suggestion, test }) {
+/**
+ * Where the page was opened from, to go back to after a pick: Settings, or a new account's setup (only those two, so
+ * the address can never send anyone elsewhere). { href, label, active } or null.
+ */
+export function backOf(back) {
+  const b = String(back || '');
+  if (b === '/settings') return { href: '/settings', label: 'חזרה להגדרות', active: 'settings' };
+  if (/^\/new\/[\w-]+$/.test(b)) return { href: b, label: 'חזרה להגדרת החשבון', active: 'new' };
+  return null;
+}
+
+/**
+ * Which design the account's slideshows are in, and the way to the page that shows its last one in all five (the
+ * owner, 2026-10-31: "also choosing the design of the slideshow. format A-E" and "i did not find the /styles page. make
+ * it more accessible"): on Settings, and on a new account's setup once it has a sample. `back` brings the pick back.
+ */
+export function designPanel(pack, current, { back = null } = {}) {
+  const href = `/styles?account=${encodeURIComponent(pack.id)}${backOf(back) ? `&back=${encodeURIComponent(back)}` : ''}`;
+  const about = current ? (current === 'E' && pack.meta.style?.text === 'shadow' ? ABOUT.Eshadow : ABOUT[current]) : '';
+  return `<section class="panel" id="design-${esc(pack.id)}"><header><h2>עיצוב המצגות</h2></header>
+<p class="m0"><b>${current ? `סגנון ${esc(current)} · ${esc(HE[current])}` : 'העיצוב הראשון של החשבון'}</b></p>${about ? `<p class="muted small m4">${esc(about)}</p>` : ''}
+<p class="muted small">יש חמישה עיצובים. בעמוד העיצובים רואים את המצגת האחרונה שלכם בכל אחד מהם, ובוחרים.</p>
+<div class="actions p0 m6"><a class="btn" href="${esc(href)}">${icon('eye')}לראות את כל העיצובים ולבחור</a></div></section>`;
+}
+
+function accountPanel(pc, pack, { lock, prev, suggestion, test, back = null }) {
   const current = lock.theme.style?.name || null;
   const pending = pack.meta.style?.name && pack.meta.style.name !== current ? pack.meta.style.name : null;
   const key = prev ? keyOf(pack, prev.post) : '';
@@ -110,7 +135,7 @@ function accountPanel(pc, pack, { lock, prev, suggestion, test }) {
     return `<article class="stylecol${s === current ? ' on' : ''}"><header><b>${s} · ${HE[s]}</b>${s === current ? '<span class="chip ok">עכשיו</span>' : s === suggestion.name ? '<span class="chip">מומלץ</span>' : ''}</header>
 <p class="muted small">${esc(s === 'E' && pack.meta.style?.text === 'shadow' ? ABOUT.Eshadow : ABOUT[s])} <img class="sw" src="${swatch(accent)}" alt="" title="${esc(accent)}" width="12" height="12"></p>
 <div class="stylestrip">${imgs}</div>${warnLine(st?.warnings)}
-${s === current ? '' : postButton(pc, `/accounts/${pack.id}/style-pick`, `לעבור לסגנון ${s}`, { cls: 'btn sm', fields: { style: s }, confirm: `לחצו שוב כדי לעבור לסגנון ${s}` })}</article>`;
+${s === current ? '' : postButton(pc, `/accounts/${pack.id}/style-pick`, `לעבור לסגנון ${s}`, { cls: 'btn sm', fields: { style: s, ...(back ? { back } : {}) }, confirm: `לחצו שוב כדי לעבור לסגנון ${s}` })}</article>`;
   }).join('');
   const testLine = test
     ? test.result
@@ -129,25 +154,26 @@ ${testLine}
 }
 
 /** The page: every account of the workspace, or the one asked for. */
-export async function stylesPage(ctx, pc, { only = null } = {}) {
+export async function stylesPage(ctx, pc, { only = null, back = null } = {}) {
+  const to = backOf(back);
   const packs = ctx.packs.filter((p) => !only || p.id === only);
   const panels = [];
   for (const pack of packs) {
     const lock = lockedStyle(ctx.db, pack, (ctx.global || ctx).packs);
     const prev = await previewsOf(ctx, pack).catch((e) => ({ error: e.message }));
     const suggestion = suggestStyle({ ...pack.meta }, pack.theme.colors, ((ctx.global || ctx).packs).filter((p) => p.id !== pack.id));
-    panels.push(prev?.error ? `<section class="panel"><header><h2>${esc(pack.meta.displayName)}</h2></header><p class="muted">התצוגה לא נוצרה: ${esc(prev.error)}</p></section>` : accountPanel(pc, pack, { lock, prev, suggestion, test: styleTest(ctx.db, pack) }));
+    panels.push(prev?.error ? `<section class="panel"><header><h2>${esc(pack.meta.displayName)}</h2></header><p class="muted">התצוגה לא נוצרה: ${esc(prev.error)}</p></section>` : accountPanel(pc, pack, { lock, prev, suggestion, test: styleTest(ctx.db, pack), back: to?.href || null }));
   }
-  const body = `<div class="head"><div><a class="muted small back" href="/accounts">${icon('chev')}חזרה לחשבונות</a><h1>סגנון השקפים</h1></div></div>
+  const body = `<div class="head"><div><a class="muted small back" href="${esc(to?.href || '/accounts')}">${icon('chev')}${to?.label || 'חזרה לחשבון'}</a><h1>עיצוב המצגות</h1></div></div>
 <p class="muted">לכל חשבון סגנון אחד, וכל הפוסטים שלו יוצאים בו. החלפה חלה מהפוסט הבא, ופוסטים שכבר צוירו לא משתנים.</p>
 ${panels.join('')}`;
-  return layout({ ...pc, title: 'סגנון השקפים', active: 'accounts' }, body);
+  return layout({ ...pc, title: 'עיצוב המצגות', active: to?.active || 'accounts' }, body);
 }
 
 /** The routes: the page, a pick, the test. */
 export function stylesRoutes() {
   return [
-    ['GET', /^\/styles$/, (ctx, _u, _m, q, pc) => stylesPage(ctx, pc, { only: q.account || null })],
+    ['GET', /^\/styles$/, (ctx, _u, _m, q, pc) => stylesPage(ctx, pc, { only: q.account || null, back: q.back || null })],
     [
       'POST',
       /^\/accounts\/([\w-]+)\/style-pick$/,
@@ -157,7 +183,7 @@ export function stylesRoutes() {
         if (!STYLES[f.style]) throw new ActionError('אין סגנון כזה');
         const lock = chooseStyle(ctx.db, pack, f.style);
         audit(ctx.db, { actor: user.name, action: 'style', accountId: pack.id, detail: { style: f.style, hash: lock.hash } });
-        return { ok: true, message: `החשבון עבר לסגנון ${f.style}. הפוסטים הבאים ייצאו בו, ואלה שכבר צוירו לא משתנים.`, redirect: `/styles?account=${pack.id}` };
+        return { ok: true, message: `החשבון עבר לסגנון ${f.style}. הפוסטים הבאים ייצאו בו, ואלה שכבר צוירו לא משתנים.`, redirect: backOf(f.back)?.href || `/styles?account=${pack.id}` };
       },
     ],
     [

@@ -2106,3 +2106,17 @@ keep their richer formats and the weighted rotation. A customer's card is labell
 amounts, times and temperatures too. The same day the owner said "clubs like fenherbache are not famous, and people
 are not really interested in things they dont recognize": the plan's prompt now asks that a post's main subject be a
 name most of the audience knows at once, a lesser name only inside a post about a famous one, else usable=false.
+
+### Settings is where the slideshows are set: their kinds and their design (2026-10-31, follow-up)
+
+The owner, the same evening: "also choosing the design of the slideshow. format A-E", "סוגי המצגות should be in
+settings", "i did not find the /styles page. make it more accessible", and "on settings, many blocks go on top of each
+other on the right side, instead of also going to the left". Settings now opens with the account's kinds of slideshow
+(moved from the account page) and its design: the style it is in, what that style looks like in a line, and the way to
+the page that draws the account's last slideshow in all five ("לראות את כל העיצובים ולבחור", src/web/styles.js
+designPanel). The same panel stands under a new account's samples once one passed, so the customer picks the design on
+their own sample. The designs page (titled "עיצוב המצגות") goes back where it was opened from, Settings or the setup,
+and a pick returns there; `back` is only ever one of those two (styles.js backOf), never an address from elsewhere.
+The account page's style panel keeps its link, now "לראות את כל העיצובים". Settings' panels flow in one container that
+CSS columns split in two on a desk, each panel whole (.set-cols): in its two fixed columns a customer's right column
+ended at 2310px and the left at 549px.

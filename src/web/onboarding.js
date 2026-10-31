@@ -11,6 +11,8 @@ import { zernioConfigured } from '../publish/zernio.js';
 import { defaultChoiceFor, readChoice, saveChoice } from '../schedule/choice.js';
 import { ActionError } from './actions.js';
 import { FORMATS_FEW, formatsSection } from './formats.js';
+import { designPanel } from './styles.js';
+import { lockedStyle } from '../render/style.js';
 import { DEFAULT_PICKED, MIN_PICKED, pickedFrom } from '../formats/library.js';
 import { postCard } from './pages.js';
 import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
@@ -584,6 +586,7 @@ ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות �
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
 ${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>` : ''}</section>
+${pack && good ? designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` }) : ''}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
 ${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>

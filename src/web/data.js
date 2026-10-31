@@ -1,5 +1,5 @@
 import { latestFeedback } from '../metrics/feedback.js';
-import { styleTest } from '../render/style.js';
+import { lockedStyle, styleTest } from '../render/style.js';
 import { DAY, monthKey, now } from '../core/clock.js';
 import { waitingImages } from '../images/index.js';
 import { KEYS, isSet } from '../core/env.js';
@@ -311,6 +311,8 @@ export function settingsData(ctx) {
     assistant: operator ? null : prefsOf(ctx.db, ctx.workspaceId),
     // The days and times the account shown posts on (src/schedule/choice.js): its owner chooses them here.
     schedule: ctx.packs[0] ? scheduleData(ctx.db, ctx.packs[0]) : null,
+    // The account shown: its kinds of slideshow and its design are set here (src/web/formats.js, styles.js designPanel).
+    account: ctx.packs[0] ? { pack: ctx.packs[0], customer: isCustomerAccount(ctx.db, ctx.packs[0].id), style: lockedStyle(ctx.db, ctx.packs[0], (ctx.root || ctx).packs).theme.style?.name || null } : null,
     // Which emails the workspace's owners get (src/notify/email.js).
     email: operator ? null : emailPrefsOf(ctx.db, ctx.workspaceId),
   };

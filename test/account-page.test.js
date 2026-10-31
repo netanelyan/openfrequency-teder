@@ -113,7 +113,8 @@ test("a customer's account page: the header, the month, the week, the queue, app
   assert.match(html, /<h3>אישור<\/h3><\/header><p class="m0">כל פוסט מחכה לאישור שלכם לפני שהוא עולה\.<\/p>/);
   assert.doesNotMatch(html, /name="mode"/);
   assert.match(html, /<h3>איך פוסטים עולים לטיקטוק<\/h3><\/header><p class="m0">המצגות מגיעות לטיוטות בטיקטוק\./);
-  assert.match(html, /<h3>סגנון<\/h3>[\s\S]*?נעול מ-[\s\S]*?<a class="btn sm" href="\/styles\?account=demo">להחליף סגנון<\/a>/);
+  assert.match(html, /<h3>סגנון<\/h3>[\s\S]*?נעול מ-[\s\S]*?<a class="btn sm" href="\/styles\?account=demo">לראות את כל העיצובים<\/a>/);
+  assert.doesNotMatch(html, /acct-formats/, 'the kinds of slideshow are on Settings');
 
   // The networks: their names the panel's heading, a check, and a row each with its state, its account and its button.
   assert.match(html, /<div class="connect" id="connect-demo"><header><h3>טיקטוק, אינסטגרם ופייסבוק<\/h3><span class="end"><form method="post" action="\/accounts\/demo\/connections">/, 'the panel home links to (#connect-demo), with "לבדוק שוב"');
@@ -127,7 +128,7 @@ test("a customer's account page: the header, the month, the week, the queue, app
 
   // Every form on the page posts with this session's token.
   const forms = html.match(/<form method="post"[^>]*>/g) || [];
-  assert.equal(forms.length, 6, 'the check, three connects, the kinds of slideshow (src/web/formats.js) and the switch');
+  assert.equal(forms.length, 5, 'the check, three connects and the switch (the kinds of slideshow are on Settings)');
   assert.equal((html.match(new RegExp(`name="_csrf" value="${csrf}"`, 'g')) || []).length, forms.length);
 });
 
@@ -209,7 +210,7 @@ test('in a real browser: no sideways scroll on a phone, and on a desk the panels
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'no sideways scroll at 390');
     // Every panel in one column, each within the screen.
     const cols = await phone.$$eval('.acct-grid > .panel', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
-    assert.equal(cols.length, 8, 'month, week, queue, networks, approval, TikTok, look, the kinds of slideshow');
+    assert.equal(cols.length, 7, 'month, week, queue, networks, approval, TikTok, look');
     for (const [l, r] of cols) assert.ok(l >= 0 && r <= 390, `${l}..${r} within the phone`);
     assert.equal(new Set(cols.map(([l]) => l)).size, 1, 'one column');
     // The two taps of the switch still work: the first arms it.

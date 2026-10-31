@@ -33,9 +33,9 @@ export function formatsSection(form = null) {
  */
 export const picksFormats = (pack, customer) => Boolean(customer) || inTurns(pack);
 
-/** The account page's panel: what is picked, and the way to change it. */
-export function formatsPanel(ctx, pack) {
-  return `<section class="panel acct-formats" id="formats-${esc(pack.id)}"><header><h3>${FORMATS_TITLE}</h3><span class="end muted small">${pickedOf(pack).length} נבחרו</span></header>
+/** Settings' panel (the owner, 2026-10-31: "סוגי המצגות should be in settings"): what is picked, and the way to change it. */
+export function formatsPanel(ctx, pack, { heading = 'h3' } = {}) {
+  return `<section class="panel acct-formats" id="formats-${esc(pack.id)}"><header><${heading}>${FORMATS_TITLE}</${heading}><span class="end muted small">${pickedOf(pack).length} נבחרו</span></header>
 <p class="m0 muted small">${LEDE_ACCOUNT}</p>
 <form method="post" action="/accounts/${esc(pack.id)}/formats">${csrfField(ctx)}${formatsPicker(pickedOf(pack))}<div class="actions p0 m6"><button class="btn sm" type="submit">שמירה</button></div></form></section>`;
 }
@@ -49,5 +49,5 @@ export function setFormats(ctx, user, { id }, form) {
   const before = pickedOf(pack);
   setPackFormats(pack, ids);
   audit(ctx.db, { actor: user.name, action: 'formats', accountId: id, detail: { before, after: ids } });
-  return { ok: true, message: 'נשמר. המצגת הבאה כבר תצא באחד מהסוגים שבחרתם.', redirect: `/accounts?account=${encodeURIComponent(id)}#formats-${encodeURIComponent(id)}` };
+  return { ok: true, message: 'נשמר. המצגת הבאה כבר תצא באחד מהסוגים שבחרתם.', redirect: `/settings#formats-${encodeURIComponent(id)}` };
 }

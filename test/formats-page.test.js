@@ -48,9 +48,9 @@ const post = async (p, cookie, body, from = '/accounts') =>
 const ticks = (ids) => Object.fromEntries(ids.map((id) => [`fmt_${id}`, 'on']));
 const formatsFile = () => JSON.parse(readFileSync(path.join(home.home, 'packs', 'demo', 'formats.json'), 'utf8'));
 
-test("the account page: the customer's panel shows every format in the library, theirs ticked; the company's own account has none", async () => {
+test("Settings: the customer's panel shows every format in the library, theirs ticked; the company's own account has none", async () => {
   const { cookie } = fake.session(customer(1));
-  const html = await (await get('/accounts', cookie)).text();
+  const html = await (await get('/settings', cookie)).text();
   assert.match(html, /<section class="panel acct-formats" id="formats-demo">/);
   assert.match(html, /סוגי המצגות/);
   for (const f of LIBRARY) assert.ok(html.includes(`name="fmt_${f.id}"`), f.id);
@@ -58,31 +58,31 @@ test("the account page: the customer's panel shows every format in the library, 
   assert.match(html, /name="fmt_myth-fact" checked/);
   assert.doesNotMatch(html, /name="fmt_facts" checked/);
   const op = fake.session(operator()).cookie;
-  const own = await (await get('/accounts?account=second', op)).text();
+  const own = await (await get('/settings?account=second', op)).text();
   assert.doesNotMatch(own, /acct-formats/, "the company's own hand-written formats are not replaced from here");
 });
 
 test('changing them: fewer than three is refused and nothing changes; three or more become the account\'s, in turn', async () => {
   const { cookie } = fake.session(customer(1));
   const before = formatsFile();
-  const few = await post('/accounts/demo/formats', cookie, ticks(['facts', 'story']));
+  const few = await post('/accounts/demo/formats', cookie, ticks(['facts', 'story']), '/settings');
   assert.equal(few.status, 303);
   assert.match(decodeURIComponent(few.headers.get('set-cookie') || ''), /לפחות 3/);
   assert.deepEqual(formatsFile(), before, 'the file is as it was');
-  const ok = await post('/accounts/demo/formats', cookie, ticks(['ranking', 'facts', 'story', 'nope']));
+  const ok = await post('/accounts/demo/formats', cookie, ticks(['ranking', 'facts', 'story', 'nope']), '/settings');
   assert.equal(ok.status, 303);
-  assert.match(ok.headers.get('location'), /\/accounts\?account=demo#formats-demo$/);
+  assert.match(ok.headers.get('location'), /\/settings#formats-demo$/);
   const after = formatsFile();
   assert.deepEqual(after.formats.map((f) => f.id), ['facts', 'story', 'ranking']);
   assert.equal(after.rotate, 'turns');
-  const html = await (await get('/accounts', cookie)).text();
+  const html = await (await get('/settings', cookie)).text();
   for (const id of ['facts', 'story', 'ranking']) assert.match(html, new RegExp(`name="fmt_${id}" checked`), id);
   assert.match(html, /3 נבחרו/);
   assert.ok(db.get("SELECT 1 FROM audit WHERE action = 'formats' AND account_id = 'demo'"), 'the change is in the audit log');
   // Another workspace's session cannot (test/workspaces.test.js tries every button); the account is not theirs.
   const other = fake.session(customer(2)).cookie;
   const refused = await post('/accounts/demo/formats', other, ticks(['facts', 'tips', 'iceberg']), '/new');
-  assert.notEqual(refused.headers.get('location'), '/accounts?account=demo#formats-demo');
+  assert.notEqual(refused.headers.get('location'), '/settings#formats-demo');
   assert.deepEqual(formatsFile().formats.map((f) => f.id), ['facts', 'story', 'ranking']);
 });
 
@@ -113,22 +113,22 @@ test('a new account: the sources step shows the formats with the defaults ticked
   assert.equal(file.rotate, 'turns');
 });
 
-test('on a phone the picker is two cards to a row and nothing scrolls sideways; on a desk several to a row', async () => {
+test('two cards to a row on a phone and in a column of Settings on a desk, and nothing scrolls sideways', async () => {
   const { sid } = fake.session(customer(1));
   const browser = await chromium.launch();
   try {
-    for (const [width, perRow] of [[390, 2], [360, 2], [1440, 3]]) {
+    for (const [width, perRow] of [[390, 2], [360, 2], [1440, 2]]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
       await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
       const page = await context.newPage();
-      await page.goto(`${base}/accounts`);
+      await page.goto(`${base}/settings`);
       const box = await page.evaluate(() => {
         const cards = [...document.querySelectorAll('#formats-demo .fmt-pick')].map((c) => c.getBoundingClientRect());
         return { cards: cards.length, firstRow: cards.filter((r) => Math.abs(r.top - cards[0].top) < 2).length, sideways: document.documentElement.scrollWidth > window.innerWidth };
       });
       assert.equal(box.cards, LIBRARY.length);
       assert.equal(box.sideways, false, `${width}: no sideways scroll`);
-      assert.ok(perRow === 2 ? box.firstRow === 2 : box.firstRow >= perRow, `${width}: ${box.firstRow} to a row`);
+      assert.equal(box.firstRow, perRow, `${width}: ${box.firstRow} to a row`);
       await context.close();
     }
   } finally {
