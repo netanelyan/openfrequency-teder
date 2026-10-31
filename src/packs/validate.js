@@ -159,6 +159,9 @@ export function validatePack(pack) {
     if (!(e >= MIX.min && e <= MIX.max)) p.push(`formats.json: mix.entertaining must be between ${MIX.min} and ${MIX.max}`);
   }
 
+  // A customer's picks go in turn (src/formats/rotation.js turnOrder); nothing else is a way to rotate.
+  if (formats.rotate != null && formats.rotate !== 'turns') p.push('formats.json: rotate is "turns" (the formats a customer picked, one after the other) or left out');
+
   // ---- events and the fight week (pack.json)
   const fw = s.fightWeek;
   if (fw) {

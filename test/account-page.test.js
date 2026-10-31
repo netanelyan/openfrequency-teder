@@ -127,7 +127,7 @@ test("a customer's account page: the header, the month, the week, the queue, app
 
   // Every form on the page posts with this session's token.
   const forms = html.match(/<form method="post"[^>]*>/g) || [];
-  assert.equal(forms.length, 5, 'the check, three connects and the switch');
+  assert.equal(forms.length, 6, 'the check, three connects, the kinds of slideshow (src/web/formats.js) and the switch');
   assert.equal((html.match(new RegExp(`name="_csrf" value="${csrf}"`, 'g')) || []).length, forms.length);
 });
 
@@ -209,7 +209,7 @@ test('in a real browser: no sideways scroll on a phone, and on a desk the panels
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'no sideways scroll at 390');
     // Every panel in one column, each within the screen.
     const cols = await phone.$$eval('.acct-grid > .panel', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
-    assert.equal(cols.length, 7, 'month, week, queue, networks, approval, TikTok, look');
+    assert.equal(cols.length, 8, 'month, week, queue, networks, approval, TikTok, look, the kinds of slideshow');
     for (const [l, r] of cols) assert.ok(l >= 0 && r <= 390, `${l}..${r} within the phone`);
     assert.equal(new Set(cols.map(([l]) => l)).size, 1, 'one column');
     // The two taps of the switch still work: the first arms it.

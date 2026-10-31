@@ -10,6 +10,8 @@ import { carryOnboardingZernio, doneLink, onboardingDoneLink, onboardingStates, 
 import { zernioConfigured } from '../publish/zernio.js';
 import { defaultChoiceFor, readChoice, saveChoice } from '../schedule/choice.js';
 import { ActionError } from './actions.js';
+import { FORMATS_FEW, formatsSection } from './formats.js';
+import { DEFAULT_PICKED, MIN_PICKED, pickedFrom } from '../formats/library.js';
 import { postCard } from './pages.js';
 import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
@@ -553,7 +555,7 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
       `${head}${saidBanner(r.found.said)}${shown.length < FEW ? fewPanel(pc, r, shown.length) : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
 <div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
-<div class="grid12"><section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
+<div class="grid12">${formatsSection()}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
 ${nameFields(pc, r)}
 <p class="muted small m0">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
 <button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button></div></section>
@@ -737,9 +739,13 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         saveSetup(ctx.db, r.id, typed(f));
         const n = checkName(f, { packs: engine(ctx).packs });
         if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
+        // The kinds of slideshow picked on this step (src/web/formats.js), at least three; a form that did not show the
+        // choice (an older page) gets the defaults.
+        const formatIds = f.formats_shown ? pickedFrom(f) : DEFAULT_PICKED;
+        if (formatIds.length < MIN_PICKED) throw new ActionError(FORMATS_FEW, 422);
         let made;
         try {
-          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null });
+          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds });
         } catch (e) {
           throw createError(ctx, e);
         }

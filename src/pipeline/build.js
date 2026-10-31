@@ -9,7 +9,7 @@ import { quotaMonth, room } from '../budget/quota.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
-import { ensureFormats, groupsOf, mixOf, pickFormat, pickHook, pickTemplates } from '../formats/rotation.js';
+import { ensureFormats, groupsOf, inTurns, mixOf, pickFormat, pickHook, pickTemplates, turnOrder } from '../formats/rotation.js';
 import { coverCredit, coverFrame, fillTemplate, hookProblems, isTemplateId, speakerOf, templateById, templateOnCover, whoGender } from '../formats/hooks.js';
 import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, SLIDES, structureNumbers } from '../formats/kinds.js';
 import { resolveFormat } from '../trends/index.js';
@@ -891,7 +891,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   const dv = directive || {};
   // The rivals the owner typed in: what the niche already does, said to the outline and the slides.
   const rivals = rivalsOf(db, pack.id);
-  formatKey ||= dv.formatKey || null;
+  // A customer's formats go in turn (src/formats/rotation.js turnOrder): a directive's "the same format again" does not.
+  const turns = inTurns(pack);
+  formatKey ||= (turns ? null : dv.formatKey) || null;
   hookId ||= dv.hookId || null;
   ctaText ||= dv.ctaText || null;
   docKey ||= dv.docKey || null;
@@ -903,7 +905,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   }
 
   ensureFormats(db, pack);
-  const fkey = formatKey || pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack), exclude: dv.avoidFormats || [] }) || pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack) }) || pack.formats.formats[0].id;
+  const order = turns ? [...turnOrder(db, pack, { exclude: dv.avoidFormats || [] }), ...turnOrder(db, pack)] : null;
+  const fkey = formatKey || (turns ? order[0] : pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack), exclude: dv.avoidFormats || [] }) || pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack) })) || pack.formats.formats[0].id;
   const resolve = (k) => resolveFormat(db, pack, k);
   let format = resolve(fkey) || pack.formats.formats[0];
   // When no fresh document fits the format the rotation picked, the others in the
@@ -911,7 +914,12 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   // a format asked for by name is not.
   const active = db.all("SELECT format_key FROM formats WHERE account_id = ? AND status = 'active'", pack.id).map((r) => r.format_key);
   const others = active.filter((k) => k !== format.id).map(resolve).filter(Boolean);
-  const formatsToTry = formatKey ? [format] : [format, ...others.filter((f) => groupOf(f) === groupOf(format)), ...others.filter((f) => groupOf(f) !== groupOf(format))];
+  // In turn, the next ones in their turn.
+  const formatsToTry = formatKey
+    ? [format]
+    : turns
+      ? [format, ...[...new Set(order)].filter((k) => k !== format.id).map(resolve).filter(Boolean)]
+      : [format, ...others.filter((f) => groupOf(f) === groupOf(format)), ...others.filter((f) => groupOf(f) !== groupOf(format))];
   // The day the post goes out: what an on-this-day post is about.
   const postDay = day || (slotAt ? israelDate(Date.parse(slotAt)) : israelDate(now()));
   // The quota, weighed and held in one step: no await comes between the count and the drafting row that holds the

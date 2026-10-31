@@ -238,6 +238,8 @@ const casesFor = () => {
     [`/takedowns/${B.takedown}/deleted`, { platform: 'tiktok' }],
     ['/accounts/bravo/mode', { mode: 'auto' }],
     ['/accounts/bravo/style'],
+    // The kinds of slideshow B posts in are B's to pick.
+    ['/accounts/bravo/formats', { fmt_facts: 'on', fmt_tips: 'on', fmt_story: 'on' }],
     ['/accounts/bravo/style-pick', { style: 'B' }],
     ['/accounts/bravo/style-test', { on: '1' }],
     ['/accounts/bravo/kill'],

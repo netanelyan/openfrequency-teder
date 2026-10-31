@@ -29,6 +29,7 @@ import { entitlementClient } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
+import { setFormats } from './formats.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -174,6 +175,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/takedowns\/(\d+)\/deleted$/, (c, u, m, f) => act.takedownDeleted(c, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/mode$/, (c, u, m, f) => act.setMode(c, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/style$/, (c, u, m) => act.applyStyle(c, u, { id: m[1] })],
+    ['POST', /^\/accounts\/([\w-]+)\/formats$/, (c, u, m, f) => setFormats(c, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/kill$/, (c, u, m) => act.killAccount(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/resume$/, (c, u, m) => act.resume(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/quota$/, (c, u, m, f) => act.setQuota(c, u, { id: m[1] }, f)],

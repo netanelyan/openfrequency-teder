@@ -14,6 +14,8 @@ import { schedulePanel } from './schedule.js';
 import { connectLine } from '../publish/hold.js';
 import { PLATFORM_LIST } from '../core/platforms.js';
 import { EMAIL_HE } from '../notify/email.js';
+import { libraryFormat } from '../formats/library.js';
+import { formatsPanel, picksFormats } from './formats.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -128,7 +130,7 @@ const formatName = (pack, id) => pack?.formats.formats.find((f) => f.id === id)?
 
 // What kind of slideshow a post is, in the words a business owner uses. A format's own name is the pack's ("איך זה
 // עובד", "המאמן"), which reads like a heading on a card, so customers see this instead: by the format's id first (the
-// starter formats, src/onboarding/pack.js STARTER_FORMATS, and the demo's), then by its kind (src/formats/kinds.js).
+// first accounts' starter formats, and the demo's; the library's go by their kind), then by its kind (src/formats/kinds.js).
 // Anything else shows nothing.
 const TYPE_BY_FORMAT = {
   explainer: 'הסבר בכמה שלבים',
@@ -155,7 +157,8 @@ const TYPE_BY_KIND = {
   'owner-story': 'הסיפור של העסק',
   list: 'רשימה',
 };
-export const typeHe = (post) => TYPE_BY_FORMAT[post.format_id] || TYPE_BY_KIND[post.kind] || '';
+// A format the customer picked is called on its card what it was called when they picked it (src/formats/library.js).
+export const typeHe = (post) => TYPE_BY_FORMAT[post.format_id] || libraryFormat(post.format_id)?.name || TYPE_BY_KIND[post.kind] || '';
 /** The kind on a card: the pack's format name for the operator, the plain words (or nothing) for a customer. */
 const typeLabel = (ctx, pack, post) => (ctx.operator ? formatName(pack, post.format_id) : typeHe(post) ? `סוג: ${typeHe(post)}` : '');
 
@@ -654,6 +657,7 @@ ${networks}
 ${modePanel(ctx, pack, { mode, customer })}
 ${connect ? tiktokModePanel(ctx, connect) : ''}
 ${stylePanel(ctx, pack, style)}
+${picksFormats(pack, customer) ? formatsPanel(ctx, pack) : ''}
 </div>
 ${foot}
 </section>`;

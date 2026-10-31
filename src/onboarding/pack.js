@@ -11,6 +11,7 @@ import { lookGroups, loadPack, readPack } from '../packs/load.js';
 import { validateAll } from '../packs/validate.js';
 import { packIdOf } from './setup.js';
 import { suggestStyle } from './style.js';
+import { DEFAULT_PICKED, formatsFor } from '../formats/library.js';
 import { resolveStyle } from '../render/styles/tokens.js';
 
 // A new pack, written from an onboarding: the owner's seed, the sources they
@@ -75,11 +76,6 @@ export function newTheme(existing, { groupOf = () => 'all', group = 'all' } = {}
   return { template: look.template, variant: look.variant, colors: best.c, fonts: { display, text: display === 'Assistant' ? 'Heebo' : 'Assistant' }, options: { radius: 24, coverPhoto: false } };
 }
 
-const STARTER_FORMATS = [
-  { id: 'explainer', name: 'איך זה עובד', about: 'One thing explained in a few steps, a fact per slide, from an approved source.', weight: 3, items: [3, 5], hooks: ['ככה {x} עובד באמת', '{n} דברים על {x} שרוב האנשים מפספסים'], closers: [{ title: 'תשמרו את זה לפעם הבאה', body: 'ותשלחו למי שזה נוגע לו' }] },
-  { id: 'n-facts', name: 'עובדות קצרות', about: 'A few short, specific facts about one subject, one per slide.', weight: 2, items: [3, 5], hooks: ['{n} דברים שלא ידעתם על {x}'], closers: [{ title: 'איזה מהם הפתיע אתכם?', body: 'תשמרו את הרשימה' }] },
-  { id: 'whats-new', name: 'מה חדש', about: 'What changed recently, dated, a change per slide, from the source that announced it.', weight: 1, trial: true, items: [3, 4], hooks: ['מה השתנה ב{x} לאחרונה'], closers: [{ title: 'תשמרו ותבדקו אם זה נוגע לכם', body: 'העדכונים מגיעים לאט, לא לכולם באותו יום' }] },
-];
 
 function voiceTemplate(seed, displayName) {
   return `# הקול של "${displayName}"
@@ -121,7 +117,7 @@ const VOICE_SCHEMA = { type: 'object', properties: { voice: { type: 'string' } }
  * Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. `workspaceId` is the
  * customer's (null for the operator's own account): its look is kept apart from that workspace's other accounts.
  */
-export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null }) {
+export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null, formatIds = DEFAULT_PICKED }) {
   const id = packIdOf(handle);
   if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id)) throw new Error('the handle must be latin letters and digits, so the pack id can be made from it');
   const dir = path.join(packsDir(), id);
@@ -181,7 +177,9 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     })),
   };
   const formats = {
-    formats: STARTER_FORMATS,
+    // The formats the customer picked on the sources step, in turn (src/formats/library.js, rotation.js turnOrder).
+    formats: formatsFor(formatIds),
+    rotate: 'turns',
     caption: { questions: ['מה עוד הייתם רוצים לדעת על זה?', 'זה נוגע לכם?', 'על מה תרצו פירוק כזה?'] },
     hashtags: { broad: ['#טיפים', '#ישראל'], niche: [...words.map((w) => `#${w.replace(/[^\p{L}\p{N}_]/gu, '')}`).filter((t) => t.length > 2).slice(0, 3), '#מידע'] },
     trends: { queries: { he: [`טיפים ${seed.niche}`], en: [`${seed.nicheEn || seed.niche} tips`] }, minViews: { he: 1000, en: 20000 } },

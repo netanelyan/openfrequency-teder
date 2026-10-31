@@ -2083,3 +2083,26 @@ offered. A site whose robots.txt keeps this engine or Claude out is not read, an
 the operator and never offered, since it could never be read. Authority now counts a recognized specialist publication
 as an established one, whatever the subject. The search may run four minutes (it was three). Not yet proven on a live
 niche: the first real setup of a new niche is the test (test/discover-any.test.js is the baking case, offline).
+
+### The customer picks the kinds of slideshow, and they go in turn (2026-10-31)
+
+The owner: "i want the customer to pick the formats he likes. it is changable, and each slideshow is in a different
+format." Every account the setup made got the same three formats, all of the old list kind ("איך זה עובד", "עובדות
+קצרות", "מה חדש"), and the rotation picked by weight and results, avoiding only the previous post's exact format. Now
+src/formats/library.js holds twelve formats a customer picks from, each one of the engine's kinds written for no niche
+(facts, tips, story, what-happened, guess-who, head-to-head, ranking, myth-fact, iceberg, hot-take, on-this-day, the
+explainer), with a name and a line for the customer and an `about` for the model. Left out: the meme (it stands on no
+photograph, and no slide may), do-dont (it draws app screens) and the owner's story (it needs the owner's own facts).
+The sources step of a new account shows them with five ticked (facts, tips, story, myth-fact, ranking); the account page
+shows them for a customer's account (or any account already in turn) and saves a new pick at once (POST
+/accounts/<id>/formats, src/web/formats.js). At least three, so two slideshows in a row never share one. The picks are
+the pack's formats.json with "rotate": "turns" (src/packs/write.js setPackFormats keeps captions, hashtags and trends).
+In turn (src/formats/rotation.js turnOrder): the next slideshow takes the format used longest ago, one never used
+first, in the file's order; samples count (a new account's samples show its formats one by one), a stopped post does
+not; a format taken off the list is never picked again; results do not reorder them and a trend's format never joins,
+since the customer chose; a morning directive's "the same format again" is ignored. The company's own hand-written packs
+keep their richer formats and the weighted rotation. A customer's card is labelled with the name they picked
+(pages.js typeHe). The facts kind's prompt spoke of "the sport itself"; it now reads for any subject, and tips name
+amounts, times and temperatures too. The same day the owner said "clubs like fenherbache are not famous, and people
+are not really interested in things they dont recognize": the plan's prompt now asks that a post's main subject be a
+name most of the audience knows at once, a lesser name only inside a post about a famous one, else usable=false.

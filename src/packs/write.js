@@ -1,6 +1,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { styleConfigProblems } from '../render/styles/tokens.js';
+import { formatsFor, MIN_PICKED } from '../formats/library.js';
 
 // The settings of a pack the website writes: its slide style (pack.json "style"), when the owner picks one on the
 // Accounts page or a style test settles, how its TikTok posts go out (zernio.tiktokMode, zernio.tiktokPrivacy,
@@ -73,4 +74,25 @@ export function setPackStyle(pack, patch) {
   renameSync(`${file}.tmp`, file);
   pack.meta.style = next;
   return next;
+}
+
+/**
+ * The formats a customer picked (src/formats/library.js), written into the pack's formats.json: its list becomes the
+ * library's entries for these ids, taken in turn ("rotate": "turns", src/formats/rotation.js turnOrder). Captions,
+ * hashtags and trends are kept. At least MIN_PICKED, all the library's own; the caller says so to the customer.
+ * Returns the new list.
+ */
+export function setPackFormats(pack, ids) {
+  const picked = formatsFor(ids);
+  if (picked.length < MIN_PICKED) throw Object.assign(new Error(`at least ${MIN_PICKED} formats`), { code: 'few' });
+  const file = path.join(pack.dir, 'formats.json');
+  const raw = readFileSync(file, 'utf8');
+  const data = JSON.parse(raw);
+  data.formats = picked;
+  data.rotate = 'turns';
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  writeFileSync(`${file}.tmp`, `${JSON.stringify(data, null, 2).replace(/\n/g, eol)}${eol}`);
+  renameSync(`${file}.tmp`, file);
+  pack.formats = { ...pack.formats, formats: data.formats, rotate: 'turns' };
+  return data.formats;
 }

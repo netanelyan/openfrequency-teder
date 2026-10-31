@@ -618,6 +618,17 @@ blockquote.q { margin: 0; padding: 10px 12px; border-inline-start: 3px solid var
   .acct-net { grid-column: span 2; grid-row: span 2; }
   .acct-tiktok { grid-column: 1 / -1; }
 }
+/* The kinds of slideshow picked (src/web/formats.js): across the grid's width, as many cards to a row as fit on a desk,
+   two on a phone (twelve cards one under the other was a long scroll). */
+.acct-grid > .acct-formats { grid-column: 1 / -1; }
+.fmt-picks { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
+@media (min-width: 700px) { .fmt-picks { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); } }
+.fmt-pick { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--fill); cursor: pointer; }
+.fmt-pick:has(input:checked) { border-color: var(--accent); background: var(--fill-2); }
+.fmt-pick input[type='checkbox'] { flex: none; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--accent-fill); }
+.fmt-pick span { display: grid; gap: 3px; min-width: 0; }
+.fmt-pick b { font-weight: 600; color: var(--ink); }
+.fmt-pick small { color: var(--ink-3); font-size: 13px; line-height: 1.4; }
 .acct-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 16px 4px 0; }
 .acct-foot form { margin: 0; }
 .acct-foot p { color: var(--ink-p); }

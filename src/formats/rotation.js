@@ -200,6 +200,25 @@ export function pickFormat(db, accountId, { recent = null, rand = Math.random, e
   return pool[pool.length - 1].format_key;
 }
 
+/** Whether a pack's formats go in turn: the formats a customer picked (formats.json "rotate": "turns"). */
+export const inTurns = (pack) => pack?.formats?.rotate === 'turns';
+
+/**
+ * The pack's formats in turn, the one used longest ago first (a format never used before any used one, in the file's
+ * order): the next slideshow takes the first. The owner, 2026-10-31: "each slideshow is in a different format". Only
+ * the formats in the file, so one the customer took off is never picked again (its row stays, with its history); the
+ * results do not reorder them and a trend's format never joins them, since the customer picked these. Samples count,
+ * so a new account's samples show its formats one by one; a post the checks stopped does not, since it never showed.
+ */
+export function turnOrder(db, pack, { exclude = [] } = {}) {
+  const keys = (pack.formats.formats || []).map((f) => f.id).filter((k) => !exclude.includes(k));
+  const last = new Map(db.all("SELECT format_id AS k, MAX(created_at) AS at FROM posts WHERE account_id = ? AND status != 'blocked' GROUP BY format_id", pack.id).map((r) => [r.k, r.at]));
+  return keys
+    .map((k, i) => ({ k, i, at: last.get(k) || '' }))
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.i - b.i))
+    .map((x) => x.k);
+}
+
 /** format_key -> 'entertaining' | 'number', from the pack's formats. */
 export const groupsOf = (pack) => Object.fromEntries((pack.formats.formats || []).map((f) => [f.id, groupOf(f)]));
 
