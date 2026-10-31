@@ -1281,3 +1281,46 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 /* The accessibility statement, under the card of the pages with no session. */
 .a11y-foot { margin: 4px 0 0; text-align: center; font-size: 12px; }
 .a11y-foot a { color: var(--ink-3); }
+
+/* ------------------------------------------------------------ the accessibility panel
+   The website's (openfrequency.co.il, its style.css .a11y; ui.js a11yWidget, app.js): a round glass button at the
+   bottom corner, the tab bar's sibling, and over it a panel of four switches, each a class on <html> that the rules
+   at the end of this block read. On a phone it stands above the tab bar, and on a post's page above its action bar
+   too, so it never covers either; on a desk, in the corner. Under the toast, which says something and goes. */
+.a11y-w { position: fixed; z-index: 45; bottom: calc(var(--tab) + 20px + env(safe-area-inset-bottom)); inset-inline-end: 16px; }
+@media (max-width: 899px) { body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 60px + 12px + env(safe-area-inset-bottom)); } }
+@media (min-width: 900px) { .a11y-w { bottom: 24px; inset-inline-end: 24px; } }
+.a11y-w[hidden], .a11y-p[hidden] { display: none; }
+.a11y-btn { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.a11y-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.a11y-btn svg circle { fill: currentColor; stroke: none; }
+.a11y-btn[aria-expanded='true'] { color: var(--accent); }
+.a11y-btn:focus-visible { border-radius: 50%; }
+.a11y-p { position: absolute; bottom: 60px; inset-inline-end: 0; display: grid; gap: 8px; width: min(280px, calc(100vw - 32px)); padding: 16px; border-radius: var(--r); background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); text-align: start; }
+.a11y-p h2 { margin: 0 0 4px; font: 600 17px/1.3 var(--display); }
+.a11y-p [data-a] { min-height: 44px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: var(--r-m); background: transparent; color: var(--ink); font: 400 15px/1.3 var(--text); text-align: start; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.a11y-p [data-a]:focus-visible { border-radius: var(--r-m); }
+.a11y-p [data-a][aria-pressed='true'] { border-color: var(--accent-fill); background: var(--accent-fill); color: var(--accent-ink); }
+@media (hover: hover) { .a11y-p [data-a][aria-pressed='false']:hover { background: var(--fill); } }
+.a11y-end { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 14px; }
+.a11y-reset { min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.a11y-end a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-reduced-transparency: reduce) { .a11y-btn, .a11y-p { backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@media print { .a11y-w { display: none; } }
+
+/* The switches. Bigger text zooms the page, as the website does, so every size written in px grows with it. A phone
+   is then 325px wide at 390: a post's action bar no longer holds its three buttons in a row, so its first takes a row
+   of its own and the others share the next, and the panel's button stands above the taller bar. */
+html.a-big body { zoom: 1.2; }
+@media (max-width: 899px) {
+  html.a-big .actionbar { flex-wrap: wrap; }
+  html.a-big .actionbar .btn.primary { flex-basis: 100%; }
+  html.a-big body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 112px + 12px + env(safe-area-inset-bottom)); }
+}
+html.a-links a { text-decoration: underline !important; text-decoration-thickness: 2px !important; text-underline-offset: 3px; }
+html.a-still *, html.a-still *::before, html.a-still *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+/* High contrast: the quiet text comes up to the ink, the hairlines darken, and the glass goes solid. */
+html.a-contrast { --ink-2: #1d1d1f; --ink-3: #424245; --ink-p: #1d1d1f; --line: #8e8e93; --line-2: #424245; --bar: #ffffff; --bar-float: #ffffff; --bar-edge: #424245; --surface: #ffffff; --surface-hi: #ffffff; --edge: #424245; --inset: #f5f5f7; --field: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  html.a-contrast { --ink-2: #f5f5f7; --ink-3: #e5e5ea; --ink-p: #f5f5f7; --line: #8e8e93; --line-2: #d2d2d7; --bar: #000000; --bar-float: #000000; --bar-edge: #d2d2d7; --surface: #000000; --surface-hi: #000000; --edge: #d2d2d7; --inset: #1c1c1e; --field: #000000; }
+}

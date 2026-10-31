@@ -52,6 +52,23 @@ export const A11Y_URL = 'https://openfrequency.co.il/accessibility';
 export const a11yLink = () => `<a class="a11y" href="${A11Y_URL}">הצהרת הנגישות</a>`;
 
 /**
+ * The accessibility panel, the website's own (openfrequency-web src/layout.mjs .a11y), on every page of the layout: a
+ * round button at the bottom corner, four switches that are each a class on <html> (style.css reads them; app.js keeps
+ * them in this browser under the website's key, of-a11y), a reset, and the website's statement. Hidden until app.js
+ * shows it, so without script the page is the same page. The button comes before the panel, so Tab from it goes into
+ * the switches. Its box is .a11y-w: .a11y is the statement link above.
+ */
+const A11Y_SWITCHES = [['big', 'טקסט גדול יותר'], ['contrast', 'ניגודיות גבוהה'], ['links', 'קו מתחת לקישורים'], ['still', 'לעצור תנועה']];
+export const a11yWidget = () => `<div class="a11y-w" data-a11y hidden>
+<button class="a11y-btn" type="button" aria-expanded="false" aria-controls="a11y-p"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.5" r="1.8"/><path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5l-3 6M12 14.5l3 6"/></svg><span class="sr">נגישות</span></button>
+<div class="a11y-p" id="a11y-p" role="group" aria-labelledby="a11y-h" hidden>
+<h2 id="a11y-h">נגישות</h2>
+${A11Y_SWITCHES.map(([key, label]) => `<button type="button" data-a="${key}" aria-pressed="false">${label}</button>`).join('\n')}
+<div class="a11y-end"><button type="button" class="a11y-reset" data-a11y-reset>לאפס</button><a href="${A11Y_URL}">הצהרת הנגישות</a></div>
+</div>
+</div>`;
+
+/**
  * Where a customer writes to us: OpenFrequency's WhatsApp, OF_SUPPORT_WA (international digits, 972..., the same value
  * as accounts'), as a wa.me link. null while it is unset or not a phone number.
  */
@@ -205,6 +222,7 @@ ${body}
 </main>
 <nav class="tabbar" aria-label="ניווט">${tabs}</nav>
 <div id="toast" role="status" aria-live="polite"></div>
+${a11yWidget()}
 <script src="/static/app.js?v=${ctx.v || 1}" defer></script>
 </body>
 </html>`;

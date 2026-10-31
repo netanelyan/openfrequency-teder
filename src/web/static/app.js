@@ -1,5 +1,38 @@
 // The desk's one script. Everything works without it; this makes the common
 // actions one tap without a page load, and makes the slide strip feel native.
+
+// The accessibility panel (ui.js a11yWidget), as on openfrequency.co.il (its site.js): the round button opens four
+// switches, each a class on <html> (a-big, a-contrast, a-links, a-still, read by style.css), kept in this browser under
+// the website's own key, of-a11y, and a reset. It closes on Escape (focus back on the button) or a click outside. It
+// runs first and on its own, so the saved switches go on before anything else here and whatever happens to the rest.
+(() => {
+  const root = document.documentElement;
+  const KEY = 'of-a11y';
+  let on = {};
+  try { on = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { on = {}; }
+  if (typeof on !== 'object' || Array.isArray(on)) on = {};
+  const box = document.querySelector('[data-a11y]');
+  const apply = () => {
+    for (const k of ['big', 'contrast', 'links', 'still']) root.classList.toggle(`a-${k}`, on[k] === true);
+    if (box) for (const b of box.querySelectorAll('[data-a]')) b.setAttribute('aria-pressed', String(on[b.dataset.a] === true));
+  };
+  apply();
+  if (!box) return;
+  const btn = box.querySelector('.a11y-btn');
+  const panel = box.querySelector('.a11y-p');
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(on)); } catch { /* a browser that keeps nothing: the switch holds for this page */ } };
+  const show = (open) => { panel.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
+  box.hidden = false;
+  btn.addEventListener('click', () => show(panel.hidden));
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-a]');
+    if (b) { on[b.dataset.a] = on[b.dataset.a] !== true; apply(); save(); }
+    if (e.target.closest('[data-a11y-reset]')) { on = {}; apply(); save(); }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { show(false); btn.focus(); } });
+  document.addEventListener('click', (e) => { if (!panel.hidden && !box.contains(e.target)) show(false); });
+})();
+
 (() => {
   document.documentElement.classList.add('js');
   const toast = document.getElementById('toast');
