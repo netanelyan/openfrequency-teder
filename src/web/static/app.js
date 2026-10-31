@@ -159,6 +159,86 @@
     form.addEventListener('change', () => form.requestSubmit());
   });
 
+  // A list typed one item at a time (a new account's topics and sites, [data-pills]): Enter makes what was typed a pill,
+  // the pills sit in a row, × takes one out, and Backspace in the empty box takes the last. The form sends the field it
+  // had, the pills one a line (the server reads them so: onboarding.js listField), and something typed and not yet a
+  // pill goes with it. Without this script the field stays as it was (topics by commas, sites a line each).
+  document.querySelectorAll('[data-pills]').forEach((field) => {
+    const max = Number(field.dataset.max) || 10;
+    const required = field.required;
+    const items = [...new Set(field.value.split(field.dataset.pills === 'commas' ? /\r?\n|[,،]/ : /\r?\n/).map((x) => x.trim()).filter(Boolean))].slice(0, max);
+    const sent = Object.assign(document.createElement('input'), { type: 'hidden', name: field.name });
+    const box = Object.assign(document.createElement('div'), { className: 'pills' });
+    const list = Object.assign(document.createElement('ul'), { className: 'pill-list' });
+    const typed = Object.assign(document.createElement('input'), { type: 'text', className: 'pill-typed' });
+    typed.dir = field.dir || 'auto';
+    typed.setAttribute('enterkeyhint', 'enter');
+    if (field.dir === 'ltr') {
+      typed.setAttribute('autocapitalize', 'off');
+      typed.spellcheck = false;
+    }
+    field.removeAttribute('name');
+    field.required = false;
+    field.hidden = true;
+    // The box's own field first, so a tap on the label goes to it and never to a pill's ×; CSS draws the pills before it.
+    box.append(typed, list);
+    field.before(box, sent);
+    const draw = () => {
+      list.replaceChildren(
+        ...items.map((text, i) => {
+          const li = Object.assign(document.createElement('li'), { className: 'pill' });
+          const word = Object.assign(document.createElement('span'), { textContent: text, dir: 'auto' });
+          const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×' });
+          x.setAttribute('aria-label', `להסיר את ${text}`);
+          x.addEventListener('click', () => {
+            items.splice(i, 1);
+            draw();
+            typed.focus();
+          });
+          li.append(word, x);
+          return li;
+        })
+      );
+      sent.value = items.join('\n');
+      typed.required = required && !items.length;
+      typed.disabled = items.length >= max;
+    };
+    const add = (text) => {
+      const v = text.trim();
+      if (v && !items.includes(v) && items.length < max) items.push(v);
+    };
+    typed.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        add(typed.value);
+        typed.value = '';
+        draw();
+      } else if (e.key === 'Backspace' && !typed.value && items.length) {
+        items.pop();
+        draw();
+      }
+    });
+    // Lines pasted together become a pill each.
+    typed.addEventListener('paste', (e) => {
+      const text = e.clipboardData?.getData('text') || '';
+      if (!/\n/.test(text)) return;
+      e.preventDefault();
+      text.split(/\r?\n/).forEach(add);
+      draw();
+    });
+    box.addEventListener('click', (e) => {
+      if (e.target === box || e.target === list) typed.focus();
+    });
+    // Before the form's data is gathered: what was typed without Enter is a pill too.
+    field.form?.addEventListener('submit', () => {
+      if (!typed.value.trim()) return;
+      add(typed.value);
+      typed.value = '';
+      draw();
+    });
+    draw();
+  });
+
   // Dots that follow the slide strip.
   document.querySelectorAll('[data-strip]').forEach((strip) => {
     const dots = strip.nextElementSibling?.matches('.dots') ? [...strip.nextElementSibling.children] : [];

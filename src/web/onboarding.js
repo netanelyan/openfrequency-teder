@@ -61,6 +61,16 @@ const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'נתונים' };
 const FAILURE_HE = { timeout: 'החיפוש לקח יותר מדי זמן ונעצר.', restart: 'החיפוש נקטע באמצע.', error: 'משהו השתבש בחיפוש.' };
 /** The most a discovery may run before it is stopped and marked failed (retryable). */
 export const DISCOVERY_TIMEOUT_MS = 3 * 60_000;
+
+/**
+ * A list typed in the form, a new account's topics or sites: one item a line, as the page's pills send them (static/app.js
+ * data-pills), or, with `commas` (topics), by commas too, as the field reads without the page's script. Trimmed, each
+ * to `len` characters, empty ones and repeats left out, at most `max`.
+ */
+export const listField = (v, { commas = false, max = 10, len = 300 } = {}) =>
+  [...new Set(String(v || '').split(commas ? /\r?\n|[,،]/ : /\r?\n/).map((x) => x.trim().slice(0, len)).filter(Boolean))].slice(0, max);
+/** A new account's topics: 12 at most, 60 characters each. */
+const TOPICS = { commas: true, max: 12, len: 60 };
 /** The samples one press asks for, the fewest that count as done, and the most tries to get there. */
 export const SAMPLE_TARGET = 5;
 export const SAMPLE_ENOUGH = 3;
@@ -366,8 +376,8 @@ function listPage(ctx, pc) {
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
 <label class="f">במה החשבון יעסוק <small>כמו שהייתם מספרים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">למי הוא מיועד<input type="text" name="audience" maxlength="160" placeholder="למשל: סטודנטים שמבשלים בתקציב קטן"></label>
-<label class="f">נושאים שחשובים לכם <small>מופרדים בפסיקים, לא חובה</small><input type="text" name="topics" maxlength="200"></label>
-<label class="f">אתרים או חשבונות שאתם אוהבים <small>כתובת אחת בכל שורה, לא חובה</small><textarea name="examples" rows="4" dir="ltr"></textarea></label>
+<label class="f">נושאים שחשובים לכם <small class="js-hide">מופרדים בפסיקים, לא חובה</small><small class="js-show">כותבים נושא ולוחצים Enter, לא חובה</small><input type="text" name="topics" maxlength="800" data-pills="commas" data-max="12"></label>
+<label class="f">אתרים או חשבונות שאתם אוהבים <small class="js-hide">כתובת אחת בכל שורה, לא חובה</small><small class="js-show">כותבים כתובת ולוחצים Enter, לא חובה</small><textarea name="examples" rows="4" dir="ltr" data-pills data-max="10"></textarea></label>
 <button class="btn primary" type="submit">${icon('spark')}לחפש מקורות</button></form></section>
 <section class="panel"><header><h2>בתהליך</h2></header>${rows.length ? `<ul class="factlist">${rows.map((r) => `<li><a href="/new/${esc(r.id)}"><b>${esc(r.seed.niche)}</b></a> <span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span> <span class="muted small">${esc(stamp(r.updated_at))}</span></li>`).join('')}</ul>` : '<p class="muted">אין עדיין.</p>'}</section></div>`
   );
@@ -394,7 +404,7 @@ function fewPanel(pc, r, n) {
   return `<section class="panel" id="more"><header><h2>מצאנו מעט מקורות טובים לנושא הזה</h2></header>
 <p class="muted">${n ? `יש כאן ${n === 1 ? 'מקור אחד' : `${n} מקורות`} שאפשר לעבוד איתם.` : 'לא מצאנו מקור שבאמת עוסק בנושא.'} עדיף להוסיף אתרים שאתם סומכים עליהם ולחפש שוב, במקום למלא את החשבון במקורות חלשים.</p>
 <form method="post" action="/new/${esc(r.id)}/more" class="formgrid">${csrfField(pc)}
-<label class="f">אתרים שאתם סומכים עליהם <small>כתובת אחת בכל שורה</small><textarea name="examples" rows="3" dir="ltr" required></textarea></label>
+<label class="f">אתרים שאתם סומכים עליהם <small class="js-hide">כתובת אחת בכל שורה</small><small class="js-show">כותבים כתובת ולוחצים Enter</small><textarea name="examples" rows="3" dir="ltr" required data-pills data-max="10"></textarea></label>
 <div><button class="btn" type="submit">${icon('spark')}לחפש שוב</button></div></form></section>`;
 }
 
@@ -524,7 +534,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         if (niche.length < 2) throw new ActionError('צריך לכתוב במה החשבון יעסוק');
         const id = newId('o');
         // No English niche to fill in: the discovery asks the model for it (src/onboarding/discover.js nicheInEnglish).
-        const seed = { niche, nicheEn: String(f.nicheEn || '').trim(), language: 'he', audience: String(f.audience || '').trim(), topics: String(f.topics || '').split(/[,،]/).map((x) => x.trim()).filter(Boolean), examples: String(f.examples || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 10) };
+        const seed = { niche, nicheEn: String(f.nicheEn || '').trim(), language: 'he', audience: String(f.audience || '').trim(), topics: listField(f.topics, TOPICS), examples: listField(f.examples) };
         ctx.db.insert('onboarding', { id, seed_json: seed, status: 'discovering', workspace_id: ctx.workspaceId ?? null, created_at: nowIso(), updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche } });
         startDiscovery(ctx, id);
@@ -549,7 +559,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       (ctx, user, m, f) => {
         const r = row(ctx, m[1]);
         if (r.status !== 'review') throw new ActionError('אפשר לחפש שוב רק לפני שהחשבון נוצר.', 409);
-        const added = String(f.examples || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+        const added = listField(f.examples);
         if (!added.length) throw new ActionError('צריך לכתוב לפחות כתובת אחת של אתר.');
         const seed = { ...r.seed, examples: [...new Set([...(r.seed.examples || []), ...added])].slice(0, 10) };
         ctx.db.update('onboarding', r.id, { status: 'discovering', seed_json: seed, candidates_json: {}, notes_json: [], updated_at: nowIso() });
