@@ -347,7 +347,8 @@
     [/^\/$/, 'today'],
     [/^\/(posts|all)$/, 'posts'],
     [/^\/post\/[^/]+$/, 'post'],
-    [/^\/(accounts|sources)$/, 'cards'],
+    [/^\/accounts$/, 'account'],
+    [/^\/sources$/, 'cards'],
     [/^\/results$/, 'results'],
     [/^\/styles$/, 'styles'],
     [/^\/(settings|more)$/, 'cols'],
@@ -382,6 +383,8 @@
     posts: () => [div('posts', post(0), post(3))],
     post: () => [div('cols', div('grid12', post(1)), div('grid12', panel(5, 2), panel(4, 5)))],
     cards: () => [div('accounts', ...[0, 1].map((i) => div('card panel', lines(5, i), div('sk-acts', div('sk btn')))))],
+    // The account page's own shape: its header, then the grid of panels (style.css .acct-grid).
+    account: () => [div('acct', div('panel acct-head', lines(2)), div('acct-grid', ...[0, 1, 2].map((i) => panel(4, i))))],
     results: () => [div('kpis', div('kpi lead', line(1), line(4, 'big')), div('kpi side', line(3), line(6, 'big'))), panel(4, 1), rows(5)],
     styles: () => [div('panel', line(2), div('sk-styles', ...Array.from({ length: 5 }, () => div('sk'))))],
     list: () => [rows(7)],

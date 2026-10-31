@@ -76,9 +76,11 @@ export function requirements(d) {
 /**
  * Each platform's state and its button, for the account page and the onboarding page. `d` is connectData's (or the
  * onboarding's, src/web/onboarding.js). `base` is where the buttons post: the account's, or the onboarding's before
- * the account exists.
+ * the account exists. `heading` (a tag, 'h3') makes the platforms' names the panel's heading, as on the account page,
+ * where the panel is the networks' own; without it they are a line, under the onboarding section's heading. Each
+ * platform is a row: its name, its state and the account connected, and the button at the row's end.
  */
-export function connectPanel(ctx, d, { base = null } = {}) {
+export function connectPanel(ctx, d, { base = null, heading = null } = {}) {
   const { pack } = d;
   const at = base || `/accounts/${pack.id}`;
   const rows = d.platforms
@@ -94,7 +96,7 @@ export function connectPanel(ctx, d, { base = null } = {}) {
             : s.state === 'reconnect'
               ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary' })
               : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost' });
-      return `<li><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${button ? `<div class="actions p0 m6">${button}</div>` : ''}</li>`;
+      return `<li class="net"><span class="who"><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}</span>${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${button ? `<span class="act">${button}</span>` : ''}</li>`;
     })
     .join('');
   const note = d.configured
@@ -102,20 +104,24 @@ export function connectPanel(ctx, d, { base = null } = {}) {
     : ctx.operator
       ? 'אי אפשר לחבר עכשיו: בשרת לא מוגדר ZERNIO_API_KEY.'
       : 'החיבור עוד לא זמין בשרת הזה.';
-  return `<div class="connect" id="connect-${esc(pack.id)}"><div class="row"><span>${esc(heList(d.platforms.map((s) => PLATFORM_NAME[s.platform] || s.platform)))}</span>${d.configured && d.hasProfile ? `<span class="end">${postButton(ctx, `${at}/connections`, 'לבדוק שוב', { cls: 'btn sm ghost' })}</span>` : ''}</div>
-${d.configured ? requirements(d) : ''}<ul class="factlist">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
+  const names = esc(heList(d.platforms.map((s) => PLATFORM_NAME[s.platform] || s.platform)));
+  const check = d.configured && d.hasProfile ? `<span class="end">${postButton(ctx, `${at}/connections`, 'לבדוק שוב', { cls: 'btn sm ghost' })}</span>` : '';
+  const head = heading ? `<header><${heading}>${names}</${heading}>${check}</header>` : `<div class="row"><span>${names}</span>${check}</div>`;
+  return `<div class="connect" id="connect-${esc(pack.id)}">${head}
+${d.configured ? requirements(d) : ''}<ul class="factlist nets">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
 }
 
 /**
  * How the account's TikTok posts go out, and (the operator) through what. A customer's TikTok always lands in the app's
  * drafts (src/publish/index.js tiktokMode): they read that in one line, with no choice to make. The operator chooses
- * for the company's own accounts, and sees a customer's as fixed.
+ * for the company's own accounts, and sees a customer's as fixed. A panel of the account page's grid (pages.js).
  */
 export function tiktokModePanel(ctx, d) {
   if (!d.pack.meta.platforms.includes('tiktok')) return '';
+  const head = '<header><h3>איך פוסטים עולים לטיקטוק</h3></header>';
   if (!ctx.operator || d.customer) {
     const line = 'המצגות מגיעות לטיוטות בטיקטוק. בוחרים שם סאונד פופולרי ומפרסמים מהאפליקציה, ותדר מזכיר לכם כשמגיעה השעה.';
-    return `<div class="row"><span>איך פוסטים עולים לטיקטוק</span></div><p class="muted small m0">${esc(line)}${ctx.operator ? ' (חשבון של לקוח: תמיד לטיוטות.)' : ''}</p>`;
+    return `<section class="panel acct-tiktok">${head}<p class="m0">${esc(line)}${ctx.operator ? ' (חשבון של לקוח: תמיד לטיוטות.)' : ''}</p></section>`;
   }
   const id = esc(d.pack.id);
   const modes = ['draft-now', 'direct', ...(d.mode === 'draft-fallback' ? ['draft-fallback'] : [])];
@@ -123,7 +129,7 @@ export function tiktokModePanel(ctx, d) {
   const via = ctx.operator
     ? `<label class="f m6">דרך מה מפרסמים לטיקטוק<select name="via"><option value="zernio"${d.via !== OWN_APP ? ' selected' : ''}>Zernio</option><option value="${OWN_APP}"${d.via === OWN_APP ? ' selected' : ''}>האפליקציה שלנו בטיקטוק (עוד לא קיימת, הפוסטים נכתבים לדיסק)</option></select></label>`
     : '';
-  return `<form method="post" action="/accounts/${id}/tiktok">${csrfField(ctx)}<div class="row"><span>איך פוסטים עולים לטיקטוק</span></div><div class="seg" role="radiogroup" aria-label="איך פוסטים עולים לטיקטוק">${choice}</div>${via}<div class="actions p0 m6"><button class="btn sm" type="submit">שמירה</button></div></form>`;
+  return `<section class="panel acct-tiktok">${head}<form method="post" action="/accounts/${id}/tiktok">${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="איך פוסטים עולים לטיקטוק">${choice}</div>${via}<div class="actions p0 m6"><button class="btn sm" type="submit">שמירה</button></div></form></section>`;
 }
 
 /** What the panels read, for one account. */

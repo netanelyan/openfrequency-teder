@@ -473,7 +473,10 @@ test("the account page says 'X of 40 used, Y of 10 redos'; the operator sees eve
     row(ctx.db, { quota_kind: 'redo', quota_month: '2026-10', redo_of: 'x' });
     ctx.db.insert('spend', { account_id: 'demo', api: 'claude', usd: 0.5, month: '2026-10', at: new Date(OCT).toISOString() });
     const rows = accountRows(ctx).map((r) => ({ ...r, week: week(ctx, r.pack.id), style: null }));
-    assert.match(accountsPage({ csrf: 'x' }, rows), /נוצלו 3 מתוך 40 הצעות · 1 מתוך 10 החלפות/);
+    // The month's panel: a line each, the count large and the plan beside it, a meter under each.
+    const month = accountsPage({ csrf: 'x' }, rows);
+    assert.match(month, /<span>הצעות שנוצלו<\/span><span class="num"><b>3<\/b> מתוך 40<\/span><\/div><meter min="0" max="40"[^>]* value="3"/);
+    assert.match(month, /<span>החלפות שנוצלו<\/span><span class="num"><b>1<\/b> מתוך 10<\/span><\/div><meter min="0" max="10"[^>]* value="1"/);
     const html = quotasPanel({ csrf: 'x' }, quotasData(ctx));
     assert.match(html, /3\/40/);
     assert.match(html, /data-k="עלות"><span class="num ltr">\$0\.50<\/span><\/td>/);

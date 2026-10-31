@@ -607,42 +607,116 @@ ${takedownPanel}
 
 /* ------------------------------------------------------------ accounts */
 
+// The account page (the owner, 2026-10-31: "design this page better"). It was one narrow card of label and value rows,
+// pinned to the right of a wide page. A customer has one account (src/web/onboarding.js ONE_ACCOUNT), so the page is
+// that account's, across the width: a header with its name, handle and state and the way to its sources, rivals and
+// sounds; under it a grid of panels, each one thing read at a glance: the month's plan, the last 7 days, what waits,
+// approval, the networks, how TikTok posts go out, the look. Three columns on a desk, two on a tablet, one on a phone
+// (style.css .acct-grid); the networks take two columns and the small panels stack beside them. The power switch is
+// last, apart from the rest, as a destructive button is in iOS.
+//
+// The page shows the account the switcher picked (server.js), the operator's too. Given several (the function takes a
+// list), each is a section of its own, the same layout one under the other.
+
 export function accountsPage(ctx, rows) {
   const body = `<div class="head"><h1>החשבון</h1><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
-<div class="accounts">${rows
-    .map(({ pack, acc, mode, customer, resumable, spend, publishers, week, style, quota, connect }) => {
-      const paused = acc.status === 'paused';
-      const max = Math.max(1, ...week.days.map((x) => x.n));
-      const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
-      return `<article class="card acc acc-${esc(pack.id)} acct" id="acc-${esc(pack.id)}">
-<div class="title">${accDot(pack.id)}<div><h2>${esc(pack.meta.displayName)}</h2><span class="muted small ltr">@${esc(pack.meta.handle)}</span></div><span class="end">${paused ? '<span class="chip warn">מושהה</span>' : '<span class="chip ok">פעיל</span>'}</span></div>
-${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${icon(acc.paused_reason === 'kill' ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<div class="small">${withSupport(acc.paused_detail)}</div>` : ''}${resumable ? '' : `<div class="small">${withSupport('את החשבון הזה מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.')}</div>`}</div>${resumable ? postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעלה מחדש', { cls: 'btn sm' }) : ''}</div>` : ''}
-${modeControl(ctx, pack, acc, { mode, customer })}
-${ctx.operator ? `<div class="row"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}
-${quota ? quotaRow(quota, pack.id) : ''}
-<div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
-<div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
-<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd>${ctx.operator ? `<dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>` : ''}${style ? `<dt>סגנון</dt><dd>${style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`} · נעול מ-${esc(shortDate(style.at))} · <a href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></dd>` : ''}</dl>
-${connect ? `${connectPanel(ctx, connect)}${tiktokModePanel(ctx, connect)}` : ''}
-${style?.pending ? `<div class="paused">${icon('alert')}<div><b>${ctx.operator ? 'הסגנון בקובץ theme.json השתנה' : 'יש לחשבון סגנון חדש'}</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
-<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}לכבות את החשבון`, { cls: 'btn danger', confirm: 'לחצו שוב כדי לכבות' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
-</article>`;
-    })
-    .join('')}</div>`;
+${rows.map((r) => accountSection(ctx, r)).join('')}`;
   return layout({ ...ctx, title: 'חשבונות', active: 'accounts' }, body);
+}
+
+/** One account: its header, a paused account's banner, the grid of panels, and the power switch. */
+function accountSection(ctx, { pack, acc, mode, customer, resumable, spend, publishers, week, style, quota, connect }) {
+  const id = esc(pack.id);
+  const paused = acc.status === 'paused';
+  const head = `<header class="panel acct-head">${accDot(pack.id)}<div class="who"><h2 id="acct-name-${id}">${esc(pack.meta.displayName)}</h2><span class="muted ltr">@${esc(pack.meta.handle)}</span></div>${paused ? '<span class="chip warn">מושהה</span>' : '<span class="chip ok">פעיל</span>'}
+<div class="links"><a class="btn sm" href="/sources?account=${id}">מקורות</a><a class="btn sm" href="/rivals?account=${id}">מתחרים</a><a class="btn sm" href="/sounds?account=${id}">סאונדים</a></div></header>`;
+  const kill = acc.paused_reason === 'kill';
+  const pausedBanner = paused
+    ? `<div class="banner ${kill ? 'bad' : 'warn'}">${icon(kill ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<p>${withSupport(acc.paused_detail)}</p>` : ''}${resumable ? '' : `<p>${withSupport('את החשבון הזה מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.')}</p>`}</div>${resumable ? postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעלה מחדש', { cls: 'btn sm' }) : ''}</div>`
+    : '';
+  // The networks, with (the operator's) what each platform really goes out through.
+  const networks = connect
+    ? `<section class="panel acct-net">${connectPanel(ctx, connect, { heading: 'h3' })}${ctx.operator ? `<dl class="kv mt12"><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd></dl>` : ''}</section>`
+    : '';
+  const foot = paused
+    ? ''
+    : `<div class="acct-foot">${postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}לכבות את החשבון`, { cls: 'btn sm danger', confirm: 'לחצו שוב כדי לכבות' })}${ctx.operator ? '' : '<p class="muted small m0">אחרי הכיבוי שום דבר לא ייכתב ולא יפורסם בחשבון עד שתפעילו אותו מחדש.</p>'}</div>`;
+  return `<section class="acct acc acc-${id}" id="acc-${id}" aria-labelledby="acct-name-${id}">
+${head}
+${pausedBanner}
+<div class="acct-grid">
+${quota ? monthPanel(ctx, quota, pack.id, spend) : ''}
+${weekPanel(pack, week)}
+${queuePanel(pack, week.counts)}
+${networks}
+${modePanel(ctx, pack, { mode, customer })}
+${connect ? tiktokModePanel(ctx, connect) : ''}
+${stylePanel(ctx, pack, style)}
+</div>
+${foot}
+</section>`;
+}
+
+/**
+ * The month on the account page: the suggestions and the redos used of the plan, each with its meter (orange from 75%,
+ * red from 90%, as the header's ring), and what happens when the suggestions run out. A month the workspace's accounts
+ * share is said to be theirs together, with what this account used of it. What it cost is the operator's.
+ */
+function monthPanel(ctx, q, mine, spend) {
+  const s = q.suggested;
+  const r = q.redos;
+  const meter = (x, label) => `<meter min="0" max="${x.limit || 1}" low="${(x.limit || 1) * 0.75}" high="${(x.limit || 1) * 0.9}" optimum="0" value="${Math.min(x.used, x.limit || 1)}" aria-label="${label}"></meter>`;
+  const line = (label, x) => `<div class="mrow"><span>${label}</span><span class="num"><b>${x.used}</b> מתוך ${x.limit}</span></div>${meter(x, label)}`;
+  const own = q.shared && q.accounts?.[mine] ? `<p class="muted small m6">לכל החשבונות שלכם יחד. בחשבון הזה ${q.accounts[mine].suggested === 1 ? 'הצעה אחת' : `${q.accounts[mine].suggested} הצעות`} החודש.</p>` : '';
+  return `<section class="panel acct-month"><header><h3>החודש</h3></header>
+${line('הצעות שנוצלו', s)}${line('החלפות שנוצלו', r)}${own}${s.held + r.held ? `<p class="muted small m6">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${s.used >= s.limit ? '<p class="small m6"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}
+${ctx.operator ? `<div class="mrow cost"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}</section>`;
+}
+
+/** The last 7 days: how many went out and their views, then a bar a day, the count over it, today's the last. */
+function weekPanel(pack, week) {
+  const total = week.days.reduce((s, x) => s + x.n, 0);
+  const max = Math.max(1, ...week.days.map((x) => x.n));
+  const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
+  const bars = week.days.map((x, i) => `<span${i === week.days.length - 1 ? ' class="today"' : ''} title="${esc(shortDate(x.at))}: ${x.n}"><b class="num">${x.n || ''}</b><i class="${h(x.n)}"></i><small>${esc(weekdayNarrow(x.at))}</small></span>`).join('');
+  return `<section class="panel acct-week"><header><h3>7 הימים האחרונים</h3></header>
+<p class="stat"><b class="num">${total}</b><span>פורסמו</span>${week.views != null ? `<span class="muted">· ${k(week.views)} צפיות</span>` : ''}</p>
+<div class="week" aria-label="פוסטים שפורסמו בכל יום">${bars}</div></section>`;
+}
+
+/** What waits, made this week: the posts to approve and the approved ones, each a link to them, and what was stopped. */
+function queuePanel(pack, counts) {
+  const id = esc(pack.id);
+  return `<section class="panel acct-queue"><header><h3>בתור</h3></header><div class="qlist">
+<a href="/posts?account=${id}"><span class="l">ממתינים</span>${n(counts.queued || 0, 'sig')}</a>
+<a href="/posts?account=${id}#scheduled"><span class="l">מאושרים</span>${n(counts.approved || 0)}</a>
+<div><span class="l">נחסמו השבוע</span>${n(counts.blocked || 0)}</div></div></section>`;
 }
 
 /**
  * Whether posts wait for approval. A customer reads one line: every post waits for them (src/autonomy/rails.js). The
  * operator chooses for the company's own accounts, and sees a customer's as fixed.
  */
-function modeControl(ctx, pack, acc, { mode, customer }) {
-  if (!ctx.operator || customer) {
-    return `<div class="row"><span>אישור</span><b>כל פוסט מחכה לאישור שלכם לפני שהוא עולה</b></div>${ctx.operator ? '<p class="muted small m0">חשבון של לקוח: תמיד במצב אישור.</p>' : ''}`;
-  }
-  return `<form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
-    .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
-    .join('')}</div><noscript><button class="btn sm" type="submit">שמירה</button></noscript></form>`;
+function modePanel(ctx, pack, { mode, customer }) {
+  const body =
+    !ctx.operator || customer
+      ? `<p class="m0">כל פוסט מחכה לאישור שלכם לפני שהוא עולה.</p>${ctx.operator ? '<p class="muted small m6">חשבון של לקוח: תמיד במצב אישור.</p>' : ''}`
+      : `<form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
+          .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
+          .join('')}</div><noscript><button class="btn sm" type="submit">שמירה</button></noscript></form>`;
+  return `<section class="panel acct-mode"><header><h3>אישור</h3></header>${body}</section>`;
+}
+
+/** The look the posts are drawn in, since when, the way to another, and a new one waiting to be taken. */
+function stylePanel(ctx, pack, style) {
+  if (!style) return '';
+  const name = style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`;
+  const pending = style.pending
+    ? `<div class="notice">${icon('alert')}<div><b>${ctx.operator ? 'הסגנון בקובץ theme.json השתנה' : 'יש לחשבון סגנון חדש'}</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>`
+    : '';
+  return `<section class="panel acct-style"><header><h3>סגנון</h3></header>
+<p class="m0"><b>${name}</b> <span class="muted small">נעול מ-${esc(shortDate(style.at))}</span></p>
+<div class="actions p0 m6"><a class="btn sm" href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></div>${pending}</section>`;
 }
 
 /**
