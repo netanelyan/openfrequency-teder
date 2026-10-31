@@ -419,8 +419,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         const file = post && owns(c, post.account_id) ? slideFile(post, mm[2], mm[3]) : null;
         return file ? sendPostSlide(res, file, 'private, max-age=86400') : send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
       }
-      // ---- a style preview (src/web/styles.js): a file its account's own manifest names, the workspace's accounts only
-      const sm = /^\/styles\/img\/([\w-]+)\/([\w-]+)\/([A-D])\/(\d+)$/.exec(p);
+      // ---- a style preview (src/web/styles.js): a file its account's own manifest names, the workspace's accounts only.
+      // Any style's letter; previewFile answers only for a style that exists (it was [A-D], so E's previews, the fifth
+      // style, were broken images on /styles).
+      const sm = /^\/styles\/img\/([\w-]+)\/([\w-]+)\/([A-Z])\/(\d+)$/.exec(p);
       if (sm) {
         const pk = owns(c, sm[1]) ? c.pack(sm[1]) : null;
         const file = pk ? previewFile(pk, sm[2], sm[3], sm[4]) : null;

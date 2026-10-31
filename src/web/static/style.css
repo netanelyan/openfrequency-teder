@@ -256,6 +256,14 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 
 /* On a phone the bar is the logo, the account and the spend: the logo's word gives the account's name its room. */
 @media (max-width: 899px) { .acctswitch > summary .nm small { display: none; } .acctswitch > summary { max-width: 58vw; } .top .wrap:has(.acctswitch) .brand b { display: none; } }
+/* On a phone the account's name keeps its room (it was down to "ע" at 360): tighter gaps, and the switcher drops its
+   chevron, the pill itself is the button. Under 380px the month's count drops its " / 40", the ring shows how full. */
+@media (max-width: 520px) {
+  .top .wrap { gap: 8px; }
+  .acctswitch > summary { gap: 8px; padding: 0 10px; }
+  .acctswitch > summary > svg.i { display: none; }
+}
+@media (max-width: 380px) { .spend { gap: 6px; padding: 0 12px 0 10px; } .spend .amt > span { display: none; } }
 .acctswitch .menu form { margin: 0; }
 .acctswitch .menu button, .acctswitch .menu .new, .acctswitch .menu .to { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .acctswitch .menu button:hover, .acctswitch .menu .new:hover, .acctswitch .menu .to:hover { background: var(--fill); text-decoration: none; }
@@ -366,6 +374,14 @@ main.wrap { padding-top: 28px; }
 /* A post's own title is a sentence, not a section name: smaller, so a long one stays readable. */
 .head h1.title { font-size: 22px; line-height: 1.2; text-wrap: balance; }
 @media (min-width: 900px) { .head h1 { font-size: 32px; line-height: 1.08; } .head h1.title { font-size: 30px; line-height: 1.12; } main.wrap { padding-top: 44px; } }
+/* On a phone the actions at the headline's end drop under it when the two do not fit side by side: a one-word title
+   ("מקורות") was squeezed into what the buttons left and ran into them. */
+@media (max-width: 699px) {
+  .head { display: flex; flex-wrap: wrap; align-items: flex-end; }
+  .head > :first-child { flex: 1 1 auto; }
+  .head .end { order: 2; }
+  .head .sub { order: 3; flex-basis: 100%; }
+}
 h2 { font: 700 16px/1.24 var(--display); margin: 0; }
 h3 { font-size: 14px; margin: 0; font-weight: 600; }
 .lede { color: var(--ink-2); max-width: 68ch; margin: 0 0 24px; }
@@ -395,6 +411,15 @@ h3 { font-size: 14px; margin: 0; font-weight: 600; }
 .banner p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
 .banner > div { flex: 1; min-width: 0; }
 .banner form, .banner > .btn { margin-inline-start: auto; flex: none; }
+/* A row of buttons at the banner's end is as wide as its buttons: as a div it took half the banner from the words. */
+.banner > .actions { flex: none; margin-inline-start: auto; }
+/* On a phone the banner's buttons go under its words, in line with them, not beside them in a column that left the
+   words a third of the width. */
+@media (max-width: 699px) {
+  .banner { flex-wrap: wrap; }
+  .banner > div:not(.actions) { flex: 1 1 calc(100% - 32px); }
+  .banner > .actions, .banner > form, .banner > .btn { flex: 0 1 auto; margin-inline-start: 32px; }
+}
 
 /* ------------------------------------------------------------ buttons and forms */
 
@@ -501,6 +526,9 @@ meter::-moz-meter-bar { background: var(--accent-fill); border-radius: 3px; }
 .post .pending { display: flex; align-items: center; gap: 14px; padding: 20px; }
 .post .pending .ph { flex: none; width: 54px; height: 96px; border-radius: 10px; background: var(--inset); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
 .post .pending .hook, .post .pending .subline { padding: 0; }
+/* A post the checks stopped before it had slides (pages.js stoppedCard): no buttons close it, so the card keeps under
+   its last line the 20px it has over its first, and the words sit in its middle instead of on its bottom edge. */
+.post.stopped { padding-bottom: 20px; }
 .caption .tags { color: var(--accent); }
 .caption .chip { color: var(--ink); font-weight: 600; margin-inline-end: 6px; }
 
@@ -545,6 +573,9 @@ details.facts > summary::-webkit-details-marker { display: none; }
 details.facts > summary .chev { margin-inline-start: auto; transition: transform 0.2s ease; color: var(--ink-3); }
 details.facts[open] > summary .chev { transform: rotate(180deg); }
 details.facts > summary svg.i { color: var(--ink-3); }
+/* A post page's facts in a panel of their own: the panel is the frame, so no hairline and no card margins over them. */
+.panel > details.facts:first-child { margin: 0; border-top: 0; }
+.panel > details.facts:first-child > summary { min-height: 0; margin-bottom: 4px; }
 .factlist { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
 .factlist > li { scroll-margin-top: calc(var(--top) + 24px); }
 .factlist .slide-n { font-size: 12px; font-weight: 500; color: var(--ink-3); margin-bottom: 4px; }
@@ -638,7 +669,10 @@ blockquote.q { margin: 0; padding: 10px 12px; border-inline-start: 3px solid var
 .acct .notice > svg.i, .acct .notice b { color: var(--warn); }
 .acct .notice > div { flex: 1 1 180px; min-width: 0; }
 .acct .notice form { margin-inline-start: auto; }
-.acct .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; margin-bottom: 8px; }
+/* A label and its value on one line, apart, wherever they are: Settings' month ("החודש" and what was used of it,
+   which read "החודשנוצלו" with no rule outside the account page), the setup page's networks, the slide test. */
+.row { display: flex; justify-content: space-between; align-items: center; gap: 4px 12px; margin: 0 0 8px; }
+.acct .row { font-size: 13px; }
 
 /* The month: a line a part of the plan, the count large and the limit beside it, the meter under it. */
 .mrow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
@@ -699,6 +733,11 @@ meter + .mrow { margin-top: 20px; }
 .panel > header .end { margin-inline-start: auto; }
 @media (max-width: 699px) { .panel { padding: 20px; } }
 .cols { display: grid; gap: 20px; }
+/* In columns the grid's gap is the space: a panel that is a column of its own adds no margin over it (the second
+   column of /new stood 20px lower than the first, and on a phone the two were 40px apart). */
+.cols > .panel + .panel { margin-top: 0; }
+/* An empty state with a panel under it, in one column (Rivals): apart, as two panels are, not touching. */
+.empty + .panel { margin-top: 20px; }
 @media (min-width: 1000px) { .cols { grid-template-columns: 1.15fr 0.85fr; align-items: start; } .cols.even { grid-template-columns: 1fr 1fr; } }
 
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -761,7 +800,10 @@ ol.trace li .d { color: var(--ink-3); font-size: 12px; }
 .schedrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
 .schedrow .check { min-width: 9em; }
 .schedrow .times { display: flex; gap: 8px; }
-.schedrow input[type='time'] { width: 7.5em; }
+/* Wide enough for "06:30 PM" and the clock a browser in English draws (7.5em cut it to "06:30 PI"); on a narrow phone
+   the two share the row's width. */
+.schedrow input[type='time'] { width: 8.75em; padding-inline: 12px; }
+@media (max-width: 400px) { .schedrow .times { flex: 1 1 100%; min-width: 0; } .schedrow input[type='time'] { flex: 1 1 0; width: 0; min-width: 0; } }
 .problems { background: var(--bad-bg); border-radius: var(--r-m); padding: 12px 16px; margin: 0 0 16px; }
 .problems b, .problems li { color: var(--bad); }
 .problems ul { margin: 6px 0 0; padding-inline-start: 18px; }
@@ -800,6 +842,8 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
 .login h1 { text-align: center; }
 .login p { margin: 0 0 8px; text-align: center; color: var(--ink-3); font-size: 14px; }
 .login .err { color: var(--bad); background: var(--bad-bg); padding: 12px 14px; border-radius: var(--r-m); font-size: 13px; text-align: start; }
+/* The title of the gate and error pages, in its red box, centred as the mark, the words and the buttons under it. */
+.login h1.err { text-align: center; }
 .login input { min-height: 52px; }
 .login .btn { width: 100%; min-height: 50px; margin-top: 8px; }
 .login .links { display: grid; gap: 8px; }
@@ -862,6 +906,13 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
 .srcmore > summary { cursor: pointer; }
 .srcrest { border-top: 1px solid var(--line); }
 .srcrest > summary { display: flex; align-items: center; min-height: 48px; cursor: pointer; color: var(--accent-p); font-size: 14px; font-weight: 500; }
+/* A new account's samples, at the top of its setup page (onboarding.js): how many passed and the buttons on one line
+   over the cards, the progress under it while more are written; the account's panels follow. */
+.samples { margin: 0 0 28px; }
+.samplebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0 4px 16px; }
+.samplebar > p { flex: 1 1 220px; }
+.samplebar > .actions { flex: 0 1 auto; }
+.samples > .pollbox { margin: 0 4px 16px; }
 .js .js-hide { display: none; }
 .js-show { display: none; }
 .js .js-show { display: inline; }
@@ -968,6 +1019,13 @@ a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
 .inprog-list .sub > :empty { display: none; }
 .inprog-list .sub > * + *::before { content: '·'; margin-inline: 6px; }
 .inprog-list li > .btn { flex: none; }
+/* On a phone a done item's button goes under its words, in line with them: beside them it left the words a narrow
+   column of six lines. */
+@media (max-width: 520px) {
+  .inprog-list li { flex-wrap: wrap; }
+  .inprog-list .tx { flex: 1 1 calc(100% - 44px); }
+  .inprog-list li > .btn { margin-inline-start: 44px; }
+}
 .inprog-list .ready > .btn { color: var(--accent); }
 /* The page of every account: what waits, account by account, a line a post with its cover and one approve. */
 .qgroup + .qgroup { margin-top: 20px; }
@@ -994,7 +1052,7 @@ a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
 
 .soundlist { overflow: hidden; }
 .row.sound .tx { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.row.sound { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.row.sound { display: flex; justify-content: flex-start; align-items: center; gap: 10px; min-height: 60px; margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--line); }
 .row.sound:last-child { border-bottom: 0; }
 .row.sound form { display: inline; }
 
@@ -1085,6 +1143,8 @@ details.more[open] > summary { background: var(--fill-2); }
 .ttv { position: absolute; opacity: 0; pointer-events: none; }
 .ttv-l { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 4px 12px; border-radius: 980px; font-size: 13px; font-weight: 600; color: var(--ink-3); background: var(--inset); cursor: pointer; user-select: none; }
 .ttv-l svg.i { width: 16px; height: 16px; }
+/* In a post's card (a column of flex) the toggle is a pill at the card's padding, not a bar stretched edge to edge. */
+.post > .ttv-l { align-self: flex-start; margin-inline: 20px; }
 .ttv:checked + .ttv-l { color: #fff; background: var(--accent); }
 .ttv:focus-visible + .ttv-l { outline: 2px solid var(--accent); outline-offset: 2px; }
 .strip .tt { display: none; position: absolute; inset: 0; pointer-events: none; container-type: inline-size; color: #fff; z-index: 2; }
@@ -1186,6 +1246,11 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .sk-thread .sk.in { justify-self: start; }
 .sk-thread .sk.out { justify-self: end; }
 .sk-page .kpi { min-height: 108px; }
+/* The skeleton's side tile is two lines, not two of the real tile's rows (a flex row with a rule under it each). */
+.sk-page .kpi.side { padding: 20px 24px; justify-content: flex-start; }
+.sk-page .kpi.side > .sk { display: block; min-height: 0; border-bottom: 0; }
+/* The account page's header holds lines too: in its flex row they had no width and the header stood empty. */
+.sk-page .acct-head > .sk-lines { flex: 1; }
 .sk-page .cards > .panel { margin-top: 0; }
 
 /* A button whose form was sent: it spins until the answer comes (the ajax forms set the same aria-busy). */
@@ -1203,7 +1268,7 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .sk-strip { display: grid; grid-auto-flow: column; grid-auto-columns: min(62%, 200px); gap: 10px; overflow: hidden; margin-top: 18px; }
 .sk-strip .sk { height: auto; aspect-ratio: 9 / 16; border-radius: 12px; }
 .sk-page .posts > .panel, .sk-page .accounts > .panel { margin-top: 0; }
-.sk-styles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.sk-styles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
 .sk-styles .sk { height: auto; aspect-ratio: 9 / 16; border-radius: 12px; }
 @media (max-width: 700px) { .sk-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

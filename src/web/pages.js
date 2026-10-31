@@ -261,8 +261,11 @@ function captionDetails(post) {
   return `<details class="facts"><summary>${icon('text')}הטקסט שעולה עם המצגת<span class="chev">${icon('chev')}</span></summary>${captionBlock(post)}</details>`;
 }
 
-/** A customer's card of a post the checks stopped before it had slides: what it was, and that it stopped. */
-const stoppedCard = (post) => `<article class="card acc acc-${esc(post.account_id)} post" id="post-${esc(post.id)}" data-post>
+/**
+ * A customer's card of a post the checks stopped before it had slides: what it was, and that it stopped. It has no
+ * buttons to close it, so the card keeps its own padding under the last line (style.css .post.stopped).
+ */
+const stoppedCard = (post) => `<article class="card acc acc-${esc(post.account_id)} post stopped" id="post-${esc(post.id)}" data-post>
 <div class="meta"><span class="end">${statusChip(post.status)}</span></div>
 <h3 class="hook">${esc(post.hook || post.topic || 'מצגת שלא הושלמה')}</h3>
 <p class="subline">הבדיקות שלנו עצרו אותה באמצע הכתיבה, ולכן אין בה שקפים.</p>
@@ -512,6 +515,9 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
   const kind = typeLabel(ctx, pack, post);
   const when = ctx.operator ? (post.slot_at ? stamp(post.slot_at) : '') : whenHe(post);
   const facts = factsBlock(ctx, post, { open: true });
+  // A post the checks stopped before it had slides shows no strip, no "TikTok view" over nothing and no empty caption:
+  // its card is what it was, with the card's own padding under it (style.css .post.stopped).
+  const slidesShown = Boolean(post.media?.tiktok?.length || post.media?.instagram?.length);
   const trace = d.steps
     .map((s) => {
       const det = s.detail || {};
@@ -572,12 +578,12 @@ ${redoBanners(d)}
 ${tiktokDraftBanners(ctx, post)}
 <div class="cols">
 <div>
-<section class="card acc acc-${esc(post.account_id)} post"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>
+<section class="card acc acc-${esc(post.account_id)} post${slidesShown ? '' : ' stopped'}"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
-<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}
-${post.media?.instagram ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
+${post.media?.tiktok?.length ? `<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}` : ''}
+${post.media?.instagram?.length ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
 ${trustLine(post)}
-<div class="capwrap">${captionBlock(post)}</div>
+${post.caption || post.caption_ig ? `<div class="capwrap">${captionBlock(post)}</div>` : ''}
 </section>
 ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
 ${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}
@@ -734,7 +740,7 @@ function quotaRow(q, mine = null) {
   const r = q.redos;
   const full = s.used >= s.limit;
   const own = q.shared && mine && q.accounts?.[mine] ? `<p class="muted small m4">לכל החשבונות שלכם יחד. בחשבון הזה ${q.accounts[mine].suggested === 1 ? 'הצעה אחת' : `${q.accounts[mine].suggested} הצעות`} החודש.</p>` : '';
-  return `<div><div class="row"><span>החודש</span><b class="num">נוצלו ${s.used} מתוך ${s.limit} הצעות · ${r.used} מתוך ${r.limit} החלפות</b></div>${own}<meter min="0" max="${s.limit || 1}" low="${(s.limit || 1) * 0.75}" high="${(s.limit || 1) * 0.9}" optimum="0" value="${Math.min(s.used, s.limit || 1)}"></meter>${s.held + r.held ? `<p class="muted small m4">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${full ? '<p class="small m4"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}</div>`;
+  return `<div><div class="row"><span>החודש</span> <b class="num">נוצלו ${s.used} מתוך ${s.limit} הצעות · ${r.used} מתוך ${r.limit} החלפות</b></div>${own}<meter min="0" max="${s.limit || 1}" low="${(s.limit || 1) * 0.75}" high="${(s.limit || 1) * 0.9}" optimum="0" value="${Math.min(s.used, s.limit || 1)}"></meter>${s.held + r.held ? `<p class="muted small m4">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${full ? '<p class="small m4"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}</div>`;
 }
 
 /**
@@ -867,7 +873,9 @@ function relChart(scored) {
       return `<a href="/post/${esc(p.id)}"><title>${esc(p.hook)}: ${p.rel.toFixed(2)}× (${esc(shortDate(p.published_at))})</title><rect class="${p.rel >= 1 ? 'c-up' : 'c-down'}" x="${at}" y="${top.toFixed(2)}" width="6" height="${Math.max(0.8, hgt).toFixed(2)}"/></a>`;
     })
     .join('');
-  return `<div class="chart rel2"><span class="ymax num" dir="ltr">2×</span><span class="ymid num" dir="ltr">1×</span><svg viewBox="0 0 ${Math.max(1, n) * W} 100" preserveAspectRatio="none" role="img" aria-label="כל פוסט מול החציון"><line class="c-base" x1="0" x2="${n * W}" y1="50" y2="50" vector-effect="non-scaling-stroke"/>${bars}</svg>${n ? `<div class="xt"><span>${esc(shortDate(posts[0].published_at))}</span><span>${esc(shortDate(posts[n - 1].published_at))}</span></div>` : ''}</div>
+  // The labels keep the page's direction, so they stand in the margin left for them as the views chart's do; only the
+  // words read left to right ("2×"). With dir on the label itself it sat on the bars' side, over the last bar.
+  return `<div class="chart rel2"><span class="ymax num"><bdi dir="ltr">2×</bdi></span><span class="ymid num"><bdi dir="ltr">1×</bdi></span><svg viewBox="0 0 ${Math.max(1, n) * W} 100" preserveAspectRatio="none" role="img" aria-label="כל פוסט מול החציון"><line class="c-base" x1="0" x2="${n * W}" y1="50" y2="50" vector-effect="non-scaling-stroke"/>${bars}</svg>${n ? `<div class="xt"><span>${esc(shortDate(posts[0].published_at))}</span><span>${esc(shortDate(posts[n - 1].published_at))}</span></div>` : ''}</div>
 <p class="legend"><span><i class="c-up"></i>מעל החציון <b class="num">${posts.filter((p) => p.rel >= 1).length}</b></span><span><i class="c-down"></i>מתחת <b class="num">${posts.filter((p) => p.rel < 1).length}</b></span></p>`;
 }
 

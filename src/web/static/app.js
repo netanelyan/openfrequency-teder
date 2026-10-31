@@ -239,21 +239,20 @@
     draw();
   });
 
-  // Dots that follow the slide strip.
+  // Dots that follow the slide strip: the dot of the slide most in view. On a phone the next slide shows two thirds of
+  // itself beside the first, and "the last one over 60%" lit the second dot while the first slide was in front.
   document.querySelectorAll('[data-strip]').forEach((strip) => {
     const dots = strip.nextElementSibling?.matches('.dots') ? [...strip.nextElementSibling.children] : [];
     if (!dots.length || !('IntersectionObserver' in window)) return;
     const slides = [...strip.children];
+    const seen = slides.map(() => 0);
     const io = new IntersectionObserver(
       (entries) => {
-        for (const en of entries) {
-          if (en.intersectionRatio > 0.6) {
-            const i = slides.indexOf(en.target);
-            dots.forEach((d, k) => d.classList.toggle('on', k === i));
-          }
-        }
+        for (const en of entries) seen[slides.indexOf(en.target)] = en.intersectionRatio;
+        const i = seen.indexOf(Math.max(...seen));
+        dots.forEach((d, k) => d.classList.toggle('on', k === i));
       },
-      { root: strip, threshold: [0.6] }
+      { root: strip, threshold: [0, 0.25, 0.5, 0.75, 1] }
     );
     slides.forEach((s) => io.observe(s));
   });

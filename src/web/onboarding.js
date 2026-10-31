@@ -571,21 +571,24 @@ ${formatsPanel}</div></div></form>
   // Another round of samples: the customer's are limited (sampleRoom), the operator's are not.
   const more = pc.operator ? { ok: true, why: null } : sampleRoom(ctx.db, r);
   const sched = pack && r.status !== 'live' ? scheduleData(ctx.db, pack) : null;
+  // The samples lead the page (the owner, 2026-10-31: "why are the slideshows at the end of the page? make them at the
+  // top"): how many passed and the buttons that act on them, the progress while more are written, the cards; then the
+  // account, its networks and its days and times.
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
     `${head}${samplesSaid(pc, r, pack, { busy, more })}
-<section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
-<p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
+<section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p>
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
 ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
-${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
+${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
-<p class="muted small mt12">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p>
+${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>` : ''}</section>
+<section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
+<p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
 ${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
 ${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
-${ops}
-<div class="posts mt16">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>`
+${ops}`
   );
 }
 

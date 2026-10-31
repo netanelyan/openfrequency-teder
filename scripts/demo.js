@@ -57,6 +57,10 @@ const db = ctx.db;
 const pack = ctx.pack('demo');
 // Every demo account is the fictional workspace's, the one the stand-in for accounts signs the browser in to.
 db.run('UPDATE accounts SET workspace_id = ?', DEMO_WORKSPACE.id);
+// That workspace has paid, as the stand-in answers (scripts/demo-accounts.js) and as the entitlement client keeps the
+// answer (src/billing/entitlement.js): without it the dry publisher refused every post as unpaid, and Results was empty.
+const { setSetting } = await import('../src/core/store.js');
+setSetting(db, `entitlement:${DEMO_WORKSPACE.id}`, { allowed: true, access: 'paid', paidThrough: null, cancelAt: null, plan: null, stoppedAt: null, checkedAt: new Date().toISOString() });
 
 const now = Date.now();
 const today = israelDate(now);
