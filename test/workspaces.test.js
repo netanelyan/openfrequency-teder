@@ -198,6 +198,12 @@ test('the positive controls: B sees its own things, and the operator sees every 
   assert.ok((await (await get('/progress.json', op)).json()).items.some((x) => x.subject === 'BravoNiche'), "the operator's block lists every workspace's setups, as /new does");
 });
 
+test("the ready-made sources by niche are the operator's: a customer's Sources page has no such list", async () => {
+  const list = /מקורות מוכנים לפי נישה/;
+  assert.doesNotMatch(await (await get('/sources', B.cookie)).text(), list, "B's own Sources page");
+  assert.match(await (await get('/sources?account=bravo', fake.session(operator()).cookie)).text(), list, "the operator's, on B's account");
+});
+
 test("A's month is A's: the suggestions in A's header are its own account's, and no page shows A the money", async () => {
   const [used, limit] = /הצעות החודש: (\d+) מתוך (\d+)/.exec(await (await get('/', A.cookie)).text()).slice(1).map(Number);
   const own = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = 'alpha' AND quota_kind = 'suggestion'").n;

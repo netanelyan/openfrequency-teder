@@ -121,7 +121,7 @@ test('a feed is read only where robots.txt lets Claude in, item by item, long re
   clearRobots();
 });
 
-test('the catalog: feeds per niche, the refused ones named with why, and adding one asks robots.txt again', async () => {
+test("the catalog: feeds per niche, the refused ones named with why, adding one is the operator's and asks robots.txt again", async () => {
   for (const [niche, n] of Object.entries(CATALOG)) {
     assert.ok(n.sources.length >= 3, niche);
     for (const s of n.sources) {
@@ -135,7 +135,10 @@ test('the catalog: feeds per niche, the refused ones named with why, and adding 
     const db = new Db(path.join(home, 'data.db'));
     opened.push(db);
     const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home, 'packs') }), log: () => {} });
-    const user = { name: 'owner' };
+    const user = { name: 'owner', operator: true };
+    // The list is the operator's: a customer adding from it is refused before anything is asked or written.
+    await assert.rejects(addCatalogSource(ctx, { name: 'customer' }, {}, { account: 'demo', niche: 'mma', id: 'sherdog-articles' }), /רק מי שמפעיל/);
+    assert.equal(db.get("SELECT COUNT(*) AS n FROM sources WHERE account_id = 'demo' AND key = 'catalog-sherdog-articles'").n, 0);
     ctx.robotsAllows = async () => ({ ok: false, why: 'robots.txt tells Claude\'s agents to stay out' });
     await assert.rejects(addCatalogSource(ctx, user, {}, { account: 'demo', niche: 'mma', id: 'sherdog-articles' }), /לא נוסף: robots.txt/);
     ctx.robotsAllows = async () => ({ ok: true });

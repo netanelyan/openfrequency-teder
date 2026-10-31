@@ -1029,8 +1029,13 @@ ${catalogPanel(ctx, current, sources)}`;
   return layout({ ...ctx, title: 'מקורות', active: 'sources' }, body);
 }
 
-/** Outlets to add in one tap, per niche, and the ones asked for that cannot be read, with why. */
+/**
+ * Outlets to add in one tap, per niche, and the ones asked for that cannot be read, with why. The operator's alone: the
+ * list is our own first niches' (football, MMA, startups), in English and with robots.txt's words, and a customer's
+ * sources come from their account's setup and the form above (the owner, 2026-10-31: "mispar9 is about football only").
+ */
 function catalogPanel(ctx, current, sources) {
+  if (!ctx.operator) return '';
   const have = new Set(sources.filter((s) => s.status === 'approved').map((s) => s.url));
   const niche = ([key, n]) => `<details class="facts"><summary>${esc(n.name)} <span class="chip ghost">${n.sources.length}</span><span class="chev">${icon('chev')}</span></summary>
 <ul class="factlist">${n.sources

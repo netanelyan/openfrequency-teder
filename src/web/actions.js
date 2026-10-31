@@ -502,6 +502,7 @@ export function addSource(ctx, user, _p, form) {
  * the network for the tests.
  */
 export async function addCatalogSource(ctx, user, _p, form) {
+  operatorOnly(user); // the list is the operator's (src/web/pages.js catalogPanel)
   const account = String(form.account || '');
   if (!ctx.pack(account)) throw new ActionError('אין חשבון כזה', 404);
   const src = catalogSource(String(form.niche || ''), String(form.id || ''));

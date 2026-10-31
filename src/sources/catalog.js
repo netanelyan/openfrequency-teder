@@ -1,4 +1,5 @@
-// Outlets an account can add to its approved sources in one click (the Sources page), per niche: feeds that were
+// Outlets the operator can add to an account's approved sources in one click (the Sources page; a customer never sees
+// the list, src/web/pages.js catalogPanel), per niche: feeds that were
 // read through the network door and whose sites' robots.txt lets this engine and Claude in (robots.js), checked on
 // 2026-10-19. The check runs again every time a source is read, so a site that later says no is not read.
 //

@@ -1324,6 +1324,9 @@ engine can act on, and what changed:
   source says is drafted by Claude: checked on 2026-10-19, The Athletic, the BBC, the
   Guardian, ESPN, ONE, TechCrunch and the two largest fight-news sites all tell
   Anthropic's agents to stay out, and are not read (src/sources/catalog.js names them); Sport5, Calcalist and CTech publish no feed.
+  Since 2026-10-31 the list is the operator's alone (the owner, on a football customer's Sources page showing MMA and
+  startups: "mispar9 is about football only"): our own first niches, in English, with robots.txt's words; a customer's
+  sources come from their account's setup and the add-a-source form.
   The check runs at every read, for every account's feeds and pages. A new fact
   kind, ATTRIBUTED (`fact.who`), is what someone said or reported: its quote is
   verified word for word as always, then the document must name them and a word of
