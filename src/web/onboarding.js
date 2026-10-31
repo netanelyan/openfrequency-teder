@@ -385,18 +385,46 @@ function listPage(ctx, pc) {
 
 const DAY_MS = 86_400_000;
 
-/** A source as the customer sees it: its name, its address, a plain word where one helps. The operator: every score. */
-function sourceCard(pc, c) {
+/** A source's site, for its row: the host without "www.". */
+const siteOf = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www./, '');
+  } catch {
+    return String(url || '');
+  }
+};
+
+/**
+ * A source as one row (the owner, 2026-10-31: compact, not a page of cards): the box to approve it, its name on one
+ * line with its site under it, a plain word where one helps, and the site to open. The operator also sees every score
+ * and the reasons, with why it is trusted to edit, folded under the row; the customer's is the reason found, as it is.
+ */
+function sourceRow(pc, c) {
   const s = c.score || {};
   const fresh = c.newest && Date.now() - Date.parse(c.newest) < 2 * DAY_MS;
   const chips = pc.operator
     ? `<span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${s.authority >= 7 ? 'ok' : s.authority >= 5 ? '' : 'warn'}">סמכות ${s.authority}/10</span><span class="chip">עדכניות ${s.freshness}/10</span>${s.relevance != null ? `<span class="chip ${s.relevance >= 6 ? '' : 'warn'}">רלוונטיות ${s.relevance}/10</span>` : ''}<span class="chip ${s.terms === 'ok' ? 'ok' : s.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[s.terms] || s.terms)}</span>`
-    : `${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`;
-  const reason = pc.operator ? `${s.reason || ''}${s.relevanceReason ? ` · ${s.relevanceReason}` : ''}${s.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}` : c.origin === 'example' ? 'האתר שנתתם לנו.' : s.reason || '';
-  return `<article class="card srccard"><div class="meta p0"><label class="chip ghost"><input type="checkbox" name="approve_${esc(c.id)}"${strong(c) ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}> לאשר</label>${chips}</div>
-<h3 class="srcname" dir="auto">${esc(c.name)}</h3><a class="small ltr" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.url)}</a>
-<p class="muted small m6" dir="auto">${esc(reason)}</p>
-<label class="f mt12">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(c.why || s.reason)}" maxlength="300"></label></article>`;
+    : `${c.origin === 'example' ? '<span class="chip">מהאתרים שלכם</span>' : ''}${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`;
+  const more = pc.operator
+    ? `<details class="srcmore"><summary class="muted small" dir="auto">${esc(`${s.reason || ''}${s.relevanceReason ? ` · ${s.relevanceReason}` : ''}${s.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}`)}</summary><label class="f">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(c.why || s.reason)}" maxlength="300"></label></details>`
+    : '';
+  return `<li class="srcrow"><label><input type="checkbox" name="approve_${esc(c.id)}"${strong(c) ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}><span class="srcwho"><b dir="auto">${esc(c.name)}</b><span class="ltr">${esc(siteOf(c.url))}</span></span>${chips ? `<span class="srctags">${chips}</span>` : ''}</label><a class="srcopen" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`לפתוח את ${c.name}`)}" title="${esc(c.url)}">${icon('ext')}</a>${more}</li>`;
+}
+
+/** How many sources the list shows before the rest fold away: every ticked one first, then others up to this many. */
+const SOURCES_SHOWN = 8;
+
+/** The sources found, as rows: the ticked ones and a few more, the rest under "עוד", and (the operator) those not offered. */
+function sourcesPanel(pc, shown, hidden) {
+  const ticked = shown.filter(strong);
+  const first = [...ticked, ...shown.filter((c) => !strong(c)).slice(0, Math.max(0, SOURCES_SHOWN - ticked.length))];
+  const rest = shown.filter((c) => !first.includes(c));
+  const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c)).join('')}</ul>`;
+  const said = `${ticked.length ? `סימנו ${ticked.length === 1 ? 'מקור חזק אחד' : `${ticked.length} מקורות חזקים`}. ` : ''}תדר כותב רק ממקורות מסומנים.`;
+  return `<section class="panel" id="found"><header><h2>המקורות שמצאנו</h2></header><p class="muted small m0">${esc(said)}</p>
+${rows(first)}
+${rest.length ? `<details class="srcrest"><summary>${rest.length === 1 ? 'עוד מקור אחד' : `עוד ${rest.length} מקורות`}</summary>${rows(rest)}</details>` : ''}
+${pc.operator && hidden.length ? `<details class="srcrest"><summary class="muted small">מקורות שלא הוצגו ללקוח (${hidden.length})</summary>${rows(hidden)}</details>` : ''}</section>`;
 }
 
 /** Too few good sources: said plainly, with a search again with more of the owner's own sites. */
@@ -458,12 +486,11 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
     // The customer is offered the good ones only; the operator sees the rest too, folded away.
     const shown = cands.filter(offered);
     const hidden = cands.filter((c) => !offered(c));
-    const hiddenPanel = pc.operator && hidden.length ? `<details class="mt12"><summary class="muted small">מקורות שלא הוצגו ללקוח (${hidden.length})</summary><div class="grid12">${hidden.map((c) => sourceCard(pc, c)).join('')}</div></details>` : '';
     return layout(
       { ...pc, title: 'בחירת מקורות', active: 'new' },
       `${head}${saidBanner(r.found.said)}${shown.length < FEW ? fewPanel(pc, r, shown.length) : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
-<div class="cols"><div class="grid12">${shown.map((c) => sourceCard(pc, c)).join('') || `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}${hiddenPanel}</div>
+<div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
 <div class="grid12"><section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
 ${nameFields(pc, r)}
 <p class="muted small m0">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>

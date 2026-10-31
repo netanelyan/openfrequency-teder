@@ -215,6 +215,12 @@ export function connectRoutes(links) {
 
 /* ------------------------------------------------------------------ the two doors without a session */
 
+/**
+ * A handle in a Hebrew sentence, kept left to right (Unicode's isolates survive the escaping): at the start of a
+ * right-to-left line its @ was drawn after the name ("mispar9@").
+ */
+const handleHe = (username) => `⁦@${username}⁩`;
+
 function resultPage({ title, text, actions = '', v = 1 }) {
   return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="robots" content="noindex"><title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
 <body class="login"><main class="card">
@@ -318,7 +324,7 @@ export async function publicPick(ctx, { id, pageId, t = now() }) {
       const pack = ctx.pack(pick.target.id);
       if (pack) await refreshConnections(ctx.db, pack, { t, prefer });
     }
-    const who = platform === 'facebook' ? page.name || got.username || 'העמוד בפייסבוק' : got.username || page.username ? `@${got.username || page.username}` : 'החשבון באינסטגרם';
+    const who = platform === 'facebook' ? page.name || got.username || 'העמוד בפייסבוק' : got.username || page.username ? handleHe(got.username || page.username) : 'החשבון באינסטגרם';
     return [200, resultPage({ title: `${name} מחובר`, text: `${who} מחובר עכשיו. אפשר לסגור את הדף.` })];
   } catch (e) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id} ${platform} pick: ${e.message}`);
@@ -364,7 +370,7 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
   const c = kept[platform];
   if (c?.status !== 'connected') return [200, resultPage({ title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר. אפשר לנסות שוב.`, actions: back })];
   const niche = j(ob.seed_json, {})?.niche || '';
-  return [200, resultPage({ title: `${name} מחובר`, text: `${c.username ? `@${c.username}` : `החשבון ב${name}`} מחובר עכשיו${niche ? ` לחשבון החדש על ${niche}` : ''}. כשהחשבון ייווצר, החיבור יעבור אליו לבד.`, actions: back })];
+  return [200, resultPage({ title: `${name} מחובר`, text: `${c.username ? handleHe(c.username) : `החשבון ב${name}`} מחובר עכשיו${niche ? ` לחשבון החדש על ${niche}` : ''}. כשהחשבון ייווצר, החיבור יעבור אליו לבד.`, actions: back })];
 }
 
 /**
@@ -412,6 +418,6 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const s = connectState(ctx.db, pack, platform);
   if (s.state !== 'connected') return [200, resultPage({ title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
   ctx.db.update('accounts', pack.id, { updated_at: nowIso() });
-  return [200, resultPage({ title: `${name} מחובר`, text: `${s.username ? `@${s.username}` : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.` })];
+  return [200, resultPage({ title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.` })];
 }
 
