@@ -450,6 +450,21 @@ test('the sources step: no scores or terms for the customer, off-topic and forbi
   assert.match(op, /רלוונטיות 1\/10/);
 });
 
+test('the sources step is compact: a row each, 8 open with the ticked ones first, the rest folded, ticked or not, and sent with the form', async () => {
+  const many = Array.from({ length: 12 }, (_, i) => cand(`m${i + 1}`, i === 10 ? { score: { authority: 6, freshness: 7, terms: 'ok', reason: 'x', relevance: 8 } } : {}));
+  reviewing('o-fold', 51, many);
+  const html = visible(await (await get('/new/o-fold', fake.session(customer(51)).cookie)).text());
+  const open = html.slice(0, html.indexOf('<details class="srcrest">'));
+  assert.equal((open.match(/<li class="srcrow">/g) || []).length, 8, '8 rows open');
+  assert.equal((html.match(/<li class="srcrow">/g) || []).length, 12, 'all 12 on the page');
+  assert.match(html, /סימנו 11 מקורות חזקים\. תדר כותב רק ממקורות מסומנים\./);
+  assert.match(html, /<summary>עוד 4 מקורות, 3 מהם מסומנים<\/summary>/);
+  assert.match(html, /<span class="ltr">m1\.example\.org<\/span>/, 'the site, not the whole address');
+  assert.doesNotMatch(html, /name="why_/, 'no reason box for the customer');
+  assert.match(html, /name="approve_m12" checked/, 'a folded ticked one is still ticked');
+  assert.doesNotMatch(html, /name="approve_m11" checked/);
+});
+
 test('too few good sources: said plainly, and a search again with more of the customer\'s own sites', async () => {
   reviewing('o-few', 1, [cand('one'), cand('off', { score: { authority: 9, freshness: 5, terms: 'ok', reason: 'x', relevance: 2 } })]);
   const { cookie } = fake.session(customer(1));

@@ -424,19 +424,22 @@ function sourceRow(pc, c) {
   return `<li class="srcrow"><label><input type="checkbox" name="approve_${esc(c.id)}"${strong(c) ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}><span class="srcwho"><b dir="auto">${esc(c.name)}</b><span class="ltr">${esc(siteOf(c.url))}</span></span>${chips ? `<span class="srctags">${chips}</span>` : ''}</label><a class="srcopen" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`לפתוח את ${c.name}`)}" title="${esc(c.url)}">${icon('ext')}</a>${more}</li>`;
 }
 
-/** How many sources the list shows before the rest fold away: every ticked one first, then others up to this many. */
+/** How many sources the list shows open; the rest fold away (still sent with the form, ticked or not). */
 const SOURCES_SHOWN = 8;
 
-/** The sources found, as rows: the ticked ones and a few more, the rest under "עוד", and (the operator) those not offered. */
+/** The sources found, as rows: the ticked ones first, 8 in all, the rest under "עוד", and (the operator) those not offered. */
 function sourcesPanel(pc, shown, hidden) {
   const ticked = shown.filter(strong);
-  const first = [...ticked, ...shown.filter((c) => !strong(c)).slice(0, Math.max(0, SOURCES_SHOWN - ticked.length))];
-  const rest = shown.filter((c) => !first.includes(c));
+  const ordered = [...ticked, ...shown.filter((c) => !strong(c))];
+  const first = ordered.slice(0, SOURCES_SHOWN);
+  const rest = ordered.slice(SOURCES_SHOWN);
+  const restTicked = rest.filter(strong).length;
   const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c)).join('')}</ul>`;
   const said = `${ticked.length ? `סימנו ${ticked.length === 1 ? 'מקור חזק אחד' : `${ticked.length} מקורות חזקים`}. ` : ''}תדר כותב רק ממקורות מסומנים.`;
+  const more = `${rest.length === 1 ? 'עוד מקור אחד' : `עוד ${rest.length} מקורות`}${restTicked ? `, ${restTicked === rest.length ? (rest.length === 1 ? 'מסומן' : 'כולם מסומנים') : restTicked === 1 ? 'אחד מהם מסומן' : `${restTicked} מהם מסומנים`}` : ''}`;
   return `<section class="panel" id="found"><header><h2>המקורות שמצאנו</h2></header><p class="muted small m0">${esc(said)}</p>
 ${rows(first)}
-${rest.length ? `<details class="srcrest"><summary>${rest.length === 1 ? 'עוד מקור אחד' : `עוד ${rest.length} מקורות`}</summary>${rows(rest)}</details>` : ''}
+${rest.length ? `<details class="srcrest"><summary>${esc(more)}</summary>${rows(rest)}</details>` : ''}
 ${pc.operator && hidden.length ? `<details class="srcrest"><summary class="muted small">מקורות שלא הוצגו ללקוח (${hidden.length})</summary>${rows(hidden)}</details>` : ''}</section>`;
 }
 
