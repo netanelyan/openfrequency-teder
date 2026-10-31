@@ -165,6 +165,18 @@ test("the operator's own account: approval chosen, TikTok chosen, the month's co
   assert.doesNotMatch(theirs, /action="\/accounts\/demo\/mode"/);
 });
 
+test('a Facebook Page is named as it is, with no @: a Page has a name, not a handle', async () => {
+  db.insert('zernio_connections', { account_id: 'demo', platform: 'facebook', zernio_account_id: 'z-facebook', username: 'עציץ ושמש', status: 'connected', issue: null, connected_at: new Date().toISOString(), checked_at: new Date().toISOString() });
+  try {
+    const html = await (await get('/accounts', fake.session(customer(1)).cookie)).text();
+    assert.match(html, /<b>פייסבוק<\/b> <span class="chip ok">מחובר<\/span> <bdi class="muted" dir="auto">עציץ ושמש<\/bdi>/);
+    assert.doesNotMatch(html, /@עציץ ושמש/);
+    assert.match(html, /<span class="ltr muted">@atzitz\.shemesh<\/span>/, 'TikTok keeps its @');
+  } finally {
+    db.run("DELETE FROM zernio_connections WHERE account_id = 'demo' AND platform = 'facebook'");
+  }
+});
+
 test('several accounts are a section each, in the same layout, one under the other', () => {
   const rows = accountRows(ctx).map((r) => ({ ...r, week: week(ctx, r.pack.id), style: null }));
   assert.deepEqual(rows.map((r) => r.pack.id), ['demo', 'second']);

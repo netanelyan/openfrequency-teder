@@ -96,7 +96,7 @@ export function connectPanel(ctx, d, { base = null, heading = null } = {}) {
             : s.state === 'reconnect'
               ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary' })
               : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost' });
-      return `<li class="net"><span class="who"><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}</span>${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${button ? `<span class="act">${button}</span>` : ''}</li>`;
+      return `<li class="net"><span class="who"><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? (s.platform === 'facebook' ? ` <bdi class="muted" dir="auto">${esc(s.username)}</bdi>` : ` <span class="ltr muted">@${esc(s.username)}</span>`) : ''}</span>${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${button ? `<span class="act">${button}</span>` : ''}</li>`;
     })
     .join('');
   const note = d.configured
