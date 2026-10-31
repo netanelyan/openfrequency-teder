@@ -386,7 +386,8 @@ export function todayPage(ctx, d) {
   const count = (k) => d.groups.reduce((s, g) => s + g[k].length, 0);
   const todo = needsYou(d, 6, ctx);
   // One number leads: what went out today, with the latest of it. What waits for the owner and what is scheduled sit
-  // beside it. What the checks stopped is not on home: it is on Posts and Results.
+  // beside it. What the checks stopped is not on home: it is on Posts and Results. Under them, when something runs or
+  // just ended, the block of work in progress (src/web/progress.js, drawn by server.js as d.progressHtml).
   const out = count('published');
   const last = d.groups.flatMap((g) => g.published).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))[0];
   const next = d.groups.flatMap((g) => g.scheduled).map((p) => p.slot_at).filter(Boolean).sort()[0];
@@ -398,6 +399,7 @@ ${stopBanners(ctx, d)}
 <a class="kpi lead${out ? ' ok' : ''}" href="/posts#published"><span class="l">פורסמו היום</span><span class="v num">${out}</span><span class="s">${last ? `האחרון ב-${esc(timeHe(last.published_at))}: ${esc(last.hook)}` : next ? `הבא עולה ב-${esc(when(next))}` : 'אין פוסט מתוזמן'}</span></a>
 <div class="kpi side">${side('/posts', 'waiting', 'מחכים לאישור')}${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}</div>
 </section>
+${d.progressHtml || ''}
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.</p>'}
 </section>

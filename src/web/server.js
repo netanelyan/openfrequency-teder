@@ -28,6 +28,7 @@ import { workspaceDeleteRoute } from './workspace-delete.js';
 import { entitlementClient } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
+import { progressOf, progressPanel, progressStatus } from './progress.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -448,7 +449,11 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
 
-      if (p === '/') return page(pages.todayPage(pc, data.today(sc)));
+      // Home, with the block of work in progress (src/web/progress.js): the workspace's new-account setups, the posts
+      // of the account shown being written.
+      if (p === '/') return page(pages.todayPage(pc, { ...data.today(sc), progressHtml: progressPanel(progressOf(c, sc)) }));
+      // What that block's script asks while something runs: JSON, never cached, the same workspace's and account's.
+      if (p === '/progress.json') return json(req, res, 200, progressStatus(progressOf(c, sc)));
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
       // The one page that is not one account's: every account of the workspace, and what waits in all of them.
       if (p === '/all') {

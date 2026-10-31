@@ -307,6 +307,51 @@ export function statusOf(ctx, r) {
   return { status: r.status, busy, key, line, ready, go };
 }
 
+/**
+ * A new account's work in the background, for the home page's block (src/web/progress.js): its search for sources and
+ * its sample posts, each while it runs (with the progress line its own page shows), then done, with where to go, until
+ * the next step is taken (the sources chosen, the samples gone through) and `within` at most after it ended (the
+ * samples' own time; a search's is the setup's last change, the search's end unless something was saved since). A
+ * search that stopped is said too, with the way to try again. The setups are those /new lists: the workspace's, every
+ * one for the operator. A search left 'discovering' with no job in this process was cut off by a restart: said as
+ * stopped, without writing anything (its own page marks it, as before). Items: { id, state: running | ready | stopped,
+ * title, subject, line, href, go, at }.
+ */
+export function onboardingWork(ctx, { t = now(), within = DAY_MS } = {}) {
+  const since = new Date(t - within).toISOString();
+  const busy = [...running.keys()];
+  const mine = ctx.workspaceId == null ? '' : ' AND workspace_id = ?';
+  const rows = ctx.db.all(`SELECT * FROM onboarding WHERE (updated_at >= ? OR id IN (${busy.map(() => '?').join(', ') || 'NULL'}))${mine} ORDER BY updated_at DESC LIMIT 20`, since, ...busy, ...(mine ? [ctx.workspaceId] : []));
+  const out = [];
+  for (const raw of rows) {
+    const r = { ...raw, seed: j(raw.seed_json, {}), found: j(raw.candidates_json, {}) };
+    const job = running.has(r.id);
+    const recent = (at) => Date.parse(at || r.updated_at) >= t - within;
+    const page = `/new/${r.id}`;
+    const niche = r.seed.niche || '';
+    if (['discovering', 'review', 'failed'].includes(r.status)) {
+      const base = { id: `o:${r.id}:sources`, subject: niche, at: r.updated_at };
+      if (r.status === 'discovering' && job) out.push({ ...base, state: 'running', title: STATUS_HE.discovering, line: progressLine(progress.get(r.id)) });
+      else if (r.status === 'review' && recent()) out.push({ ...base, state: 'ready', title: 'המקורות מוכנים, אפשר לבחור', line: '', href: `${page}#sources`, go: 'לבחור מקורות' });
+      else if (r.status !== 'review' && recent()) out.push({ ...base, state: 'stopped', title: STATUS_HE.failed, line: 'אפשר לנסות שוב עם אותם פרטים.', href: page, go: 'להמשיך' });
+      continue;
+    }
+    if (!r.pack_id) continue;
+    const base = { id: `o:${r.id}:samples`, subject: ctx.pack(r.pack_id)?.meta.displayName || niche };
+    if (job) {
+      out.push({ ...base, state: 'running', title: STATUS_HE.samples, line: progressLine(progress.get(r.id)), at: r.updated_at });
+      continue;
+    }
+    // Done writing, and not yet gone through ('ready' and 'live' are the steps after).
+    const s = r.found.samples;
+    if (r.status !== 'samples' || !s?.at || !recent(s.at)) continue;
+    const made = s.made || 0;
+    if (s.failure) out.push({ ...base, state: 'stopped', title: made ? `${made} מתוך ${SAMPLE_TARGET} פוסטים לדוגמה מוכנים` : 'אף פוסט לדוגמה לא נכתב', line: SAMPLES_HE[s.failure] || SAMPLES_HE.error, href: page, go: 'להמשיך', at: s.at });
+    else out.push({ ...base, state: 'ready', title: 'הפוסטים לדוגמה מוכנים', line: `${sampleCount(ctx.db, r.pack_id)} מתוך ${SAMPLE_TARGET} דוגמאות עברו את כל הבדיקות.`, href: page, go: 'להמשיך', at: s.at });
+  }
+  return out;
+}
+
 /** The progress line and the call to move on, polled by the page's script (src/web/static/app.js data-poll). */
 function pollBox(ctx, r, { href }) {
   const s = statusOf(ctx, r);

@@ -284,7 +284,9 @@
   document.addEventListener('keydown', closeSwitch);
   // A page waiting on work in the background (a new account's search for sources, its sample posts) asks how it goes
   // and changes only its progress line: never a reload under someone typing. When there is something new to show, the
-  // page moves on by itself if nothing was typed, else it says so and waits for a tap.
+  // page moves on by itself if nothing was typed, else it says so and waits for a tap. A block that lists several
+  // pieces of work (home's, data-swap, src/web/progress.js) gets a line each by its name, and when there is something
+  // new to show it is drawn again in place from the answer's html, never a reload; empty, it goes.
   const poll = document.querySelector('[data-poll]');
   if (poll) {
     let typed = false;
@@ -299,7 +301,16 @@
           const s = await res.json();
           const line = poll.querySelector('[data-progress]');
           if (line && s.line && line.textContent !== s.line) line.textContent = s.line;
-          if (s.key && s.key !== poll.dataset.key) {
+          for (const el of poll.querySelectorAll('[data-progress]')) {
+            const text = s.lines?.[el.dataset.progress];
+            if (text && el.textContent !== text) el.textContent = text;
+          }
+          if (s.key && s.key !== poll.dataset.key && 'swap' in poll.dataset) {
+            poll.innerHTML = s.html || '';
+            poll.hidden = !s.html;
+            poll.dataset.key = s.key;
+            if (!s.busy) return;
+          } else if (s.key && s.key !== poll.dataset.key) {
             if (!busyTyping()) {
               const to = new URL(poll.dataset.href, location.href);
               if (to.pathname !== location.pathname) return location.assign(to.href);

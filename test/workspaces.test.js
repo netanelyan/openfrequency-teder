@@ -155,7 +155,7 @@ function snapshotB() {
 // Every page, as A would open it, and as A might try to reach B's: by ?account=, by B's ids in the address.
 const pagesFor = () => [
   '/', '/posts', '/all', '/accounts', '/results', '/sources', '/facts', '/topics', '/rivals', '/sounds', '/settings', '/more', '/new', '/styles',
-  '/static/accounts.css', '/notifications/latest.json',
+  '/static/accounts.css', '/notifications/latest.json', '/progress.json',
   '/?account=bravo', '/posts?account=bravo', '/accounts?account=bravo', '/results?account=bravo', '/sources?account=bravo', '/facts?account=bravo', '/topics?account=bravo', '/rivals?account=bravo', '/sounds?account=bravo', '/settings?account=loose',
   `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`, `/new/${B.onboarding}/status`,
   '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`,
@@ -180,7 +180,8 @@ test('workspace A sees nothing of workspace B, or of an account in no workspace:
 });
 
 test('the positive controls: B sees its own things, and the operator sees every workspace and the account in none', async () => {
-  for (const [p, re] of [['/rivals', /bravo\.rival/], ['/sounds', /BravoSound/], ['/topics', /BravoTopic/], ['/facts', /BravoFacts/], ['/sources', /BravoSource/], [`/post/${B.post}`, /bravo/i], ['/new', /BravoNiche/], ['/', /bravo/]]) {
+  // B's setup found its sources today: home's block of work in progress lists it, for B (src/web/progress.js).
+  for (const [p, re] of [['/rivals', /bravo\.rival/], ['/sounds', /BravoSound/], ['/topics', /BravoTopic/], ['/facts', /BravoFacts/], ['/sources', /BravoSource/], [`/post/${B.post}`, /bravo/i], ['/new', /BravoNiche/], ['/', /bravo/], ['/', /BravoNiche/], ['/progress.json', /BravoNiche/]]) {
     const res = await get(p, B.cookie);
     assert.equal(res.status, 200, p);
     assert.match(await res.text(), re, p);
@@ -194,6 +195,7 @@ test('the positive controls: B sees its own things, and the operator sees every 
   const all = await (await get('/all', op)).text();
   for (const id of ['alpha', 'bravo', 'loose']) assert.match(all, new RegExp(`acc-${id}`), `the operator sees ${id}`);
   assert.match((await (await get('/notifications/latest.json', op)).json()).title, /LooseNotice/, "the operator's latest is any account's");
+  assert.ok((await (await get('/progress.json', op)).json()).items.some((x) => x.subject === 'BravoNiche'), "the operator's block lists every workspace's setups, as /new does");
 });
 
 test("A's month is A's: the suggestions in A's header are its own account's, and no page shows A the money", async () => {

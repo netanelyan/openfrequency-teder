@@ -940,6 +940,24 @@ a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
 @media (max-width: 480px) { .acctab .r { grid-template-columns: minmax(0, 1fr) repeat(3, 56px); gap: 4px; } .acctab .r.h > span { font-size: 11px; } }
 .sumtab td:not(:first-child), .sumtab th:not(:first-child) { text-align: center; }
 .home-panel { margin: 0 0 20px; }
+/* Home's work in progress (src/web/progress.js): a row an item, its state as the round mark at its start (a turning
+   ring while it runs, a green check once done, orange when it stopped), what it is, what about and how far, and once
+   done the way to it at the row's end. The ring stands still with reduced motion (the rule that turns animation off). */
+.inprog-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.inprog-list li { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 0; border-top: 1px solid var(--line); }
+.inprog-list li:first-child { border-top: 0; }
+.inprog-list .ico { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--ink-3); }
+.inprog-list .ready .ico { background: var(--ok-bg); color: var(--ok); }
+.inprog-list .stopped .ico { background: var(--warn-bg); color: var(--warn); }
+.inprog-list .ico svg.i { width: 18px; height: 18px; stroke-width: 2.2; }
+.inprog-list .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent-fill); animation: spin 0.9s linear infinite; }
+.inprog-list .tx { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.inprog-list .tx b { font-weight: 600; overflow-wrap: anywhere; }
+.inprog-list .sub { color: var(--ink-3); font-size: 13px; overflow-wrap: anywhere; }
+.inprog-list .sub > :empty { display: none; }
+.inprog-list .sub > * + *::before { content: '·'; margin-inline: 6px; }
+.inprog-list li > .btn { flex: none; }
+.inprog-list .ready > .btn { color: var(--accent); }
 /* The page of every account: what waits, account by account, a line a post with its cover and one approve. */
 .qgroup + .qgroup { margin-top: 20px; }
 .qgroup > header { display: flex; align-items: center; gap: 8px; min-height: 36px; margin-bottom: 4px; }
