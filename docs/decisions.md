@@ -2120,3 +2120,11 @@ and a pick returns there; `back` is only ever one of those two (styles.js backOf
 The account page's style panel keeps its link, now "לראות את כל העיצובים". Settings' panels flow in one container that
 CSS columns split in two on a desk, each panel whole (.set-cols): in its two fixed columns a customer's right column
 ended at 2310px and the left at 549px.
+
+### A new account goes on with three samples (2026-10-31)
+
+Asked whether setup could finish at 3 samples instead of 5, the owner answered "ok". "עברתי על הדוגמאות", the step
+after it ("להעלות לאוויר") and the setup checklist (accounts /setup) now need SAMPLE_ENOUGH, three samples that passed
+every check, where they needed five; a round of samples still asks for five (SAMPLE_TARGET), and is counted a success at
+three, as it already was. The copy that promised five says "פוסטים לדוגמה" or "לפחות שלושה", and the samples bar says how
+many passed and, under three, that it takes three to go on (onboarding.js samplesLine).

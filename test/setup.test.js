@@ -137,12 +137,12 @@ test('each onboarding stage: searching, failed, sources to pick, samples being w
   assert.deepEqual([k.samples.status, k.samples.href], ['working', `${T}/new/o1`], 'samples being written');
   __onboarding.running.clear();
 
-  samples('alpha', 3);
-  assert.match(byKey(await steps(6)).samples.detail, /3 מתוך 5/);
-  samples('alpha', 2, 3);
+  samples('alpha', 2);
+  assert.equal(byKey(await steps(6)).samples.detail, '2 דוגמאות עברו את כל הבדיקות. צריך לפחות 3 כדי להמשיך. אפשר ליצור עוד.');
+  samples('alpha', 1, 2);
   k = byKey(await steps(6));
-  assert.deepEqual([k.samples.status, k.samples.href], ['todo', `${T}/new/o1`], 'five to look over');
-  assert.match(k.samples.detail, /חמשת הפוסטים מוכנים/);
+  assert.deepEqual([k.samples.status, k.samples.href], ['todo', `${T}/new/o1`], 'three are enough to look over');
+  assert.equal(k.samples.detail, 'הפוסטים לדוגמה מוכנים ומחכים שתעברו עליהם.');
 
   db.run("UPDATE onboarding SET status = 'ready' WHERE id = 'o1'");
   k = byKey(await steps(6));

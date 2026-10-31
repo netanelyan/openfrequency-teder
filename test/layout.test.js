@@ -76,7 +76,7 @@ test('the setup page opens on its samples: the count, the buttons and the cards 
   const html = await (await get('/new/o-lay', fake.session(customer(1)).cookie)).text();
   const first = html.indexOf('<article class="card acc acc-demo post');
   assert.ok(first > 0, 'the cards are there');
-  const count = html.indexOf('1 מתוך 5 דוגמאות עברו את כל הבדיקות.');
+  const count = html.indexOf('דוגמה אחת עברה את כל הבדיקות. צריך לפחות 3 כדי להמשיך.');
   const more = html.indexOf(`action="/new/o-lay/samples"`);
   const connect = html.indexOf('id="connect"');
   const schedule = html.indexOf('id="schedule"');

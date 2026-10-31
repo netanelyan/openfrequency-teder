@@ -158,7 +158,7 @@ test('sample posts: being written with how many are ready, then ready with the w
   for (let i = 0; i < 5; i++) post('sample', { sample: 1 });
   db.run('UPDATE onboarding SET candidates_json = ? WHERE id = ?', JSON.stringify({ samples: { made: 5, failure: null, at: iso(Date.now()) } }), 'o-smp');
   const ready = await status(cookie);
-  assert.deepEqual(ready.items, [{ id: 'o:o-smp:samples', state: 'ready', title: 'הפוסטים לדוגמה מוכנים', subject: name, line: '5 מתוך 5 דוגמאות עברו את כל הבדיקות.', href: '/new/o-smp', go: 'להמשיך' }]);
+  assert.deepEqual(ready.items, [{ id: 'o:o-smp:samples', state: 'ready', title: 'הפוסטים לדוגמה מוכנים', subject: name, line: '5 דוגמאות עברו את כל הבדיקות.', href: '/new/o-smp', go: 'להמשיך' }]);
   // Too few, and why, from the setup page's own words.
   db.run('UPDATE onboarding SET candidates_json = ? WHERE id = ?', JSON.stringify({ samples: { made: 2, failure: 'nofacts', at: iso(Date.now()) } }), 'o-smp');
   const few = (await status(cookie)).items[0];

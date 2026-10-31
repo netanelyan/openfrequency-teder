@@ -22,10 +22,11 @@ import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport
 // The new-account flow, on the website:
 //
 //   seed  ->  discovery (in the background)  ->  approve sources, name the account
-//         ->  the pack is written (no code)  ->  5 sample posts to review, the days and times to post on
+//         ->  the pack is written (no code)  ->  sample posts to review (a press asks for 5), the days and times
 //         ->  live, in Approve mode
 //
-// Nothing goes live before five samples exist and the owner has looked at them.
+// Nothing goes live before three samples (SAMPLE_ENOUGH) exist and the owner has looked at them (the owner,
+// 2026-10-31, asked whether setup could finish at 3 instead of 5: "ok").
 //
 // WHILE THE SOURCES ARE SEARCHED the owner does the rest of the setup on the same page, and each part is kept on the
 // onboarding (setup_json, src/onboarding/setup.js) until the account exists: the name and the handle (offered again on
@@ -89,6 +90,14 @@ export const hasAccount = (db, workspaceId) => customerWorkspace(workspaceId) &&
 export const SAMPLE_TARGET = 5;
 export const SAMPLE_ENOUGH = 3;
 export const SAMPLE_ATTEMPTS = 9;
+
+/** How many samples passed, and while that is fewer than SAMPLE_ENOUGH, that it takes three to go on. */
+export const samplesLine = (good) => {
+  const need = `צריך לפחות ${SAMPLE_ENOUGH}`;
+  if (!good) return `${need} דוגמאות שעוברות את כל הבדיקות כדי להמשיך.`;
+  const passed = `${good === 1 ? 'דוגמה אחת עברה' : `${good} דוגמאות עברו`} את כל הבדיקות.`;
+  return good >= SAMPLE_ENOUGH ? passed : `${passed} ${need} כדי להמשיך.`;
+};
 
 /**
  * How many rounds of samples a customer may ask for: two for each new account (the first five, and one more press), and
@@ -352,7 +361,7 @@ export function onboardingWork(ctx, { t = now(), within = DAY_MS } = {}) {
     if (r.status !== 'samples' || !s?.at || !recent(s.at)) continue;
     const made = s.made || 0;
     if (s.failure) out.push({ ...base, state: 'stopped', title: made ? `${made} מתוך ${SAMPLE_TARGET} פוסטים לדוגמה מוכנים` : 'אף פוסט לדוגמה לא נכתב', line: SAMPLES_HE[s.failure] || SAMPLES_HE.error, href: page, go: 'להמשיך', at: s.at });
-    else out.push({ ...base, state: 'ready', title: 'הפוסטים לדוגמה מוכנים', line: `${sampleCount(ctx.db, r.pack_id)} מתוך ${SAMPLE_TARGET} דוגמאות עברו את כל הבדיקות.`, href: page, go: 'להמשיך', at: s.at });
+    else out.push({ ...base, state: 'ready', title: 'הפוסטים לדוגמה מוכנים', line: samplesLine(sampleCount(ctx.db, r.pack_id)), href: page, go: 'להמשיך', at: s.at });
   }
   return out;
 }
@@ -432,7 +441,7 @@ function listPage(ctx, pc) {
   const rows = (ctx.workspaceId == null ? ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20') : ctx.db.all('SELECT * FROM onboarding WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 20', ctx.workspaceId)).map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
   return layout(
     { ...pc, title: 'חשבון חדש', active: 'new' },
-    `<div class="head"><h1>חשבון חדש</h1>${one ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים חמישה פוסטים לדוגמה.</span>'}</div>
+    `<div class="head"><h1>חשבון חדש</h1>${one ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים פוסטים לדוגמה.</span>'}</div>
 <div class="cols">${one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
 <div class="actions p0"><a class="btn" href="/accounts">לחשבון שלכם</a></div></section>` : `<section class="panel"><header><h2>מתחילים מכאן</h2></header>
 <p class="muted">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
@@ -579,16 +588,16 @@ ${formatsPanel}</div></div></form>
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
     `${head}${samplesSaid(pc, r, pack, { busy, more })}
-<section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p>
+<section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
-${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
+${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
 ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
 ${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>` : ''}</section>
 ${pack && good ? designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` }) : ''}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
-<p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
+<p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
 ${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
 ${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
 ${ops}`
@@ -791,7 +800,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       (ctx, user, m) => {
         const r = row(ctx, m[1]);
         const n = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", r.pack_id).n;
-        if (n < 5) throw new ActionError(`צריך חמש דוגמאות שעברו את הבדיקות, יש ${n}`);
+        if (n < SAMPLE_ENOUGH) throw new ActionError(`צריך לפחות ${SAMPLE_ENOUGH} דוגמאות שעברו את הבדיקות, יש ${n}`);
         ctx.db.update('onboarding', r.id, { status: 'ready', updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: r.pack_id, detail: { reviewed: n } });
         return { ok: true, message: 'סומן שעברתם על הדוגמאות.', redirect: `/new/${r.id}` };
@@ -802,7 +811,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       /^\/new\/([\w-]+)\/live$/,
       (ctx, user, m) => {
         const r = row(ctx, m[1]);
-        if (r.status !== 'ready') throw new ActionError('קודם עוברים על חמש הדוגמאות');
+        if (r.status !== 'ready') throw new ActionError('קודם עוברים על הדוגמאות');
         ctx.db.update('accounts', r.pack_id, { status: 'active', mode: 'approve', updated_at: nowIso() });
         ctx.db.update('onboarding', r.id, { status: 'live', updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'went_live', accountId: r.pack_id });

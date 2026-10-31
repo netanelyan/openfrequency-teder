@@ -2,7 +2,7 @@ import { connectState, onboardingStates } from '../publish/connect.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { internalRefusal } from './demos.js';
 import { PLATFORM_NAME } from './connect.js';
-import { onboardingBusy } from './onboarding.js';
+import { SAMPLE_ENOUGH, onboardingBusy, samplesLine } from './onboarding.js';
 import { forWorkspace } from './workspace.js';
 
 // GET /internal/setup?workspace=<id>: a workspace's setup steps in Teder, for the checklist on accounts' /setup page
@@ -71,14 +71,14 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
     steps.push(step('sources', 'בוחרים מקורות', 'done', { detail: k === 1 ? 'מקור אחד מאושר.' : k > 1 ? `${k} מקורות מאושרים.` : '' }));
   }
 
-  // Five sample posts, written in the background, then looked over.
+  // Sample posts, written in the background, then looked over: three that passed are enough to go on (SAMPLE_ENOUGH).
   if (n < STAGE.samples) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo'));
   else if (stage === 'samples') {
     const good = account ? c.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", account.id).n : 0;
-    if (ob && onboardingBusy(ob.id)) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'working', { detail: 'כותבים עכשיו חמישה פוסטים לדוגמה.', href: obPage }));
-    else if (good >= 5) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo', { detail: 'חמשת הפוסטים מוכנים ומחכים שתעברו עליהם.', href: obPage }));
-    else if (good > 0) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo', { detail: `${good} מתוך 5 דוגמאות עברו את הבדיקות. אפשר ליצור עוד.`, href: obPage }));
-    else steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo', { detail: 'יוצרים חמישה פוסטים לדוגמה ועוברים עליהם.', href: obPage }));
+    if (ob && onboardingBusy(ob.id)) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'working', { detail: 'כותבים עכשיו פוסטים לדוגמה.', href: obPage }));
+    else if (good >= SAMPLE_ENOUGH) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo', { detail: 'הפוסטים לדוגמה מוכנים ומחכים שתעברו עליהם.', href: obPage }));
+    else if (good > 0) steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo', { detail: `${samplesLine(good)} אפשר ליצור עוד.`, href: obPage }));
+    else steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'todo', { detail: 'יוצרים פוסטים לדוגמה ועוברים עליהם.', href: obPage }));
   } else steps.push(step('samples', 'עוברים על פוסטים לדוגמה', 'done'));
 
   // On air: the account active. A paused one was on air and has stopped.

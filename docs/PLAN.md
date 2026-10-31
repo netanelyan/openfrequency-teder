@@ -169,7 +169,7 @@ small script.
 | Accounts | status, mode, budget used, kill switch, last 7 days |
 | Results | per post and per format, winners and losers, what is being dropped and why |
 | Sources | approve, remove or add sources per account |
-| New account | the onboarding flow: seed, discovered sources to approve, 5 sample posts, go live |
+| New account | the onboarding flow: seed, discovered sources to approve, sample posts (3 enough), go live |
 | Settings | global kill switch, global budget, which keys are set (never their values), audit log |
 
 ## Phases

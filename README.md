@@ -124,7 +124,7 @@ there is nothing to open yet; `ready` is every required step done. The steps fol
 new-account flow: **account** is `todo` (to `/new`) with nothing started, `working` while
 sources are searched for, `attention` when the search failed, and done once the pack is
 written; **sources** is `todo` on the onboarding page while the sources wait to be picked;
-**samples** is `working` while the five samples are written, `todo` while they wait to be
+**samples** is `working` while samples are written (up to five a press), `todo` while they wait to be
 made or looked over, done once reviewed; **live** is done when the account is active, and
 `attention` when it is paused. **connect** is required, so the checklist never says
 ready with nothing to publish to: done once at least one platform the account publishes
@@ -343,8 +343,8 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 
 Adding an account is never code. Either on the website (*Accounts* > new account:
 a niche, an audience and a few example sites; the engine finds and scores sources,
-suggests formats, writes the pack with a look no other account has, and five sample
-posts must pass before it goes live), or by hand: `npm run init-private -- --pack <id>`
+suggests formats, writes the pack with a look no other account has, and at least three
+sample posts must pass before it goes live), or by hand: `npm run init-private -- --pack <id>`
 and edit its files.
 
 | File | Holds |

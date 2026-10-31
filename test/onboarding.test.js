@@ -205,7 +205,7 @@ test('adding an account needs no code: the onboarding writes a valid, distinct p
   }
 });
 
-test('the website flow: seed, discovery, approve sources, the pack is created, and it cannot go live without five samples', async () => {
+test('the website flow: seed, discovery, approve sources, the pack is created, and it cannot go live without three samples', async () => {
   const { home, cleanup } = tempHome();
   let server;
   let fake;
@@ -265,7 +265,7 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     const op = fake.session(operator()).cookie;
     assert.match(await (await fetch(`${base}/new/${id}`, { headers: { cookie: op } })).text(), /הערות למפעיל[\s\S]*ANTHROPIC_API_KEY/, 'the operator sees the notes');
     await post(`/new/${id}/live`, {});
-    assert.equal(ctx.db.get('SELECT status FROM accounts WHERE id = ?', row.pack_id).status, 'onboarding', 'no going live without five reviewed samples');
+    assert.equal(ctx.db.get('SELECT status FROM accounts WHERE id = ?', row.pack_id).status, 'onboarding', 'no going live without three reviewed samples');
   } finally {
     server?.close();
     await fake?.close();

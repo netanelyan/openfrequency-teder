@@ -32,7 +32,7 @@ says which keys are set without showing them.
 
 ### ANTHROPIC_API_KEY: writing the sample posts, scoring sources
 
-- **What it is.** Claude writes the five sample posts of a new account, scores each source found (authority,
+- **What it is.** Claude writes the sample posts of a new account, scores each source found (authority,
   freshness, terms of use, a one-line reason), writes the account's voice guide and turns the Hebrew niche into the
   English words YouTube is searched with. Without a key (the engine in recorded mode) no sample is written, sources are
   scored by a transparent heuristic (the web address: `.gov.il`, `.ac.il`, a known publication), the voice guide is the
@@ -47,7 +47,7 @@ says which keys are set without showing them.
 - **What to do.** The live server must run with `ANTHROPIC_API_KEY` set (and `ANTHROPIC_WORKSPACE_ID` for a key not
   scoped to one workspace). If the key is set and the notes still appear, read the service's log for the failed call
   (rate limit, billing, a model id).
-- **Needed now?** Yes. Without it no new account can reach its five samples, so none can go live.
+- **Needed now?** Yes. Without it no new account can reach its three samples, so none can go live.
 
 ## Optional, for better results
 

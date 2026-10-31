@@ -1223,7 +1223,7 @@ ${before.length ? `<details class="mt12"><summary class="muted">החודשים �
 export function morePage(ctx) {
   const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;
   const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
-${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד חמישה פוסטים לדוגמה')}
+${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד פוסטים לדוגמה')}
 ${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, מכסות, מפתחות' : 'התראות, החבילה החודשית, החשבון שלך')}
 ${ctx.operator ? row('/demos', 'accounts', 'דמואים לחנויות', 'חנויות שביקשו דמו באתר') : ''}
 <a class="danger" href="${esc(ctx.links?.logout || '#')}"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></a></nav>`;
