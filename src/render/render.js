@@ -9,6 +9,7 @@ import { endParts } from './end.js';
 import { everyPhoto, kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
+import { namesIn, whoIn } from '../images/names.js';
 import { overlayOf } from '../rules/overlay.js';
 import { fillsCover, imageSize } from '../images/size.js';
 import { stylePage } from './styles/index.js';
@@ -570,7 +571,10 @@ export function planPhotos({ slides, byIdx, postKind }) {
   const candidates = (s, i) => {
     const q = String(s.imageQuery || '').toLowerCase().trim();
     const own = [...byIdx].filter(([k, p]) => p?.file && typeof k === 'number' && k !== i && k !== answer);
-    const same = q ? own.filter(([, p]) => String(p.query || '').toLowerCase().trim() === q).map(([k]) => k) : [];
+    // The same person by another search counts too: two slides about Mané, searched "Sadio Mane Liverpool" and "Sadio
+    // Mane Senegal", share the one that was found, rather than the second standing on a scene under his name.
+    const who = whoIn(s.imageQuery);
+    const same = q ? own.filter(([, p]) => String(p.query || '').toLowerCase().trim() === q || (who.length && namesIn(String(p.query || ''), who))).map(([k]) => k) : [];
     const subject = manySubjects || postKind === 'guess-who' ? [] : own.map(([k]) => k).sort((a, b) => a - b);
     return [...new Set([...same, ...subject, ...sceneKeys])];
   };
@@ -623,13 +627,15 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const oneSubject = !['guess-who', 'ranking', 'head-to-head', 'list'].includes(kindNow);
   // One ground for the whole post: the slides used to stand on their own photographs in turn, a different picture
   // and colour behind every slide. A slide's own photograph is in its frame; the ground behind every slide is one.
-  const ground = opts.backgroundPhoto ? (uri.has(0) && oneSubject ? uri.get(0) : uri.get('bg') || null) : null;
+  const groundKey = opts.backgroundPhoto ? (uri.has(0) && oneSubject ? 0 : uri.has('bg') ? 'bg' : null) : null;
+  const ground = groundKey != null ? uri.get(groundKey) : null;
   const bgFor = () => ground;
   // A template that stands every slide on a photograph (photocard): a content slide's own fills it, else the post's
   // (the cover's when the post is about one subject, else the one found for its scene), sharp, never blurred.
   const impl = TEMPLATE_IMPL[pack.theme.template] || {};
   const bleed = impl.fullBleed && pack.theme.options?.coverPhoto !== false;
-  const postPhoto = (oneSubject && uri.get(0)) || uri.get('bg') || null;
+  const postKey = oneSubject && uri.has(0) ? 0 : uri.has('bg') ? 'bg' : null;
+  const postPhoto = postKey != null ? uri.get(postKey) : null;
   const items = slides.filter((s) => s.kind === 'item').length;
   const places = slidePlaces(slides);
   // Photographs left off a slide that could not fit them, per platform: not shown, not credited.
@@ -638,6 +644,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const extra = post.extra || {};
   const out = {};
   const scales = {};
+  const grounds = {};
   // An account drawn in one of the slide styles (src/render/styles): each slide is a page of its own.
   const styled = Boolean(pack.theme.style);
   const warnings = [];
@@ -752,14 +759,18 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
           // Style C's key line, at the foot of the cover: the day, or the two sides. Nothing is set over a headline.
           slide.keyLine = day || names;
         }
-        drawn.push({ i, s, slide, look: {}, file, ratio: await drawSlide({ i, s, slide, look: {}, file, size }) });
+        const on = split ? ['ca', 'cb'] : slide.photo ? [from] : [];
+        drawn.push({ i, s, slide, look: {}, file, on, own: split ? null : from, ratio: await drawSlide({ i, s, slide, look: {}, file, size }) });
         out[size].push(file);
         continue;
       }
       // A cover photograph smaller than FULL_BLEED_MIN is framed over its own blurred copy, never stretched to fill.
       const framed = full && s.kind === 'cover' && !fillsCover(readFileSync(byIdx.get(i).file));
       const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : stand, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i), framed };
-      drawn.push({ i, s, slide, look, file, ratio: await drawSlide({ i, s, slide, look, file, size }) });
+      // A cover draws no framed photograph of its own (coverInner); a content or closing slide does, beside its words.
+      const framedOwn = slide.photo && s.kind !== 'cover' ? i : null;
+      const on = [...(full ? [i] : tease ? [slides.length - 1] : stand ? [postKey] : []), ...(split ? ['ca', 'cb'] : []), ...(look.bg && !look.photo && !split ? [groundKey] : []), ...(framedOwn != null ? [framedOwn] : [])];
+      drawn.push({ i, s, slide, look, file, on, own: framedOwn, ratio: await drawSlide({ i, s, slide, look, file, size }) });
       out[size].push(file);
     }
     // One type size for the content slides: each was fitted on its own, and a post came out with a title at full size
@@ -775,11 +786,15 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       }
     }
     (scales[size] = drawn.map((d) => Math.round(d.ratio * 100) / 100));
+    // What each slide was drawn on, once every slide is drawn: a photograph a slide had to give up is not under it.
+    grounds[size] = [];
+    for (const d of drawn) grounds[size][d.i] = d.on.filter((k) => !(dropped[size]?.has(d.i) && k === d.own));
     if (end && styled && !only) {
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
       const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null } }), { size, file, lenient });
       for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
       out[size].push(file);
+      grounds[size][slides.length] = endKey != null && uri.has(endKey) ? [endKey] : [];
     } else if (end && !only) {
       const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand };
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
@@ -787,9 +802,14 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       const own = impl.end && bleed && postPhoto;
       await renderHtml(page({ theme: pack.theme, overlay, size, slide: own ? { ...sl, brand: null } : sl, parts: own ? impl.end(pack) : endParts(pack), ...(own ? { photo: postPhoto } : { bg: bgFor(slides.length) }) }), { size, file, floor: 0.45 });
       out[size].push(file);
+      grounds[size][slides.length] = own ? [postKey] : ground ? [groundKey] : [];
     }
   }
   Object.defineProperty(out, 'dropped', { value: dropped, enumerable: false });
+  // What each slide stands on, per platform: { size: [[keys of `photos`], ...] }, a slide's index its place, the closing
+  // slide after the last. [] is a slide drawn with no photograph at all, which a post that searches photographs may
+  // not have (src/pipeline/build.js; the owner, 2026-10-31: "no slide can be empty").
+  Object.defineProperty(out, 'grounds', { value: grounds, enumerable: false });
   // The size each slide's text came out at, per platform, as a share of the design's.
   Object.defineProperty(out, 'scales', { value: scales, enumerable: false });
   // What a lenient render (a preview) drew although it did not fit, per slide.

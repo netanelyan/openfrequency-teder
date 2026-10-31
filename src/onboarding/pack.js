@@ -13,6 +13,7 @@ import { packIdOf } from './setup.js';
 import { suggestStyle } from './style.js';
 import { DEFAULT_PICKED, formatsFor } from '../formats/library.js';
 import { resolveStyle } from '../render/styles/tokens.js';
+import { writeScenes } from '../images/scenes.js';
 
 // A new pack, written from an onboarding: the owner's seed, the sources they
 // approved, and a look none of the customer's other accounts has. No code: the
@@ -185,6 +186,12 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     trends: { queries: { he: [`טיפים ${seed.niche}`], en: [`${seed.nicheEn || seed.niche} tips`] }, minViews: { he: 1000, en: 20000 } },
   };
   const rules = { maxQuoteWords: 40, bannedPhrases: [], patterns: [], imageQueryBlock: ['logo', 'brand'] };
+  // The account's scenes, what a slide with no photograph of its own stands on (src/images/scenes.js): a customer's
+  // first samples went out as dark slides with white text, every slide's own photograph refused and no scene to fall
+  // back on (the owner, 2026-10-31: "the slides dont have images. no slide can be empty").
+  const scenes = await writeScenes(ctx, { ...seed, displayName: pack.displayName }, { block: rules.imageQueryBlock });
+  theme.backgroundQueries = scenes.scenes;
+  theme.options = { ...theme.options, backgroundPhoto: true };
 
   let voice = voiceTemplate(seed, pack.displayName);
   if (ctx.llm?.kind === 'claude') {

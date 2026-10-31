@@ -97,7 +97,7 @@ const EVENT_HE = {
 const CHECK_HE = {
   facts: 'שער העובדות: מספר שלא בציטוט', shape: 'צורת הפורמט', visuals: 'גרפיקות', details: 'פרטים מהמחקר', caption: 'כיתוב (אורך, חסר)', keywords: 'מילות מפתח', length: 'אורך כותרת או שקף', overlay: 'טקסט על התמונה',
   'voice:banned': 'קול: מילה אסורה', 'voice:phrase': 'קול: ביטוי של בוט', 'voice:register': 'קול: משלב', 'voice:structure': 'קול: מבנה', 'voice:length': 'קול: אורך ומשפטים', 'voice:language': 'קול: שפה', 'voice:url': 'קול: קישור', 'voice:artefact': 'קול: שארית של מודל', 'voice:empty': 'טקסט ריק',
-  'kind:no_source': 'אין מסמך שמחזיק פוסט', 'kind:no_photo': 'אין תמונה של שני הצדדים', 'kind:fact_check': 'עובדות שלא אומתו (בתכנון)', 'kind:voice': 'נשמע כמו בוט (ציון הבודק)', 'kind:review': 'הבודק: יותר מהעובדות', 'kind:budget': 'תקציב', 'kind:shape': 'צורת הפורמט', 'kind:rules': 'חוק או כלל של החשבון',
+  'kind:no_source': 'אין מסמך שמחזיק פוסט', 'kind:no_photo': 'אין תמונה מורשית לשקף', 'kind:fact_check': 'עובדות שלא אומתו (בתכנון)', 'kind:voice': 'נשמע כמו בוט (ציון הבודק)', 'kind:review': 'הבודק: יותר מהעובדות', 'kind:budget': 'תקציב', 'kind:shape': 'צורת הפורמט', 'kind:rules': 'חוק או כלל של החשבון',
 };
 const checkHe = (c) => CHECK_HE[c] || (/^compliance:/.test(c) ? `חוק: ${c.slice(11)}` : /^rule:/.test(c) ? `כלל של החשבון: ${c.slice(5)}` : /^honesty:/.test(c) ? `כנות: ${c.slice(8)}` : c);
 

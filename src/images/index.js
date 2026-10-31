@@ -10,6 +10,9 @@ import { j } from '../db/index.js';
 import { blockedQuery } from '../rules/check.js';
 import { flatten, screenImage } from './safety.js';
 import { imageSize } from './size.js';
+import { namesIn, namesOf } from './names.js';
+
+export { namesIn, namesOf, shows, whoIn } from './names.js';
 
 // HARD RULE 5: images only from licensed libraries, with the licence stored per
 // image. Pexels and Unsplash (commercial use, their own licences), Wikimedia
@@ -28,7 +31,7 @@ import { imageSize } from './size.js';
 // anything the pack blocks (rules.json imageQueryBlock) are refused, and so is a
 // query that asks for one.
 
-const ALWAYS_BLOCK = ['logo', 'crest', 'emblem', 'badge', 'trademark', 'screenshot', 'jersey', 'kit', 'mascot', 'poster', 'banner', 'sign', 'text'];
+export const ALWAYS_BLOCK = ['logo', 'crest', 'emblem', 'badge', 'trademark', 'screenshot', 'jersey', 'kit', 'mascot', 'poster', 'banner', 'sign', 'text'];
 const COMMONS_OK = /^(?:cc0|cc[- ]zero|public domain|pd(?:[- ].*)?|cc by(?:-sa)? \d(?:\.\d)?(?: .*)?|cc by(?:-sa)?|attribution(?:-sharealike)?)$/i;
 const COMMONS_NO = /\bnc\b|non-?commercial|\bnd\b|no ?deriv|fair use|copyrighted|all rights reserved/i;
 
@@ -343,20 +346,6 @@ export function providerOrder(pack) {
   return [...(packPhotoList(pack).length ? ['pack'] : []), ...new Set(listed)];
 }
 
-/**
- * Whether a picture's title names the person a query names: two of the query's name
- * words side by side, as a name is written ("Holly_Holm_at_UFC"). A word of the name
- * was not enough ("Holm" matched "Rudder Rock, Steep Holm Island", "Serra" a plant
- * called Senecio serra), and neither were both words apart ("Holly with berries, Holm
- * Hill"). A query with a single name word needs that word.
- */
-export function namesIn(title, names) {
-  const words = String(title).toLowerCase().replace(/[_%]/g, ' ').split(/[^\p{L}\p{N}'-]+/u).filter(Boolean);
-  const want = names.map((n) => n.toLowerCase());
-  if (want.length < 2) return want.every((n) => words.includes(n));
-  return want.slice(1).some((b, i) => words.some((w, j) => w === want[i] && words[j + 1] === b));
-}
-
 /** Does a file's title name a person or a place (two capitalised words in a row), rather than a camera's numbering? */
 export function titleNamesSomeone(title) {
   const t = String(title || '').replace(/^File:/, '').replace(/\.[a-z]{3,4}$/i, '').replace(/[_()-]/g, ' ');
@@ -365,9 +354,6 @@ export function titleNamesSomeone(title) {
 
 /** CC BY and CC BY-SA require the author and the license next to the picture. */
 export const needsCredit = (license) => /\bby\b|attribution/i.test(String(license || ''));
-
-/** The names a query asks a picture to show: its capitalised words, less the promotions' and the sport's own. */
-export const namesOf = (query) => String(query).split(/\s+/).filter((w) => /^\p{Lu}\p{L}{2,}/u.test(w) && !/^(UFC|PFL|ONE|MMA|BJJ|FC|The|Stadium|Arena|Park)$/i.test(w));
 
 const PROVIDER_NAME = { commons: 'Wikimedia Commons', pexels: 'Pexels', unsplash: 'Unsplash', openverse: 'Openverse' };
 // Where Openverse found a picture, by the name its own site goes by: a credit says "Flickr via Openverse".
@@ -380,9 +366,12 @@ export function creditedTo(img) {
   return up ? `${UPSTREAM_NAME[up] || up} via ${name}` : name;
 }
 
-/** Every photograph a post shows: its slides' and its lead one, once each. */
+// The photographs a slide may stand on without being its own: the post's scenes and a head-to-head's two halves.
+const groundIds = (post) => [post.checks?.bgImage, ...(post.checks?.sceneImages || []), ...(post.checks?.coverImages || [])];
+
+/** Every photograph a post shows: its slides' and its lead one, and the scenes its other slides stand on, once each. */
 export function postImages(db, post) {
-  const ids = [...new Set([...(post.slides || []).map((s) => s.image_id), post.checks?.image, post.checks?.bgImage, ...(post.checks?.coverImages || [])].filter(Boolean))];
+  const ids = [...new Set([...(post.slides || []).map((s) => s.image_id), post.checks?.image, ...groundIds(post)].filter(Boolean))];
   return ids.map((id) => db.get('SELECT * FROM images WHERE id = ?', id)).filter(Boolean);
 }
 
@@ -393,9 +382,11 @@ export const waitingImages = (db, post) => postImages(db, post).filter((img) => 
  * The credit line a post's caption carries for the photos whose license asks for
  * one, or ''. It is added when the caption is published, after the checks: a
  * license name ("CC BY-SA 4.0") is not a claim, and its numbers are not facts.
+ * The scenes behind slides with no photograph of their own are credited too: since every slide stands on a photograph
+ * (2026-10-31), a slide shows a scene more often than not, and one from Commons or Openverse asks for its credit.
  */
 export function imageCredit(db, post) {
-  const ids = [...new Set((post.slides || []).map((s) => s.image_id).filter(Boolean))];
+  const ids = [...new Set([...(post.slides || []).map((s) => s.image_id), ...groundIds(post)].filter(Boolean))];
   const credits = ids
     .map((id) => db.get('SELECT provider, license, author, match_json FROM images WHERE id = ?', id))
     .filter((img) => img && needsCredit(img.license))

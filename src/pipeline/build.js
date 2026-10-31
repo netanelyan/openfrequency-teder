@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { newId, nowIso, now, DAY } from '../core/clock.js';
 import { mediaDir, packsDir } from '../core/paths.js';
@@ -22,7 +22,8 @@ import { lineDraft, oneLine, overlayOf, overlayProblems } from '../rules/overlay
 import { isOwnerDoc } from '../sources/facts.js';
 import { MAX_HASHTAGS, SHORT_CAPTION, captionProblems, captionStyleOf, hashtagProblems, storyCaption } from '../rules/caption.js';
 import { ATTRIBUTED_MAX, gate, numbersIn, verifyFact } from '../verify/claims.js';
-import { findImage, MIN_SIDE, packPhotoList } from '../images/index.js';
+import { findImage, MIN_SIDE, packPhotoList, shows, whoIn } from '../images/index.js';
+import { scenesFor } from '../images/scenes.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost, slidePlaces } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
@@ -1327,8 +1328,17 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
     // A guess-who whose answer has no licensed photograph shows a bare question mark for a cover, and an answer no
     // photograph shows is one most of the audience does not know either: every reader failed both. Another topic.
-    if (kindName(format) === 'guess-who' && pack.theme.options?.coverPhoto && !photos.get(draft.slides.length - 1)) {
+    // A styled account puts its covers on photographs whatever its theme says (findPhotos), so its guess-who needs the face too.
+    const styledPost = Boolean(draft.style || pack.meta?.style?.name);
+    if (kindName(format) === 'guess-who' && (pack.theme.options?.coverPhoto || styledPost) && !photos.get(draft.slides.length - 1)) {
       return block('no_photo', `אין תמונה מורשית של ${draft.subject?.answer || 'התשובה'}: נחשו-מי צריך פנים לטשטש על השער`);
+    }
+    // No slide goes out empty (the owner, 2026-10-31: "the slides dont have images. no slide can be empty"): a post of
+    // an account that searches photographs, with not one found and no scene either, is another post.
+    const photosNeeded = searchesPhotos(pctx, pack);
+    if (photosNeeded && !photos.size) {
+      step(db, postId, 'photos', 'failed', { why: 'nothing found', scenes: pack.theme.backgroundQueries?.length ? 'theme' : 'derived' });
+      return block('no_photo', 'לא נמצאה אף תמונה מורשית לפוסט, גם לא סצנה של החשבון: שקף לא יוצא בלי תמונה');
     }
 
     // ---- render
@@ -1343,6 +1353,17 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const look = postStyle ? lookFor(db, pack, postStyle, ctx.packs || []) : lockedStyle(db, pack, ctx.packs || []);
     const files = await renderPost({ pack: { ...pack, theme: look.theme }, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir });
     step(db, postId, 'render', 'ok', { platforms: Object.keys(files), slides: slides.length });
+
+    // ---- every slide on a photograph, and a name on a photograph of its own: what was drawn, on every platform
+    if (photosNeeded) {
+      const gaps = photoGaps({ grounds: files.grounds || {}, photos, named: namedOn({ format, draft, outline }), slides: slides.length });
+      if (gaps.length) {
+        rmSync(outDir, { recursive: true, force: true });
+        step(db, postId, 'photos', 'failed', { gaps });
+        return block('no_photo', gapReason(gaps), { gaps });
+      }
+      step(db, postId, 'photos', 'ok', { grounds: files.grounds });
+    }
 
     // ---- store and queue
     const tags = hashtagsFor(pack, format, postId, [draft.hook, draft.sub, draft.caption, ...(draft.keywords || []), ...draft.slides.map((s) => `${s.title} ${s.body}`)].join(' '));
@@ -1378,7 +1399,73 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
  * the drawn cover the owner had ruled out.
  */
 export function needsSides(pack, format, outline) {
-  return Boolean(outline && pack.theme.options?.coverPhoto && (pack.meta.imagery?.providers || []).length && kindName(format) === 'head-to-head');
+  // A styled account's cover stands on a photograph whatever its theme says, and a head-to-head's names both sides: a
+  // name is never written without a photograph of whom it names (the owner, 2026-10-31).
+  return Boolean(outline && (pack.theme.options?.coverPhoto || pack.meta?.style?.name) && (pack.meta.imagery?.providers || []).length && kindName(format) === 'head-to-head');
+}
+
+/**
+ * Does this post search photographs for real: its account lists a photo library or has photographs of its own, and
+ * the run is not an offline one (recorded drafts with no network, where findImage finds nothing by design)? Such a
+ * post never goes out with a slide on no photograph (photoGaps). An account that lists no library has chosen drawn
+ * slides; none does today.
+ */
+export const searchesPhotos = (ctx, pack) => !(ctx.mode === 'recorded' && !ctx.imagesLive) && Boolean((pack.meta.imagery?.providers || []).length || packPhotoList(pack).length);
+
+/**
+ * Whom each slide names, as the photograph under it must show them: Map(slide index -> [query, ...]), each a search that
+ * names a person or a club (whoIn). A content slide names whom its imageQuery names: the writer gives a slide that names
+ * someone that one, by name (prompts.js). A clue names no one (it never gives the answer away), and a meme's slides
+ * are the account's own design, searched for no photograph of their own (findPhotos). A cover names whom its
+ * photograph search names (whoever the cover shows, the cover line names), but for a facts or tips cover's famous
+ * face, which the line leaves unnamed, and a guess-who's, which hides its answer; a head-to-head's cover names both
+ * sides; a guess-who's reveal names its answer.
+ */
+export function namedOn({ format, draft, outline }) {
+  const kind = kindName(format);
+  const last = draft.slides.length - 1;
+  const one = (q) => (whoIn(q).length ? [q] : []);
+  const named = new Map();
+  const cover = kind === 'head-to-head' ? [...one(outline?.imageQuery), ...one(outline?.imageQueryB)] : ['facts', 'tips', 'guess-who'].includes(kind) ? [] : one(outline?.imageQuery);
+  if (cover.length) named.set(0, cover);
+  draft.slides.forEach((s, i) => {
+    if (i === 0 || s.kind !== 'item' || s.role === 'clue' || kind === 'meme') return;
+    const list = [...(kind === 'guess-who' && i === last ? one(outline?.imageQuery) : []), ...one(s.imageQuery)];
+    if (list.length) named.set(i, list);
+  });
+  return named;
+}
+
+/**
+ * The slides a post may not go out with, from what each was drawn on (renderPost's `grounds`, every platform): one on
+ * no photograph at all, and one that names someone (`named`, from namedOn) on no photograph of them, a scene not being
+ * enough. Each as { slide, why: 'none'|'name', names, size, on }, a slide once; [] when every slide stands where it may.
+ * `slides`: how many slides the post has (a closing slide after them is the account's own).
+ */
+export function photoGaps({ grounds, photos, named, slides }) {
+  const out = new Map();
+  for (const [size, list] of Object.entries(grounds || {})) {
+    (list || []).forEach((on, i) => {
+      if (out.has(i)) return;
+      if (!on?.length) return out.set(i, { slide: i, why: 'none', size, closing: i >= slides || undefined });
+      const shown = on.map((k) => photos.get(k)).filter(Boolean);
+      const missing = (named.get(i) || []).filter((q) => !shown.some((img) => shows(img, q)));
+      if (missing.length) out.set(i, { slide: i, why: 'name', names: missing.map((q) => whoIn(q).join(' ')), size, on });
+    });
+  }
+  return [...out.values()].sort((a, b) => a.slide - b.slide);
+}
+
+/** A post's photograph gaps, said in a line for its steps and for whoever tries again. */
+export function gapReason(gaps) {
+  // "לשער", "בשקף 3", "בשקף הסיום": the slide with its preposition.
+  const at = (p, g) => `${p}${g.closing ? 'שקף הסיום' : g.slide === 0 ? 'שער' : `שקף ${g.slide + 1}`}`;
+  const and = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} ו${list.at(-1)}` : list[0]);
+  const bare = gaps.filter((g) => g.why === 'none');
+  return [
+    ...gaps.filter((g) => g.why === 'name').map((g) => `אין תמונה מורשית של ${g.names.join(' ושל ')} ${at('ל', g)}, ושם לא נכתב בלי תמונה שמראה אותו`),
+    bare.length ? `${and(bare.map((g) => at('ב', g)))} אין תמונה: לא נמצאה תמונה מורשית, וגם לא סצנה של החשבון` : '',
+  ].filter(Boolean).join(' · ');
 }
 
 /**
@@ -1459,11 +1546,13 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     });
   }
   const seen = new Set();
+  let searches = 0;
   for (const w of wants) {
     const key = w.query.toLowerCase().trim();
     // At most four searches a post, or one a slide when every slide stands on its own photograph.
-    if (seen.has(key) || seen.size >= (styledAll ? SLIDES.max : 4)) continue;
+    if (seen.has(key) || searches >= (styledAll ? SLIDES.max : 4)) continue;
     seen.add(key);
+    searches++;
     const why = {};
     // A cover fills the frame; a content slide's photograph sits in one (the last slide of a guess-who fills it too).
     const minSide = w.idx === 0 || (photoOn === 'last' && w.idx === last) ? MIN_SIDE.cover : MIN_SIDE.framed;
@@ -1472,7 +1561,16 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
     if (!img && (w.idx === 0 || (kind === 'guess-who' && w.idx === last)) && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
       seen.add(who.toLowerCase());
+      searches++;
       img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why, minSide }).catch(() => null);
+    }
+    // A content slide that names someone and found nothing tries the name alone ("Sadio Mane" rather than "Sadio Mane
+    // Liverpool 2019 final"): a slide that names someone stands on a photograph of them or the post does not go out. It
+    // is not counted among the post's searches, so no later slide loses its own.
+    const named = w.idx > 0 ? whoIn(w.query).join(' ') : '';
+    if (!img && named && named.toLowerCase() !== key && !seen.has(named.toLowerCase())) {
+      seen.add(named.toLowerCase());
+      img = await findImage(ctx, { pack, query: named, postId, claim: w.claim, why, minSide }).catch(() => null);
     }
     step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode, why });
     if (img) out.set(w.idx, img);
@@ -1506,7 +1604,9 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // A styled post finds up to three scenes ('bg', 'bg2', 'bg3'): what a slide with no photograph of its own stands on,
   // so that no one photograph has to stand behind every slide (render.js plans them, two slides each at most).
   if (pack.theme.options?.backgroundPhoto || styledAll) {
-    const scenes = pack.theme.backgroundQueries || [];
+    // theme.json's scenes, else the ones written for an account the setup made before it wrote scenes (scenesFor): a
+    // customer's samples went out as dark slides, its theme with none (2026-10-31).
+    const scenes = await scenesFor(ctx, pack);
     const start = [...String(postId)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % Math.max(1, scenes.length);
     // The subject first only when no cover shows it already (and never a guess-who's answer or one of a head-to-head's two).
     const subjectFirst = !styledAll && !out.has(0) && !['guess-who', 'head-to-head'].includes(kind) ? [outline.imageQuery] : [];

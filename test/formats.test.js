@@ -301,6 +301,8 @@ test('a head-to-head of two people needs both faces, and a matchup refused for o
   const outline = { imageQuery: 'Erling Haaland', imageQueryB: 'Kylian Mbappé' };
   assert.equal(needsSides(pack(true), fmt('head-to-head'), outline), true);
   assert.equal(needsSides(pack(false), fmt('head-to-head'), outline), false, 'an account without cover photographs draws its own art');
+  // A styled account's cover stands on a photograph whatever its theme says, and its cover names both sides (2026-10-31).
+  assert.equal(needsSides({ ...pack(false), meta: { ...pack(false).meta, style: { name: 'E' } } }, fmt('head-to-head'), outline), true, 'a styled account needs both faces');
   assert.equal(needsSides(pack(true, []), fmt('head-to-head'), outline), false);
   assert.equal(needsSides(pack(true), fmt('head-to-head'), { imageQuery: 'Ciryl Gane', imageQueryB: '' }), true, 'one side left unnamed is no way around the two faces');
   assert.equal(needsSides(pack(true), fmt('ranking'), outline), false);
