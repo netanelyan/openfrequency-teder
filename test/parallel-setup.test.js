@@ -6,7 +6,7 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { listen } from '../src/web/server.js';
-import { __onboarding } from '../src/web/onboarding.js';
+import { __onboarding, ONE_ACCOUNT } from '../src/web/onboarding.js';
 import { choiceOf } from '../src/schedule/choice.js';
 import { setupOf } from '../src/onboarding/setup.js';
 import { offered, relevanceOf, heuristicScore, discover, strong } from '../src/onboarding/discover.js';
@@ -107,7 +107,12 @@ afterEach(() => {
 const AT = new Date().toISOString();
 const get = (p, cookie) => fetch(`${base}${p}`, { redirect: 'manual', headers: cookie ? { cookie } : {} });
 async function csrfOf(cookie) {
-  return /name="_csrf" value="([^"]+)"/.exec(await (await get('/new', cookie)).text())[1];
+  // /new has a form until the workspace has its one account (ONE_ACCOUNT); then the account's page has forms of its own.
+  for (const p of ['/new', '/accounts']) {
+    const m = /name="_csrf" value="([^"]+)"/.exec(await (await get(p, cookie)).text());
+    if (m) return m[1];
+  }
+  throw new Error('no form with a token on /new or /accounts');
 }
 const post = async (p, cookie, body = {}, { ajax = false } = {}) =>
   fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', origin: base, ...(ajax ? { 'x-of-ajax': '1' } : {}) }, body: new URLSearchParams({ _csrf: await csrfOf(cookie), ...body }).toString() });
@@ -195,8 +200,8 @@ test('the name and handle, saved while waiting, are checked as at create and off
 });
 
 test('the days and times chosen while waiting are written to the account at create, and the samples page shows them chosen', async () => {
-  const { cookie } = fake.session(customer(1));
-  searching('o-sched', 1);
+  const { cookie } = fake.session(customer(21));
+  searching('o-sched', 21);
   const wrong = await post('/new/o-sched/schedule', cookie, { day_0: 'on' }, { ajax: true });
   assert.equal(wrong.status, 422, 'the same checks as the choice everywhere');
   assert.match((await wrong.json()).message, /ביום ראשון חסרה שעה/);
@@ -335,6 +340,27 @@ test('Instagram back through Facebook Login: one account is picked by itself, se
   assert.equal(setupOf(db, 'o-ig').zernio.connections.instagram.id, 'ig-pg9', 'the account Zernio just connected is the one kept');
 });
 
+test('one Teder account a subscription: a customer whose account is open gets no form for another, and neither a new search nor an older setup makes one; the operator may', async () => {
+  await atSamples('o-one', 'one.acct', 41);
+  const { cookie } = fake.session(customer(41));
+  const page = await (await get('/new', cookie)).text();
+  assert.match(page, /<h2>עוד חשבון הוא עוד מנוי<\/h2>/);
+  assert.ok(page.includes('לכל חשבון בתדר יש מנוי משלו, והחשבון שלכם כבר פתוח. רוצים עוד חשבון?'), 'says why, and how to get one');
+  assert.doesNotMatch(page, /name="niche"/, 'no form for another');
+  assert.match(page, /href="\/new\/o-one"/, 'the setup in progress is still listed: the way back to its samples');
+  const again = await post('/new', cookie, { niche: 'עוד נושא' }, { ajax: true });
+  assert.equal(again.status, 409);
+  assert.equal((await again.json()).message, ONE_ACCOUNT);
+  // A setup started before the account was made cannot make a second one.
+  reviewing('o-one-b', 41, [cand('b1'), cand('b2'), cand('b3')]);
+  const second = await post('/new/o-one-b/create', cookie, { approve_b1: 'on', displayName: 'שני', handle: 'second.acct' }, { ajax: true });
+  assert.equal(second.status, 409);
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM accounts WHERE workspace_id = 41').n, 1);
+  // A customer without an account starts one; the operator's own pages always may.
+  assert.match(await (await get('/new', fake.session(customer(42)).cookie)).text(), /name="niche"/);
+  assert.match(await (await get('/new', fake.session(operator()).cookie)).text(), /name="niche"/);
+});
+
 test('the new routes keep to their workspace, and to the paywall', async () => {
   searching('o-iso', 2);
   const A = fake.session(customer(1)).cookie;
@@ -443,10 +469,14 @@ test('too few good sources: said plainly, and a search again with more of the cu
 
 /* ------------------------------------------------------------------ the samples */
 
+/** The workspace each samples test's account is in: one Teder account a subscription, so each its own. */
+const wsOf = new Map();
+let nextWs = 100;
 /** An account in onboarding, its onboarding at the samples step. */
-async function atSamples(id, handle) {
-  reviewing(id, 1, [cand('s1'), cand('s2'), cand('s3')]);
-  const r = await post(`/new/${id}/create`, fake.session(customer(1)).cookie, { approve_s1: 'on', displayName: `דוגמאות ${handle}`, handle }, { ajax: true });
+async function atSamples(id, handle, ws = nextWs++) {
+  wsOf.set(id, ws);
+  reviewing(id, ws, [cand('s1'), cand('s2'), cand('s3')]);
+  const r = await post(`/new/${id}/create`, fake.session(customer(ws)).cookie, { approve_s1: 'on', displayName: `דוגמאות ${handle}`, handle }, { ajax: true });
   assert.equal(r.status, 200, await r.text());
   return db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id;
 }
@@ -463,7 +493,7 @@ const builder = (outcomes, calls = []) => async (c, { pack }) => {
   return { status: 'blocked', kind: o === 'error' ? 'error' : o === 'empty' ? 'no_source' : 'fact_check', reason: `refused: ${o}` };
 };
 const runSamples = async (onb) => {
-  await post(`/new/${onb}/samples`, fake.session(customer(1)).cookie);
+  await post(`/new/${onb}/samples`, fake.session(customer(wsOf.get(onb))).cookie);
   await Promise.all([...__onboarding.running.values()]);
 };
 
@@ -473,7 +503,7 @@ test('samples: the sources are read first, then written one by one; the read is 
   let release;
   const gate = new Promise((r) => (release = r));
   ctx.samplesOpts = { read: async () => (order.push('read'), await gate, { docs: 4, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'ok', 'ok'], order), retryMs: 0 };
-  const { cookie } = fake.session(customer(1));
+  const { cookie } = fake.session(customer(wsOf.get('o-s1')));
   await post('/new/o-s1/samples', cookie);
   const during = await (await get('/new/o-s1', cookie)).text();
   assert.match(during, /data-poll="\/new\/o-s1\/status"/);
@@ -495,7 +525,7 @@ test('samples: no facts in the chosen sources is said with what helps, and a way
   await runSamples('o-s2');
   ctx.log = () => {};
   assert.deepEqual(calls, [], 'nothing written from nothing');
-  const html = await (await get('/new/o-s2', fake.session(customer(1)).cookie)).text();
+  const html = await (await get('/new/o-s2', fake.session(customer(wsOf.get('o-s2'))).cookie)).text();
   assert.match(html, /במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן\. אפשר להוסיף מקורות או לבחור אחרים, ואז לנסות שוב\./);
   assert.match(html, /href="\/sources\?account=samples-two">לבחור מקורות<\/a>/);
   assert.match(html, /action="\/new\/o-s2\/samples"[^]*?לנסות שוב/);
@@ -505,7 +535,7 @@ test('samples: no facts in the chosen sources is said with what helps, and a way
   // Sources that could not be read at all.
   ctx.samplesOpts = { read: async () => ({ docs: 0, sources: 1, failed: [{ name: 'Site s1', error: 'HTTP 403' }] }), build: builder([]), retryMs: 0 };
   await runSamples('o-s2');
-  assert.match(await (await get('/new/o-s2', fake.session(customer(1)).cookie)).text(), /לא הצלחנו לקרוא את המקורות שבחרתם/);
+  assert.match(await (await get('/new/o-s2', fake.session(customer(wsOf.get('o-s2'))).cookie)).text(), /לא הצלחנו לקרוא את המקורות שבחרתם/);
   assert.match(await (await get('/new/o-s2', fake.session(operator()).cookie)).text(), /Site s1: HTTP 403/, 'the operator reads the raw reason');
 });
 
@@ -527,22 +557,22 @@ test('samples: an error is tried once more by itself; refused ones are followed 
   await runSamples('o-s4');
   ctx.log = () => {};
   assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", p2).n, 2, 'the good ones are kept');
-  const html = await (await get('/new/o-s4', fake.session(customer(1)).cookie)).text();
+  const html = await (await get('/new/o-s4', fake.session(customer(wsOf.get('o-s4'))).cookie)).text();
   assert.match(html, /2 פוסטים לדוגמה מוכנים, והם כאן למטה\. משהו נתקע אצלנו באמצע הכתיבה\. אפשר לנסות שוב\./);
 
   // Three of five is enough: no warning.
   await atSamples('o-s5', 'samples.five');
   ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'empty', 'empty']), retryMs: 0 };
   await runSamples('o-s5');
-  assert.doesNotMatch(await (await get('/new/o-s5', fake.session(customer(1)).cookie)).text(), /banner warn/);
+  assert.doesNotMatch(await (await get('/new/o-s5', fake.session(customer(wsOf.get('o-s5'))).cookie)).text(), /banner warn/);
   assert.equal(JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-s5'").candidates_json).samples.made, 3);
 });
 
 test('samples: two rounds for each new account, six a month for the customer, none once it is live; the operator is not limited', async () => {
   // The rounds the tests above wrote are this workspace's month too: start it empty.
-  db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 1 AND status <> 'review'");
-  const packId = await atSamples('o-r1', 'rounds.one');
-  const { cookie } = fake.session(customer(1));
+  db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 31 AND status <> 'review'");
+  const packId = await atSamples('o-r1', 'rounds.one', 31);
+  const { cookie } = fake.session(customer(31));
   // One list of calls for every round: the stand-in names each sample by its call's number.
   const calls = [];
   const five = () => ({ read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'ok', 'ok'], calls), retryMs: 0 });
@@ -573,14 +603,16 @@ test('samples: two rounds for each new account, six a month for the customer, no
 
   // Six rounds this month across the customer's new accounts: a new one's first press is refused too.
   const month = new Date().toISOString();
-  db.insert('onboarding', { id: 'o-r-many', seed_json: {}, status: 'samples', workspace_id: 1, candidates_json: { rounds: Array.from({ length: 6 }, () => ({ at: month, by: 'customer' })) }, created_at: AT, updated_at: AT });
-  await atSamples('o-r2', 'rounds.two');
+  db.insert('onboarding', { id: 'o-r-many', seed_json: {}, status: 'samples', workspace_id: 31, candidates_json: { rounds: Array.from({ length: 6 }, () => ({ at: month, by: 'customer' })) }, created_at: AT, updated_at: AT });
+  // One account a subscription: the first is gone (taken out of the workspace), and the customer starts another.
+  db.run('UPDATE accounts SET workspace_id = NULL WHERE id = ?', packId);
+  await atSamples('o-r2', 'rounds.two', 31);
   const over = await post('/new/o-r2/samples', cookie, {}, { ajax: true });
   assert.equal(over.status, 409);
   assert.match((await over.json()).message, /החודש כבר כתבנו לכם פוסטים לדוגמה 6 פעמים/);
   // A round that broke on our side and wrote nothing is not the customer's.
   db.run("DELETE FROM onboarding WHERE id = 'o-r-many'");
-  db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 1 AND id <> 'o-r2'");
+  db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 31 AND id <> 'o-r2'");
   ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['throw', 'throw']), retryMs: 0 };
   await runSamples('o-r2');
   const r2 = JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-r2'").candidates_json).rounds;

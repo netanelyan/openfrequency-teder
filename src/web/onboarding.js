@@ -71,6 +71,15 @@ export const listField = (v, { commas = false, max = 10, len = 300 } = {}) =>
   [...new Set(String(v || '').split(commas ? /\r?\n|[,،]/ : /\r?\n/).map((x) => x.trim().slice(0, len)).filter(Boolean))].slice(0, max);
 /** A new account's topics: 12 at most, 60 characters each. */
 const TOPICS = { commas: true, max: 12, len: 60 };
+
+/**
+ * One Teder account a subscription (the owner, 2026-10-31): a customer's plan is their one account's, never split
+ * between accounts. Another account is another subscription, at the same price, opened by us. Our own workspaces keep
+ * as many as they have.
+ */
+export const ONE_ACCOUNT = 'לכל חשבון בתדר יש מנוי משלו, והחשבון שלכם כבר פתוח. רוצים עוד חשבון? כתבו לנו, ונפתח לכם עוד מנוי באותו מחיר.';
+/** Whether a customer's workspace already has its one account. */
+export const hasAccount = (db, workspaceId) => customerWorkspace(workspaceId) && Boolean(db.get('SELECT 1 FROM accounts WHERE workspace_id = ? LIMIT 1', workspaceId));
 /** The samples one press asks for, the fewest that count as done, and the most tries to get there. */
 export const SAMPLE_TARGET = 5;
 export const SAMPLE_ENOUGH = 3;
@@ -367,18 +376,22 @@ function scheduleSection(ctx, pc, r) {
 /* ------------------------------------------------------------------ the pages */
 
 function listPage(ctx, pc) {
+  // A customer whose one account is open gets no form for another (ONE_ACCOUNT); the setups in progress stay listed,
+  // the way back to their account's samples step among them.
+  const one = hasAccount(ctx.db, ctx.workspaceId);
   const rows = (ctx.workspaceId == null ? ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20') : ctx.db.all('SELECT * FROM onboarding WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 20', ctx.workspaceId)).map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
   return layout(
     { ...pc, title: 'חשבון חדש', active: 'new' },
-    `<div class="head"><h1>חשבון חדש</h1><span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים חמישה פוסטים לדוגמה.</span></div>
-<div class="cols"><section class="panel"><header><h2>מתחילים מכאן</h2></header>
+    `<div class="head"><h1>חשבון חדש</h1>${one ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים חמישה פוסטים לדוגמה.</span>'}</div>
+<div class="cols">${one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
+<div class="actions p0"><a class="btn" href="/accounts">לחשבון שלכם</a></div></section>` : `<section class="panel"><header><h2>מתחילים מכאן</h2></header>
 <p class="muted">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
 <label class="f">במה החשבון יעסוק <small>כמו שהייתם מספרים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">למי הוא מיועד<input type="text" name="audience" maxlength="160" placeholder="למשל: סטודנטים שמבשלים בתקציב קטן"></label>
 <label class="f">נושאים שחשובים לכם <small class="js-hide">מופרדים בפסיקים, לא חובה</small><small class="js-show">כותבים נושא ולוחצים Enter, לא חובה</small><input type="text" name="topics" maxlength="800" data-pills="commas" data-max="12"></label>
 <label class="f">אתרים או חשבונות שאתם אוהבים <small class="js-hide">כתובת אחת בכל שורה, לא חובה</small><small class="js-show">כותבים כתובת ולוחצים Enter, לא חובה</small><textarea name="examples" rows="4" dir="ltr" data-pills data-max="10"></textarea></label>
-<button class="btn primary" type="submit">${icon('spark')}לחפש מקורות</button></form></section>
+<button class="btn primary" type="submit">${icon('spark')}לחפש מקורות</button></form></section>`}
 <section class="panel"><header><h2>בתהליך</h2></header>${rows.length ? `<ul class="factlist">${rows.map((r) => `<li><a href="/new/${esc(r.id)}"><b>${esc(r.seed.niche)}</b></a> <span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span> <span class="muted small">${esc(stamp(r.updated_at))}</span></li>`).join('')}</ul>` : '<p class="muted">אין עדיין.</p>'}</section></div>`
   );
 }
@@ -557,6 +570,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       'POST',
       /^\/new$/,
       (ctx, user, _m, f) => {
+        if (hasAccount(ctx.db, ctx.workspaceId)) throw new ActionError(ONE_ACCOUNT, 409);
         const niche = String(f.niche || '').trim();
         if (niche.length < 2) throw new ActionError('צריך לכתוב במה החשבון יעסוק');
         const id = newId('o');
@@ -665,6 +679,8 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       async (ctx, user, m, f) => {
         const r = row(ctx, m[1]);
         if (r.status !== 'review') throw new ActionError('החשבון הזה כבר נוצר, או שהחיפוש עוד לא הסתיים.', 409);
+        // An older setup finished after the workspace's account was made: still one account.
+        if (hasAccount(ctx.db, r.workspace_id ?? null)) throw new ActionError(ONE_ACCOUNT, 409);
         // A source the customer was not offered is not theirs to approve (the operator may); one whose terms forbid
         // reuse is nobody's.
         const may = (c) => c.score?.terms !== 'no' && (offered(c) || user.operator);
