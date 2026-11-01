@@ -316,12 +316,29 @@ says which keys are set without showing them.
 - **What it is.** A store's demo page (`/s/<slug>`) ends with "להפעיל את תדר". With `OF_SIGNUP_OPEN=1` it goes to
   accounts' sign-up, `OF_SIGNUP_URL` (https only; empty is `https://accounts.openfrequency.co.il/signup`). Without it
   the button goes to the website's `https://openfrequency.co.il/join?p=teder`, so nobody is sent to a page that does
-  not take them yet.
+  not take them yet. When the page shows both plans (the next section), each plan's card has its own button with
+  `OF_SIGNUP_OPEN=1`, "להצטרף בחבילה הקטנה" to `<sign-up>?p=teder&plan=small` and "להצטרף בחבילה המלאה" to
+  `&plan=full`, the website's links; without it the cards have no button and one "להפעיל את תדר" to /join is under
+  them (/join takes no plan).
 - **What to do.** Leave `OF_SIGNUP_OPEN` empty until accounts really has a public sign-up page (today accounts signs
   in existing customers and invited people only). When it does, set `OF_SIGNUP_OPEN=1`, and `OF_SIGNUP_URL` if the
   address is not the default (for example with a `?p=teder` the sign-up page reads).
 - **Needed now?** No. It is the switch for the day self-serve sign-up opens, together with `BRAVE_API_KEY` and
   `ANTHROPIC_API_KEY` above.
+
+### The price on the stores' pages: both plans
+
+- **What it is.** The panel "המחיר בעמודים של החנויות" on `/demos` (POST `/demos/offer`, kept in the setting
+  `demo-offer`). "החבילה המלאה": its price a month and its setup fee (`monthly`, `setup`); its slideshows and redos are
+  Teder's own, 40 and 10 (`DEFAULT_PLAN`). "החבילה הקטנה": its price, setup fee, slideshows and redos a month
+  (`small_monthly`, `small_setup`, `small_slideshows`, `small_redos`), which only accounts knows otherwise. VAT is the
+  same for both. With the full plan's price and VAT a store's page shows the one card it always had; once the small
+  plan has its price, slideshows and redos too, it shows a card for each, as openfrequency.co.il's /teder does
+  (openfrequency-web `tederPricing`), then what both include. An empty setup fee says nothing, 0 says "אין דמי הקמה."
+- **What to do.** Enter the same numbers as the website's `site.config.json` (`teder.*`, `teder.small.*`) and
+  accounts' `PLANS.teder`: today 790 and 1,490 for the full plan, 490, 990, 15 and 4 for the small one, VAT "לא כולל".
+  The line under the form says what the pages show. Change them here whenever the website's change.
+- **Needed now?** Yes: until the small plan is filled in, the stores' pages show only the full plan.
 
 ### OF_SUPPORT_WA: where "כתבו לנו" leads
 

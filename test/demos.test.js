@@ -253,7 +253,7 @@ test("the store's page says what the sample is and what Teder does, promises no 
   for (const name of ['TikTok', 'Instagram']) assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
   for (const name of ['Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva']) assert.ok(!sec.includes(`aria-label="${name}"`), `no ${name}: Teder does not connect to it`);
   for (const promise of ['החיבורים עלינו', 'וכל חיבור נוסף', 'מפתחים אותו', 'הצוות', 'כלול בשירות', 'בנה מהמוצרים']) assert.ok(!page.includes(promise), `no "${promise}"`);
-  assert.ok(sec.includes('<h3>ככה מתחילים</h3>'), 'how one starts, on their own');
+  assert.ok(!page.includes('ככה מתחילים'), 'no steps of a sign-up: the page stays short (test/demo-price.test.js)');
   assert.ok(page.includes('פרסום בימים ובשעות שאתם בוחרים. בשבת ובחג לא מפרסמים'), 'the days and times are theirs');
   assert.doesNotMatch(sec, /style=|<img|https?:\/\//, 'inline SVG only, no inline style and nothing loaded from elsewhere');
 });

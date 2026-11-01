@@ -4,6 +4,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { dataDir } from '../core/paths.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
 import { nowIso } from '../core/clock.js';
+import { DEFAULT_PLAN, MAX_PLAN } from '../budget/quota.js';
 import { buildDemo, readDemo, requestDemo } from '../demos/build.js';
 import { DemoError } from '../demos/store.js';
 import { ActionError } from './actions.js';
@@ -46,14 +47,30 @@ export function startBuild(ctx, id, opts = {}) {
   return p;
 }
 
+// The price on the stores' pages, as the operator sets it on /demos: the full plan's monthly price and setup fee, VAT
+// (the same for both plans), and the small plan's price, setup fee, slideshows and redos (openfrequency.co.il sells
+// both: site.config.json teder.* and teder.small.*). The full plan's slideshows and redos are Teder's own
+// (DEFAULT_PLAN); the small plan's come from accounts' answer only, so the operator writes them here. An offer saved
+// before the small plan existed has none, and its pages show the one plan as before.
 const OFFER_KEY = 'demo-offer';
-export const offerOf = (db) => getSetting(db, OFFER_KEY, { monthly: null, setup: null, vat: null });
+const NO_SMALL = { monthly: null, setup: null, slideshows: null, redos: null };
+export const offerOf = (db) => {
+  const o = getSetting(db, OFFER_KEY, null) || {};
+  return { monthly: o.monthly ?? null, setup: o.setup ?? null, vat: o.vat ?? null, small: { ...NO_SMALL, ...(o.small || {}) } };
+};
+/** Whether the pages show a price: the full plan's monthly price and VAT are set. */
+const priced = (o) => o.monthly > 0 && Boolean(o.vat);
+/** Whether they show both plans: priced, and the small plan has its monthly price, its slideshows and its redos. */
+const bothPlans = (o) => priced(o) && o.small?.monthly > 0 && o.small.slideshows > 0 && o.small.redos != null;
 
 const ils = (n) => `${Number(n).toLocaleString('he-IL')} ₪`;
+const vatWords = (o) => (o.vat === 'included' ? 'כולל מע״מ' : 'לא כולל מע״מ');
+/** What the stores' pages say about the price, for the operator under the form. */
 const priceLine = (o) => {
-  if (!(o.monthly > 0) || !o.vat) return null;
-  const vat = o.vat === 'included' ? 'כולל מע״מ' : 'לא כולל מע״מ';
-  return `זה ${ils(o.monthly)} לחודש, ${vat}${o.setup > 0 ? `, ועוד ${ils(o.setup)} דמי הקמה, פעם אחת` : ''}.`;
+  if (!priced(o)) return null;
+  const fee = (p) => (p.setup > 0 ? `, ועוד ${ils(p.setup)} דמי הקמה, פעם אחת` : '');
+  if (!bothPlans(o)) return `זה ${ils(o.monthly)} לחודש, ${vatWords(o)}${fee(o)}. החבילה הקטנה תופיע כשיהיו לה מחיר לחודש, מספר מצגות ומספר החלפות.`;
+  return `שתי חבילות, ${vatWords(o)}. הקטנה ${ils(o.small.monthly)} לחודש${fee(o.small)}, ל-${o.small.slideshows} מצגות ו-${o.small.redos} החלפות בחודש. המלאה ${ils(o.monthly)} לחודש${fee(o)}, ל-${DEFAULT_PLAN.suggested} מצגות ו-${DEFAULT_PLAN.redos} החלפות בחודש.`;
 };
 
 /** "ל" before a Hebrew name, "ל־" before any other. */
@@ -245,25 +262,92 @@ export function joinUrl(env = process.env) {
   const signup = String(env.OF_SIGNUP_URL || '').trim() || SIGNUP_DEFAULT;
   return open && /^https:\/\/[^\s"'<>]+$/.test(signup) ? signup : JOIN;
 }
+
+/**
+ * A plan's own way in, as the website's plan cards link it (openfrequency-web src/lib.mjs signupUrl): accounts'
+ * sign-up with ?p=teder&plan=small or full. Null while the page's way in is the website's /join, which takes no plan.
+ */
+function planUrl(join, plan) {
+  if (join === JOIN) return null;
+  try {
+    const u = new URL(join);
+    if (!u.searchParams.has('p')) u.searchParams.set('p', 'teder');
+    u.searchParams.set('plan', plan);
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+// Teder's two plans as openfrequency.co.il shows them (openfrequency-web src/sections.mjs TEDER_PLANS and
+// tederPricing), the small one first: [the plan as accounts takes it, the card's name, "in it" for its button].
+const PLAN_CARDS = [
+  ['small', 'חבילה קטנה', 'בחבילה הקטנה'],
+  ['full', 'חבילה מלאה', 'בחבילה המלאה'],
+];
+// With two plans the cards say how many redos each gives, so what a redo is joins what both include (the website's
+// line for it on /teder).
+const REDO_LINE = 'גרסה חדשה כשמצגת לא יצאה כמו שצריך, עד מספר ההחלפות של החבילה';
+// The setup fee as the self-serve terms say it, beside the plans when their buttons go to accounts' sign-up (the
+// website's NO_REFUND, said there while sign-up is open).
+const NO_REFUND = 'דמי ההקמה לא מוחזרים.';
+
+/**
+ * The price section: with both plans, a card for each as on openfrequency.co.il (its figure, VAT, its slideshows and
+ * redos, its setup fee and its own button to sign-up), then what both include; with one, the card the page always
+ * had (the figure, VAT and the setup fee, the way in, what it includes); with none, what Teder does and the way in.
+ */
+function priceSection(offer, join) {
+  if (bothPlans(offer)) {
+    const open = planUrl(join, 'full') != null;
+    const card = ([plan, name, inIt]) => {
+      const p = plan === 'small' ? offer.small : { monthly: offer.monthly, setup: offer.setup, slideshows: DEFAULT_PLAN.suggested, redos: DEFAULT_PLAN.redos };
+      const fee = p.setup > 0 ? `בחודש הראשון יש גם ${ils(p.setup)} דמי הקמה, פעם אחת.${open ? ` ${NO_REFUND}` : ''}` : p.setup === 0 ? 'אין דמי הקמה.' : '';
+      return `<article class="glass plan">
+<h3 class="plan-name">${name}</h3>
+<p class="figure"><span class="num">${esc(Number(p.monthly).toLocaleString('he-IL'))}</span><span class="cur">₪</span><span class="per">לחודש</span></p>
+<p class="plan-vat">${vatWords(offer)}</p>
+<p class="plan-cap"><b>${esc(p.slideshows)}</b> מצגות מוצעות בחודש, ועד <b>${esc(p.redos)}</b> החלפות</p>
+${fee ? `<p class="plan-fee">${esc(fee)}</p>` : ''}${open ? `<a class="go" href="${esc(planUrl(join, plan))}">להצטרף ${inIt}</a>` : ''}
+</article>`;
+    };
+    return `<section class="price" aria-labelledby="price-h"><h2 id="price-h">אם תפעילו את תדר</h2>
+<p class="price-lede">שתי חבילות, לפי מספר המצגות בחודש. כל השאר זהה בשתיהן.</p>
+<div class="plans">${PLAN_CARDS.map(card).join('\n')}</div>
+<div class="glass price-incl plan-both"><h3>מה יש בשתי החבילות</h3><ul class="checks">${[...INCLUDES, REDO_LINE].map((x) => `<li>${x}</li>`).join('')}</ul>${open ? '' : `<a class="go" href="${esc(join)}">להפעיל את תדר</a>`}</div>
+</section>`;
+  }
+  const one = priced(offer);
+  const notes = one ? `${offer.vat === 'included' ? 'כולל מע״מ.' : 'לא כולל מע״מ.'}${offer.setup > 0 ? ` בחודש הראשון יש גם ${esc(ils(offer.setup))} דמי הקמה, פעם אחת.` : ''}` : '';
+  return `<section class="price" aria-labelledby="price-h"><h2 id="price-h">אם תפעילו את תדר</h2>
+<div class="glass price-card">
+<div class="price-main">
+<p class="price-name">${tederMark()}<b>תדר</b></p>
+${one ? `<p class="figure"><span class="num">${esc(Number(offer.monthly).toLocaleString('he-IL'))}</span><span class="cur">₪</span><span class="per">לחודש</span></p><p class="price-notes">${notes}</p>` : ''}
+<a class="go" href="${esc(join)}">להפעיל את תדר</a>
+</div>
+<div class="price-incl"><h3>${one ? 'מה כלול במחיר' : 'מה תדר עושה'}</h3><ul class="checks">${INCLUDES.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+</div>
+</section>`;
+}
 const articleName = (title) => String(title || '').replace(/\s*\(Wikipedia[^)]*\)\s*$/, '');
 
 // What this page is and what Teder is, said plainly: the slideshow was written from the store's site to show how it
 // looks; in Teder the owner picks the account's subject and Teder writes about it from sources they approve, never
-// about their products. Where it goes out: TikTok and Instagram, the only two Teder posts to. Then how one starts, on
-// their own. Nothing here promises work done by hand. The same on every page, nothing in it about the store.
+// about their products. Where it goes out: TikTok and Instagram. Nothing here promises work done by hand. The same on
+// every page, nothing in it about the store. The steps of a sign-up are not here: the page stays short (the owner,
+// 2026-11-01, of "ככה מתחילים": "unnecessary information. has to be minimal").
 const PLATFORM_LOGOS = LOGOS.filter((l) => ['TikTok', 'Instagram'].includes(l.name));
 const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h">בתדר אתם בוחרים על מה החשבון כותב</h2>
 <p class="links-lede">את המצגת הזו תדר כתב מהאתר שלכם, כדי שתראו איך זה נראה אצלכם. כשפותחים חשבון בתדר, בוחרים לו נושא, ותדר כותב עליו מצגות מתוך מקורות שאתם מאשרים. המצגות עוסקות בתחום עצמו, ואין בהן המלצות על מוצרים.</p>
 <ul class="logos" aria-label="איפה המצגות מתפרסמות">${PLATFORM_LOGOS.map((l) => `<li${l.box ? ' class="wide"' : ''} title="${l.name}"><svg viewBox="${l.box || '0 0 24 24'}" role="img" aria-label="${l.name}"><path fill="${l.color}" d="${l.path}"/></svg></li>`).join('')}</ul>
-<div class="glass links-note"><h3>ככה מתחילים</h3>
-<p>נרשמים, כותבים במה החשבון יעסוק, מאשרים מקורות ועוברים על כמה פוסטים לדוגמה. אחר כך מחברים את טיקטוק ואת אינסטגרם, בוחרים ימים ושעות, וכל פוסט מחכה לאישור שלכם לפני שהוא עולה.</p></div>
 </section>`;
 
 /**
  * The store's page, built like Toran's (openfrequency-toran src/pitch/page.ts): what was read on its site and the
  * way in beside its products, on its own photograph; then the slideshow itself; then what Teder is (LINKS above);
- * then what Teder would do for it and what that costs, and the way in (joinUrl). No script: the two sizes are two
- * radio buttons and CSS.
+ * then what Teder would do for it and what that costs, one plan or both, and the way in (priceSection, joinUrl). No
+ * script: the two sizes are two radio buttons and CSS.
  */
 export function demoPage(demo, { offer, join = joinUrl() }) {
   const name = demo.store?.name || demo.domain;
@@ -276,9 +360,6 @@ export function demoPage(demo, { offer, join = joinUrl() }) {
   const initial = esc([...String(name).trim()][0] || '·');
   const mark = (sm = false) =>
     demo.store?.logo ? `<span class="logo${sm ? ' sm' : ''}"><img src="${base}/logo" alt="${sm ? '' : esc(name)}"></span>` : `<span class="initial${sm ? ' sm' : ''}" aria-hidden="true">${initial}</span>`;
-  // The price, on one card as on openfrequency.co.il: the figure, VAT and the setup fee, the way in, and what it includes.
-  const priced = offer.monthly > 0 && offer.vat;
-  const notes = priced ? `${offer.vat === 'included' ? 'כולל מע״מ.' : 'לא כולל מע״מ.'}${offer.setup > 0 ? ` בחודש הראשון יש גם ${esc(ils(offer.setup))} דמי הקמה, פעם אחת.` : ''}` : '';
   const tile = (n, label, wide = false) => `<div${wide ? ' class="wide"' : ''}><dt>${label}</dt><dd>${n}</dd></div>`;
   const stats = [
     st.products ? tile(esc(st.products), 'מוצרים') : '',
@@ -318,16 +399,7 @@ ${shelfHtml}
 <p class="caption">את הנושא בחר תדר, ואת המצגת הוא כתב ועיצב. לא שינינו בה מילה.${(demo.post?.photos || []).length ? ' התמונות מ־<a href="https://www.pexels.com" rel="noopener noreferrer">Pexels</a>.' : ''}</p>
 ${facts.length ? `<details class="glass facts"><summary>מאיפה כל עובדה</summary><ul>${facts.map((f) => `<li><b>${esc(f.claim)}</b><q>${esc(f.quote)}</q>${f.url ? `<a href="${esc(f.url)}" rel="noopener noreferrer">${esc(articleName(f.source) || f.url)}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
 ${LINKS}
-<section class="price" aria-labelledby="price-h"><h2 id="price-h">אם תפעילו את תדר</h2>
-<div class="glass price-card">
-<div class="price-main">
-<p class="price-name">${tederMark()}<b>תדר</b></p>
-${priced ? `<p class="figure"><span class="num">${esc(Number(offer.monthly).toLocaleString('he-IL'))}</span><span class="cur">₪</span><span class="per">לחודש</span></p><p class="price-notes">${notes}</p>` : ''}
-<a class="go" href="${esc(join)}">להפעיל את תדר</a>
-</div>
-<div class="price-incl"><h3>${priced ? 'מה כלול במחיר' : 'מה תדר עושה'}</h3><ul class="checks">${INCLUDES.map((x) => `<li>${x}</li>`).join('')}</ul></div>
-</div>
-</section>
+${priceSection(offer, join)}
 <footer class="foot"><span class="by">${ofMark()}OpenFrequency</span>${a11yLink()}</footer>
 </div>
 </body></html>`;
@@ -346,12 +418,19 @@ function listPage(ctx, pc) {
   const rows = demosWithOpens(ctx.db, { limit: 200 }).map(readDemo);
   const o = offerOf(ctx.db);
   const sel = (v) => (o.vat === v ? ' selected' : '');
+  const field = (label, name, v) => `<label>${label}<input name="${name}" inputmode="numeric" value="${esc(v ?? '')}"></label>`;
   const offer = `<section class="panel"><header><h2>המחיר בעמודים של החנויות</h2></header>
 <form method="post" action="/demos/offer" class="d-offer"><input type="hidden" name="_csrf" value="${esc(pc.csrf)}">
-<label>לחודש, ב-₪<input name="monthly" inputmode="numeric" value="${esc(o.monthly ?? '')}"></label>
-<label>דמי הקמה, ב-₪<input name="setup" inputmode="numeric" value="${esc(o.setup ?? '')}"></label>
-<label>מע״מ<select name="vat"><option value=""${sel(null)}>לא נקבע</option><option value="included"${sel('included')}>כולל</option><option value="excluded"${sel('excluded')}>לא כולל</option></select></label>
-<button class="btn">לשמור</button></form>
+<fieldset><legend>החבילה המלאה, ${DEFAULT_PLAN.suggested} מצגות ו-${DEFAULT_PLAN.redos} החלפות בחודש</legend>
+${field('לחודש, ב-₪', 'monthly', o.monthly)}
+${field('דמי הקמה, ב-₪', 'setup', o.setup)}</fieldset>
+<fieldset><legend>החבילה הקטנה</legend>
+${field('לחודש, ב-₪', 'small_monthly', o.small.monthly)}
+${field('דמי הקמה, ב-₪', 'small_setup', o.small.setup)}
+${field('מצגות בחודש', 'small_slideshows', o.small.slideshows)}
+${field('החלפות בחודש', 'small_redos', o.small.redos)}</fieldset>
+<div class="d-offer-end"><label>מע״מ, בשתי החבילות<select name="vat"><option value=""${sel(null)}>לא נקבע</option><option value="included"${sel('included')}>כולל</option><option value="excluded"${sel('excluded')}>לא כולל</option></select></label>
+<button class="btn">לשמור</button></div></form>
 <p class="muted small">${priceLine(o) ? esc(priceLine(o)) : 'עד שהמחיר נקבע, העמודים לא מזכירים אותו.'}</p></section>`;
   const list = rows.length
     ? `<section class="panel"><ul class="d-list">${rows
@@ -411,8 +490,12 @@ export function demosRoutes() {
           const t = String(v ?? '').trim();
           return t === '' ? null : /^[\d,]+(\.\d+)?$/.test(t) ? Number(t.replace(/,/g, '')) : NaN;
         };
-        const offer = { monthly: n(f.monthly), setup: n(f.setup), vat: ['included', 'excluded'].includes(f.vat) ? f.vat : null };
-        if ([offer.monthly, offer.setup].some((x) => x != null && !(x >= 0))) throw new ActionError('המחיר צריך להיות מספר');
+        const small = { monthly: n(f.small_monthly), setup: n(f.small_setup), slideshows: n(f.small_slideshows), redos: n(f.small_redos) };
+        const offer = { monthly: n(f.monthly), setup: n(f.setup), vat: ['included', 'excluded'].includes(f.vat) ? f.vat : null, small };
+        if ([offer.monthly, offer.setup, small.monthly, small.setup].some((x) => x != null && !(x >= 0))) throw new ActionError('המחיר צריך להיות מספר');
+        // As many as the operator may give an account of ours (MAX_PLAN), so a typo cannot promise thousands.
+        const whole = (x, max) => x == null || (Number.isInteger(x) && x >= 0 && x <= max);
+        if (!whole(small.slideshows, MAX_PLAN.suggested) || !whole(small.redos, MAX_PLAN.redos)) throw new ActionError(`מספר המצגות וההחלפות צריך להיות מספר שלם, עד ${MAX_PLAN.suggested}`);
         setSetting(ctx.db, OFFER_KEY, offer);
         audit(ctx.db, { actor: user.name, action: 'demo_offer', detail: offer });
         return { ok: true, message: 'המחיר נשמר', redirect: '/demos' };

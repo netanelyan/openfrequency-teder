@@ -68,16 +68,18 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
   .glass { background: rgba(255, 255, 255, 0.9); }
 }
 
-/* what we read: the numbers on tiles, the articles as chips */
+/* what we read: the numbers on tiles, the articles as chips. Each tile starts as wide as what it says, and one that does
+   not fit goes to the next row (with equal shares the price range ran past its tile beside the products on a desk, and
+   "תמונות מוצרים" was cut on a phone of 360) */
 .read { margin: 22px 0 0; padding: 18px 2px 0; border-top: 1px solid rgba(0, 0, 0, 0.08); text-align: start; }
 .read h2 { font-size: 18px; font-weight: 700; line-height: 1.3; margin: 0 0 12px; }
 .stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
-.stats div { display: flex; flex: 1 1 0; flex-direction: column-reverse; gap: 2px; min-width: 0; padding: 12px 14px 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.72); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 6px 16px -12px rgba(0, 0, 0, 0.2); }
+.stats div { display: flex; flex: 1 1 auto; flex-direction: column-reverse; gap: 2px; min-width: 0; padding: 12px 14px 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.72); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 6px 16px -12px rgba(0, 0, 0, 0.2); }
 .stats div.wide { flex-basis: 100%; }
 .stats dd { margin: 0; font: 800 clamp(24px, 6.6vw, 30px)/1.1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stats dd small { font-size: 0.5em; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
 .stats dt { overflow: hidden; font-size: 13px; color: var(--ink-3); white-space: nowrap; text-overflow: ellipsis; }
-@media (min-width: 560px) { .stats div.wide { flex: 1.7 1 0; } }
+@media (min-width: 560px) { .stats div.wide { flex: 1.7 1 auto; } }
 .pages { margin: 14px 0 0; }
 .pages span { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: var(--ink); }
 .pages ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -146,8 +148,7 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
 .facts q { color: var(--ink-3); font-size: 15px; quotes: '״' '״'; }
 .facts a { font-size: 13px; }
 
-/* what the team fits and connects, as on Toran's page: the systems' marks on white tiles, a wide tile for anything
-   else, and a glass note on what is built when it does not exist yet, edged in Teder's violet */
+/* what Teder is and where it posts, as on Toran's page: the networks' marks on white tiles */
 .links { padding: 40px 0 8px; }
 .links h2 { font-size: 24px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; margin: 0 0 10px; padding: 0 4px; }
 .links-lede { margin: 0 0 18px; padding: 0 4px; color: var(--ink-2); font-size: 16px; line-height: 1.6; max-width: 40em; }
@@ -158,9 +159,6 @@ ul.logos li.wide { padding: 0 12px; }
 ul.logos li.wide svg { width: 62px; height: 14px; }
 ul.logos li.more { padding: 0 20px; font-size: 15px; font-weight: 700; flex: 1 1 260px; justify-content: flex-start; }
 ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; margin-inline-end: 4px; color: var(--teder); }
-.links-note { margin-top: 18px; padding: 18px 22px; border-inline-start: 3px solid var(--teder); border-radius: 20px; }
-.links-note h3 { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
-.links-note p { margin: 0; color: var(--ink-2); font-size: 15px; line-height: 1.65; }
 @media (max-width: 520px) { ul.logos { gap: 8px; } ul.logos li { min-width: 56px; height: 56px; padding: 0 12px; border-radius: 16px; } ul.logos li svg { width: 28px; height: 28px; } ul.logos li.wide svg { width: 70px; height: 15px; } ul.logos li.more { flex-basis: 100%; } }
 
 /* the price: one card, as the store saw it on openfrequency.co.il. The figure, VAT and the setup fee and the way in
@@ -184,6 +182,19 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
 .checks li::before { content: ''; position: absolute; inset-inline-start: 0; top: 0.2em; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--teder) 14%, transparent); }
 .checks li::after { content: ''; position: absolute; inset-inline-start: 8px; top: calc(0.2em + 5px); width: 5px; height: 10px; border-right: 2.4px solid var(--teder); border-bottom: 2.4px solid var(--teder); transform: rotate(45deg); }
 @media (min-width: 640px) { .price-card { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } }
+/* both plans, as on openfrequency.co.il (its sections.mjs tederPricing): a card each with its figure, VAT, its
+   slideshows and redos, its setup fee and its own way in, side by side where they fit; then what both include */
+.price-lede { margin: -4px 0 16px; padding: 0 4px; color: var(--ink-2); font-size: 16px; }
+.plans { display: grid; gap: 16px; }
+.plan { display: grid; align-content: start; gap: 6px; padding: 24px 22px; }
+.plan-name { margin: 0; font-size: 20px; font-weight: 700; }
+.plan-vat, .plan-fee { margin: 0; color: var(--ink-2); font-size: 15px; }
+.plan-cap { margin: 10px 0 0; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.plan-cap b { font-variant-numeric: tabular-nums; }
+.plan .go { justify-self: start; margin-top: 14px; }
+.plan-both { margin-top: 16px; }
+.plan-both .go { margin-top: 22px; }
+@media (min-width: 700px) { .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 36px; padding: 16px 4px 0; border-top: 1px solid rgba(0, 0, 0, 0.07); font-size: 13px; color: var(--ink-3); }
 
