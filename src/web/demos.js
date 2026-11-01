@@ -397,7 +397,7 @@ ${shelfHtml}
 <div class="stage instagram">${strip(demo, 'instagram', base)}</div>
 <div class="cap"><b>הטקסט שעולה עם המצגת</b><p>${esc(demo.post?.caption || '')}</p></div>
 </section>
-<p class="caption">את הנושא בחר תדר, ואת המצגת הוא כתב ועיצב. לא שינינו בה מילה.${(demo.post?.photos || []).length ? ' התמונות מ־<a href="https://www.pexels.com" rel="noopener noreferrer">Pexels</a>.' : ''}</p>
+${(demo.post?.photos || []).length ? '<p class="caption">התמונות מ־<a href="https://www.pexels.com" rel="noopener noreferrer">Pexels</a>.</p>' : ''}
 ${facts.length ? `<details class="glass facts"><summary>מאיפה כל עובדה</summary><ul>${facts.map((f) => `<li><b>${esc(f.claim)}</b><q>${esc(f.quote)}</q>${f.url ? `<a href="${esc(f.url)}" rel="noopener noreferrer">${esc(articleName(f.source) || f.url)}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
 ${LINKS}
 ${priceSection(offer, join)}

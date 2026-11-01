@@ -172,6 +172,11 @@ test('"ככה מתחילים" is gone, and the page keeps what it is for: the sl
   assert.ok(!page.includes('ככה מתחילים') && !page.includes('links-note'), 'no steps of a sign-up');
   assert.doesNotMatch(readFileSync(new URL('../src/web/static/demo.css', import.meta.url), 'utf8'), /links-note/, 'nor its CSS');
   assert.match(page, new RegExp(`src="/s/${SLUG}/tiktok-0\\.jpg"`), 'the slideshow');
+  // Nor the line under the slideshow (the owner, 2026-11-01, chose to cut it); a photo credit alone stays, and only
+  // under a slideshow with photographs.
+  assert.doesNotMatch(page, /את הנושא בחר תדר|לא שינינו בה מילה/);
+  assert.doesNotMatch(page, /<p class="caption">\s*<\/p>/, 'no empty line in its place');
+  assert.match(page, /<p class="caption">התמונות מ־<a href="https:\/\/www\.pexels\.com" rel="noopener noreferrer">Pexels<\/a>\.<\/p>/, 'the photographs credited');
   assert.match(page, /<section class="links"[\s\S]*?בתדר אתם בוחרים על מה החשבון כותב/, 'what Teder is');
   assert.ok(priceOf(page).includes('<span class="num">790</span>'), 'the price');
   assert.ok(priceOf(page).includes(`<a class="go" href="${JOIN}">להפעיל את תדר</a>`), 'and the way in');
