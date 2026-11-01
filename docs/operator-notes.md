@@ -320,11 +320,10 @@ says which keys are set without showing them.
   `OF_SIGNUP_OPEN=1`, "להצטרף בחבילה הקטנה" to `<sign-up>?p=teder&plan=small` and "להצטרף בחבילה המלאה" to
   `&plan=full`, the website's links; without it the cards have no button and one "להפעיל את תדר" to /join is under
   them (/join takes no plan).
-- **What to do.** Leave `OF_SIGNUP_OPEN` empty until accounts really has a public sign-up page (today accounts signs
-  in existing customers and invited people only). When it does, set `OF_SIGNUP_OPEN=1`, and `OF_SIGNUP_URL` if the
-  address is not the default (for example with a `?p=teder` the sign-up page reads).
-- **Needed now?** No. It is the switch for the day self-serve sign-up opens, together with `BRAVE_API_KEY` and
-  `ANTHROPIC_API_KEY` above.
+- **What to do.** Set `OF_SIGNUP_OPEN=1` once accounts has a public sign-up page, and `OF_SIGNUP_URL` if the address
+  is not the default. accounts' sign-up has been open for Teder since 2026-10-30 (`OF_SIGNUP=1`,
+  `OF_SIGNUP_PRODUCTS=teder`), and `OF_SIGNUP_OPEN=1` goes on with the deploy of the two plans (2026-11-01).
+- **Needed now?** Yes, since sign-up is open: without it the plans' cards on a demo page have no button.
 
 ### The price on the stores' pages: both plans
 

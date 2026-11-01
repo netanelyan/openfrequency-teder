@@ -466,9 +466,11 @@ test('a message off stays off; one at night waits for the morning; one no longer
 });
 
 test('quota.low once a month at 8 left, and the weekly summary on Sunday at 09:00, one per customer', async () => {
-  const t = israelInstant('2026-11-01', '09:30').getTime(); // a Sunday
+  // A Sunday well ahead: on 2026-11-01, the Sunday this test used to name, the posts other tests made at the real time
+  // counted in its month too, and 8 left read 7.
+  const t = israelInstant('2030-11-03', '09:30').getTime();
   setNow(t);
-  clone(A.post, null, { quota_kind: 'suggestion', quota_month: '2026-11' });
+  clone(A.post, null, { quota_kind: 'suggestion', quota_month: '2030-11' });
   paidWorkspaces(db, [1], { plan: { name: 'full', slideshows: 9, redos: 10 } });
   const c = catcher();
   await assistantTick(ctx, { t, env: ENV, send: c.send });
@@ -478,12 +480,12 @@ test('quota.low once a month at 8 left, and the weekly summary on Sunday at 09:0
   assert.deepEqual(weekly.map((g) => g.body.customer).sort(), [1, 2]);
   const w1 = weekly.find((g) => g.body.customer === 1).body.data;
   assert.deepEqual(w1.accounts.map((a) => a.account.id), ['alpha'], "a customer's summary is of their own accounts");
-  assert.equal(w1.to, israelInstant('2026-11-01', '09:00').toISOString());
+  assert.equal(w1.to, israelInstant('2030-11-03', '09:00').toISOString());
   const again = catcher();
   await assistantTick(ctx, { t: t + 3_600_000, env: ENV, send: again.send });
   assert.ok(!again.got.some((g) => g.type === 'quota.low' || g.type === 'weekly.summary'), 'once');
   // Saturday has no summary.
-  assert.equal(detect(ctx, { t: israelInstant('2026-10-31', '21:00').getTime() })['weekly.summary'], undefined);
+  assert.equal(detect(ctx, { t: israelInstant('2030-11-02', '21:00').getTime() })['weekly.summary'], undefined);
 });
 
 test('nothing is found or sent while the secret is not set', async () => {

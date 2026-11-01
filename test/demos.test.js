@@ -250,7 +250,7 @@ test("the store's page says what the sample is and what Teder does, promises no 
   assert.ok(sec.includes('את המצגת הזו תדר כתב מהאתר שלכם'), 'the sample is from their site');
   assert.ok(sec.includes('בוחרים לו נושא, ותדר כותב עליו מצגות מתוך מקורות שאתם מאשרים'), 'in Teder they choose the subject');
   assert.ok(sec.includes('ואין בהן המלצות על מוצרים'), 'and Teder never recommends products');
-  for (const name of ['TikTok', 'Instagram']) assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
+  for (const name of ['TikTok', 'Instagram', 'Facebook']) assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
   for (const name of ['Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva']) assert.ok(!sec.includes(`aria-label="${name}"`), `no ${name}: Teder does not connect to it`);
   for (const promise of ['החיבורים עלינו', 'וכל חיבור נוסף', 'מפתחים אותו', 'הצוות', 'כלול בשירות', 'בנה מהמוצרים']) assert.ok(!page.includes(promise), `no "${promise}"`);
   assert.ok(!page.includes('ככה מתחילים'), 'no steps of a sign-up: the page stays short (test/demo-price.test.js)');

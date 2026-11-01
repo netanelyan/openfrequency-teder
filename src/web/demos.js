@@ -334,10 +334,11 @@ const articleName = (title) => String(title || '').replace(/\s*\(Wikipedia[^)]*\
 
 // What this page is and what Teder is, said plainly: the slideshow was written from the store's site to show how it
 // looks; in Teder the owner picks the account's subject and Teder writes about it from sources they approve, never
-// about their products. Where it goes out: TikTok and Instagram. Nothing here promises work done by hand. The same on
-// every page, nothing in it about the store. The steps of a sign-up are not here: the page stays short (the owner,
-// 2026-11-01, of "ככה מתחילים": "unnecessary information. has to be minimal").
-const PLATFORM_LOGOS = LOGOS.filter((l) => ['TikTok', 'Instagram'].includes(l.name));
+// about their products. Where it goes out: TikTok, Instagram and Facebook, as the page's title and the website say.
+// Nothing here promises work done by hand. The same on every page, nothing in it about the store. The steps of a
+// sign-up are not here: the page stays short (the owner, 2026-11-01, of "ככה מתחילים": "unnecessary information. has
+// to be minimal").
+const PLATFORM_LOGOS = LOGOS.filter((l) => ['TikTok', 'Instagram', 'Facebook'].includes(l.name));
 const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h">בתדר אתם בוחרים על מה החשבון כותב</h2>
 <p class="links-lede">את המצגת הזו תדר כתב מהאתר שלכם, כדי שתראו איך זה נראה אצלכם. כשפותחים חשבון בתדר, בוחרים לו נושא, ותדר כותב עליו מצגות מתוך מקורות שאתם מאשרים. המצגות עוסקות בתחום עצמו, ואין בהן המלצות על מוצרים.</p>
 <ul class="logos" aria-label="איפה המצגות מתפרסמות">${PLATFORM_LOGOS.map((l) => `<li${l.box ? ' class="wide"' : ''} title="${l.name}"><svg viewBox="${l.box || '0 0 24 24'}" role="img" aria-label="${l.name}"><path fill="${l.color}" d="${l.path}"/></svg></li>`).join('')}</ul>
