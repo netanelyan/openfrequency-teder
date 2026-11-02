@@ -7,7 +7,6 @@ import { Db } from '../src/db/index.js';
 import { loadAll, loadPack } from '../src/packs/load.js';
 import { validatePack } from '../src/packs/validate.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { __onboarding } from '../src/web/onboarding.js';
 import { setupOf } from '../src/onboarding/setup.js';
 import { promiseFrom, readSitePromo, reading } from '../src/onboarding/promo.js';
@@ -16,7 +15,7 @@ import { setPackPromo } from '../src/packs/write.js';
 import { siteDescription } from '../src/demos/store.js';
 import { PROMO_HE, promoFromForm, readNote, settlePromo } from '../src/web/promo.js';
 import { closeBrowser } from '../src/render/render.js';
-import { copyPack, customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { copyPack, customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // What every slideshow sends people to (the owner, 2026-11-02, item 1 of the closing slide: "a `promo` field in the
 // pack/settings with a name, a short promise (what the viewer gets), and a target (a site, a product, or "link in bio").
@@ -238,7 +237,7 @@ before(async () => {
   ctx.mediaDir = path.join(home.home, 'media');
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'demo'");
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'r'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'r'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

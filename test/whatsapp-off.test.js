@@ -7,10 +7,9 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { tick } from '../src/autonomy/runner.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
 import { israelInstant } from '../src/schedule/israel.js';
-import { customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, paidWorkspaces, serverFree, tempHome } from './helpers.js';
 
 // Teder is managed on its dashboard only (the owner, 2026-11-02: "managing teder through whatsapp, only through the
 // dashboard. the demo stays"): the runner tells the WhatsApp assistant (openfrequency-toran) nothing, even with
@@ -42,12 +41,12 @@ before(async () => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end('{"ok":true}');
   });
-  await new Promise((r) => toran.listen(0, '127.0.0.1', r));
+  const toranPort = await serverFree(toran);
   for (const k of ['OF_ASSISTANT_SECRET', 'OF_TORAN_URL']) saved[k] = process.env[k];
   process.env.OF_ASSISTANT_SECRET = SECRET;
-  process.env.OF_TORAN_URL = `http://127.0.0.1:${toran.address().port}/internal/teder/events`;
+  process.env.OF_TORAN_URL = `http://127.0.0.1:${toranPort}/internal/teder/events`;
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'o'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'o'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

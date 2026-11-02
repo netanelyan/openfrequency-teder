@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen, setupOpen } from '../src/web/server.js';
+import { setupOpen } from '../src/web/server.js';
 import { __onboarding, CAP_HE, PAYWALL_SAMPLES, sampleRoom } from '../src/web/onboarding.js';
 import { BEFORE_PAY_HE, GATE, READY_LINE, gatePage } from '../src/web/pages.js';
 import { UNPAID_SETUP_USD, meterSetup, setupCapUsd, setupRoom, setupSpend } from '../src/billing/setup-cap.js';
@@ -15,7 +15,7 @@ import { accountAllowed } from '../src/billing/entitlement.js';
 import { connectLink } from '../src/publish/connect.js';
 import { getSetting, setSetting } from '../src/core/store.js';
 import { csrfFor } from '../src/web/auth.js';
-import { customer, fakeAccounts, opened, operator, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, tempHome } from './helpers.js';
 
 // Setting up before paying (the owner, 2026-11-02, item 2 of the audit): a customer who signed up and has not paid goes
 // through /new (niche, sources, samples) and sees the samples; the paywall stops only going live and connecting, and its
@@ -63,7 +63,7 @@ before(async () => {
   fake = await fakeAccounts();
   for (const ws of [3, 6, 7, 8]) fake.entitlement(ws, 'unpaid');
   fake.entitlement(4, 'comp');
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: SESSION, OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: SESSION, OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });
