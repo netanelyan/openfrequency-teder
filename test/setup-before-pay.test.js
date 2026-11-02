@@ -22,7 +22,8 @@ import { customer, fakeAccounts, opened, operator, tempHome } from './helpers.js
 // page shows the samples with "המצגות שלכם מוכנות, נשאר רק להפעיל". What the setup may spend before paying is capped
 // (src/billing/setup-cap.js, $3.50 a workspace); a paying or comp workspace is as it was.
 //
-// Workspaces: 3 unpaid (the whole flow), 4 comp, 5 paid, 6 unpaid (the cap), 7 unpaid at the cap before it began.
+// Workspaces: 3 unpaid (the whole flow), 4 comp, 5 paid, 6 unpaid (the cap), 7 unpaid at the cap before it began,
+// 8 unpaid (the closing slide's promo saved while the sources are searched).
 // The samples are written by a stand-in for buildPost that stores a sample with one slide and records what it cost.
 
 let home;
@@ -60,7 +61,7 @@ before(async () => {
   ctx.mediaDir = path.join(home.home, 'media');
   ctx.samplesOpts = { build: stubBuild, read: async () => ({ docs: 3, sources: 1, failed: [] }), retryMs: 0 };
   fake = await fakeAccounts();
-  for (const ws of [3, 6, 7]) fake.entitlement(ws, 'unpaid');
+  for (const ws of [3, 6, 7, 8]) fake.entitlement(ws, 'unpaid');
   fake.entitlement(4, 'comp');
   const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: SESSION, OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
   server = s.server;
@@ -270,6 +271,22 @@ test('before paying: the sources page is open, with approving, removing and addi
   assert.deepEqual(setupSpend(db, 3), spent);
 });
 
+test('before paying: the closing slide promo is saved on /new before the account exists, not the paywall', async () => {
+  const b = browser(customer(8));
+  const r1 = await b.post('/new', { niche: 'צמחי בית', audience: 'דירות קטנות' });
+  assert.equal(r1.status, 303);
+  const id = r1.headers.get('location').split('/').pop();
+  // The step is on the page whether the search still runs (its own save) or has finished (inside the account's form).
+  const page = await (await b.get(`/new/${id}`)).text();
+  assert.ok(page.includes('name="promo_name"'), 'the promo step is on the page');
+  const res = await b.post(`/new/${id}/promo`, { promo_name: 'שתיל ועלה', promo_promise: 'צמחי בית ועציצים מקרמיקה', promo_target: 'bio' });
+  assert.equal(res.status, 303, 'saved, not 402');
+  const setup = JSON.parse(db.get('SELECT setup_json FROM onboarding WHERE id = ?', id).setup_json);
+  assert.equal(setup.promoBy, 'customer');
+  assert.equal(setup.promo.name, 'שתיל ועלה');
+  await settle();
+});
+
 test('a comp and a paid workspace: exactly as before, never counted against the cap', async () => {
   const b = browser(customer(4));
   assert.equal((await b.get('/')).status, 200, 'comp: the product');
@@ -421,7 +438,7 @@ test('the meter hears every spend recorded inside the setup, however deep, and n
 test('what is open before paying: the new-account flow up to its samples and the sources page, and nothing else', () => {
   const open = [
     ['GET', '/new'], ['GET', '/new/o-1'], ['HEAD', '/new/o-1'], ['GET', '/new/o-1/status'], ['POST', '/new'],
-    ['POST', '/new/o-1/retry'], ['POST', '/new/o-1/more'], ['POST', '/new/o-1/name'], ['POST', '/new/o-1/schedule'],
+    ['POST', '/new/o-1/retry'], ['POST', '/new/o-1/more'], ['POST', '/new/o-1/name'], ['POST', '/new/o-1/promo'], ['POST', '/new/o-1/schedule'],
     ['POST', '/new/o-1/create'], ['POST', '/new/o-1/samples'], ['POST', '/new/o-1/reviewed'],
     ['GET', '/media/p-1/tiktok/0'], ['GET', '/media/p-1/instagram/3'], ['GET', '/static/accounts.css'],
     ['GET', '/sources'], ['HEAD', '/sources'], ['POST', '/sources/12/approve'], ['POST', '/sources/12/remove'], ['POST', '/sources/add'],

@@ -493,6 +493,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .seg input:focus-visible + label { outline: 3px solid color-mix(in srgb, var(--accent-fill) 60%, transparent); }
 [data-theme="dark"] .seg input:checked + label small { color: var(--ink); }
 
+/* the closing slide's promo (src/web/promo.js): where it sends people, and only the fields that choice needs */
+.promo fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.promo legend { float: right; width: 100%; padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.promo .seg { clear: both; }
+.promo .seg label { min-height: 44px; }
+/* the promise whole on a phone: two lines, not a field that cuts it off */
+.promo textarea { min-height: 0; resize: none; }
+@supports selector(:has(a)) {
+  .promo .promo-if { display: none; }
+  .promo:has([name='promo_target'][value='site']:checked) label.promo-if.site,
+  .promo:has([name='promo_target'][value='product']:checked) label.promo-if.product { display: flex; }
+  .promo:has([name='promo_target'][value='bio']:checked) p.promo-if.bio { display: block; }
+}
+
 /* meters */
 meter { width: 100%; height: 6px; border-radius: 3px; background: var(--fill); border: 0; display: block; }
 meter::-webkit-meter-bar { background: var(--fill); border-radius: 3px; border: 0; height: 6px; }

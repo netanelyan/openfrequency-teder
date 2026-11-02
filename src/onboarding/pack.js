@@ -118,7 +118,7 @@ const VOICE_SCHEMA = { type: 'object', properties: { voice: { type: 'string' } }
  * Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. `workspaceId` is the
  * customer's (null for the operator's own account): its look is kept apart from that workspace's other accounts.
  */
-export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null, formatIds = DEFAULT_PICKED }) {
+export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null, formatIds = DEFAULT_PICKED, promo = null }) {
   const id = packIdOf(handle);
   if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id)) throw new Error('the handle must be latin letters and digits, so the pack id can be made from it');
   const dir = path.join(packsDir(), id);
@@ -152,6 +152,8 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     // The owner's own photographs (<pack>/photos) first, then the libraries; Openverse last, for the people and places
     // the stock libraries do not have.
     imagery: { providers: ['pack', 'pexels', 'unsplash', 'commons', 'openverse'] },
+    // What its slideshows send people to (src/packs/promo.js), as set up on /new; none, and they ask to follow it.
+    ...(promo ? { promo } : {}),
   };
   // The slide style (src/render/styles), from what the account is about and its colours, away from a look-alike; and
   // never one the workspace's other accounts already have in an accent this close (validateAll would refuse it).

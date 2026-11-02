@@ -30,6 +30,7 @@ import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
 import { setFormats } from './formats.js';
+import { setPromo } from './promo.js';
 import { themeOf } from './ui.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
@@ -116,9 +117,10 @@ const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.'
  * Setting up before paying (the owner, 2026-11-02, item 2 of the audit: "a customer who signed up and hasn't paid can go
  * through /new (niche, sources, samples) and see the samples. The paywall blocks only going live and connecting
  * accounts"). What a customer whose workspace has not paid may open: the new-account flow's pages and the steps up to
- * its samples (the search, searching again, the name, the days and times, choosing the sources and creating the
- * account, the samples, "עברתי על הדוגמאות"), its own slides, the accounts' colours, and the sources page with what it
- * does (approving, removing and adding a source; the owner, 2026-11-02: "open it", none of them a paid call). Everything
+ * its samples (the search, searching again, the name, the closing slide's promo, the days and times, choosing the
+ * sources and creating the account, the samples, "עברתי על הדוגמאות"), its own slides, the accounts' colours, and the
+ * sources page with what it does (approving, removing and adding a source; the owner, 2026-11-02: "open it", none of
+ * them a paid call). Everything
  * else is the paywall, by default: going live (/new/<id>/live, approving, publishing, the account's mode and days and
  * times), connecting (/new/<id>/connect/..., /new/<id>/connections, /accounts/<id>/connect/...) and every other page and
  * button, the topics and the hand-checked facts among them. What the setup may spend before paying is capped
@@ -126,7 +128,7 @@ const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.'
  */
 const SETUP_OPEN = [
   ['GET', /^\/new(\/[\w-]+(\/status)?)?$/],
-  ['POST', /^\/new(\/[\w-]+\/(retry|more|name|schedule|create|samples|reviewed))?$/],
+  ['POST', /^\/new(\/[\w-]+\/(retry|more|name|promo|schedule|create|samples|reviewed))?$/],
   ['GET', /^\/sources$/],
   ['POST', /^\/sources\/(\d+\/(approve|remove)|add)$/],
   ['GET', /^\/media\/[\w-]+\/(tiktok|instagram)\/\d+$/],
@@ -200,6 +202,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/accounts\/([\w-]+)\/mode$/, (c, u, m, f) => act.setMode(c, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/style$/, (c, u, m) => act.applyStyle(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/formats$/, (c, u, m, f) => setFormats(c, u, { id: m[1] }, f)],
+    ['POST', /^\/accounts\/([\w-]+)\/promo$/, (c, u, m, f) => setPromo(c, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/kill$/, (c, u, m) => act.killAccount(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/resume$/, (c, u, m) => act.resume(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/quota$/, (c, u, m, f) => act.setQuota(c, u, { id: m[1] }, f)],

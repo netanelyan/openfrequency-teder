@@ -17,6 +17,7 @@ import { EMAIL_HE } from '../notify/email.js';
 import { libraryFormat } from '../formats/library.js';
 import { formatsPanel, picksFormats } from './formats.js';
 import { designPanel } from './styles.js';
+import { promoPanel } from './promo.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -1127,6 +1128,7 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <div class="set-cols">
 ${acct && picksFormats(acct.pack, acct.customer) ? formatsPanel(ctx, acct.pack, { heading: 'h2' }) : ''}
 ${acct ? designPanel(acct.pack, acct.style, { back: '/settings' }) : ''}
+${acct ? promoPanel(ctx, acct.pack) : ''}
 ${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
 ${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
 ${d.quotas ? quotasPanel(ctx, d.quotas) : ''}

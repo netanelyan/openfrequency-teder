@@ -72,11 +72,32 @@ export function siteName(html) {
   return null;
 }
 
+/**
+ * What a homepage says the store is, in its own words: its meta description, else og:description, else
+ * twitter:description, decoded and single-spaced. '' when it has none. A new account's closing slide starts from it
+ * (src/onboarding/promo.js).
+ */
+export function siteDescription(html) {
+  const tags = String(html || '').match(/<meta\b[^>]*>/gi) || [];
+  // An attribute's value in either quote, so an apostrophe or a geresh inside the other one is kept.
+  const attr = (tag, k) => {
+    const m = new RegExp(`\\s${k}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i').exec(tag);
+    return m ? (m[1] ?? m[2]) : null;
+  };
+  for (const [k, v] of [['name', 'description'], ['property', 'og:description'], ['name', 'twitter:description']]) {
+    const tag = tags.find((t) => String(attr(t, k) || '').toLowerCase() === v);
+    const text = tag ? clean(attr(tag, 'content')) : '';
+    if (text) return text;
+  }
+  return '';
+}
+
 const NAMES = { shopify: 'Shopify', woocommerce: 'WooCommerce', wix: 'Wix' };
 
 /**
  * Read a store on Shopify, WooCommerce or Wix. get/getPage are injectable (tests). Throws DemoError with a sentence
- * for the operator. Returns { origin, domain, platform, name, currency, accent, products, collections, logo }.
+ * for the operator. Returns { origin, domain, platform, name, description, currency, accent, products, collections,
+ * logo }, description the homepage's own (siteDescription).
  */
 export async function readStore(url, { get = getJson, getPage = getText } = {}) {
   const origin = storeOrigin(url);
@@ -99,7 +120,7 @@ export async function readStore(url, { get = getJson, getPage = getText } = {}) 
   }
   const accent = /<meta[^>]+name=["']theme-color["'][^>]+content=["'](#[0-9a-f]{6})["']/i.exec(html)?.[1] || null;
   const name = String(read.name || siteName(html) || domainOf(origin)).trim();
-  return { origin, domain: domainOf(origin), platform: read.platform, name, currency: read.currency || 'ILS', accent, products: read.products, collections: read.collections || [], logo: logoOf(html, origin, name) };
+  return { origin, domain: domainOf(origin), platform: read.platform, name, description: siteDescription(html), currency: read.currency || 'ILS', accent, products: read.products, collections: read.collections || [], logo: logoOf(html, origin, name) };
 }
 
 const READERS = { shopify: readShopify, woocommerce: readWooCommerce, wix: readWix };

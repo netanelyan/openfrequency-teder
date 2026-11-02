@@ -19,6 +19,9 @@ import { READY_LINE, postCard } from './pages.js';
 import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
+import { storeOrigin } from '../demos/store.js';
+import { reading, startSiteRead } from '../onboarding/promo.js';
+import { newPromoPanel, promoFromDraft, promoFromForm } from './promo.js';
 
 // The new-account flow, on the website:
 //
@@ -78,6 +81,8 @@ export const listField = (v, { commas = false, max = 10, len = 300 } = {}) =>
   [...new Set(String(v || '').split(commas ? /\r?\n|[,،]/ : /\r?\n/).map((x) => x.trim().slice(0, len)).filter(Boolean))].slice(0, max);
 /** A new account's topics: 12 at most, 60 characters each. */
 const TOPICS = { commas: true, max: 12, len: 60 };
+/** How long POST /new waits for the business's site to be read before it opens the page (the read goes on after). */
+export const SITE_WAIT_MS = 6000;
 
 /**
  * One Teder account a subscription (the owner, 2026-10-31): a customer's plan is their one account's, never split
@@ -505,6 +510,7 @@ ${capped ? activateBanner(pc, { good: goodSamples(ctx.db, ctx.workspaceId), capp
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
 <label class="f">במה החשבון יעסוק <small>כמו שהייתם מספרים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">למי הוא מיועד<input type="text" name="audience" maxlength="160" placeholder="למשל: סטודנטים שמבשלים בתקציב קטן"></label>
+<label class="f">האתר של העסק <small>לא חובה. ממנו נמלא את השקף האחרון של כל מצגת</small><input type="text" name="site" maxlength="300" dir="ltr" inputmode="url" autocapitalize="off" autocomplete="url" spellcheck="false" placeholder="shop.co.il"></label>
 <label class="f">נושאים שחשובים לכם <small class="js-hide">מופרדים בפסיקים, לא חובה</small><small class="js-show">כותבים נושא ולוחצים Enter, לא חובה</small><input type="text" name="topics" maxlength="800" data-pills="commas" data-max="12"></label>
 <label class="f">אתרים או חשבונות שאתם אוהבים <small class="js-hide">כתובת אחת בכל שורה, לא חובה</small><small class="js-show">כותבים כתובת ולוחצים Enter, לא חובה</small><textarea name="examples" rows="4" dir="ltr" data-pills data-max="10"></textarea></label>
 <button class="btn primary" type="submit">${icon('spark')}לחפש מקורות</button></form></section>`}
@@ -603,8 +609,8 @@ function detailPage(ctx, pc, r) {
       `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
 <p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
 ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
-<p class="muted mt12">${pc.unpaid ? 'בינתיים אפשר לסדר כאן את השם ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
-<div class="cols"><div class="grid12">${namePanel(pc, r)}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
+<p class="muted mt12">${pc.unpaid ? 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
+<div class="cols"><div class="grid12">${namePanel(pc, r)}${newPromoPanel(pc, r, { action: `/new/${r.id}/promo`, busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
     );
   }
   if (r.status === 'failed') {
@@ -630,7 +636,7 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
       `${head}${capped ? activateBanner(pc, { good: 0, capped }) : ''}${saidBanner(r.found.said)}${shown.length < FEW && !capped ? fewPanel(pc, r, shown.length) : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
 <div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
-<div class="grid12">${formatsSection()}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
+<div class="grid12">${formatsSection()}${newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
 ${nameFields(pc, r)}
 <p class="muted small m0">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
 <button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button></div></section>
@@ -703,17 +709,29 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
     [
       'POST',
       /^\/new$/,
-      (ctx, user, _m, f) => {
+      async (ctx, user, _m, f) => {
         if (hasAccount(ctx.db, ctx.workspaceId)) throw new ActionError(ONE_ACCOUNT, 409);
         capCheck(ctx, user, ctx.workspaceId);
         const niche = String(f.niche || '').trim();
         if (niche.length < 2) throw new ActionError('צריך לכתוב במה החשבון יעסוק');
         const id = newId('o');
+        // The business's own site, optional: the closing slide is filled in from it (src/onboarding/promo.js).
+        const typedSite = String(f.site || '').trim().slice(0, 300);
+        const site = typedSite ? storeOrigin(typedSite) : null;
         // No English niche to fill in: the discovery asks the model for it (src/onboarding/discover.js nicheInEnglish).
-        const seed = { niche, nicheEn: String(f.nicheEn || '').trim(), language: 'he', audience: String(f.audience || '').trim(), topics: listField(f.topics, TOPICS), examples: listField(f.examples) };
-        ctx.db.insert('onboarding', { id, seed_json: seed, status: 'discovering', workspace_id: ctx.workspaceId ?? null, created_at: nowIso(), updated_at: nowIso() });
+        const seed = { niche, nicheEn: String(f.nicheEn || '').trim(), language: 'he', audience: String(f.audience || '').trim(), topics: listField(f.topics, TOPICS), examples: listField(f.examples), ...(site ? { site } : {}) };
+        ctx.db.insert('onboarding', { id, seed_json: seed, status: 'discovering', workspace_id: ctx.workspaceId ?? null, ...(typedSite && !site ? { setup_json: { siteRead: 'failed' } } : {}), created_at: nowIso(), updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche } });
         startDiscovery(ctx, id, { counted: !user.operator });
+        if (site) {
+          // A moment's wait, so the page usually opens with it filled in; a slow site goes on in the background.
+          const job = startSiteRead(ctx.db, id, site, { opts: engine(ctx).siteOpts || {}, log: ctx.log });
+          await new Promise((done) => {
+            const t = setTimeout(done, engine(ctx).siteWaitMs ?? SITE_WAIT_MS);
+            t.unref?.();
+            job.finally(() => (clearTimeout(t), done()));
+          });
+        }
         return { ok: true, message: 'מחפשים מקורות.', redirect: `/new/${id}` };
       },
     ],
@@ -758,6 +776,21 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         saveSetup(ctx.db, r.id, { displayName: n.displayName, handle: n.handle });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, name: true } });
         return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#name` };
+      },
+    ],
+    [
+      'POST',
+      /^\/new\/([\w-]+)\/promo$/,
+      (ctx, user, m, f) => {
+        // The closing slide, accepted as it was filled in or changed (src/web/promo.js). What was typed is kept even
+        // when it will not do, so the form comes back with it; the account takes it only once it does.
+        const r = row(ctx, m[1]);
+        beforeAccount(r);
+        const got = promoFromForm(f);
+        saveSetup(ctx.db, r.id, { promo: got.draft, promoBy: 'customer' });
+        if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems });
+        audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, promo: Boolean(got.promo) } });
+        return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#promo` };
       },
     ],
     [
@@ -829,11 +862,20 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         // choice (an older page) gets the defaults.
         const formatIds = f.formats_shown ? pickedFrom(f) : DEFAULT_PICKED;
         if (formatIds.length < MIN_PICKED) throw new ActionError(FORMATS_FEW, 422);
+        // What the last slide sends people to, as this step showed it (src/web/promo.js): left empty, none, and the
+        // last slide asks to follow the account. A form that did not show it (an older page) takes the setup's draft.
+        let promo = promoFromDraft(r.setup.promo);
+        if (f.promo_shown) {
+          const got = promoFromForm(f);
+          saveSetup(ctx.db, r.id, { promo: got.draft, promoBy: 'customer' });
+          if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems });
+          promo = got.promo;
+        }
         // The account's voice and scenes are paid calls: before paying, under the setup's cap and counted against it.
         capCheck(ctx, user, r.workspace_id);
         let made;
         try {
-          made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds }), !user.operator);
+          made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds, promo }), !user.operator);
         } catch (e) {
           throw createError(ctx, e);
         }

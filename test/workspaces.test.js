@@ -148,6 +148,8 @@ function snapshotB() {
     // A's own email choices are A's to change; what accounts said of each workspace's payment is kept as it is asked.
     settings: db.all("SELECT key, value_json FROM settings WHERE key != 'email:prefs:1' AND key NOT LIKE 'entitlement:%' ORDER BY key"),
     facts: existsSync(factsDir) ? readdirSync(factsDir).map((f) => [f, readFileSync(path.join(factsDir, f), 'utf8')]) : [],
+    // B's pack.json: its style, its formats' kind and what its slideshows send people to (promo) are written there.
+    pack: readFileSync(path.join(home.home, 'packs', 'bravo', 'pack.json'), 'utf8'),
   });
 }
 
@@ -239,6 +241,8 @@ const casesFor = () => {
     ['/accounts/bravo/style'],
     // The kinds of slideshow B posts in are B's to pick.
     ['/accounts/bravo/formats', { fmt_facts: 'on', fmt_tips: 'on', fmt_story: 'on' }],
+    // What B's slideshows send people to is B's to say.
+    ['/accounts/bravo/promo', { promo_shown: '1', promo_name: 'A', promo_promise: 'A sends B somewhere else', promo_target: 'site', promo_site: 'a.example.org' }],
     ['/accounts/bravo/style-pick', { style: 'B' }],
     ['/accounts/bravo/style-test', { on: '1' }],
     ['/accounts/bravo/kill'],
@@ -291,6 +295,7 @@ const casesFor = () => {
     [`/new/${B.onboarding}/retry`],
     // The setup done while the sources are searched: the name, the days and times, TikTok and Instagram, a search again.
     [`/new/${B.onboarding}/name`, { displayName: 'A in B', handle: 'a.in.b' }],
+    [`/new/${B.onboarding}/promo`, { promo_shown: '1', promo_name: 'A', promo_promise: 'A sends B somewhere else', promo_target: 'bio' }],
     [`/new/${B.onboarding}/schedule`, { day_1: 'on', t1_1: '10:00' }],
     [`/new/${B.onboarding}/connect/tiktok`],
     [`/new/${B.onboarding}/connections`],

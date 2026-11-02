@@ -2186,3 +2186,28 @@ up costs. Set a cap for unpaid accounts, and show it to me."
    it, however deep, so a call added to the search or the samples later is counted without anyone remembering to. It is
    weighed before each paid step (a search, creating the account, each sample), so the step that crosses it finishes
    and nothing starts after it. Paid, comp and due workspaces, ours and the operator are never counted or stopped.
+
+### What every slideshow sends people to: the promo (2026-11-02, item 1 of the closing slide)
+
+The owner: "every slideshow ends with a closing slide that sends people to the customer's site or product", and its
+first item: "a `promo` field in the pack/settings with a name, a short promise (what the viewer gets), and a target (a
+site, a product, or "link in bio"). Fill it in automatically during setup on `/new` from the store's site, and the
+customer can edit it in Settings. Our own accounts can have no promo; in that case the last slide sends people to follow
+the account." It lives in pack.json "promo", beside the style and endSlide: what a slide says is the pack's, the
+website already writes the style and the formats into the pack, and the writer and the renderer read pack.meta. Shape
+(src/packs/promo.js): name 1 to 40 characters, promise 6 to 90, target { kind: "site", url }, { kind: "product",
+name (1 to 60), url } or { kind: "bio" }; addresses https only (a bare "shop.co.il" is https), no sign-in, port or
+other scheme; text without control or direction marks, one space, trimmed. validatePack checks it like the rest of the
+file. No key (every pack before this, and our own accounts) or null is a state of its own: closingOf(pack) answers
+{ kind: "follow", handle }, else { kind: "promo", name, promise, target }, for the closing slide to come (item 2).
+An address the engine fills in by itself must be on the store's own domain; one the customer typed may be anywhere.
+/new's first form has one more field, optional: the business's site. POST /new reads it the way a store's demo is read
+(src/demos/store.js readStore, Shopify, WooCommerce or Wix; a site on none of them by its homepage alone), waiting up to
+six seconds so the page usually opens filled in, and keeps a draft on the onboarding: the store's own name (not its bare
+domain), the first sentence of its homepage's own description that fits a slide, in Hebrew, with no "the best", "number
+one" or hurry (src/onboarding/promo.js promiseFrom), and the site as the target. No model is asked, so nothing is spent.
+The step ("השקף האחרון") stands on the page that waits for the sources with its own save, and on the sources step inside
+the form that makes the account: the account is made with it as shown. A form left empty is no promo; one half filled in
+is refused with what is missing. A site that could not be read says so, and the customer types it. Settings has the same
+fields after the design (POST /accounts/<id>/promo, src/web/promo.js), saved into pack.json (src/packs/write.js
+setPackPromo); emptied, the key goes and the last slide asks to follow. The slides themselves are unchanged until item 2.

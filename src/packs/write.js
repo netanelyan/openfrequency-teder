@@ -2,11 +2,13 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { styleConfigProblems } from '../render/styles/tokens.js';
 import { formatsFor, MIN_PICKED } from '../formats/library.js';
+import { cleanPromo, promoConfigProblems } from './promo.js';
 
 // The settings of a pack the website writes: its slide style (pack.json "style"), when the owner picks one on the
 // Accounts page or a style test settles, how its TikTok posts go out (zernio.tiktokMode, zernio.tiktokPrivacy,
-// publishers.tiktok), and a platform added to it (Facebook, offered to the accounts customers made: src/publish/connect.js
-// offerFacebook). Everything else in a pack is the owner's to edit by hand. The file is read fresh, only those
+// publishers.tiktok), a platform added to it (Facebook, offered to the accounts customers made: src/publish/connect.js
+// offerFacebook), and what its slideshows send people to ("promo", on Settings). Everything else in a pack is the
+// owner's to edit by hand. The file is read fresh, only those
 // keys are replaced, and it is written whole (a temporary file renamed over it), so a hand edit made since the engine
 // started is kept.
 
@@ -74,6 +76,24 @@ export function setPackStyle(pack, patch) {
   renameSync(`${file}.tmp`, file);
   pack.meta.style = next;
   return next;
+}
+
+/**
+ * What the account's slideshows send people to (src/packs/promo.js): a promo written into pack.json "promo", or null,
+ * which takes the key out (no promo: the last slide asks to follow the account). Refused, and nothing written, when it
+ * would not pass the pack's own check. Returns what was kept.
+ */
+export function setPackPromo(pack, promo) {
+  const problems = promoConfigProblems(promo);
+  if (problems.length) throw Object.assign(new Error(problems.join('; ')), { problems });
+  const kept = promo == null ? null : cleanPromo(promo);
+  rewrite(pack, (m) => {
+    if (kept) m.promo = kept;
+    else delete m.promo;
+  });
+  if (kept) pack.meta.promo = kept;
+  else delete pack.meta.promo;
+  return kept;
 }
 
 /**
