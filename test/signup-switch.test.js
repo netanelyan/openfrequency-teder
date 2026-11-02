@@ -15,7 +15,7 @@ import { INTERNAL_TOKEN, opened, tempHome } from './helpers.js';
 
 // One sign-up switch in three places (the owner, 2026-11-02): Teder's OF_SIGNUP_OPEN, accounts' OF_SIGNUP and
 // OF_SIGNUP_PRODUCTS (GET /internal/signup), the website's "signup" (signup.teder in its support.json). Checked once at
-// start, after the website listens: quiet when they agree; a loud line and one alert when they do not; "couldn't check"
+// start, after the website listens: one quiet line when they agree; a loud line and one alert when they do not; "couldn't check"
 // and the alert when one cannot be asked. accounts and the website are fakes here, handed in as their fetch: no network.
 
 const LOUD = /THE SIGN-UP SWITCH DISAGREES/;
@@ -57,11 +57,11 @@ async function check({ teder = '1', accounts = ACCOUNTS.open, site = SITE.open, 
   return { r, logs, alerts, db: d, accounts: fetchLocal, site: fetchSite, cleanup: () => home?.cleanup() };
 }
 
-test('the three agree, open or closed: nothing is said and nobody is alerted', async () => {
+test('the three agree, open or closed: one quiet line says so and nobody is alerted', async () => {
   for (const [teder, accounts, site, open] of [['1', ACCOUNTS.open, SITE.open, true], [null, ACCOUNTS.closed, SITE.closed, false], ['', ACCOUNTS.toranOnly, SITE.closed, false]]) {
     const c = await check({ teder, accounts, site });
     try {
-      assert.deepEqual(c.logs, [], `quiet: ${teder}`);
+      assert.deepEqual(c.logs, [`[signup] all three agree: ${open ? 'open' : 'closed'}`], `one quiet line: ${teder}`);
       assert.deepEqual(c.alerts, []);
       assert.equal(c.r.agree, true);
       assert.deepEqual([c.r.teder.open, c.r.accounts.open, c.r.site.open], [open, open, open]);

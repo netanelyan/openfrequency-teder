@@ -163,7 +163,7 @@ Teder asks accounts three more things, on `OF_ACCOUNTS_INTERNAL` (default
   after the website listens and without holding it up (`src/web/signup-switch.js`): open
   for Teder is `open` with `teder` among `products`, and it must agree with Teder's own
   `OF_SIGNUP_OPEN` and with the website's (`signup.teder` in
-  `https://openfrequency.co.il/support.json`). When they agree nothing is said; when they
+  `https://openfrequency.co.il/support.json`). When they agree, one quiet line says so; when they
   do not, or one cannot be asked, a loud line in the log and one alert to the operator
   (docs/operator-notes.md, "One sign-up switch in three places").
 

@@ -14,7 +14,8 @@ import { signupOpen } from './demos.js';
 //             its build publishes it: GET https://openfrequency.co.il/support.json -> signup.teder, "open" or "closed"
 //
 // Asked once, after the website listens (scripts/web.js), and never waited for: the start goes on, and each question
-// has its own timeout. When the three agree nothing is said. When they do not, one loud line says which one says what,
+// has its own timeout. When the three agree, one quiet line says so ("all three agree: open"), so a log without it
+// means the check never ran (the owner, 2026-11-02). When they do not, one loud line says which one says what,
 // and the operator is alerted (src/notify/operator.js: the server's alert command, or only the log and /all's table
 // while there is none). One that cannot be asked is "couldn't check <it>: <why>", and alerted too: a switch nobody
 // can read is no better than one that disagrees, now that people pay through it. One alert a start, whatever was
@@ -82,7 +83,7 @@ export async function siteSignup({ url = SITE_EXPORT, fetchImpl = doorFetch, tim
 }
 
 /**
- * Ask the three and say what was found: nothing when they agree; a loud line when they do not, a "couldn't check" line
+ * Ask the three and say what was found: one quiet line when they agree; a loud line when they do not, a "couldn't check" line
  * for each that could not be asked, and then one alert. Returns { agree, teder, accounts, site, alerted }, agree null
  * when what could be asked agrees but not all could be. Never throws for a source: each is caught on its own.
  * `fetchLocal`, `fetchSite`, `run` and `t` are for the tests.
@@ -99,7 +100,10 @@ export async function checkSignupSwitch(ctx, { env = process.env, fetchLocal, fe
   const said = Object.keys(found).map((k) => `${NAMES[k]} ${found[k].error == null ? `says ${found[k].says}` : "couldn't be checked"}`).join('; ');
   if (disagree) log(`!!! THE SIGN-UP SWITCH DISAGREES: ${said}. Make the three the same: ${NOTES}`);
   for (const k of failed) log(`couldn't check ${SHORT[k]}: ${found[k].error}`);
-  if (!disagree && !failed.length) return { agree: true, ...found, alerted: false };
+  if (!disagree && !failed.length) {
+    log(`all three agree: ${open ? 'open' : 'closed'}`);
+    return { agree: true, ...found, alerted: false };
+  }
 
   const title = disagree ? 'Teder: the sign-up switch disagrees' : `Teder: couldn't check the sign-up switch (${failed.map((k) => SHORT[k]).join(', ')})`;
   const body = [said, ...failed.map((k) => `Couldn't check ${SHORT[k]}: ${found[k].error}`), `How to set all three: ${NOTES}`].join('. ');

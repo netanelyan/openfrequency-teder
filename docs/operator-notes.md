@@ -353,7 +353,7 @@ says which keys are set without showing them.
 - **What the start says.** Once the website listens (`scripts/web.js`), and without holding up the start, Teder asks
   accounts (`GET /internal/signup` with `OF_INTERNAL_TOKEN`, 3 seconds at most) and the website (its
   `/support.json`, 10 seconds at most) (src/web/signup-switch.js):
-  - The three agree: nothing in the log, no alert.
+  - The three agree: one quiet line, `[signup] all three agree: open` (or closed), and no alert.
   - They do not: one line that says what each says, `[signup] !!! THE SIGN-UP SWITCH DISAGREES: Teder (OF_SIGNUP_OPEN)
     says open; accounts (OF_SIGNUP, OF_SIGNUP_PRODUCTS) says closed; the website (site.config.json "signup") says
     open. Make the three the same: ...`, and an alert, "Teder: the sign-up switch disagrees". accounts open for other
@@ -368,7 +368,7 @@ says which keys are set without showing them.
     alert command, `OF_ALERT_CMD` or else `/usr/local/bin/of-alert`. Neither is on the VPS today (no alerts yet, and
     of-alert is not installed), so it reaches no phone: it is the `[alert] ...` line in the log and a line in the
     alerts of the week under /all's health table. Read the start's lines with `journalctl -u openfrequency -n 30
-    --no-pager | grep '\[signup\]'`; nothing there means the three agreed.
+    --no-pager | grep '\[signup\]'`; no `[signup]` line at all means the check never ran.
   - The token is never in the log or the alert, only why a question failed.
 - **Needed now?** The check runs by itself at every start. It needs accounts with `/internal/signup` and the
   website's `support.json` with `signup`, both deployed before this Teder; until then each start says it couldn't
