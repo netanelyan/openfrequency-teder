@@ -382,7 +382,8 @@ test('light edits: a photograph the post already has, a slide removed, and text 
     assert.equal(post.slides.length, n0 - 1);
     assert.deepEqual(post.slides.map((s) => s.idx), [...Array(n0 - 1).keys()]);
     assert.equal(post.slides[1].title, second);
-    assert.equal(post.media.tiktok.length, n0 - 1);
+    // The slides left, and the closing slide after them, drawn again.
+    assert.equal(post.media.tiktok.length, n0 - 1 + 1);
     assert.ok(post.media.tiktok.every((f) => existsSync(f)));
     assert.deepEqual(recheck(ctx.db, post, pack), []);
     await assert.rejects(removeSlide(ctx, customer, { id, idx: '0' }), /אין שקף תוכן כזה/);

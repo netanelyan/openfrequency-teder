@@ -109,7 +109,8 @@ test("every slide's own photograph refused: every slide still stands on a photog
     const [photos] = steps(ctx.db, res.postId, 'photos');
     assert.equal(photos?.status, 'ok', 'the post says what every slide stands on');
     for (const [size, list] of Object.entries(photos.grounds)) {
-      assert.equal(list.length, post.slides.length, size);
+      // Every slide, and the closing slide after them: none on a bare ground.
+      assert.equal(list.length, post.slides.length + 1, size);
       list.forEach((on, i) => assert.ok(on.length && on.every((k) => /^bg/.test(k)), `${size} slide ${i + 1} stands on a scene: ${JSON.stringify(on)}`));
     }
     assert.ok(!JSON.parse(readFileSync(path.join(dir, 'theme.json'), 'utf8')).backgroundQueries, "the scenes came without a change to theme.json");

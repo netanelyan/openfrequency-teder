@@ -193,7 +193,9 @@ test('the demo pack builds a post of every kind through the real pipeline, offli
       // TikTok's caption is one short line by default (captionStyleOf); Instagram's is led by the cover line.
       assert.ok(post.caption.length >= 15 && post.caption.split('\n').filter(Boolean).length <= 2 && post.caption_ig?.startsWith(post.hook.replace(/\s*\n\s*/g, ' ')), `${kind}: two captions, the Instagram one led by the cover line`);
       assert.ok(post.hook_pattern && post.data.cta?.text, `${kind}: a cover pattern and a call to action`);
-      for (const p of ['tiktok', 'instagram']) assert.equal(post.media[p].length, n, `${kind}: every slide on ${p}`);
+      // Every slide, and after them the post's closing slide (not counted in the 5 to 8, as the follow slide never was).
+      assert.ok(post.data.closing?.actions, `${kind}: a closing slide`);
+      for (const p of ['tiktok', 'instagram']) assert.equal(post.media[p].length, n + 1, `${kind}: every slide on ${p}, then the closing slide`);
     }
   } finally {
     cleanup();

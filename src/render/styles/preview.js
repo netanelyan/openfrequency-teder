@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { mediaDir } from '../../core/paths.js';
 import { formatOfPost, loadPost, postDraft } from '../../pipeline/build.js';
+import { closingExtra } from '../../pipeline/closing.js';
 import { tokenOf } from '../../verify/claims.js';
 import { renderPost, slidePlaces } from '../render.js';
 import { kindName } from '../../formats/kinds.js';
@@ -74,7 +75,7 @@ export async function renderStylePreview(db, { pack, post, style, outDir, size =
     [...post.slides.map((s) => [s.idx, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file && existsSync(p.file))
   );
   const format = formatOfPost(db, pack, post);
-  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '', ...(draft.coverVisual ? { coverVisual: draft.coverVisual } : {}) };
+  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '', ...(draft.coverVisual ? { coverVisual: draft.coverVisual } : {}), ...closingExtra(draft) };
   const token = tokenOf({ slides, caption: draft.caption, hook: draft.hook, sub: draft.sub, extra });
   // The text drawn is the text the fact gate signed: a post whose stored text no longer hashes to its token is not drawn.
   if (post.checks?.token && post.checks.token !== token) throw new Error('the post\'s text is not the text the fact gate signed');

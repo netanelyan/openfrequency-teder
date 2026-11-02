@@ -1,6 +1,7 @@
 import { esc, he, sourceLine, two } from '../html.js';
 import { depthLabel, ROLE_LABEL } from '../roles.js';
 import { KINDS } from '../../formats/kinds.js';
+import { actionHtml } from '../end.js';
 
 // A photograph behind every slide, sharp, and the facts on one dark card under it.
 //
@@ -222,8 +223,9 @@ export const photocard = {
     }
     return `<div class="frame"><h2 class="fit">${he(s.title)}</h2>${s.body ? `<p class="body2 fit">${he(s.body)}</p>` : ''}</div>`;
   },
-  /** The closing slide: the photograph, one sentence and the handle. */
-  end: (pack) => {
+  /** The closing slide: the photograph, one sentence and the handle; a post's closing slide, its line and its action. */
+  end: (pack, { closing = null, action = null } = {}) => {
+    if (closing) return { css: CSS, html: `<div class="frame">${closing.line ? `<div class="end-line fit">${he(closing.line)}</div>` : ''}<div class="end-handle">${actionHtml(action)}</div></div>` };
     const e = pack.meta.endSlide || {};
     const line = e.body || e.title || '';
     return { css: CSS, html: `<div class="frame"><div class="end-line fit">${he(line)}</div><div class="end-handle"><bdi dir="ltr">@${esc(pack.meta.handle)}</bdi></div></div>` };

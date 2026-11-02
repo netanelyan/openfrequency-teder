@@ -30,6 +30,7 @@ import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, everyPhoto, visualsNeeded } from './prompts.js';
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
+import { closingExtra, closingSlide } from './closing.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
 import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
@@ -273,8 +274,11 @@ export function igCaption({ hook, captionShort, question }) {
   return [oneLine(hook), joinCaption(captionShort, question)].filter(Boolean).join('\n\n');
 }
 
-/** What the gate and the token hold beyond the slides, in one fixed order. */
-const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '', ...(d.coverVisual ? { coverVisual: d.coverVisual } : {}) });
+/**
+ * What the gate and the token hold beyond the slides, in one fixed order. The closing slide is in it (its line and its
+ * action, src/pipeline/closing.js): the renderer draws only what the gate signed, the closing slide included.
+ */
+const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '', ...(d.coverVisual ? { coverVisual: d.coverVisual } : {}), ...closingExtra(d) });
 
 /** The fact gate, with what this kind of post allows: its structure numbers, its fact-free roles. */
 export function gateDraft(format, draft, facts, { allow = [] } = {}) {
@@ -505,7 +509,7 @@ export function keepItems(format, items, good) {
 /**
  * The slides call's answer as a draft, fixed in code and checked: what buildPost
  * does with each answer, and what the launch set's tools check an answer with.
- * Returns { draft, checked, fixes }.
+ * Returns { draft, checked, fixes, closing }: `closing` says whose line the closing slide carries ({ by, line, refused }).
  */
 export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, facts, closer = null, hook = null, cta = null, attempt = 0, style = null }) {
   const legacy = kindName(format) === 'list';
@@ -553,8 +557,12 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
   const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
+  // Every post ends on its closing slide (src/pipeline/closing.js): the writer's line when it passes the closing slide's
+  // rules, else a line of the promo's own words, and the action under it always the code's. It never stops a post.
+  const closed = closingSlide(pack, { line: d.closing?.line, facts, others: ctx.packs || [] });
+  draft.closing = closed.closing;
   const checked = checkDraft(ctx, pack, { draft, format, facts, items, attempt, moment: outline?.momentKeys || null });
-  return { draft, checked, fixes };
+  return { draft, checked, fixes, closing: { by: closed.closing.by, line: closed.closing.line, refused: closed.refused } };
 }
 
 /**
@@ -870,6 +878,8 @@ export function postDraft(post) {
     hook: post.hook || '', sub: post.sub || '', caption: post.caption || '', captionShort: data.captionShort || '', question: data.question || '',
     subject: data.subject || {}, keywords: data.keywords || [], cta: data.cta || null, hookPattern: post.hook_pattern || '',
     ...(data.hookTemplate ? { hookTemplate: data.hookTemplate } : {}),
+    // The closing slide, as it was signed (a post made before it has none, and closes as it did).
+    ...(data.closing ? { closing: data.closing } : {}),
     slides: post.slides.map((s) => ({
       kind: s.kind, role: s.role || (s.kind === 'item' ? 'item' : s.kind), title: s.title || '', body: s.body || '', a: s.data?.a || '', b: s.data?.b || '', factKeys: s.factKeys,
       ...(s.data?.visual !== undefined || s.data?.imageQuery !== undefined ? { visual: s.data?.visual || null, imageQuery: s.data?.imageQuery || '' } : {}),
@@ -1104,7 +1114,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // The owner's own rewrites teach the voice; the three latest short ones are enough.
     const edits = db.all('SELECT before, after FROM edits WHERE account_id = ? AND length(after) <= 240 ORDER BY id DESC LIMIT 3', pack.id);
     const legacy = kindName(format) === 'list';
-    const closer = legacy ? pickBy(format.closers, postId) : null;
+    // A list's own closer (formats.json "closers") is no longer drawn: every post, a list too, ends on its closing slide.
+    const closer = null;
     // A pattern and a call to action can be fixed in advance (the launch set does, so the text drafted for them and the post agree).
     // So can a cover template (the morning's feedback does, to keep or vary a cover that worked).
     const fixedTemplate = isTemplateId(hookId) ? templateById(pack, format, hookId) : null;
@@ -1126,6 +1137,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     let checked = null;
     let lastProblems = [];
     let lastAnswer = null;
+    let closed = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       let res;
       try {
@@ -1140,6 +1152,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       const made = draftFromAnswer(pctx, pack, { format, answer: res.data, outline, items, facts, closer, hook, cta, attempt, style: postStyle });
       draft = made.draft;
       checked = made.checked;
+      closed = made.closing;
       step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say), checks: checksOf(checked.problems), fixed: made.fixes }, res.usd);
       if (!checked.problems.length) break;
       // Problems that each belong to one text are mended there (the repair, below), not by drafting the post again.
@@ -1149,6 +1162,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       lastAnswer = res.data;
     }
     if (!draft) return block('voice', 'הטיוטה לא נכתבה');
+    // The closing slide: whose line it carries, and what a refused line of the writer's broke.
+    step(db, postId, 'closing', closed.by === 'writer' ? 'ok' : 'info', { kind: draft.closing.kind, by: closed.by, line: closed.line, broke: closed.refused });
     // A graphic is decoration: one the redraft left malformed (a compare of one item) is dropped and the post checked
     // again without it, not lost with every fact in it verified. The count of slides with a visual is still checked.
     if (checked.problems.length && checked.problems.every((p) => p.where === 'visual' && /^(slide \d+|the cover): /.test(p.msg))) {
@@ -1383,7 +1398,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     return finish(status, {
       // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
-      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined },
+      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined, closing: draft.closing },
       checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });

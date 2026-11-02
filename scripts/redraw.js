@@ -41,7 +41,7 @@ for (const id of ids) {
   const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => source.get(k)) }));
   const img = (imageId) => (imageId ? db.get('SELECT * FROM images WHERE id = ?', imageId) : null);
   const photos = new Map([...post.slides.map((s, i) => [i, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.sceneImages || []).map((x, k) => [`bg${k + 2}`, img(x)]), ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file));
-  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '', ...(draft.coverVisual ? { coverVisual: draft.coverVisual } : {}) };
+  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '', ...(draft.coverVisual ? { coverVisual: draft.coverVisual } : {}), ...(draft.closing ? { closing: draft.closing } : {}) };
   const token = tokenOf({ slides, caption: draft.caption, hook: draft.hook, sub: draft.sub, extra });
   const files = await renderPost({ pack: { ...pack, theme }, format, post: { id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token, extra, ctaKind: draft.cta?.kind }, slides, photos, outDir: path.join(out, id), lenient: true });
   console.log(`${id} ${format.id}: ${Object.values(files).flat().length} slides -> ${path.join(out, id)}`);

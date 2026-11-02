@@ -8,6 +8,7 @@ import { OWNER_TITLE } from '../sources/facts.js';
 import { contentRange, everyPhoto, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
 import { VISUAL_SCHEMA, visualsOf, visualsPrompt } from '../render/visuals.js';
 import { SLOTS, SPEAKER_EN, speakerOf, templatesPrompt } from '../formats/hooks.js';
+import { closingRequest } from './closing.js';
 
 // The drafting calls' prompts and schemas, built from the pack.
 //
@@ -138,8 +139,15 @@ export const SLIDES_SCHEMA = {
     question: { type: 'string' },
     keywords: { type: 'array', items: { type: 'string' } },
     coverVisual: VISUAL_SCHEMA,
+    // The closing slide's one line (src/pipeline/closing.js): the code writes its action and checks the line.
+    closing: {
+      type: 'object',
+      properties: { line: { type: 'string' } },
+      required: ['line'],
+      additionalProperties: false,
+    },
   },
-  required: ['hook', 'sub', 'hookPattern', 'hookTemplate', 'hookSlots', 'hookFacts', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual'],
+  required: ['hook', 'sub', 'hookPattern', 'hookTemplate', 'hookSlots', 'hookFacts', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual', 'closing'],
   additionalProperties: false,
 };
 
@@ -284,7 +292,7 @@ ${
     ? ''
     : `
 EVERY POST:
-- 5 to 8 slides with the cover. One idea per slide. The best item, the payoff, is on the last slide: the slideshows that spread end on their strongest slide, never on a request to follow, save or comment. Never write a call to action on a slide.
+- 5 to 8 slides with the cover. One idea per slide. The best item, the payoff, is on the last content slide: the slideshows that spread end on their strongest slide, never on a request to follow, save or comment. Never write a call to action on a slide. After the last content slide comes the closing slide, which sends people to the account's store or asks them to follow it: you write only its one line (CLOSING SLIDE in the request), the code writes the rest.
 - WHAT SPREADS ON TIKTOK (25 slideshows over 500K views, read slide by slide): one short line on one real photograph a slide, the way a person types on their phone. A sport or story slide holds 5 to 15 words: the title is the point, the body empty or one short line (a facts slide has no body at all: body ""). A title is at most 60 characters. A slide nobody can read in two seconds is skipped. Covers are about 7 words with a count or a famous name ("7 דברים שלא ידעתם על ליגת העל", "5 טעויות שעשיתי בשנה הראשונה").
 - The cover is one bold claim or one question, narrow and specific, with a famous name in it when there is one. It opens a gap the slides close ("שלא ידעתם", a count, a number one kept for the end); it never promises what the post does not deliver, and it never hides what the post is about.
 - Facts in every kind of post come from the documents: a story, a quiz or an opinion holds only facts the quotes support.
@@ -358,6 +366,7 @@ The request names the format and its kind, the content slides with their roles, 
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences, broken into lines as the request's LINES says (or one item a line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
 - story, captionShort, keywords: as the account's rules say. For a legacy list post, the story may be in "hook" alone, and captionShort and keywords may be empty.
 - question: one short question about this post's own subject that a reader could answer from their own life, or "" when none would sound natural. Never a line that fits any post ("ידעתם את זה?", "מה דעתכם?", "למי זה יכול לעזור?"): those are dropped.
+- closing.line: the closing slide's one line, after the last content slide, as CLOSING SLIDE in the request says: this post's topic tied to what the slide sends people to. Its action (the link, the address, the handle) is the code's, never in the line.
 
 ${READ_ALOUD}`,
 };
@@ -524,7 +533,9 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
-  const end = pack?.meta?.endSlide?.title;
+  // The account's own follow slide (pack.json endSlide) still takes the call to action off the last content slide; the
+  // closing slide itself is the post's (src/pipeline/closing.js), on every post.
+  const end = pack?.meta?.endSlide?.title && !everyPhoto(pack, format, style);
   return [
     `${formatHead(format, n)}`,
     // Said first, not left to the format's paragraph: rankings were refused for a place without its graphic, and
@@ -535,7 +546,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     templates.length ? `COVER TEMPLATES FOR THIS POST, best first: ${templates.map((t) => `[${t.id}]`).join(', ')}. The cover is written from the first whose promise these facts keep, speaking ${SPEAKER_EN[speakerOf(pack)]}; "" when none does.` : '',
     hook ? `COVER PATTERN${templates.length ? ' (when no template fits)' : ''}: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
-    end && !legacy && !everyPhoto(pack, format, style) ? 'The design adds a closing slide that asks them to follow the account: no slide asks to save, send, follow or comment.' : cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
+    cta && !legacy && !end ? `The design ends the last content slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
     body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',
     sub.maxChars < LIMITS.sub.maxChars ? `SUB: the line under the cover is at most ${sub.maxChars} characters, one punchy line that makes them swipe (the stakes or a tease, never an explanation of the topic), or "".` : '',
     !legacy && everyPhoto(pack, format, style)
@@ -558,6 +569,8 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
       : '',
     'OUTLINE:',
     ...outline.items.map((it, i) => `${i + 1}. ${legacy ? '' : `${it.role || 'item'}: `}${it.point} (facts: ${(it.facts || []).join(', ') || 'none'})`),
+    // The closing slide: this post's topic and what the account's slideshows send people to.
+    pack?.meta ? closingRequest(pack, { topic: outline.topic }) : '',
     edits.length ? `\nLines the account's owner rewrote by hand recently (write like the AFTER versions):\n${edits.map((e) => `- before: ${e.before}\n  after: ${e.after}`).join('\n')}` : '',
     problems.length ? `\nTHE LAST DRAFT WAS REFUSED BY THE CHECKS. Fix exactly these and keep everything else:\n${problems.map((p) => `- ${p}`).join('\n')}` : '',
     // The draft itself: without it, "keep everything else" was a new draft from scratch, with new mistakes.

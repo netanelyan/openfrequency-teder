@@ -79,10 +79,12 @@ function redoBanners(d) {
   return out.join('');
 }
 const STEP_HE = {
-  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
+  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'שקף הסיום', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
   whatsapp: 'מוואטסאפ',
 };
+/** Whose line the closing slide carries (src/pipeline/closing.js), in the post's trace. */
+const CLOSING_HE = { writer: 'השורה שנכתבה עם השקפים', safe: 'הבדיקה פסלה את השורה שנכתבה, ובמקומה שורה מהפרטים של החשבון', none: 'בלי שורה' };
 /** What a customer did through the WhatsApp assistant (until 2026-11-02), in the post's trace. */
 const WHATSAPP_HE = { approve: 'אישור', reject: 'דחייה', edit: 'עריכה' };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
@@ -195,7 +197,9 @@ function strip(post, platform = 'tiktok', { mock = null } = {}) {
       const s = post.slides[i];
       const n = s?.kind === 'item' ? items.indexOf(s) + 1 : null;
       const target = n ? `#s-${post.id}-${n}` : '#';
-      return `<a href="${target}" aria-label="שקף ${i + 1}${n ? `, העובדות שלו` : ''}">${mock || ''}<img src="${media(post, platform, i)}" alt="${esc(s?.kind === 'cover' ? post.hook : s?.title || '')}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async" width="270" height="${platform === 'tiktok' ? 480 : 338}"><span class="n">${i + 1}/${files.length}</span>${n && s.factKeys.length ? `<span class="has">${s.factKeys.length === 1 ? 'מקור אחד' : `${s.factKeys.length} מקורות`}</span>` : ''}</a>`;
+      // The image after the stored slides is the post's closing slide (src/pipeline/closing.js): its line.
+      const alt = s?.kind === 'cover' ? post.hook : s ? s.title || '' : post.data?.closing?.line || '';
+      return `<a href="${target}" aria-label="שקף ${i + 1}${n ? `, העובדות שלו` : ''}">${mock || ''}<img src="${media(post, platform, i)}" alt="${esc(alt)}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async" width="270" height="${platform === 'tiktok' ? 480 : 338}"><span class="n">${i + 1}/${files.length}</span>${n && s.factKeys.length ? `<span class="has">${s.factKeys.length === 1 ? 'מקור אחד' : `${s.factKeys.length} מקורות`}</span>` : ''}</a>`;
     })
     .join('')}</div><div class="dots" aria-hidden="true">${files.map((_, i) => `<i${i === 0 ? ' class="on"' : ''}></i>`).join('')}</div>`;
 }
@@ -523,6 +527,7 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.why) bits.push(det.why);
       if (det.error && ctx.operator) bits.push(det.error);
       if (det.stuck) bits.push('נקטע באמצע השליחה');
+      if (s.step === 'closing') bits.push(...[CLOSING_HE[det.by], det.line ? `"${det.line}"` : '', ctx.operator ? (det.broke || []).slice(0, 2).join(' · ') : ''].filter(Boolean));
       if (s.step === 'whatsapp') bits.push(...[WHATSAPP_HE[det.action] || det.action, det.by, det.slide ? `שקף ${det.slide}` : ''].filter(Boolean));
       else if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : det.via === 'whatsapp' ? 'מוואטסאפ' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);

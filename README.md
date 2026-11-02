@@ -254,7 +254,7 @@ format (by the mix and results)
   -> research: those articles read, the details a fan would want, each verified
   -> the cover from a hook template the code offers, best first (or the format's
      pattern when none fits the facts); slides, captions and graphics, in the
-     account's voice
+     account's voice, and the closing slide's one line (its action is the code's)
   -> checks in code: voice, honesty, the kind's shape, lengths, the fact gate, the
      cover's promise kept by the slides
   -> one redraft if needed -> review -> rewrite of the flagged lines only
@@ -293,8 +293,32 @@ the cover patterns and the calls to action.
 
 The last three are the shapes the slideshows that spread on TikTok take (25 of them
 read slide by slide, `docs/decisions.md`). They, and any post drawn in the native
-style (E), stand on a photograph a slide, end on their best slide with no call to
-action and no closing "follow" slide, and keep to one short line a slide.
+style (E), stand on a photograph a slide, end their content on their best slide with no
+call to action drawn on it, and keep to one short line a slide. The closing slide
+still follows them, as it follows every post.
+
+**The closing slide.** Every post, of every format and in every style, ends on its
+closing slide, after the last content slide and not counted in the 5 to 8
+(`src/pipeline/closing.js`; the owner, 2026-11-02: "every slideshow ends with a closing
+slide that sends people to the customer's site or product"). Its line is the writer's:
+one sentence, or a short question and its answer, 3 to 12 words and at most 60
+characters, that ties the post's topic to what the account's `promo` sends people to (a
+product named as the fit for the topic, or what the store has for it, named), or, for an
+account with no promo, says why following it gives more of that topic. Its action is the
+code's, never the model's: on TikTok "הלינק בביו" (no address ever), on Instagram and
+Facebook the promo's address ("באתר shop.co.il") for a site or a product and "הלינק בביו"
+for "link in bio", and "תעקבו אחרי @handle" everywhere for an account with no promo. The
+line is checked in code like any slide (the voice's tells, honesty, the law, the
+account's own rules) and for what a closing slide never says: "הכי", "ביותר", "מספר 1"
+and other claims the store did not make, urgency or scarcity ("רק היום", "נשארו רק",
+"אל תפספסו"), an offer or a number neither the promo nor the facts hold, the action
+itself or a generic "visit our site", and a line that does not name the product or the
+store. A line that breaks a rule is never used: the slide takes the first line made of
+the promo's own words that passes (the product at the store, the store's name and its
+promise, more of the account's topic), and the post's trace says what the writer's line
+broke. The line and the action are in what the fact gate signs. Its own design in each
+style is still to come; for now the line is set as large as the style holds it, with
+the action under it.
 
 Every post has 5 to 8 slides, one idea a slide, keywords in Hebrew and English for
 TikTok's search, a TikTok caption and a short Instagram one led by the cover line.
@@ -392,7 +416,7 @@ and edit its files.
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, a closing slide that asks to follow; `promo`, what the slideshows send people to (`name`, `promise`, `target`: `{ kind: "site", url }`, `{ kind: "product", name, url }` or `{ kind: "bio" }`; none means "follow the account", src/packs/promo.js), filled in on /new from the business's site and changed on Settings; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
+| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, the fixed follow slide posts made before the closing slide end on (a new post ends on its closing slide instead; with an endSlide, no call to action is drawn on the last content slide); `promo`, what the closing slide sends people to (`name`, `promise`, `target`: `{ kind: "site", url }`, `{ kind: "product", name, url }` or `{ kind: "bio" }`; none means "follow the account", src/packs/promo.js), filled in on /new from the business's site and changed on Settings; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
 | `voice.md` | who is talking, to whom, how it sounds, with `## שורות טובות` and `## שורות רעות` |
 | `theme.json` | a template and variant from the engine's library, colours, fonts, the graphics it draws (`visuals`), whether slides sit on a blurred photograph and the scenes searched for it (`backgroundQueries`) |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, why it is trusted, what its terms allow, when it was approved. A source taken out of the file is no longer read |
@@ -767,7 +791,7 @@ src/verify      facts against stored documents, the render gate
 src/rules       pack rules, cross-promotion, investment-advice compliance, the text on a slide, the caption's story and hashtags
 src/images      licensed photographs and the image screen
 src/render      fonts, templates and their variants, the graphics, Chromium
-src/pipeline    one post from topic to queue, the rivals typed in by hand; export to disk
+src/pipeline    one post from topic to queue, its closing slide (the writer's line, the code's action), the rivals typed in by hand; export to disk
 src/publish     dry, Zernio (TikTok), Instagram, takedowns
 src/metrics     reading numbers, crediting formats, the morning's feedback
 src/formats     the kinds of post, rotation, the mix, cover patterns, the cover's hook templates

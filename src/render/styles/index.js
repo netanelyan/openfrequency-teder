@@ -5,7 +5,8 @@ import { VISUAL_CSS, visualHtml } from '../visuals.js';
 import { zonesFor } from '../../rules/overlay.js';
 import { familiesOf, resolveStyle, STYLES, themeColors } from './tokens.js';
 import { displayText, slideModel, sourcesOf, textHtml } from './model.js';
-import { BODY_FLOOR, sidesOf, STEP } from './fit.js';
+import { BODY_FLOOR, boxFor, fitText, sidesOf, STEP } from './fit.js';
+import { actionHtml } from '../end.js';
 
 // The five slide styles, drawn (tokens.js has what each one sets, model.js what each slide shows).
 //
@@ -488,6 +489,15 @@ function listHtml(body, S, g) {
 
 /** The closing slide: its line, and the handle the account is followed at. */
 function endHtml(m, g, S) {
+  if (m.closing) {
+    // A post's closing slide (src/pipeline/closing.js): the writer's line set as the style's headline when it holds the
+    // line, else as the line under a cover, else as a slide's text, then the action the code wrote for this platform.
+    // (Its own design in each style comes later: this keeps every line of up to 60 characters inside the slide.)
+    const fits = (field) => S.text[field] && fitText(m.title, S.text[field], { box: boxFor(S.text[field], g.size, null, S.name), scale: HEADS.has(field) && g.ig ? 0.85 : 1 }).ok;
+    const field = ['title', 'sub', 'tbody'].find(fits) || 'tbody';
+    const line = txt(field === 'title' ? 'h2' : 'p', { title: 'hl', sub: 'sub', tbody: 'bd' }[field], S, field, m.title, g);
+    return { bt: g.y(560), html: `<div class="blk">${line}<div class="handle">${actionHtml(m.action)}</div></div>` };
+  }
   return {
     bt: g.y(560),
     html: `<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g)}${txt('p', 'sub', S, 'sub', m.body, g)}<div class="handle"><bdi dir="ltr">@${esc(m.handle)}</bdi></div></div>`,

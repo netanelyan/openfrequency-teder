@@ -3,6 +3,7 @@ import path from 'node:path';
 import { kindOf } from '../formats/kinds.js';
 import { renderPost } from '../render/render.js';
 import { lockedStyle, styleByHash } from '../render/style.js';
+import { closingExtra } from './closing.js';
 
 // The customer's light edits on a post's page (src/web/actions.js): a slide's text, another of the post's own
 // photographs, a slide removed. Each one draws the post again and calls no model, except the fact check of text that
@@ -31,7 +32,8 @@ export async function drawAgain(ctx, { post, pack, format, draft, token }) {
   const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => sourceOf.get(k)) }));
   const image = post.checks?.image ? db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null;
   const outDir = path.dirname(post.media.tiktok?.[0] || post.media.instagram?.[0]);
-  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '' };
+  // The closing slide is drawn again as it was signed (src/pipeline/closing.js).
+  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '', ...closingExtra(draft) };
   // Drawn again as it was drawn: in the look it went out in, with every photograph it had (each slide's, the one
   // behind the slides, a head-to-head's two faces). An edit used to bring back the cover's photograph alone.
   const look = styleByHash(db, pack, post.checks?.style) || lockedStyle(db, pack, (ctx.global || ctx).packs);

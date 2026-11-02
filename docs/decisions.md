@@ -2220,6 +2220,77 @@ it. Settings has the same fields after the design (POST /accounts/<id>/promo, sr
 (src/packs/write.js setPackPromo); emptied, the key goes and the last slide asks to follow. The slides themselves are
 unchanged until item 2.
 
+### The closing slide's line is the writer's, its action the code's (2026-11-02, item 2 of the closing slide)
+
+The owner: "every slideshow ends with a closing slide that sends people to the customer's site or product. This applies
+to every format, every style and every account, with no exceptions", and item 2: "The last slide is always the hook to
+the product. It ties to the slideshow's topic (a slideshow about plants that survive in the dark ends with the store's
+plant that fits), and it's never a generic 'visit our site'. One short line plus the action. It goes through
+hebrew-voice, so no 'the best X' claims, no manufactured urgency, no 'don't miss'." (src/pipeline/closing.js.)
+
+The line is written with the slides, in the same call: the slides schema has one more field, `closing.line`, and the
+request one more section, CLOSING SLIDE, with the post's topic, what the promo says (the store's name and promise, the
+product's name, or the account's handle and topics), the action the code will write on each platform, one example of
+the tone for that kind of promo, and the rules. No second call: the line needs the post in front of it, and a call of
+its own would cost a prefix for one sentence. The line starts from the post's topic (its subject, the problem it
+solves, the moment it tells) and lands on the promo: a product named as the fit for it; what the store has for it, the
+store named, as its promise says; or, with no promo, what more of it following the account gives. Six lines written
+through the claude-cli backend (the subscription, no API key) showed why both halves are said: told only to "tie" the
+topic to the store, two of six said the store's promise again and nothing of the post, so the request now says the
+line starts from the topic and is never the promise on its own; and the one whose topic was the example's own (plants
+for a room with no window) wrote the example back word for word, so the examples are from businesses few accounts
+will be (a bakery, a bicycle shop, a camping store, a home cooking account). Run again, all six started from their
+topic and passed the check.
+
+The line is at most 60 characters, 3 to 12 words, one sentence or a short question and its answer: 60 is what the
+engine gives any slide's title (LIMITS.slideTitle, and "a title is at most 60 characters" in the writer's rules), what a
+reader takes in during the two seconds a slide gets, and what the old follow slide's title held (pack.json endSlide),
+and it leaves the slide room for the action under it. Fewer than 3 words is a label, not a line.
+
+The action is never the model's. closingActions builds it from the promo and the platform: TikTok "הלינק בביו" (no
+address on a TikTok slide, ever), Instagram and Facebook "באתר <address>" for a site or a product (the address as a
+slide shows it: no scheme, no "www.", the path only when it is plain and the whole is 28 characters at most, else the
+site alone) and "הלינק בביו" for "link in bio"; an account with no promo "תעקבו אחרי @handle" everywhere. Facebook is
+sent Instagram's image, so their actions are the same. Each action is data, { where, lead, chip, text, url, display,
+handle }, for the design that is still to come (item 4): the words, and the address or handle beside them.
+
+The line is checked in code before it is used (closingLineProblems): every tell the voice check refuses on a slide's
+title (src/voice/tells.js: a colon, an exclamation mark, a long dash, teasers, ad copy, "אל תפספסו", the singular),
+honesty, the law and the account's own rules (src/rules/check.js), and what a closing slide must never say: a claim the
+store did not make ("הכי", "ביותר", "מספר 1", "המוביל", "מושלם", "בלעדי", "best", "#1"), urgency or scarcity ("רק
+היום", "לזמן מוגבל", "נשארו רק", "מלאי", "מהרו", "עכשיו", "תפספסו"), an offer the promise does not make ("מבצע",
+"הנחה", "חינם"), a number neither the promo nor the post's verified quotes hold, the action itself or a generic one
+("בקרו", "היכנסו", "לחצו", "לינק", "ביו", "אתר", "תעקבו", an address, an @), and, for a promo, a line that does not
+name the product (its name or its first words) or the store. What code can fix it fixes first, as on every slide (a
+long dash becomes a comma, an exclamation mark a full stop). A line that still breaks a rule is never used: the slide
+takes the first line made of the promo's own words that passes the same rules (the product at the store, "X אצל Y",
+then the product with the promise, the product, the store; the store's name and its promise, then the promise, then the
+name; "עוד על <the account's first topic> בפוסטים הבאים" for an account with no promo), and with none, no line, the
+action alone. The post's trace has a step for it ("שקף הסיום"): whose line it carries, the line, and for the operator
+what the writer's line broke. A refused line is not sent back to the writer here: that is item 3's repair loop.
+
+Where it lives: the closing slide is the post's, not the kind's. It is kept beside the slides, in the draft and in
+posts.data_json `closing` ({ kind, line, by: writer | safe | none, the promo's name, promise, product, url, the handle,
+and the actions }), not as a slide row, so everything that reads "the last slide" as the last content slide (a
+guess-who's reveal, a story's payoff, the photographs' plan, the light edits) reads it as before, and the 5 to 8 slides
+of a kind do not count it (they never counted the follow slide). It is inside what the fact gate signs (extraOf), so the
+renderer draws it only as it was checked, and every path that draws a stored post again (a light edit, the style
+picker, the gate before publishing, scripts/redraw.js) carries it. The renderer draws it after the last content slide,
+on every platform, in place of the account's old follow slide (pack.json endSlide, which now ends only posts made
+before this), on the post's least-used photograph (on an older template with no ground of its own, that photograph
+blurred behind it: no slide is a bare ground). Its design per style is item 4; until then the line is set as large as
+the style holds it (the headline, else the line under a cover, else a slide's text), the action under it in the
+accent colour. A list's own closer (formats.json "closers") is no longer drawn: a list ends on its closing slide like
+every post, so it does not end twice. The per-format call to action is chosen, stored and drawn on the last content
+slide as before (an account with an endSlide still draws none), and the morning feedback's cta is unchanged: making the
+results change the closing slide's text is item 6.
+
+test/closing.test.js: the action per platform and kind of promo, every banned phrasing caught, the writer's line or the
+safe line and never a line that breaks the rules, the prompt carrying the topic, the promo, the action and the rules,
+every format of the demo built through the pipeline with a product promo and a stubbed writer (the closing slide last on
+both platforms, the writer's line or the safe line, the trace, the gate before publishing), an account with no promo,
+and the closing slide drawn in every style and in the older templates with a 60-character line.
+
 ### Teder is managed on its dashboard only, not on WhatsApp (2026-11-02)
 
 The owner: "managing teder through whatsapp, only through the dashboard. the demo stays". The runner no longer tells

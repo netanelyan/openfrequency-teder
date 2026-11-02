@@ -613,7 +613,12 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const noHandle = opts.handleTag === false;
   // The closing "follow" slide, when the account has one, takes the call to action off the last content slide.
   // A post on a photograph a slide ends on its best slide instead (everyPhoto).
-  const end = pack.meta.endSlide?.title && !(format && everyPhoto(pack, format)) ? pack.meta.endSlide : null;
+  const endSlide = pack.meta.endSlide?.title && !(format && everyPhoto(pack, format)) ? pack.meta.endSlide : null;
+  // The post's own closing slide (src/pipeline/closing.js), signed with its text: the writer's line and the action the
+  // code wrote for each platform. It is drawn after the last content slide in place of the account's endSlide; a post
+  // made before it closes as it did. (Its design per style is still to come: this draws the line and the action.)
+  const closing = post.extra?.closing?.actions ? post.extra.closing : null;
+  const end = closing ? null : endSlide;
   const kindNow = format ? kindName(format) : 'list';
   // A do-dont's rules are someone else's guidance, under licences that ask for credit: its slides name their source
   // even on an account that keeps its sources off the slides.
@@ -710,11 +715,11 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         postKind,
         subject: extra.subject || {},
         keywords: extra.keywords || [],
-        cta: extra.cta && !end ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
+        cta: extra.cta && !endSlide ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
         coverVisual: extra.coverVisual || null,
         // The mark goes on the last slide only: on the cover the platform's own page already shows whose post it is,
         // and a logo there reads as an advert (the owner's call).
-        brand: brand && !end && i === slides.length - 1 && s.kind !== 'cover' ? brand : null,
+        brand: brand && !end && !closing && i === slides.length - 1 && s.kind !== 'cover' ? brand : null,
       };
       // The cover's photograph, and a guess-who's reveal, fill the slide; a content slide's sits in a frame.
       const full = uri.has(i) && (s.kind === 'cover' || (i === slides.length - 1 && s.role === 'reveal') || (bleed && s.kind === 'item')) && pack.theme.options?.coverPhoto !== false;
@@ -789,7 +794,25 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     // What each slide was drawn on, once every slide is drawn: a photograph a slide had to give up is not under it.
     grounds[size] = [];
     for (const d of drawn) grounds[size][d.i] = d.on.filter((k) => !(dropped[size]?.has(d.i) && k === d.own));
-    if (end && styled && !only) {
+    if (closing && !only) {
+      // One image goes to Instagram and to a Facebook Page (mediaSizes): their action is the same, the address.
+      const action = closing.actions[size === 'tiktok' ? 'tiktok' : 'instagram'] || closing.actions.tiktok;
+      const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
+      if (styled) {
+        const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', closing: true, title: closing.line, action, handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null } }), { size, file, lenient });
+        for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
+        grounds[size][slides.length] = endKey != null && uri.has(endKey) ? [endKey] : [];
+      } else {
+        const own = impl.end && bleed && postPhoto;
+        // No slide is a bare ground (the owner, 2026-10-31): the closing slide stands on the post's ground, else on
+        // its least-used photograph, blurred behind the words.
+        const bgKey = ground ? groundKey : endKey != null && uri.has(endKey) ? endKey : null;
+        const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand: own ? null : brand };
+        await renderHtml(page({ theme: pack.theme, overlay, size, slide: sl, parts: own ? impl.end(pack, { closing, action }) : endParts(pack, { closing, action }), ...(own ? { photo: postPhoto } : { bg: bgKey != null ? uri.get(bgKey) : null }) }), { size, file, floor: 0.45 });
+        grounds[size][slides.length] = own ? [postKey] : bgKey != null ? [bgKey] : [];
+      }
+      out[size].push(file);
+    } else if (end && styled && !only) {
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
       const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null } }), { size, file, lenient });
       for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });

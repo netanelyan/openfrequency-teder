@@ -82,7 +82,8 @@ export function slideModel(s) {
   if (s.kind === 'cover') {
     return { kind: 'cover', hook: s.hook || '', sub: s.sub || '', highlight: s.highlight || '', key: s.keyLine || '' };
   }
-  if (s.kind === 'end') return { kind: 'end', title: s.title || '', body: s.body || '', handle: s.handle || '' };
+  // The closing slide: the account's own follow slide, or a post's closing slide (its line and this platform's action).
+  if (s.kind === 'end') return { kind: 'end', title: s.title || '', body: s.body || '', handle: s.handle || '', ...(s.closing ? { closing: true, action: s.action || null } : {}) };
   const cta = s.isLast && s.cta?.text ? s.cta.text : '';
   if (s.kind === 'item') {
     // A ranking's place, as a number: the one label of a post's structure style E draws, before the title ("5.").

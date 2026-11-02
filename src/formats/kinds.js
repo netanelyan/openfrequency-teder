@@ -11,6 +11,9 @@ import { normHe } from '../voice/tells.js';
 //     10 only about a quarter of viewers finish)
 //   - one idea per slide, and the payoff on the last slide: the call to action
 //     is drawn on that slide by the design, not given a slide of its own
+//   - after the last slide, every post has its closing slide (src/pipeline/closing.js),
+//     the line that sends people to the account's store or asks them to follow it: it is
+//     the post's, not the kind's, and is not counted in the 5 to 8
 //   - a do-dont's rules come from guidance documents (a design system, a style
 //     guide, a security cheat sheet), quoted like any other fact
 //   - every factual claim traces to a quote (HARD RULE 3). A role in `factFree`
@@ -18,7 +21,8 @@ import { normHe } from '../voice/tells.js';
 //     setup, "agree?"), and any number on it must still be in the post's quotes.
 //
 // `list` is the phase 1 shape (a cover, items, a closer slide), kept for packs
-// that use it; its range comes from the format's own `items`.
+// that use it; its range comes from the format's own `items`. Its closer is now the
+// post's closing slide, like every other post's (its formats.json "closers" are not drawn).
 
 export const GROUPS = { entertaining: 'בידור', number: 'מספרים' };
 
@@ -172,9 +176,11 @@ export const isKind = (k) => Object.hasOwn(KINDS, k);
 
 /**
  * Does every slide of this post stand on its own photograph? The kinds made for it (photo: 'every') and any post drawn
- * in the native style (E), which is a photograph a slide with a line of text on it. Such a post ends on its best
- * slide: no call to action is drawn on it and no closing "follow" slide follows it (17 of the 25 slideshows that
- * spread ended on their last item, and one of the 19 outside Israel on a request to follow).
+ * in the native style (E), which is a photograph a slide with a line of text on it. Such a post's content ends on its
+ * best slide: no call to action is drawn on it and the account's own follow slide (pack.json endSlide) is not added
+ * (17 of the 25 slideshows that spread ended on their last item, and one of the 19 outside Israel on a request to
+ * follow). Its closing slide (src/pipeline/closing.js) still comes after it, as after every post (the owner, 2026-11-02:
+ * "every format, every style and every account, with no exceptions").
  */
 export const everyPhoto = (pack, format, style = null) => kindOf(format).photo === 'every' || (style || pack?.meta?.style?.name) === 'E';
 

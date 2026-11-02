@@ -35,7 +35,9 @@ test('a demo post goes from topic to rendered slides, every fact traced to an ap
     const items = post.slides.filter((s) => s.kind === 'item');
     assert.ok(items.length >= 3);
     assert.equal(post.slides[0].kind, 'cover');
-    assert.equal(post.slides.at(-1).kind, 'closer');
+    // A list ends on the post's closing slide (src/pipeline/closing.js), drawn after its last item, not on a closer of its own.
+    assert.ok(!post.slides.some((s) => s.kind === 'closer'));
+    assert.equal(post.data.closing.kind, 'follow');
     for (const s of items) {
       assert.ok(s.factKeys.length, 'every content slide cites a fact');
       for (const k of s.factKeys) {
@@ -46,7 +48,7 @@ test('a demo post goes from topic to rendered slides, every fact traced to an ap
       }
     }
     for (const platform of ['tiktok', 'instagram']) {
-      assert.equal(post.media[platform].length, post.slides.length);
+      assert.equal(post.media[platform].length, post.slides.length + 1, 'every slide, and the closing slide last');
       for (const f of post.media[platform]) assert.ok(existsSync(f));
     }
     const steps = ctx.db.all('SELECT step FROM steps WHERE post_id = ?', res.postId).map((s) => s.step);

@@ -20,8 +20,23 @@ const END_CSS = `
 const handleRun = (handle) => `<bdi dir="ltr">@${esc(handle)}</bdi>`;
 const withHandle = (text, handle) => String(text || '').split('{handle}').map((part) => he(part)).join(handleRun(handle));
 
-/** The end slide's template parts for page(). */
-export function endParts(pack) {
+/**
+ * A closing slide's action (src/pipeline/closing.js closingActions) as one run: its words, and the address or the handle
+ * beside them kept left to right.
+ */
+export const actionHtml = (a) => (a ? `${he(a.lead || a.text || '')}${a.chip ? ` <bdi dir="ltr">${esc(a.chip)}</bdi>` : ''}` : '');
+
+/**
+ * The end slide's template parts for page(). With a post's closing slide (`closing`, and the `action` of this
+ * platform), its line and its action; without one, the account's own follow slide (pack.json endSlide).
+ */
+export function endParts(pack, { closing = null, action = null } = {}) {
+  if (closing) {
+    return {
+      css: END_CSS,
+      html: `<div class="frame end-frame"><div class="end">${closing.line ? `<div class="end-title fit">${he(closing.line)}</div>` : ''}<div class="end-handle"><span class="icon">${ICON.arrow}</span>${actionHtml(action)}</div></div></div>`,
+    };
+  }
   const e = pack.meta.endSlide || {};
   const handle = pack.meta.handle;
   return {
