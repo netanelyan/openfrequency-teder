@@ -322,8 +322,7 @@ const DOORS = [
   ['/readyz', 'test/ops.test.js'],
   ['/favicon.ico', 'test/web.test.js'],
   ['/sw.js', 'test/web.test.js'],
-  ...['/static/style.css', '/static/app.js', '/static/icon.svg', '/static/icon-180.png', '/static/icon-512.png', '/static/manifest.webmanifest', '/static/fonts/Assistant.ttf', '/static/demo.css'].map((p) => [p, null]),
-  ['/theme', null], // the browser's light or dark, a cookie of its own
+  ...['/static/style.css', '/static/app.js', '/static/theme.js', '/static/icon.svg', '/static/icon-180.png', '/static/icon-512.png', '/static/manifest.webmanifest', '/static/fonts/Assistant.ttf', '/static/demo.css'].map((p) => [p, null]),
   ['/m/p1/tiktok/0', 'test/assistant.test.js'],
   ['/connect/alpha/tiktok', 'test/zernio.test.js'],
   ['/connect/alpha/tiktok/done', 'test/zernio.test.js'],

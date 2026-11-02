@@ -120,9 +120,10 @@ test('in a real browser: a stopped sample keeps its words off the card\'s edge, 
   let browser;
   try {
     browser = await chromium.launch();
-    const open = async (url, width, height, colorScheme = 'light') => {
-      const context = await browser.newContext({ viewport: { width, height }, colorScheme, ...(width < 600 ? { isMobile: true, hasTouch: true } : {}) });
-      await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
+    // Dark is the browser's choice (the of-theme cookie), never the device's setting.
+    const open = async (url, width, height, theme = 'light') => {
+      const context = await browser.newContext({ viewport: { width, height }, ...(width < 600 ? { isMobile: true, hasTouch: true } : {}) });
+      await context.addCookies([{ name: 'of_session', value: sid, url: base }, ...(theme === 'dark' ? [{ name: 'of-theme', value: 'dark', url: base }] : [])]);
       const page = await context.newPage();
       await page.goto(`${base}${url}`, { waitUntil: 'domcontentloaded' });
       return page;

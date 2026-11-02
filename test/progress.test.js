@@ -215,8 +215,8 @@ test('in a real browser: the line moves in place, and when the search ends the b
   let browser;
   try {
     browser = await chromium.launch();
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
-    await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await context.addCookies([{ name: 'of_session', value: sid, url: base }, { name: 'of-theme', value: 'dark', url: base }]);
     const page = await context.newPage();
     let loads = 0;
     page.on('framenavigated', (f) => f === page.mainFrame() && loads++);

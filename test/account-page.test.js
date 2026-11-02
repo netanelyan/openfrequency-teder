@@ -197,9 +197,10 @@ test('in a real browser: no sideways scroll on a phone, and on a desk the panels
   let browser;
   try {
     browser = await chromium.launch();
-    const open = async (width, height, colorScheme) => {
-      const context = await browser.newContext({ viewport: { width, height }, colorScheme });
-      await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
+    // Light or dark is the browser's choice (the of-theme cookie), and a device that prefers the other is not followed.
+    const open = async (width, height, theme) => {
+      const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme === 'dark' ? 'light' : 'dark' });
+      await context.addCookies([{ name: 'of_session', value: sid, url: base }, ...(theme === 'dark' ? [{ name: 'of-theme', value: 'dark', url: base }] : [])]);
       const page = await context.newPage();
       await page.goto(`${base}/accounts`);
       return page;
@@ -231,7 +232,7 @@ test('in a real browser: no sideways scroll on a phone, and on a desk the panels
       const net = await box(desk, '.acct-net');
       assert.ok(net.width > 1.9 * m.width, 'the networks take two columns');
       assert.ok(q.x - main.x < 80, 'no empty half: the last column reaches the page edge');
-      // The colours follow the system setting: the page's own background is the theme's.
+      // The colours follow the choice, not the system setting: the page's own background is the theme's.
       const bg = await desk.evaluate(() => getComputedStyle(document.body).backgroundColor);
       assert.equal(bg, scheme === 'dark' ? 'rgb(17, 17, 19)' : 'rgb(238, 239, 242)');
     }

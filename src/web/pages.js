@@ -1,4 +1,4 @@
-import { a11yLink, accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
+import { a11yLink, accDot, csrfField, dayHe, esc, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { STUCK_REASON } from '../publish/errors.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
@@ -1243,7 +1243,7 @@ export const GATE = {
   unpaid: { title: 'תדר מחכה לתשלום', text: 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
 };
 
-export function gatePage({ kind, links, v = 1 }) {
+export function gatePage({ kind, links, v = 1, theme = 'light' }) {
   const g = GATE[kind] || GATE.error;
   const actions =
     kind === 'error'
@@ -1253,12 +1253,12 @@ export function gatePage({ kind, links, v = 1 }) {
       : kind === 'not_in_plan'
         ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
         : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eeeff2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)"><title>${esc(g.title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
-<body class="login"><main class="card">
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<title>${esc(g.title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
+<body class="login"><main class="card">${themeButton(theme)}
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1 class="err" role="alert">${esc(g.title)}</h1>
 <p>${esc(g.text)}</p>
-<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
+<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
 }
 
 /**
@@ -1274,15 +1274,15 @@ export const ERROR_HE = {
   broken: { title: 'משהו השתבש אצלנו', text: 'נסו שוב בעוד כמה דקות. אם זה חוזר, כתבו לנו ונבדוק.' },
 };
 
-export function errorPage({ kind = 'broken', text = null, back = '/', v = 1 }) {
+export function errorPage({ kind = 'broken', text = null, back = '/', v = 1, theme = 'light' }) {
   const g = ERROR_HE[kind] || ERROR_HE.broken;
   const links = `${back && back !== '/' ? `<a class="btn primary" href="${esc(back)}">חזרה לדף הקודם</a>` : ''}<a class="btn${back && back !== '/' ? '' : ' primary'}" href="/">לדף הבית</a>`;
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="robots" content="noindex"><title>${esc(g.title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
-<body class="login"><main class="card">
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<meta name="robots" content="noindex"><title>${esc(g.title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
+<body class="login"><main class="card">${themeButton(theme)}
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1 class="err" role="alert">${esc(g.title)}</h1>
 <p>${withSupport(text || g.text)}</p>
-<div class="links">${links}</div></main></body></html>`;
+<div class="links">${links}</div></main>${themeScript(v)}</body></html>`;
 }
 
 export function notFoundPage(ctx) {

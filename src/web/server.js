@@ -30,6 +30,7 @@ import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
 import { setFormats } from './formats.js';
+import { themeOf } from './ui.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -218,12 +219,14 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // ---- the WhatsApp assistant: answers only straight from this machine, signed (src/assistant/api.js)
       if (isAssistantPath(p)) return await assistant(req, res, url);
       const jar = cookies(req);
-      const theme = ['dark', 'light'].includes(jar.of_theme) ? jar.of_theme : null;
+      // Light or dark, as this browser chose on any OpenFrequency site (ui.js themeOf): every page below arrives in it.
+      const theme = themeOf(jar);
 
       // ---- static, no session
       if (req.method === 'GET' || req.method === 'HEAD') {
         if (p === '/static/style.css') return send(req, res, 200, readFileSync(path.join(STATIC, 'style.css')), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         if (p === '/static/app.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'app.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
+        if (p === '/static/theme.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'theme.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         // A browser asks for /favicon.ico on its own (Safari always): answer with the icon, not the login page.
         if (p === '/favicon.ico') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon-180.png')), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/icon.svg') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon.svg')), 'image/svg+xml', { 'cache-control': 'public, max-age=86400' });
@@ -246,7 +249,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // Connecting a TikTok, Instagram or Facebook Page from a link the assistant sent, and back from Zernio (src/web/connect.js).
         const cn = /^\/connect\/([\w-]+)\/(tiktok|instagram|facebook)(\/done)?$/.exec(p);
         if (cn) {
-          const [status, html, location] = await publicConnect(ctx, { account: cn[1], platform: cn[2], done: Boolean(cn[3]), query: url.searchParams, links: connectLinks() });
+          const [status, html, location] = await publicConnect(ctx, { account: cn[1], platform: cn[2], done: Boolean(cn[3]), query: url.searchParams, links: connectLinks(), theme });
           if (location) {
             res.writeHead(302, { location, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
             return res.end();
@@ -256,13 +259,13 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // The Instagram account or Facebook Page picked on our own page, after a headless connect that offered several (src/web/connect.js).
         const pk = /^\/connect\/pick\/([0-9a-f]{32})$/.exec(p);
         if (pk) {
-          const [status, html] = await publicPick(ctx, { id: pk[1], pageId: url.searchParams.get('page') });
+          const [status, html] = await publicPick(ctx, { id: pk[1], pageId: url.searchParams.get('page'), theme });
           return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
         }
         // Back from Zernio after a connect made while a new account's sources were searched, before the account existed.
         const oc = /^\/new\/([\w-]+)\/connect\/(tiktok|instagram|facebook)\/done$/.exec(p);
         if (oc) {
-          const [status, html] = await publicOnboardingConnect(ctx, { onboardingId: oc[1], platform: oc[2], query: url.searchParams, links: connectLinks() });
+          const [status, html] = await publicOnboardingConnect(ctx, { onboardingId: oc[1], platform: oc[2], query: url.searchParams, links: connectLinks(), theme });
           return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
         }
         // The service worker, from the root so its scope is the whole site.
@@ -274,11 +277,11 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
           const demo = publicDemo(ctx.db, dm[1]);
           if (dm[4]) return demo ? send(req, res, 200, demoThemeCss(demo), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=600' }) : send(req, res, 404, '', 'text/css; charset=utf-8');
           if (dm[2] || dm[5]) return sendSlide(ctx, res, demo, dm[2] === 'p' ? 'shelf' : dm[2] || 'logo', dm[3]) || send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
-          if (!demo) return send(req, res, 404, goneHtml(), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex' });
+          if (!demo) return send(req, res, 404, goneHtml(theme), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex' });
           // The page itself, opened by someone not signed in, is an open; its pictures and its colour are not.
           const { visitor, cookie } = visitorOf(jar, { https: secure });
           if (req.method === 'GET' && !(await signedIn(jar, secure))) recordOpen(ctx.db, demo.id, visitor);
-          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db) }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', ...(cookie ? { 'set-cookie': cookie } : {}) });
+          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db), theme }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', ...(cookie ? { 'set-cookie': cookie } : {}) });
         }
       }
       // A store asked for a demo on openfrequency.co.il: the website's lead service, on this machine, with its token.
@@ -318,7 +321,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         if (kind === 'login') return reading ? redirect(res, links.login(here)) : json(req, res, 401, { ok: false, message: 'צריך להיכנס שוב.', login: links.login(here) });
         const status = kind === 'error' ? 503 : 403;
         if (!reading) return json(req, res, status, { ok: false, message: pages.GATE[kind].text });
-        return send(req, res, status, pages.gatePage({ v: V, kind, links }));
+        return send(req, res, status, pages.gatePage({ v: V, kind, links, theme }));
       }
       const a = answer.body;
       // The operator is the superadmin outside view-as: every workspace. In view-as the superadmin is in the
@@ -333,7 +336,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (ent && !ent.allowed) {
         const kind = ent.known ? 'unpaid' : 'error';
         if (!reading) return json(req, res, ent.known ? 402 : 503, { ok: false, message: pages.GATE[kind].text, ...(ent.known ? { pay: links.setup } : {}) });
-        return send(req, res, ent.known ? 402 : 503, pages.gatePage({ v: V, kind, links }));
+        return send(req, res, ent.known ? 402 : 503, pages.gatePage({ v: V, kind, links, theme }));
       }
       const c = operator ? ctx : forWorkspace(ctx, a.workspace.id);
       const csrf = csrfFor(sid, secret);
@@ -354,10 +357,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         const origin = req.headers.origin;
         if (origin && !origins.has(origin)) return json(req, res, 403, { ok: false, message: 'בקשה מאתר אחר נחסמה.' });
         const form = await readForm(req);
-        if (!csrfOk(form._csrf, sid, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, pages.errorPage({ kind: 'stale', back: backOf(req, host), v: V }));
+        if (!csrfOk(form._csrf, sid, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, pages.errorPage({ kind: 'stale', back: backOf(req, host), v: V, theme }));
         // View-as (and any session accounts marks read-only) changes nothing, whatever the button: refused here, on
         // the server, not only by the buttons it does not see.
-        if (user.readOnly) return ajax ? json(req, res, 403, { ok: false, message: READ_ONLY }) : send(req, res, 403, pages.errorPage({ kind: 'read_only', back: backOf(req, host), v: V }));
+        if (user.readOnly) return ajax ? json(req, res, 403, { ok: false, message: READ_ONLY }) : send(req, res, 403, pages.errorPage({ kind: 'read_only', back: backOf(req, host), v: V, theme }));
         // Developer mode: the settings a developer reads (the server's keys, engine and log), the operator's alone,
         // opened from the version line and kept on this browser.
         if (p === '/settings/dev') {
@@ -374,18 +377,13 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
           const ref = req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/';
           return redirect(res, /^\/post\//.test(ref) ? '/' : ref, { 'set-cookie': acctCookie(to.id) });
         }
-        if (p === '/theme') {
-          const next = theme === 'dark' ? 'light' : 'dark';
-          const cookie = `of_theme=${next}; Path=/; Max-Age=31536000; SameSite=Strict`;
-          return ajax ? json(req, res, 200, { ok: true, theme: next }, { 'set-cookie': cookie }) : redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': cookie });
-        }
         for (const [method, re, fn] of ROUTES) {
           const m = method === 'POST' && re.exec(p);
           if (!m) continue;
           try {
             const r = await fn(c, user, m, form);
             if (ajax) return json(req, res, 200, r);
-            if (r.go) return send(req, res, 200, goPage(r.go, { name: r.goName, v: V }), 'text/html; charset=utf-8', { 'referrer-policy': 'no-referrer' });
+            if (r.go) return send(req, res, 200, goPage(r.go, { name: r.goName, v: V, theme }), 'text/html; charset=utf-8', { 'referrer-policy': 'no-referrer' });
             const back = r.redirect || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname + new URL(req.headers.referer).search : '/');
             return redirect(res, back, { 'set-cookie': flash(r.message) });
           } catch (e) {
@@ -407,10 +405,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             return redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
           }
         }
-        return ajax ? json(req, res, 404, { ok: false, message: 'אין פעולה כזו' }) : send(req, res, 404, pages.errorPage({ kind: 'no_action', back: backOf(req, host), v: V }));
+        return ajax ? json(req, res, 404, { ok: false, message: 'אין פעולה כזו' }) : send(req, res, 404, pages.errorPage({ kind: 'no_action', back: backOf(req, host), v: V, theme }));
       }
 
-      if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, pages.errorPage({ kind: 'method', v: V }));
+      if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, pages.errorPage({ kind: 'method', v: V, theme }));
 
       // ---- media: a post's rendered slides, read only from inside the data folder, and only the workspace's own
       const mm = /^\/media\/([\w-]+)\/(tiktok|instagram)\/(\d+)$/.exec(p);
@@ -514,7 +512,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const mine = e instanceof act.ActionError;
       const status = mine ? e.status || 400 : 500;
       if (req.headers['x-of-ajax'] === '1') return json(req, res, status, { ok: false, message: mine ? e.message : pages.ERROR_HE.broken.text });
-      return send(req, res, status, pages.errorPage({ kind: 'broken', text: mine ? e.message : null, back: backOf(req, String(req.headers.host || '').toLowerCase()), v: V }));
+      return send(req, res, status, pages.errorPage({ kind: 'broken', text: mine ? e.message : null, back: backOf(req, String(req.headers.host || '').toLowerCase()), v: V, theme: themeOf(cookies(req)) }));
     }
   };
   // Every route the site answers, for the test that each one keeps to its workspace.

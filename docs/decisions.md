@@ -2128,3 +2128,22 @@ after it ("להעלות לאוויר") and the setup checklist (accounts /setup)
 every check, where they needed five; a round of samples still asks for five (SAMPLE_TARGET), and is counted a success at
 three, as it already was. The copy that promised five says "פוסטים לדוגמה" or "לפחות שלושה", and the samples bar says how
 many passed and, under three, that it takes three to go on (onboarding.js samplesLine).
+
+### Light by default, dark by a choice every site shares (2026-11-02)
+
+The owner: "make sure that every repo starts on light mode. changing it on one subdomain changes it on all of the
+subdomains". Teder followed the device's light or dark setting and had no switch (the desk's redesign, 2026-10-16). Now it is light
+whatever the device prefers, and dark only by choice. The website, accounts, Teder and Toran keep one contract: the
+cookie of-theme, "light" or "dark", written with Domain=.openfrequency.co.il under the company's name (host-only
+anywhere else), Path=/, a year, SameSite=Lax, Secure on https; no cookie or any other value is light. The server reads
+it and renders every page in it before it paints (ui.js themeOf, htmlOpen, themeMeta): data-theme on <html>, the
+color-scheme and one theme-color, #eeeff2 or #111113. That covers the layout and every page that stands alone: the
+paywall and the other gates, the error pages, the connect pages and the store's demo page. Every dark rule in style.css
+moved from @media (prefers-color-scheme: dark) onto [data-theme="dark"]; demo.css, light only until now, has the desk's
+dark tokens. The switch is the website's own button (a moon while light, a sun while dark, "מצב כהה", aria-pressed):
+in the corner beside the accessibility button on every page of the layout (the phone's top bar has no room for it
+beside the account's name), in the card's corner on a page that stands alone, at the end of the demo page's top line.
+Its script, static/theme.js, flips the page at once, writes the cookie and the colours, and follows a choice made
+elsewhere when a tab is looked at again; the CSP is unchanged (a static module, nothing inline). The old POST /theme and
+its of_theme cookie, unused since the switch went, are gone. The slides the renderer draws and the emails are as they
+were. The footer is the mark and the name, not the website's dark panel, so it stays as it is.

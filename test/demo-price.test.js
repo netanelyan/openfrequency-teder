@@ -236,12 +236,15 @@ test('in a real browser, at 1440, 390 and 360, light and dark: buttons apart, no
       process.env.OF_SIGNUP_OPEN = signup;
       const kind = `${offer.small ? 'two plans' : 'one plan'}, sign-up ${signup ? 'open' : 'closed'}`;
       for (const [width, height] of [[1440, 900], [390, 844], [360, 780]]) {
-        for (const colorScheme of ['light', 'dark']) {
-          const context = await browser.newContext({ viewport: { width, height }, colorScheme, reducedMotion: 'reduce', ...(width < 600 ? { isMobile: true, hasTouch: true } : {}) });
+        // Dark is the browser's choice (the of-theme cookie), on a device that prefers light.
+        for (const theme of ['light', 'dark']) {
+          const context = await browser.newContext({ viewport: { width, height }, colorScheme: 'light', reducedMotion: 'reduce', ...(width < 600 ? { isMobile: true, hasTouch: true } : {}) });
+          if (theme === 'dark') await context.addCookies([{ name: 'of-theme', value: 'dark', url: base }]);
           const page = await context.newPage();
           await page.goto(`${base}/s/${SLUG}`, { waitUntil: 'load' });
           await page.evaluate(() => document.querySelectorAll('details').forEach((d) => (d.open = true)));
-          const at = `${kind}, ${width} ${colorScheme}`;
+          const at = `${kind}, ${width} ${theme}`;
+          assert.equal(await page.getAttribute('html', 'data-theme'), theme, at);
           const m = await page.evaluate(measure);
           assert.deepEqual(m.close, [], `${at}: buttons closer than 8px`);
           assert.deepEqual(m.edges, [], `${at}: on a card's edge`);

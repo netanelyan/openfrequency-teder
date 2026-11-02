@@ -77,68 +77,64 @@
   --top: 66px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #111113;
-    --wall: radial-gradient(120% 80% at 85% -10%, #2c2c30 0%, rgba(44, 44, 48, 0) 55%),
-      linear-gradient(160deg, #1c1c1f 0%, #0b0b0d 30%, #2a2a2e 52%, #0e0e10 76%, #1f1f22 100%);
-    --surface: rgba(44, 44, 48, 0.55);
-    --surface-hi: rgba(58, 58, 62, 0.55);
-    --edge: rgba(255, 255, 255, 0.1);
-    --rim: rgba(255, 255, 255, 0.14);
-    --shadow-tile: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 36px -14px rgba(0, 0, 0, 0.7);
-    --solid: #2c2c2e;
-    --inset: rgba(255, 255, 255, 0.06);
-    --fill: rgba(118, 118, 128, 0.24);
-    --fill-2: rgba(118, 118, 128, 0.32);
-    --pill: #2c2c2e;
-    --seg-on: #636366;
-    --field: rgba(0, 0, 0, 0.3);
-    --line: rgba(255, 255, 255, 0.08);
-    --line-2: rgba(255, 255, 255, 0.16);
-    --ink: #f5f5f7;
-    --ink-2: #d2d2d7;
-    --ink-3: #a1a1a6;
-    --ink-p: #b8b8bd;
-    --accent-p: #2997ff;
-    --accent: #2997ff;
-    --accent-fill: #0071e3;
-    --accent-fill-2: #0077ed;
-    --ok: #30d158;
-    --ok-bg: #0f2a17;
-    --warn: #ff9f0a;
-    --warn-bg: #2d1f08;
-    --bad: #ff6961;
-    --bad-bg: #2d1213;
-    --bad-ink: #1d1d1f;
-    --badge: #ff6961;
-    --badge-ink: #1d1d1f;
-    --bar: rgba(22, 22, 23, 0.8);
-    --bar-float: rgba(30, 30, 32, 0.78);
-    --bar-edge: rgba(255, 255, 255, 0.1);
-    --toast: rgba(58, 58, 60, 0.9);
-    --shadow-float: 0 8px 30px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
+/* Dark, when the browser chose it (ui.js themeOf: data-theme on <html>, from the cookie every OpenFrequency site
+   shares), never because the device prefers it. Every dark rule below hangs on the same attribute. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111113;
+  --wall: radial-gradient(120% 80% at 85% -10%, #2c2c30 0%, rgba(44, 44, 48, 0) 55%),
+    linear-gradient(160deg, #1c1c1f 0%, #0b0b0d 30%, #2a2a2e 52%, #0e0e10 76%, #1f1f22 100%);
+  --surface: rgba(44, 44, 48, 0.55);
+  --surface-hi: rgba(58, 58, 62, 0.55);
+  --edge: rgba(255, 255, 255, 0.1);
+  --rim: rgba(255, 255, 255, 0.14);
+  --shadow-tile: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 36px -14px rgba(0, 0, 0, 0.7);
+  --solid: #2c2c2e;
+  --inset: rgba(255, 255, 255, 0.06);
+  --fill: rgba(118, 118, 128, 0.24);
+  --fill-2: rgba(118, 118, 128, 0.32);
+  --pill: #2c2c2e;
+  --seg-on: #636366;
+  --field: rgba(0, 0, 0, 0.3);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.16);
+  --ink: #f5f5f7;
+  --ink-2: #d2d2d7;
+  --ink-3: #a1a1a6;
+  --ink-p: #b8b8bd;
+  --accent-p: #2997ff;
+  --accent: #2997ff;
+  --accent-fill: #0071e3;
+  --accent-fill-2: #0077ed;
+  --ok: #30d158;
+  --ok-bg: #0f2a17;
+  --warn: #ff9f0a;
+  --warn-bg: #2d1f08;
+  --bad: #ff6961;
+  --bad-bg: #2d1213;
+  --bad-ink: #1d1d1f;
+  --badge: #ff6961;
+  --badge-ink: #1d1d1f;
+  --bar: rgba(22, 22, 23, 0.8);
+  --bar-float: rgba(30, 30, 32, 0.78);
+  --bar-edge: rgba(255, 255, 255, 0.1);
+  --toast: rgba(58, 58, 60, 0.9);
+  --shadow-float: 0 8px 30px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 /* Increase Contrast: the quiet text and the hairlines come up, and the bars go solid. */
 @media (prefers-contrast: more) {
   :root { --ink-2: #1d1d1f; --ink-3: #424245; --ink-p: #1d1d1f; --line: #c7c7cc; --line-2: #8e8e93; --bar: #fafafc; --bar-float: #fafafc; --bar-edge: #8e8e93; --surface: rgba(255, 255, 255, 0.94); --surface-hi: rgba(255, 255, 255, 0.94); --edge: #c7c7cc; }
-}
-@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root { --ink-2: #f5f5f7; --ink-3: #d2d2d7; --ink-p: #f5f5f7; --line: #545458; --line-2: #8e8e93; --bar: #161617; --bar-float: #1e1e20; --bar-edge: #8e8e93; --surface: rgba(29, 29, 31, 0.96); --surface-hi: rgba(29, 29, 31, 0.96); --edge: #545458; }
+  :root[data-theme="dark"] { --ink-2: #f5f5f7; --ink-3: #d2d2d7; --ink-p: #f5f5f7; --line: #545458; --line-2: #8e8e93; --bar: #161617; --bar-float: #1e1e20; --bar-edge: #8e8e93; --surface: rgba(29, 29, 31, 0.96); --surface-hi: rgba(29, 29, 31, 0.96); --edge: #545458; }
 }
 /* Reduce Transparency, or a browser without backdrop blur: the bars are solid. */
 @media (prefers-reduced-transparency: reduce) {
   :root { --bar: #fafafc; --bar-float: #fafafc; --toast: #1d1d1f; --surface: #ffffff; --surface-hi: #ffffff; --inset: #f5f5f7; --fill: #e8e8ed; --fill-2: #dcdce1; --field: #ffffff; }
-}
-@media (prefers-reduced-transparency: reduce) and (prefers-color-scheme: dark) {
-  :root { --bar: #161617; --bar-float: #1e1e20; --toast: #3a3a3c; --surface: #1d1d1f; --surface-hi: #1d1d1f; --inset: #2a2a2c; --fill: #2c2c2e; --fill-2: #3a3a3c; --field: #161617; }
+  :root[data-theme="dark"] { --bar: #161617; --bar-float: #1e1e20; --toast: #3a3a3c; --surface: #1d1d1f; --surface-hi: #1d1d1f; --inset: #2a2a2c; --fill: #2c2c2e; --fill-2: #3a3a3c; --field: #161617; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root { --bar: #fafafc; --bar-float: #fafafc; --toast: #1d1d1f; --surface: rgba(255, 255, 255, 0.9); --surface-hi: rgba(255, 255, 255, 0.9); }
-  @media (prefers-color-scheme: dark) { :root { --bar: #161617; --bar-float: #1e1e20; --toast: #3a3a3c; --surface: rgba(29, 29, 31, 0.92); --surface-hi: rgba(29, 29, 31, 0.92); } }
+  :root[data-theme="dark"] { --bar: #161617; --bar-float: #1e1e20; --toast: #3a3a3c; --surface: rgba(29, 29, 31, 0.92); --surface-hi: rgba(29, 29, 31, 0.92); }
 }
 
 * { box-sizing: border-box; }
@@ -247,7 +243,7 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .acctswitch > summary > .badge + svg.i { margin-inline-start: 0; }
 /* On a phone the list drops below the bar, solid: a blur inside the bar's own blur sees nothing behind it. */
 .acctswitch .menu { position: absolute; z-index: 30; top: calc(100% + 8px); inset-inline-start: 0; display: grid; gap: 2px; min-width: 240px; padding: 6px; border-radius: 16px; background: #fbfbfd; box-shadow: var(--shadow-float), inset 0 0 0 1px var(--edge); }
-@media (prefers-color-scheme: dark) { .acctswitch .menu { background: #1e1e20; } }
+[data-theme="dark"] .acctswitch .menu { background: #1e1e20; }
 .acctswitch .menu form { margin: 0; }
 .acctswitch .menu button, .acctswitch .menu .new, .acctswitch .menu .to { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 12px; border: 0; border-radius: 12px; background: none; color: var(--ink-2); font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
 .acctswitch .menu .nm b { font-weight: 500; }
@@ -295,7 +291,7 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   .acctswitch > summary { max-width: none; min-height: 52px; gap: 12px; padding: 0 12px; border-radius: 14px; }
   /* On a desk the other accounts open in the sidebar itself, rows like the sections: no box of their own. */
   .acctswitch .menu { position: static; min-width: 0; margin-top: 4px; padding: 0; background: none; box-shadow: none; }
-  @media (prefers-color-scheme: dark) { .acctswitch .menu { background: none; } }
+  [data-theme="dark"] .acctswitch .menu { background: none; }
   .nav { grid-column: 1 / -1; grid-row: 3; align-self: start; margin-top: 12px; display: flex; flex-direction: column; gap: 2px; padding: 0; border-radius: 0; background: none; }
   .nav a { min-height: 42px; gap: 12px; padding: 0 12px; border-radius: 12px; font-size: 13px; position: relative; white-space: nowrap; }
   .nav a svg.i { color: var(--ink-3); }
@@ -479,7 +475,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .seg label small { font-size: 11px; font-weight: 400; color: var(--ink-2); }
 .seg input:checked + label { background: var(--seg-on); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04); }
 .seg input:focus-visible + label { outline: 3px solid color-mix(in srgb, var(--accent-fill) 60%, transparent); }
-@media (prefers-color-scheme: dark) { .seg input:checked + label small { color: var(--ink); } }
+[data-theme="dark"] .seg input:checked + label small { color: var(--ink); }
 
 /* meters */
 meter { width: 100%; height: 6px; border-radius: 3px; background: var(--fill); border: 0; display: block; }
@@ -948,7 +944,7 @@ h2.inline { display: inline; }
 .capwrap { padding: 12px 20px 8px; }
 .post > details.facts:last-child { margin-bottom: 6px; }
 /* An account whose own colour is dark (a brown, a navy) keeps its dot visible on the dark tiles. */
-@media (prefers-color-scheme: dark) { .dot { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.28); } }
+[data-theme="dark"] .dot { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.28); }
 /* A source's address is a link: a full-height row to tap, not a 21 px line. */
 .srccard > a.small { display: inline-flex; align-items: center; min-height: 40px; overflow-wrap: anywhere; }
 /* The morning's feedback: four boxes, views by what the post led people to do. The box that asks for more of the same leads. */
@@ -1218,7 +1214,7 @@ details.more[open] > summary { background: var(--fill-2); }
    page lands where its outline was. Shimmer and bar are CSS animations, which keep moving while the browser is busy
    fetching; with reduced motion both stay, still (the rule above turns every animation off). */
 :root { --sk-hi: rgba(255, 255, 255, 0.6); --sk-ease: cubic-bezier(0.23, 1, 0.32, 1); }
-@media (prefers-color-scheme: dark) { :root { --sk-hi: rgba(255, 255, 255, 0.07); } }
+:root[data-theme="dark"] { --sk-hi: rgba(255, 255, 255, 0.07); }
 
 .loadbar { position: fixed; inset-inline: 0; top: 0; height: 3px; z-index: 60; pointer-events: none; opacity: 0; transition: opacity 0.15s ease-out; }
 .loadbar::before { content: ''; position: absolute; inset: 0; background: var(--accent-fill); transform: scaleX(0); transform-origin: right; }
@@ -1290,10 +1286,12 @@ html.sk-on #main > :not(.sk-page) { display: none; }
    The website's (openfrequency.co.il, its style.css .a11y; ui.js a11yWidget, app.js): a round glass button at the
    bottom corner, the tab bar's sibling, and over it a panel of four switches, each a class on <html> that the rules
    at the end of this block read. On a phone it stands above the tab bar, and on a post's page above its action bar
-   too, so it never covers either; on a desk, in the corner. Under the toast, which says something and goes. */
-.a11y-w { position: fixed; z-index: 45; bottom: calc(var(--tab) + 20px + env(safe-area-inset-bottom)); inset-inline-end: 16px; }
-@media (max-width: 899px) { body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 60px + 12px + env(safe-area-inset-bottom)); } }
-@media (min-width: 900px) { .a11y-w { bottom: 24px; inset-inline-end: 24px; } }
+   too, so it never covers either; on a desk, in the corner. Under the toast, which says something and goes. The
+   corner (.corner) holds it and, beside it, the light or dark switch (below). */
+.corner { position: fixed; z-index: 45; bottom: calc(var(--tab) + 20px + env(safe-area-inset-bottom)); inset-inline-end: 16px; display: flex; align-items: flex-end; gap: 8px; }
+@media (max-width: 899px) { body:has(.actionbar) .corner { bottom: calc(var(--tab) + 16px + 60px + 12px + env(safe-area-inset-bottom)); } }
+@media (min-width: 900px) { .corner { bottom: 24px; inset-inline-end: 24px; } }
+.a11y-w { position: relative; }
 .a11y-w[hidden], .a11y-p[hidden] { display: none; }
 .a11y-btn { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .a11y-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -1309,8 +1307,24 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .a11y-end { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 14px; }
 .a11y-reset { min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .a11y-end a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-@media (prefers-reduced-transparency: reduce) { .a11y-btn, .a11y-p { backdrop-filter: none; -webkit-backdrop-filter: none; } }
-@media print { .a11y-w { display: none; } }
+@media (prefers-reduced-transparency: reduce) { .a11y-btn, .a11y-p, .corner .theme { backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@media print { .corner, .login .theme { display: none; } }
+
+/* Light or dark (ui.js themeButton, static/theme.js): the website's own button (openfrequency-web src/style.css
+   .theme), a moon while light and a sun while dark, shown once the script runs. In the corner it is glass like the
+   accessibility button beside it, 8px apart; on a page that stands alone (a card) it sits in the card's top corner. */
+.theme { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 0.2s ease, transform 0.16s cubic-bezier(0.23, 1, 0.32, 1); }
+.theme[hidden] { display: none; }
+.theme:active { transform: scale(0.94); }
+.theme:focus-visible { border-radius: 50%; }
+.theme svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme .sun, [data-theme="dark"] .theme .moon { display: none; }
+[data-theme="dark"] .theme .sun { display: block; }
+@media (hover: hover) { .theme:hover { background: var(--fill); } }
+.corner .theme { width: 48px; height: 48px; background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); }
+.corner .theme svg { width: 24px; height: 24px; stroke-width: 2; }
+@media (hover: hover) { .corner .theme:hover { background: var(--bar-float); } }
+.login .card > .theme { position: absolute; top: 12px; inset-inline-end: 12px; }
 
 /* The switches. Bigger text zooms the page, as the website does, so every size written in px grows with it. A phone
    is then 325px wide at 390: a post's action bar no longer holds its three buttons in a row, so its first takes a row
@@ -1319,12 +1333,10 @@ html.a-big body { zoom: 1.2; }
 @media (max-width: 899px) {
   html.a-big .actionbar { flex-wrap: wrap; }
   html.a-big .actionbar .btn.primary { flex-basis: 100%; }
-  html.a-big body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 112px + 12px + env(safe-area-inset-bottom)); }
+  html.a-big body:has(.actionbar) .corner { bottom: calc(var(--tab) + 16px + 112px + 12px + env(safe-area-inset-bottom)); }
 }
 html.a-links a { text-decoration: underline !important; text-decoration-thickness: 2px !important; text-underline-offset: 3px; }
 html.a-still *, html.a-still *::before, html.a-still *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 /* High contrast: the quiet text comes up to the ink, the hairlines darken, and the glass goes solid. */
 html.a-contrast { --ink-2: #1d1d1f; --ink-3: #424245; --ink-p: #1d1d1f; --line: #8e8e93; --line-2: #424245; --bar: #ffffff; --bar-float: #ffffff; --bar-edge: #424245; --surface: #ffffff; --surface-hi: #ffffff; --edge: #424245; --inset: #f5f5f7; --field: #ffffff; }
-@media (prefers-color-scheme: dark) {
-  html.a-contrast { --ink-2: #f5f5f7; --ink-3: #e5e5ea; --ink-p: #f5f5f7; --line: #8e8e93; --line-2: #d2d2d7; --bar: #000000; --bar-float: #000000; --bar-edge: #d2d2d7; --surface: #000000; --surface-hi: #000000; --edge: #d2d2d7; --inset: #1c1c1e; --field: #000000; }
-}
+html.a-contrast[data-theme="dark"] { --ink-2: #f5f5f7; --ink-3: #e5e5ea; --ink-p: #f5f5f7; --line: #8e8e93; --line-2: #d2d2d7; --bar: #000000; --bar-float: #000000; --bar-edge: #d2d2d7; --surface: #000000; --surface-hi: #000000; --edge: #d2d2d7; --inset: #1c1c1e; --field: #000000; }

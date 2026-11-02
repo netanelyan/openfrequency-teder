@@ -83,8 +83,11 @@ Five sections, the same on a phone and a desk:
 | **Settings** | the month's plan (a customer), what the month cost and each account's plan (the operator), which keys are set (never their values), your account and signing out |
 
 A post's own page shows the whole trace: every slide, its facts, their quotes, the
-stored document and the source. The site follows the system's light or dark setting,
-works without JavaScript, and adds to a phone's home screen. Its mark is Teder's
+stored document and the source. The site is light, whatever the device prefers, until
+someone taps the moon beside the accessibility button; dark is then the cookie `of-theme`
+that every OpenFrequency site shares (openfrequency.co.il and its subdomains), so each
+page arrives in it from the server (src/web/static/theme.js). The site works without
+JavaScript, and adds to a phone's home screen. Its mark is Teder's
 wave on violet; the footer carries the company's, OpenFrequency's halftone on blue
 (both from [`assets/brand`](assets/brand/README.md)).
 

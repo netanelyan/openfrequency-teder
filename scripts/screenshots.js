@@ -43,6 +43,9 @@ try {
       ['desktop', { width: 1440, height: 900 }, { deviceScaleFactor: 1 }],
     ]) {
       const context = await browser.newContext({ viewport, ...extra, locale: 'he-IL', colorScheme: theme });
+      // Dark is the browser's choice, the cookie every OpenFrequency site shares (src/web/static/theme.js), never the
+      // device's setting.
+      await context.addCookies([{ name: 'of-theme', value: theme, url: base }]);
       const page = await context.newPage();
       const errors = [];
       page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));

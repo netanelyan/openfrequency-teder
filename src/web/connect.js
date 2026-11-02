@@ -12,7 +12,7 @@ import { facebookPages, instagramPages, selectFacebookPage, selectInstagram } fr
 import { j } from '../db/index.js';
 import { ActionError } from './actions.js';
 import { connectErrorHe } from '../publish/errors.js';
-import { a11yLink, csrfField, esc, icon, postButton, tederMark, usd, withSupport } from './ui.js';
+import { a11yLink, csrfField, esc, htmlOpen, icon, postButton, tederMark, themeButton, themeMeta, themeScript, usd, withSupport } from './ui.js';
 
 // Connecting a customer's TikTok, Instagram and Facebook Page (src/publish/connect.js), on the website:
 //
@@ -227,22 +227,23 @@ export function connectRoutes(links) {
  */
 const handleHe = (username) => `⁦@${username}⁩`;
 
-function resultPage({ title, text, actions = '', v = 1 }) {
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="robots" content="noindex"><title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
-<body class="login"><main class="card">
+// The browser's light or dark (ui.js themeOf), which server.js reads from the request and every page here is given.
+function resultPage({ title, text, actions = '', v = 1, theme = 'light' }) {
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<meta name="robots" content="noindex"><title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
+<body class="login"><main class="card">${themeButton(theme)}
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1>${esc(title)}</h1>
 <p>${withSupport(text)}</p>
-${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
+${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
 }
 
 /**
  * The page a connect button answers with: on to Zernio's link at once. A page, not a redirect: the site's CSP keeps
  * form submissions on our own origin (form-action 'self'), redirects included, and Zernio is not ours.
  */
-export function goPage(url, { name = '', v = 1 } = {}) {
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${esc(url)}"><title>עוברים ל${esc(name)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"></head>
-<body class="login"><main class="card"><div class="hero">${tederMark()}<b>תדר</b></div><h1>עוברים ל${esc(name)}</h1><p>אם הדף לא עובר לבד, אפשר ללחוץ כאן.</p><div class="links"><a class="btn primary" href="${esc(url)}" rel="noreferrer">להמשיך</a></div><p class="a11y-foot">${a11yLink()}</p></main></body></html>`;
+export function goPage(url, { name = '', v = 1, theme = 'light' } = {}) {
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${esc(url)}"><title>עוברים ל${esc(name)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"></head>
+<body class="login"><main class="card">${themeButton(theme)}<div class="hero">${tederMark()}<b>תדר</b></div><h1>עוברים ל${esc(name)}</h1><p>אם הדף לא עובר לבד, אפשר ללחוץ כאן.</p><div class="links"><a class="btn primary" href="${esc(url)}" rel="noreferrer">להמשיך</a></div><p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
 }
 
 /**
@@ -253,16 +254,16 @@ export function goPage(url, { name = '', v = 1 } = {}) {
 const EXPIRED = { title: 'הלינק הזה כבר לא בתוקף', text: 'לינק לחיבור עובד 72 שעות. מחברים מדף החשבון בתדר, והכפתור שם פותח חיבור חדש בכל לחיצה.' };
 // The account the address names, whether or not it exists: the page is the same either way, and the account page shows
 // only the workspace's own.
-const expired = (account) => resultPage({ ...EXPIRED, actions: `<a class="btn primary" href="/accounts?account=${esc(encodeURIComponent(account))}">לדף החשבון</a>` });
+const expired = (account, theme) => resultPage({ theme, ...EXPIRED, actions: `<a class="btn primary" href="/accounts?account=${esc(encodeURIComponent(account))}">לדף החשבון</a>` });
 
 /** The page that lists the Instagram accounts (or Facebook Pages) to pick from, each a link that connects it. */
-function pickerPage(pages, id, { who = '', platform = 'instagram' } = {}) {
+function pickerPage(pages, id, { who = '', platform = 'instagram', theme = 'light' } = {}) {
   const fb = platform === 'facebook';
   // A Page is known by its name (its @username is optional); an Instagram account by its @username.
   const label = (p) => (fb ? `<bdi dir="auto">${esc(p.name || p.username)}</bdi>${p.name && p.username ? ` <small dir="ltr">@${esc(p.username)}</small>` : ''}` : `<bdi dir="ltr">@${esc(p.username || p.name)}</bdi>${p.name && p.username ? ` <small>${esc(p.name)}</small>` : ''}`);
   const links = pages.map((p) => `<a class="btn" href="/connect/pick/${esc(id)}?page=${esc(encodeURIComponent(p.pageId))}">${label(p)}</a>`).join('');
   const text = fb ? 'מצאנו כמה עמודים שאתם מנהלים. בוחרים את העמוד שאליו המצגות יעלו.' : 'מצאנו כמה חשבונות אינסטגרם מקצועיים. בוחרים את החשבון שאליו המצגות יעלו.';
-  return resultPage({ title: fb ? 'איזה עמוד פייסבוק לחבר?' : 'איזה חשבון אינסטגרם לחבר?', text: `${who ? `${who}, ` : ''}${text}`, actions: links });
+  return resultPage({ theme, title: fb ? 'איזה עמוד פייסבוק לחבר?' : 'איזה חשבון אינסטגרם לחבר?', text: `${who ? `${who}, ` : ''}${text}`, actions: links });
 }
 
 const NO_IG = { title: 'לא מצאנו חשבון אינסטגרם מקצועי', text: 'לא מצאנו עמוד פייסבוק שמחובר אליו חשבון אינסטגרם מקצועי. אפשר להעביר את החשבון לחשבון מקצועי בהגדרות של אינסטגרם, ולחבר שוב.' };
@@ -279,7 +280,7 @@ const PICKS = {
  * pick), { prefer } (one account on offer, connected by itself), or null when there is nothing to pick. `target` is
  * { kind: 'account' | 'onboarding', id, profileId }: the profile is ours, never the one in the address.
  */
-async function selection(ctx, { target, platform, query, actions, t }) {
+async function selection(ctx, { target, platform, query, actions, t, theme }) {
   const sel = selectionOf(query);
   if (!sel) return null;
   // Instagram through Facebook Login picks an account, a Facebook connect picks a Page: each only on its own return. A
@@ -289,29 +290,29 @@ async function selection(ctx, { target, platform, query, actions, t }) {
   const fits = (platform === 'instagram' && sel.step === 'select_account') || (platform === 'facebook' && sel.step === 'select_page');
   if (!kind || !fits || !target.profileId || (sel.profileId && sel.profileId !== target.profileId) || (platform === 'facebook' && !sel.userProfile)) {
     ctx.log?.(`[connect] ${target.kind} ${target.id} ${platform}: a selection return that is not ours (step ${sel.step}, profile ${sel.profileId || 'none'})`);
-    return { page: [400, resultPage({ title: 'החיבור לא הושלם', text: 'משהו בחזרה מהחיבור לא התאים. אפשר לנסות שוב.', actions })] };
+    return { page: [400, resultPage({ theme, title: 'החיבור לא הושלם', text: 'משהו בחזרה מהחיבור לא התאים. אפשר לנסות שוב.', actions })] };
   }
   const pages = await kind.list({ profileId: target.profileId, tempToken: sel.tempToken, connectToken: sel.connectToken });
-  if (!pages.length) return { page: [200, resultPage({ ...kind.none, actions })] };
+  if (!pages.length) return { page: [200, resultPage({ theme, ...kind.none, actions })] };
   if (pages.length === 1) {
     const got = await kind.select({ profileId: target.profileId, pageId: pages[0].pageId, tempToken: sel.tempToken, connectToken: sel.connectToken, userProfile: sel.userProfile });
     return { prefer: { [platform]: got.accountId } };
   }
   const id = holdPick(ctx.db, { target, platform, tempToken: sel.tempToken, connectToken: sel.connectToken, userProfile: sel.userProfile, pages }, { t });
-  return { page: [200, pickerPage(pages, id, { platform, who: String(sel.userProfile?.name || sel.userProfile?.displayName || '').slice(0, 60) })] };
+  return { page: [200, pickerPage(pages, id, { platform, theme, who: String(sel.userProfile?.name || sel.userProfile?.displayName || '').slice(0, 60) })] };
 }
 
 /**
  * GET /connect/pick/<id>?page=<pageId>: the Instagram account (or Facebook Page) picked on our own page. [status, html].
  * The id names a pick kept on the server (taken once); a page that was not on offer is refused without asking Zernio.
  */
-export async function publicPick(ctx, { id, pageId, t = now() }) {
+export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }) {
   const pick = takePick(ctx.db, id, { t });
-  if (!pick) return [404, resultPage({ title: 'הבחירה הזו כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף באתר.' })];
+  if (!pick) return [404, resultPage({ theme, title: 'הבחירה הזו כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף באתר.' })];
   const page = pick.pages.find((p) => p.pageId === String(pageId || ''));
   if (!page) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id}: a pick of a page that was not on offer`);
-    return [400, resultPage({ title: 'החשבון הזה לא ברשימה', text: 'אפשר לחבר שוב מהדף באתר ולבחור מהרשימה.' })];
+    return [400, resultPage({ theme, title: 'החשבון הזה לא ברשימה', text: 'אפשר לחבר שוב מהדף באתר ולבחור מהרשימה.' })];
   }
   const platform = PICKS[pick.platform] ? pick.platform : 'instagram';
   const name = PLATFORM_NAME[platform];
@@ -331,10 +332,10 @@ export async function publicPick(ctx, { id, pageId, t = now() }) {
       if (pack) await refreshConnections(ctx.db, pack, { t, prefer });
     }
     const who = platform === 'facebook' ? page.name || got.username || 'העמוד בפייסבוק' : got.username || page.username ? handleHe(got.username || page.username) : 'החשבון באינסטגרם';
-    return [200, resultPage({ title: `${name} מחובר`, text: `${who} מחובר עכשיו. אפשר לסגור את הדף.` })];
+    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו. אפשר לסגור את הדף.` })];
   } catch (e) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id} ${platform} pick: ${e.message}`);
-    return [200, resultPage({ title: 'החיבור לא הושלם', text: 'לא הצלחנו לחבר את החשבון שבחרתם. אפשר לחבר שוב מהדף באתר.' })];
+    return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: 'לא הצלחנו לחבר את החשבון שבחרתם. אפשר לחבר שוב מהדף באתר.' })];
   }
 }
 
@@ -343,23 +344,23 @@ export async function publicPick(ctx, { id, pageId, t = now() }) {
  * [status, html]. `ctx` is the engine's; the signature names the onboarding. What is connected is read from Zernio, and
  * an account created in the meantime takes it over at once.
  */
-export async function publicOnboardingConnect(ctx, { onboardingId, platform, query, links, t = now() }) {
+export async function publicOnboardingConnect(ctx, { onboardingId, platform, query, links, t = now(), theme = 'light' }) {
   const ob = ctx.db.get('SELECT id, pack_id, seed_json FROM onboarding WHERE id = ?', onboardingId);
-  if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ title: 'הלינק הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
+  if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ theme, title: 'הלינק הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
+  if (!zernioConfigured()) return [503, resultPage({ theme, title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
   const back = `<a class="btn primary" href="/new/${esc(encodeURIComponent(ob.id))}#connect">חזרה להקמת החשבון</a>`;
   const error = query.get('error');
   if (error) {
     audit(ctx.db, { actor: 'zernio', action: 'zernio_connect_failed', detail: { onboarding: ob.id, platform, error, reason: query.get('error_message') || null, request: query.get('request_id') || null } });
     ctx.log?.(`[connect] onboarding ${ob.id} ${platform}: Zernio returned ${error}${query.get('error_message') ? ` (${query.get('error_message')})` : ''}`);
     const text = connectErrorHe(platform, { error: error === 'oauth_denied' ? 'denied' : error, message: query.get('error_message') || '', fixable: query.get('is_user_fixable') === 'true' });
-    return [200, resultPage({ title: 'החיבור לא הצליח', text, actions: back })];
+    return [200, resultPage({ theme, title: 'החיבור לא הצליח', text, actions: back })];
   }
   let kept;
   let prefer = query.get('accountId') ? { [platform]: query.get('accountId') } : {};
   try {
-    const picked = await selection(ctx, { target: { kind: 'onboarding', id: ob.id, profileId: setupOf(ctx.db, ob.id).zernio?.profileId || null }, platform, query, actions: back, t });
+    const picked = await selection(ctx, { target: { kind: 'onboarding', id: ob.id, profileId: setupOf(ctx.db, ob.id).zernio?.profileId || null }, platform, query, actions: back, t, theme });
     if (picked?.page) return picked.page;
     if (picked?.prefer) prefer = picked.prefer;
     kept = await refreshOnboardingConnections(ctx.db, ob.id, { t, prefer });
@@ -371,25 +372,25 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
     }
   } catch (e) {
     ctx.log?.(`[connect] onboarding ${ob.id} ${platform} done: ${e.message}`);
-    return [200, resultPage({ title: 'עוד רגע', text: 'החיבור נשלח, אבל עוד לא קיבלנו אישור. תוך כמה דקות זה יופיע בדף של החשבון החדש.', actions: back })];
+    return [200, resultPage({ theme, title: 'עוד רגע', text: 'החיבור נשלח, אבל עוד לא קיבלנו אישור. תוך כמה דקות זה יופיע בדף של החשבון החדש.', actions: back })];
   }
   const c = kept[platform];
-  if (c?.status !== 'connected') return [200, resultPage({ title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר. אפשר לנסות שוב.`, actions: back })];
+  if (c?.status !== 'connected') return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר. אפשר לנסות שוב.`, actions: back })];
   const niche = j(ob.seed_json, {})?.niche || '';
-  return [200, resultPage({ title: `${name} מחובר`, text: `${c.username ? handleHe(c.username) : `החשבון ב${name}`} מחובר עכשיו${niche ? ` לחשבון החדש על ${niche}` : ''}. כשהחשבון ייווצר, החיבור יעבור אליו לבד.`, actions: back })];
+  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${c.username ? handleHe(c.username) : `החשבון ב${name}`} מחובר עכשיו${niche ? ` לחשבון החדש על ${niche}` : ''}. כשהחשבון ייווצר, החיבור יעבור אליו לבד.`, actions: back })];
 }
 
 /**
  * GET /connect/<account>/<platform>[/done]: [status, html, location?]. `ctx` is the engine's (no session, so no
  * workspace): the signature names the account. `links` is { base, secret }.
  */
-export async function publicConnect(ctx, { account, platform, done, query, links, t = now() }) {
+export async function publicConnect(ctx, { account, platform, done, query, links, t = now(), theme = 'light' }) {
   const { base, secret } = links;
   const pack = ctx.pack(account);
   const sig = { accountId: account, platform, e: query.get('e'), s: query.get('s'), t };
-  if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, expired(account)];
+  if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, expired(account, theme)];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
+  if (!zernioConfigured()) return [503, resultPage({ theme, title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;
 
   if (!done) {
@@ -397,9 +398,9 @@ export async function publicConnect(ctx, { account, platform, done, query, links
       const url = await startConnect(ctx.db, pack, platform, { doneUrl: doneLink(secret, { base, accountId: pack.id, platform, t }), actor: 'whatsapp link' });
       return [302, '', url];
     } catch (e) {
-      if (e.code === 'not_connectable') return [200, resultPage({ title: `${name} כבר מחובר`, text: `${name} של ${pack.meta.displayName} מחובר דרך Meta, ואין פה מה לחבר.` })];
+      if (e.code === 'not_connectable') return [200, resultPage({ theme, title: `${name} כבר מחובר`, text: `${name} של ${pack.meta.displayName} מחובר דרך Meta, ואין פה מה לחבר.` })];
       ctx.log?.(`[connect] ${pack.id} ${platform}: ${e.message}`);
-      return [502, resultPage({ title: 'אי אפשר לחבר כרגע', text: 'מסך החיבור לא נפתח הפעם. נסו שוב בעוד כמה דקות.', actions: again() })];
+      return [502, resultPage({ theme, title: 'אי אפשר לחבר כרגע', text: 'מסך החיבור לא נפתח הפעם. נסו שוב בעוד כמה דקות.', actions: again() })];
     }
   }
 
@@ -410,20 +411,20 @@ export async function publicConnect(ctx, { account, platform, done, query, links
     // Zernio's code stays in the audit and the log; the customer reads what it means and what to do.
     ctx.log?.(`[connect] ${pack.id} ${platform}: Zernio returned ${error}${query.get('error_message') ? ` (${query.get('error_message')})` : ''}`);
     const text = connectErrorHe(platform, { error: error === 'oauth_denied' ? 'denied' : error, message: query.get('error_message') || '', fixable: query.get('is_user_fixable') === 'true' });
-    return [200, resultPage({ title: 'החיבור לא הצליח', text, actions: again() })];
+    return [200, resultPage({ theme, title: 'החיבור לא הצליח', text, actions: again() })];
   }
   try {
-    const picked = await selection(ctx, { target: { kind: 'account', id: pack.id, profileId: profileIdOf(ctx.db, pack) }, platform, query, actions: again(), t });
+    const picked = await selection(ctx, { target: { kind: 'account', id: pack.id, profileId: profileIdOf(ctx.db, pack) }, platform, query, actions: again(), t, theme });
     if (picked?.page) return picked.page;
     const prefer = picked?.prefer || (query.get('accountId') ? { [platform]: query.get('accountId') } : {});
     await refreshConnections(ctx.db, pack, { t, prefer });
   } catch (e) {
     ctx.log?.(`[connect] ${pack.id} ${platform} done: ${e.message}`);
-    return [200, resultPage({ title: 'עוד רגע', text: 'החיבור נשלח, ועוד לא קיבלנו אישור מה חובר. תוך שעה זה יופיע בדף החשבון.' })];
+    return [200, resultPage({ theme, title: 'עוד רגע', text: 'החיבור נשלח, ועוד לא קיבלנו אישור מה חובר. תוך שעה זה יופיע בדף החשבון.' })];
   }
   const s = connectState(ctx.db, pack, platform);
-  if (s.state !== 'connected') return [200, resultPage({ title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
+  if (s.state !== 'connected') return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
   ctx.db.update('accounts', pack.id, { updated_at: nowIso() });
-  return [200, resultPage({ title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.` })];
+  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.` })];
 }
 

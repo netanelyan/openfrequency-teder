@@ -10,7 +10,7 @@ import { DemoError } from '../demos/store.js';
 import { ActionError } from './actions.js';
 import { contrast } from '../render/color.js';
 import { LOGOS } from './logos.js';
-import { esc, layout, ofMark, postButton, stamp, tederMark } from './ui.js';
+import { esc, htmlOpen, layout, ofMark, postButton, stamp, tederMark, themeButton, themeMeta, themeScript } from './ui.js';
 import { a11yLink } from './ui.js';
 
 // Stores' demos on the website (src/demos):
@@ -352,10 +352,11 @@ const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h"
 /**
  * The store's page, built like Toran's (openfrequency-toran src/pitch/page.ts): what was read on its site and the
  * way in beside its products, on its own photograph; then the slideshow itself; then what Teder is (LINKS above);
- * then what Teder would do for it and what that costs, one plan or both, and the way in (priceSection, joinUrl). No
- * script: the two sizes are two radio buttons and CSS.
+ * then what Teder would do for it and what that costs, one plan or both, and the way in (priceSection, joinUrl). Light
+ * or dark as the browser chose on any of the sites (ui.js themeOf), with the switch at the end of the top line; its
+ * script (static/theme.js) is the page's only one: the two sizes are two radio buttons and CSS.
  */
-export function demoPage(demo, { offer, join = joinUrl() }) {
+export function demoPage(demo, { offer, join = joinUrl(), theme = 'light' }) {
   const name = demo.store?.name || demo.domain;
   const subject = demo.topic?.niche || '';
   const base = `/s/${demo.slug}`;
@@ -374,12 +375,12 @@ export function demoPage(demo, { offer, join = joinUrl() }) {
     st.low != null ? tile(st.low === st.high ? esc(ils(st.low)) : `${esc(ils(st.low))} <small>עד</small> ${esc(ils(st.high))}`, 'טווח המחירים', true) : '',
   ].join('');
   const shelfHtml = shelf(demo, base);
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex, nofollow, noarchive"><meta name="color-scheme" content="light"><meta name="theme-color" content="#f4f4f6">
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">${themeMeta(theme)}
 <title>מצגת לדוגמה ${esc(le(name))}${esc(name)} | תדר</title>
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/demo.css"><link rel="stylesheet" href="${base}/theme.css"></head>
 <body class="d-page">
-<div class="wrap"><header class="top"><span class="for">עמוד שהכנו בשביל <bdi>${esc(name)}</bdi></span><span class="by">${ofMark()}OpenFrequency</span></header></div>
+<div class="wrap"><header class="top"><span class="for">עמוד שהכנו בשביל <bdi>${esc(name)}</bdi></span><span class="by">${ofMark()}OpenFrequency</span>${themeButton(theme)}</header></div>
 <div class="lead${shelfHtml ? ' with-shelf' : ''}">
 <section class="hero">
 <div class="marks">${mark()}${tederMark()}</div>
@@ -408,11 +409,12 @@ ${LINKS}
 ${priceSection(offer, join)}
 <footer class="foot"><span class="by">${ofMark()}OpenFrequency</span>${a11yLink()}</footer>
 </div>
+${themeScript()}
 </body></html>`;
 }
 
-export const goneHtml = () =>
-  `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>העמוד לא כאן | תדר</title><link rel="stylesheet" href="/static/demo.css"></head><body class="d-page"><div class="wrap"><section class="hero"><h1>העמוד הזה לא כאן</h1><p class="lede">אולי הקישור ישן. אם קיבלתם אותו מאיתנו, אפשר לענות להודעה ונשלח קישור חדש.</p></section><footer class="foot">${a11yLink()}</footer></div></body></html>`;
+export const goneHtml = (theme = 'light') =>
+  `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">${themeMeta(theme)}<title>העמוד לא כאן | תדר</title><link rel="stylesheet" href="/static/demo.css"></head><body class="d-page"><div class="wrap"><section class="hero"><h1>העמוד הזה לא כאן</h1><p class="lede">אולי הקישור ישן. אם קיבלתם אותו מאיתנו, אפשר לענות להודעה ונשלח קישור חדש.</p></section><footer class="foot">${a11yLink()}${themeButton(theme)}</footer></div>${themeScript()}</body></html>`;
 
 // ---------------------------------------------------------------- the operator's pages
 

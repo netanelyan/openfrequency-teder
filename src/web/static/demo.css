@@ -1,11 +1,15 @@
 /* A store's demo page (src/web/demos.js), built like Toran's (openfrequency-toran src/pitch): a silver wallpaper,
-   frosted glass panels, pill buttons, light only. The store's colour (--store, from /s/<slug>/theme.css, dark enough for white letters) is its initial and
-   its name's marker; Teder's violet is the buttons, the tabs and the checks. No script. */
+   frosted glass panels, pill buttons. The store's colour (--store, from /s/<slug>/theme.css, dark enough for white letters) is its initial and
+   its name's marker; Teder's violet is the buttons, the tabs and the checks. Light, or dark when the browser chose it
+   on any OpenFrequency site (data-theme on <html>, ui.js themeOf; the switch is the top line's last button): the
+   same page on the desk's dark wallpaper and dark glass. The store's logo and its products keep their own colours.
+   One script, the switch's (static/theme.js). */
 @font-face { font-family: Assistant; src: url(/static/fonts/Assistant.ttf) format('truetype'); font-weight: 200 800; font-display: swap; }
 
 :root {
   color-scheme: light;
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Hebrew', 'Segoe UI', Assistant, sans-serif;
+  --bg: #eeeff2;
   --ink: #1d1d1f;
   --ink-2: #424245;
   --ink-3: #56565b;
@@ -13,15 +17,56 @@
   --wall: radial-gradient(120% 80% at 85% -10%, #fff 0%, transparent 60%), linear-gradient(160deg, #fafafb, #e2e3e8 32%, #f4f4f6 52%, #e4e5ea 74%, #f7f7f9);
   --glass: rgba(255, 255, 255, 0.62);
   --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-solid: rgba(255, 255, 255, 0.9);
+  --rim: #fff;
+  --glass-shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.14);
+  /* a tile inside the glass (what we read, the caption, the articles), a product's card, the chosen tab */
+  --tile: rgba(255, 255, 255, 0.72);
+  --tile-edge: rgba(0, 0, 0, 0.05);
+  --card: #fff;
+  --img: #f1f1f3;
+  --seg-on: #fff;
+  --line: rgba(0, 0, 0, 0.08);
   --grey-pill: rgba(118, 118, 128, 0.12);
   --teder: #6a3fd6;
   --teder-2: #5a32c0;
+  /* Teder's violet as a line or a mark on the page (the checks, the facts' rule), not under white letters */
+  --teder-ink: #6a3fd6;
+  --focus: rgba(106, 63, 214, 0.45);
+  --price-bg: color-mix(in srgb, var(--teder) 9%, rgba(255, 255, 255, 0.5));
+  --marker: 30%;
   --store: #4a4a52;
   --store-ink: #fff;
 }
+/* Dark: the desk's own dark tokens (style.css), and the violet a step lighter where it is a line on the dark. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111113;
+  --ink: #f5f5f7;
+  --ink-2: #d2d2d7;
+  --ink-3: #a1a1a6;
+  --link: #2997ff;
+  --wall: radial-gradient(120% 80% at 85% -10%, #2c2c30 0%, rgba(44, 44, 48, 0) 55%), linear-gradient(160deg, #1c1c1f 0%, #0b0b0d 30%, #2a2a2e 52%, #0e0e10 76%, #1f1f22 100%);
+  --glass: rgba(44, 44, 48, 0.55);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --glass-solid: rgba(29, 29, 31, 0.92);
+  --rim: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 14px 36px -14px rgba(0, 0, 0, 0.7);
+  --tile: rgba(255, 255, 255, 0.06);
+  --tile-edge: rgba(255, 255, 255, 0.08);
+  --card: #1c1c1e;
+  --img: #2c2c2e;
+  --seg-on: #636366;
+  --line: rgba(255, 255, 255, 0.1);
+  --grey-pill: rgba(118, 118, 128, 0.24);
+  --teder-ink: #a487ff;
+  --focus: rgba(164, 135, 255, 0.6);
+  --price-bg: color-mix(in srgb, var(--teder) 24%, rgba(44, 44, 48, 0.5));
+  --marker: 75%;
+}
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; min-height: 100%; background-color: #eeeff2; background-image: var(--wall); background-repeat: no-repeat; background-size: 100% 100%; }
+html { -webkit-text-size-adjust: 100%; min-height: 100%; background-color: var(--bg); background-image: var(--wall); background-repeat: no-repeat; background-size: 100% 100%; }
 body { margin: 0; min-height: 100vh; color: var(--ink); font: 400 17px/1.6 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--link); }
 bdi { unicode-bidi: isolate; }
@@ -29,9 +74,10 @@ img { max-width: 100%; }
 
 .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px calc(28px + env(safe-area-inset-bottom)); }
 
-/* the top line: who it's for, who made it */
+/* the top line: who it's for, who made it, and the light or dark switch. On a phone the store's name goes to a second
+   line rather than be cut short beside the switch (at 390 "חנות הקומקומים" was "חנות ה…"). */
 .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; font-size: 13px; color: var(--ink-3); }
-.top .for { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top .for { min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
 .by { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mark { width: 16px; height: 16px; border-radius: 24%; color: #fff; display: block; flex: none; overflow: hidden; }
 .mark svg { display: block; width: 100%; height: 100%; }
@@ -51,7 +97,7 @@ img { max-width: 100%; }
 
 h1 { font-size: clamp(30px, 8.6vw, 42px); font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; margin: 18px auto 12px; max-width: 640px; text-wrap: balance; overflow-wrap: anywhere; }
 /* the store's name, under a marker stroke in its own colour, as on openfrequency.co.il */
-h1 .hl { padding-inline: 0.08em; background: linear-gradient(transparent 58%, color-mix(in srgb, var(--store) 30%, transparent) 58%, color-mix(in srgb, var(--store) 30%, transparent) 92%, transparent 92%); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+h1 .hl { padding-inline: 0.08em; background: linear-gradient(transparent 58%, color-mix(in srgb, var(--store) var(--marker), transparent) 58%, color-mix(in srgb, var(--store) var(--marker), transparent) 92%, transparent 92%); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .lede { font-size: 18px; line-height: 1.6; color: var(--ink-2); margin: 0 auto; max-width: 560px; text-wrap: pretty; }
 .quiet { font-size: 14px; line-height: 1.55; color: var(--ink-3); margin: 14px auto 0; max-width: 460px; }
 
@@ -60,21 +106,21 @@ h1 .hl { padding-inline: 0.08em; background: linear-gradient(transparent 58%, co
 .go:hover { background: var(--teder-2); }
 .go:active { transform: scale(0.98); }
 .go.big { min-height: 58px; padding: 0 32px; font-size: 18px; width: 100%; max-width: 360px; }
-a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45); outline-offset: 3px; }
+a:focus-visible, .go:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 
 /* the glass */
-.glass { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 #fff, 0 12px 32px -14px rgba(0, 0, 0, 0.14); border-radius: 26px; }
+.glass { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--rim), var(--glass-shadow); border-radius: 26px; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { background: rgba(255, 255, 255, 0.9); }
+  .glass { background: var(--glass-solid); }
 }
 
 /* what we read: the numbers on tiles, the articles as chips. Each tile starts as wide as what it says, and one that does
    not fit goes to the next row (with equal shares the price range ran past its tile beside the products on a desk, and
    "תמונות מוצרים" was cut on a phone of 360) */
-.read { margin: 22px 0 0; padding: 18px 2px 0; border-top: 1px solid rgba(0, 0, 0, 0.08); text-align: start; }
+.read { margin: 22px 0 0; padding: 18px 2px 0; border-top: 1px solid var(--line); text-align: start; }
 .read h2 { font-size: 18px; font-weight: 700; line-height: 1.3; margin: 0 0 12px; }
 .stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
-.stats div { display: flex; flex: 1 1 auto; flex-direction: column-reverse; gap: 2px; min-width: 0; padding: 12px 14px 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.72); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 6px 16px -12px rgba(0, 0, 0, 0.2); }
+.stats div { display: flex; flex: 1 1 auto; flex-direction: column-reverse; gap: 2px; min-width: 0; padding: 12px 14px 11px; border-radius: 16px; background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-edge), 0 6px 16px -12px rgba(0, 0, 0, 0.2); }
 .stats div.wide { flex-basis: 100%; }
 .stats dd { margin: 0; font: 800 clamp(24px, 6.6vw, 30px)/1.1 var(--font); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stats dd small { font-size: 0.5em; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
@@ -83,7 +129,7 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
 .pages { margin: 14px 0 0; }
 .pages span { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: var(--ink); }
 .pages ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.pages li { padding: 4px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.72); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.pages li { padding: 4px 11px; border-radius: 999px; background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-edge); font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 .read-cta { margin: 24px 0 0; text-align: center; }
 
 /* the store's products. On a phone they move past under the hero, two rows to the screen's edges, the second the
@@ -93,8 +139,8 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
 .shelf-track { display: flex; width: max-content; animation: shelf 40s linear infinite; }
 .shelf-row.r1 .shelf-track { animation-direction: reverse; }
 .shelf ul { display: flex; gap: 10px; margin: 0; padding: 0 10px 0 0; list-style: none; }
-.shelf li { flex: none; width: 132px; padding: 6px 6px 10px; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 22px -14px rgba(0, 0, 0, 0.22); direction: rtl; }
-.shelf img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 12px; background: #f1f1f3; }
+.shelf li { flex: none; width: 132px; padding: 6px 6px 10px; border-radius: 18px; background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 22px -14px rgba(0, 0, 0, 0.22); direction: rtl; }
+.shelf img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 12px; background: var(--img); }
 .shelf b { display: block; margin: 8px 4px 0; overflow: hidden; font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; text-overflow: ellipsis; }
 .shelf small { display: block; margin: 1px 4px 0; font-size: 13px; color: var(--ink-3); }
 @keyframes shelf { to { transform: translateX(-50%); } }
@@ -120,21 +166,21 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
 
 /* ---- the slideshow, where Toran's page has its chat */
 .show { overflow: hidden; margin-top: 32px; scroll-margin-top: 16px; }
-.ch-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid rgba(0, 0, 0, 0.06); }
+.ch-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
 .ch-head b { display: block; font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
 .ch-head small { display: block; font-size: 13px; color: var(--ink-3); }
 .show input { position: absolute; opacity: 0; pointer-events: none; }
 .tabs { display: flex; gap: 4px; margin: 14px 18px 0; padding: 4px; border-radius: 999px; background: var(--grey-pill); width: max-content; }
 .tabs label { padding: 6px 16px; border-radius: 999px; font-size: 15px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
-#d-tt:checked ~ .tabs label[for='d-tt'], #d-ig:checked ~ .tabs label[for='d-ig'] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
-#d-tt:focus-visible ~ .tabs label[for='d-tt'], #d-ig:focus-visible ~ .tabs label[for='d-ig'] { outline: 3px solid rgba(106, 63, 214, 0.45); outline-offset: 2px; }
+#d-tt:checked ~ .tabs label[for='d-tt'], #d-ig:checked ~ .tabs label[for='d-ig'] { background: var(--seg-on); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+#d-tt:focus-visible ~ .tabs label[for='d-tt'], #d-ig:focus-visible ~ .tabs label[for='d-ig'] { outline: 3px solid var(--focus); outline-offset: 2px; }
 #d-tt:checked ~ .stage.instagram, #d-ig:checked ~ .stage.tiktok { display: none; }
 .d-strip { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; padding: 14px 18px 16px; scroll-padding-inline: 18px; scrollbar-width: thin; scrollbar-color: rgba(0, 0, 0, 0.15) transparent; }
-.d-strip:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45); outline-offset: -3px; }
+.d-strip:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 .d-strip img { flex: none; height: auto; scroll-snap-align: start; border-radius: 16px; background: #1b1b1f; box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.4); }
 .tiktok .d-strip img { width: min(230px, 60vw); aspect-ratio: 9 / 16; }
 .instagram .d-strip img { width: min(280px, 72vw); aspect-ratio: 4 / 5; }
-.cap { margin: 0 18px 18px; padding: 12px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.7); }
+.cap { margin: 0 18px 18px; padding: 12px 14px; border-radius: 16px; background: var(--tile); }
 .cap b { display: block; font-size: 13px; font-weight: 600; color: var(--ink-3); }
 .cap p { margin: 2px 0 0; font-size: 16px; line-height: 1.5; color: var(--ink); white-space: pre-line; }
 .caption { font-size: 13px; color: var(--ink-3); text-align: center; margin: 12px 8px 0; }
@@ -143,7 +189,7 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
 .facts { margin-top: 20px; padding: 0 20px; }
 .facts summary { cursor: pointer; padding: 16px 0; font-weight: 700; }
 .facts ul { list-style: none; margin: 0; padding: 0 0 18px; display: grid; gap: 14px; }
-.facts li { display: grid; gap: 2px; padding-inline-start: 12px; border-inline-start: 3px solid color-mix(in srgb, var(--teder) 22%, transparent); }
+.facts li { display: grid; gap: 2px; padding-inline-start: 12px; border-inline-start: 3px solid color-mix(in srgb, var(--teder-ink) 30%, transparent); }
 .facts li b { font-weight: 600; }
 .facts q { color: var(--ink-3); font-size: 15px; quotes: '״' '״'; }
 .facts a { font-size: 13px; }
@@ -153,12 +199,12 @@ a:focus-visible, .go:focus-visible { outline: 3px solid rgba(106, 63, 214, 0.45)
 .links h2 { font-size: 24px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; margin: 0 0 10px; padding: 0 4px; }
 .links-lede { margin: 0 0 18px; padding: 0 4px; color: var(--ink-2); font-size: 16px; line-height: 1.6; max-width: 40em; }
 ul.logos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
-ul.logos li { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 64px; height: 64px; padding: 0 15px; border-radius: 18px; background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 16px -10px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
+ul.logos li { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 64px; height: 64px; padding: 0 15px; border-radius: 18px; background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 16px -10px rgba(0, 0, 0, 0.25), inset 0 0 0 1px var(--tile-edge); }
 ul.logos li svg { width: 32px; height: 32px; flex: none; }
 ul.logos li.wide { padding: 0 12px; }
 ul.logos li.wide svg { width: 62px; height: 14px; }
 ul.logos li.more { padding: 0 20px; font-size: 15px; font-weight: 700; flex: 1 1 260px; justify-content: flex-start; }
-ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; margin-inline-end: 4px; color: var(--teder); }
+ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; margin-inline-end: 4px; color: var(--teder-ink); }
 @media (max-width: 520px) { ul.logos { gap: 8px; } ul.logos li { min-width: 56px; height: 56px; padding: 0 12px; border-radius: 16px; } ul.logos li svg { width: 28px; height: 28px; } ul.logos li.wide svg { width: 70px; height: 15px; } ul.logos li.more { flex-basis: 100%; } }
 
 /* the price: one card, as the store saw it on openfrequency.co.il. The figure, VAT and the setup fee and the way in
@@ -166,7 +212,7 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
 .price { padding: 40px 0 8px; }
 .price h2 { font-size: 24px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; margin: 0 0 14px; padding: 0 4px; }
 .price-card { display: grid; overflow: hidden; }
-.price-main { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 24px 22px; background: color-mix(in srgb, var(--teder) 9%, rgba(255, 255, 255, 0.5)); }
+.price-main { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 24px 22px; background: var(--price-bg); }
 .price-name { display: inline-flex; align-items: center; gap: 10px; margin: 0; font-size: 20px; }
 .price-name .mark { width: 36px; height: 36px; }
 .figure { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 0; }
@@ -179,8 +225,8 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
 .price-incl h3 { margin: 0 0 12px; font-size: 17px; font-weight: 700; }
 .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .checks li { position: relative; padding-inline-start: 32px; color: var(--ink-2); }
-.checks li::before { content: ''; position: absolute; inset-inline-start: 0; top: 0.2em; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--teder) 14%, transparent); }
-.checks li::after { content: ''; position: absolute; inset-inline-start: 8px; top: calc(0.2em + 5px); width: 5px; height: 10px; border-right: 2.4px solid var(--teder); border-bottom: 2.4px solid var(--teder); transform: rotate(45deg); }
+.checks li::before { content: ''; position: absolute; inset-inline-start: 0; top: 0.2em; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--teder-ink) 16%, transparent); }
+.checks li::after { content: ''; position: absolute; inset-inline-start: 8px; top: calc(0.2em + 5px); width: 5px; height: 10px; border-right: 2.4px solid var(--teder-ink); border-bottom: 2.4px solid var(--teder-ink); transform: rotate(45deg); }
 @media (min-width: 640px) { .price-card { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } }
 /* both plans, as on openfrequency.co.il (its sections.mjs tederPricing): a card each with its figure, VAT, its
    slideshows and redos, its setup fee and its own way in, side by side where they fit; then what both include */
@@ -189,14 +235,14 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
 .plan { display: grid; align-content: start; gap: 6px; padding: 24px 22px; }
 .plan-name { margin: 0; font-size: 20px; font-weight: 700; }
 .plan-vat, .plan-fee { margin: 0; color: var(--ink-2); font-size: 15px; }
-.plan-cap { margin: 10px 0 0; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.plan-cap { margin: 10px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
 .plan-cap b { font-variant-numeric: tabular-nums; }
 .plan .go { justify-self: start; margin-top: 14px; }
 .plan-both { margin-top: 16px; }
 .plan-both .go { margin-top: 22px; }
 @media (min-width: 700px) { .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 36px; padding: 16px 4px 0; border-top: 1px solid rgba(0, 0, 0, 0.07); font-size: 13px; color: var(--ink-3); }
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 36px; padding: 16px 4px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); }
 
 @media (max-width: 559px) {
   .marks > :not(.logo) { width: 52px; height: 52px; }
@@ -207,3 +253,20 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
 
 /* The accessibility statement, at the foot of the page. */
 .foot .a11y { color: inherit; }
+
+/* TikTok's mark is black: on a dark tile it is drawn white, as TikTok draws it on black. */
+[data-theme="dark"] ul.logos li[title='TikTok'] path { fill: #fff; }
+
+/* Light or dark: the website's own button (ui.js themeButton, the desk's style.css .theme), a moon while light and a
+   sun while dark, at the end of the top line (on the page that is gone, at its foot). Shown once static/theme.js runs. */
+.theme { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 0.2s ease, transform 0.16s cubic-bezier(0.23, 1, 0.32, 1); }
+.theme[hidden] { display: none; }
+.theme:active { transform: scale(0.94); }
+.theme:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.theme svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme .sun, [data-theme="dark"] .theme .moon { display: none; }
+[data-theme="dark"] .theme .sun { display: block; }
+@media (hover: hover) { .theme:hover { background: var(--grey-pill); } }
+/* The line keeps its height, and the icon lines up with the page's edge: the button's box reaches into the padding. */
+.top .by { margin-inline-start: auto; }
+.top .theme { margin-block: -10px; margin-inline-end: -11px; }

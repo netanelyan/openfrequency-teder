@@ -115,10 +115,6 @@
         return;
       }
       const kind = form.dataset.ajax;
-      if (kind === 'theme' && out.theme) {
-        document.documentElement.dataset.theme = out.theme;
-        return;
-      }
       say(out.message, !out.ok);
       if (!out.ok) return;
       if (kind === 'remove') {
