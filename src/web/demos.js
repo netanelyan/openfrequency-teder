@@ -254,13 +254,18 @@ const JOIN = 'https://openfrequency.co.il/join?p=teder';
 export const SIGNUP_DEFAULT = 'https://accounts.openfrequency.co.il/signup';
 
 /**
+ * Teder's half of the sign-up switch: OF_SIGNUP_OPEN=1 (or true, yes, on). accounts' and the website's halves are
+ * checked against it once at start (signup-switch.js).
+ */
+export const signupOpen = (env = process.env) => /^(1|true|yes|on)$/i.test(String(env.OF_SIGNUP_OPEN || '').trim());
+
+/**
  * Where the page's button goes: accounts' sign-up (OF_SIGNUP_URL, by default SIGNUP_DEFAULT) once it is open
  * (OF_SIGNUP_OPEN=1), and until then the website's /join, so nobody is sent to a page that does not take them yet.
  */
 export function joinUrl(env = process.env) {
-  const open = /^(1|true|yes|on)$/i.test(String(env.OF_SIGNUP_OPEN || '').trim());
   const signup = String(env.OF_SIGNUP_URL || '').trim() || SIGNUP_DEFAULT;
-  return open && /^https:\/\/[^\s"'<>]+$/.test(signup) ? signup : JOIN;
+  return signupOpen(env) && /^https:\/\/[^\s"'<>]+$/.test(signup) ? signup : JOIN;
 }
 
 /**

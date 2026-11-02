@@ -21,6 +21,7 @@ const { startRunner } = await import('../src/autonomy/runner.js');
 
 const { recoverOnboarding } = await import('../src/web/onboarding.js');
 const { offerFacebook } = await import('../src/publish/connect.js');
+const { checkSignupSwitch } = await import('../src/web/signup-switch.js');
 
 const ctx = makeContext({ log: (m) => console.log(`[${new Date().toISOString()}] ${m}`) });
 // A new account's search for sources that a restart cut off is failed, and its page offers to search again.
@@ -31,6 +32,9 @@ const fb = offerFacebook(ctx);
 if (fb.length) console.log(`facebook: added as a platform to ${fb.length} customer account(s), to connect a Page from the account page`);
 const { port } = await listen(ctx);
 console.log(`open-frequency: http://127.0.0.1:${port}  (${ctx.packs.length} accounts, mode ${ctx.mode})`);
+// Sign-up is one switch in three places: ours (OF_SIGNUP_OPEN), accounts' and the website's. Asked once the website
+// listens and never waited for (each question has its own timeout); a disagreement is a loud line and an alert.
+checkSignupSwitch(ctx).catch((e) => ctx.log(`[signup] couldn't check the sign-up switch: ${e.message}`));
 // Sign-in is openfrequency-accounts' (src/web/accounts.js): without the shared token nobody gets in.
 if (String(process.env.OF_INTERNAL_TOKEN || '').trim().length < 32) {
   console.log('OF_INTERNAL_TOKEN is not set (32+ characters, the same value as in openfrequency-accounts): nobody can sign in.');

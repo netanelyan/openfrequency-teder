@@ -316,14 +316,63 @@ says which keys are set without showing them.
 - **What it is.** A store's demo page (`/s/<slug>`) ends with "להפעיל את תדר". With `OF_SIGNUP_OPEN=1` it goes to
   accounts' sign-up, `OF_SIGNUP_URL` (https only; empty is `https://accounts.openfrequency.co.il/signup`). Without it
   the button goes to the website's `https://openfrequency.co.il/join?p=teder`, so nobody is sent to a page that does
-  not take them yet. When the page shows both plans (the next section), each plan's card has its own button with
-  `OF_SIGNUP_OPEN=1`, "להצטרף בחבילה הקטנה" to `<sign-up>?p=teder&plan=small` and "להצטרף בחבילה המלאה" to
-  `&plan=full`, the website's links; without it the cards have no button and one "להפעיל את תדר" to /join is under
-  them (/join takes no plan).
+  not take them yet. When the page shows both plans ("The price on the stores' pages" below), each plan's card has
+  its own button with `OF_SIGNUP_OPEN=1`, "להצטרף בחבילה הקטנה" to `<sign-up>?p=teder&plan=small` and
+  "להצטרף בחבילה המלאה" to `&plan=full`, the website's links; without it the cards have no button and one
+  "להפעיל את תדר" to /join is under them (/join takes no plan).
 - **What to do.** Set `OF_SIGNUP_OPEN=1` once accounts has a public sign-up page, and `OF_SIGNUP_URL` if the address
   is not the default. accounts' sign-up has been open for Teder since 2026-10-30 (`OF_SIGNUP=1`,
-  `OF_SIGNUP_PRODUCTS=teder`), and `OF_SIGNUP_OPEN=1` goes on with the deploy of the two plans (2026-11-01).
+  `OF_SIGNUP_PRODUCTS=teder`), and `OF_SIGNUP_OPEN=1` goes on with the deploy of the two plans (2026-11-01). Change it
+  only together with accounts' and the website's switches: the next section.
 - **Needed now?** Yes, since sign-up is open: without it the plans' cards on a demo page have no button.
+
+### One sign-up switch in three places
+
+- **What it is.** Whether a business can sign up for Teder on its own is one decision, kept in three services, each
+  with a setting of its own. They must say the same, or a demo page sends people to a form that does not take them,
+  or the form takes people nothing sends there.
+
+  | Service | The setting | Where it is on the server | What it controls |
+  |---|---|---|---|
+  | Teder | `OF_SIGNUP_OPEN=1` | `/opt/open-frequency/private/.env` (mode 600, owner `openfrequency`); the unit `openfrequency.service` | A store's demo page (`/s/<slug>`) sends people to accounts' sign-up, each plan with its own button. Without it, to the website's `/join` (the section above). |
+  | accounts | `OF_SIGNUP=1`, with `teder` in `OF_SIGNUP_PRODUCTS` | `/opt/openfrequency-accounts/private/.env` (mode 600, owner root); the pm2 process `of-accounts` | `/signup` takes new businesses, for the products `OF_SIGNUP_PRODUCTS` names (empty: every product). Without `OF_SIGNUP=1` it says it opens soon and refuses every form (accounts' docs/setup.md). It says which it is on `GET /internal/signup`. |
+  | the website | `"signup": "open"` in openfrequency-web's `site.config.json` (in git, not an environment setting) | built into the release that `/var/www/openfrequency-web/current` points to, by the web repo's `deploy/deploy.sh` | Teder's main buttons on openfrequency.co.il go to accounts' sign-up, and `/terms` has the subscription section. `"closed"`: nothing links to sign-up. The build says which in `https://openfrequency.co.il/support.json`, as `signup.teder`, `"open"` or `"closed"`. |
+
+  As read for the server: Teder's `OF_SIGNUP_OPEN=1` since 2026-11-01, accounts' `OF_SIGNUP=1` and
+  `OF_SIGNUP_PRODUCTS=teder` (read 2026-10-30), and the website's `"signup": "open"` in the release of 2026-11-02. All
+  three open.
+- **What to do.** Change the three together, and Teder last, since its start is what checks the other two.
+  - To open: accounts' `OF_SIGNUP=1` and `OF_SIGNUP_PRODUCTS=teder` in its `private/.env`, then `pm2 reload
+    of-accounts`; the website's `"signup": "open"`, committed and deployed (`deploy/deploy.sh`); then Teder's
+    `OF_SIGNUP_OPEN=1` in `private/.env` and `systemctl restart openfrequency`.
+  - To close: the website first (`"signup": "closed"`, deployed), so it stops sending people; then accounts
+    (`OF_SIGNUP=` empty, `pm2 reload of-accounts`); then Teder (`OF_SIGNUP_OPEN=` empty, `systemctl restart
+    openfrequency`). Between the last two a demo page's button leads to accounts' "opens soon" page, which links to
+    `/join`.
+  - Toran's sign-up (`teder,toran` in `OF_SIGNUP_PRODUCTS`, Toran live on the website) is not checked here.
+- **What the start says.** Once the website listens (`scripts/web.js`), and without holding up the start, Teder asks
+  accounts (`GET /internal/signup` with `OF_INTERNAL_TOKEN`, 3 seconds at most) and the website (its
+  `/support.json`, 10 seconds at most) (src/web/signup-switch.js):
+  - The three agree: nothing in the log, no alert.
+  - They do not: one line that says what each says, `[signup] !!! THE SIGN-UP SWITCH DISAGREES: Teder (OF_SIGNUP_OPEN)
+    says open; accounts (OF_SIGNUP, OF_SIGNUP_PRODUCTS) says closed; the website (site.config.json "signup") says
+    open. Make the three the same: ...`, and an alert, "Teder: the sign-up switch disagrees". accounts open for other
+    products only says `closed for Teder (it takes toran)`.
+  - One that cannot be asked: `[signup] couldn't check accounts: <why>`, for example `timed out`, `401 bad_token`
+    (the two tokens differ), `OF_INTERNAL_TOKEN is not set (32 characters or more)`, or `404 not_found: this accounts
+    has no /internal/signup yet` (an accounts deployed before it); or `[signup] couldn't check the website: <why>`, for
+    example `HTTP 404` or `its support.json has no signup.teder` (a site built before it). Alerted too, "Teder:
+    couldn't check the sign-up switch (accounts)": a switch nobody can read is as bad as one that disagrees.
+  - The alert goes once a start, whatever was found, and not again within ten minutes if the service restarts over and
+    over (each start still writes its line). It goes the way the other alerts do (the next section's): the server's
+    alert command, `OF_ALERT_CMD` or else `/usr/local/bin/of-alert`. Neither is on the VPS today (no alerts yet, and
+    of-alert is not installed), so it reaches no phone: it is the `[alert] ...` line in the log and a line in the
+    alerts of the week under /all's health table. Read the start's lines with `journalctl -u openfrequency -n 30
+    --no-pager | grep '\[signup\]'`; nothing there means the three agreed.
+  - The token is never in the log or the alert, only why a question failed.
+- **Needed now?** The check runs by itself at every start. It needs accounts with `/internal/signup` and the
+  website's `support.json` with `signup`, both deployed before this Teder; until then each start says it couldn't
+  check them.
 
 ### The price on the stores' pages: both plans
 
@@ -380,7 +429,8 @@ says which keys are set without showing them.
   its payment as accounts last gave it, failed posts in 7 days, connections to make again, what was blocked today, its
   paused accounts and how long since a post reached the customer (src/web/health.js). Under it, the alerts of the week.
 - **The alerts.** An account that should be posting and drafted nothing in 24 hours (checked four hours after the
-  day's generation), and a batch that ran past its two hours and was asked directly, go to the operator through the
+  day's generation), a batch that ran past its two hours and was asked directly, and a start that found the sign-up
+  switch disagreeing or could not check it ("One sign-up switch in three places" above) go to the operator through the
   server's alert command, `/usr/local/bin/of-alert "<title>" "<body>"` (openfrequency-ops; `OF_ALERT_CMD` names
   another). The same command is what the systemd units call when the service or the backup fails. Without it, the
   alert is in the log ("[alert] ...") and in the table, and nothing reaches the phone.

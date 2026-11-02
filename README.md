@@ -156,8 +156,16 @@ Teder never saw, the same with zeros.
 
 #### What Teder asks accounts
 
-Teder asks accounts two more things, on `OF_ACCOUNTS_INTERNAL` (default
+Teder asks accounts three more things, on `OF_ACCOUNTS_INTERNAL` (default
 `http://127.0.0.1:4741`) with the same bearer:
+
+- **Is sign-up open?** `GET /internal/signup` → `{ open, products }`, once at each start,
+  after the website listens and without holding it up (`src/web/signup-switch.js`): open
+  for Teder is `open` with `teder` among `products`, and it must agree with Teder's own
+  `OF_SIGNUP_OPEN` and with the website's (`signup.teder` in
+  `https://openfrequency.co.il/support.json`). When they agree nothing is said; when they
+  do not, or one cannot be asked, a loud line in the log and one alert to the operator
+  (docs/operator-notes.md, "One sign-up switch in three places").
 
 - **Has the workspace paid?** `GET /internal/entitlement?workspace=<id>&product=teder` →
   `{ workspace, product, enabled, access, allowed, paidThrough, cancelAt }`; only `allowed`
