@@ -6,9 +6,8 @@ import { chromium } from 'playwright';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { DEFAULT_PICKED, LIBRARY } from '../src/formats/library.js';
-import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, tempHome } from './helpers.js';
 
 // The kinds of slideshow, picked by the customer (the owner, 2026-10-31: "i want the customer to pick the formats he
 // likes. it is changable, and each slideshow is in a different format."): on the sources step of a new account, and on
@@ -30,7 +29,7 @@ before(async () => {
   // demo is a customer's (workspace 1); second is the company's own, its formats hand-written.
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'demo'");
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'f'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'f'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

@@ -5,12 +5,11 @@ import { chromium } from 'playwright';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { accountsPage } from '../src/web/pages.js';
 import { accountRows, week } from '../src/web/data.js';
 import { monthKey } from '../src/core/clock.js';
 import { pauseAccount } from '../src/autonomy/rails.js';
-import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, tempHome } from './helpers.js';
 
 // The account page, designed again (the owner, 2026-10-31: "design this page better"): one account across the width, a
 // header with its name, handle and state, then a grid of panels (pages.js accountsPage). Every piece of information,
@@ -64,7 +63,7 @@ before(async () => {
   conn('instagram', 'atzitz.shemesh', 'reconnect');
 
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'k'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'k'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

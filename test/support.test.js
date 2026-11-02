@@ -5,13 +5,12 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { pauseAccount } from '../src/autonomy/rails.js';
 import { publishErrorHe } from '../src/publish/errors.js';
 import { errorPage } from '../src/web/pages.js';
 import { supportUrl, withSupport } from '../src/web/ui.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // "כתבו לנו" with a way to write: OpenFrequency's WhatsApp (OF_SUPPORT_WA, the same value as accounts'), a wa.me link
 // where a page shows the words. Unset, the words stay as they were. A toast, a push and an email never get a link.
@@ -41,7 +40,7 @@ before(async () => {
   db.run('UPDATE accounts SET workspace_id = 1');
   postId = (await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' })).postId;
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 's'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 's'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

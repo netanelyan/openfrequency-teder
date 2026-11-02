@@ -4,7 +4,6 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { tick } from '../src/autonomy/runner.js';
 import { canRun, UNPAID } from '../src/autonomy/rails.js';
 import { buildPost } from '../src/pipeline/build.js';
@@ -12,7 +11,7 @@ import { publishPost, PublishRefused } from '../src/publish/index.js';
 import { entitlementClient, FRESH_MS, lastKnown, RETRY_MS, STALE_MS, workspaceAllowed } from '../src/billing/entitlement.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { closeBrowser } from '../src/render/render.js';
-import { INTERNAL_TOKEN, customer, fakeAccounts, opened, operator, tempHome, viewingAs } from './helpers.js';
+import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, opened, operator, tempHome, viewingAs } from './helpers.js';
 
 // Teder is sold self-serve, and accounts owns who has paid (GET /internal/entitlement). A workspace that has not paid
 // sees a paywall instead of the product, and the engine writes, drafts and publishes nothing for its accounts; its
@@ -51,7 +50,7 @@ before(async () => {
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'alpha'");
   db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'bravo'");
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'p'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'p'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

@@ -4,7 +4,6 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { nothingDrafted, redraftBlocked, REDRAFT_LEAD_MS, startRunner, tick } from '../src/autonomy/runner.js';
 import { readiness, BEAT_MS, STUCK_MS, workspaceHealth } from '../src/web/health.js';
 import { alertOperator, recentAlerts } from '../src/notify/operator.js';
@@ -14,7 +13,7 @@ import { monthSlots } from '../src/schedule/slots.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { getSetting, setSetting } from '../src/core/store.js';
 import { nowIso } from '../src/core/clock.js';
-import { customer, fakeAccounts, operator, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // Running Teder: is it ready (/readyz), which build is it (/healthz), does a tick publish before it starts the slow
 // work, are renders queued, is a blocked slot drafted again the same day, does the operator hear of an account that
@@ -62,7 +61,7 @@ before(async () => {
   ctx.db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'other'");
   paidWorkspaces(ctx.db, [1]);
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'o'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'o'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

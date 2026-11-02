@@ -5,9 +5,8 @@ import { chromium } from 'playwright';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { listField } from '../src/web/onboarding.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // A new account's topics and sites are typed as pills: Enter makes a pill, the pills sit in a row, and the form sends
 // them one a line. The owner asked for it on 2026-10-31, in place of "separated by commas".
@@ -33,7 +32,7 @@ test('in a real browser: Enter makes a pill, in a row; × and Backspace take one
     const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home, 'packs') }), log: () => {} });
     ctx.mediaDir = path.join(home, 'media');
     fake = await fakeAccounts();
-    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'y'.repeat(40), ...fake.env } });
+    const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'y'.repeat(40), ...fake.env } });
     server = s.server;
     const base = `http://127.0.0.1:${s.port}`;
     const { sid } = fake.session(customer(7));

@@ -5,14 +5,13 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { __onboarding, ONE_ACCOUNT } from '../src/web/onboarding.js';
 import { choiceOf } from '../src/schedule/choice.js';
 import { setupOf } from '../src/onboarding/setup.js';
 import { offered, relevanceOf, heuristicScore, discover, strong } from '../src/onboarding/discover.js';
 import { connectState, onboardingDoneLink, selectionOf } from '../src/publish/connect.js';
 import { closeBrowser } from '../src/render/render.js';
-import { INTERNAL_TOKEN, customer, fakeAccounts, opened, operator, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, opened, operator, tempHome } from './helpers.js';
 
 // A business sets Teder up alone, and the search for sources takes minutes: the rest of the setup is done meanwhile, on
 // the same page (src/web/onboarding.js, src/onboarding/setup.js). The name and handle, the days and times, and TikTok
@@ -75,7 +74,7 @@ before(async () => {
   Z = fakeZernio();
   globalThis.fetch = async (url, init) => (new URL(String(url)).hostname === 'zernio.com' ? Z.handle(url, init) : realFetch(url, init));
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'q'.repeat(40), OF_ASSISTANT_SECRET: SECRET, PUBLIC_HOST: 'teder.test', ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'q'.repeat(40), OF_ASSISTANT_SECRET: SECRET, PUBLIC_HOST: 'teder.test', ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

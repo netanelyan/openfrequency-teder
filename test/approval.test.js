@@ -5,7 +5,6 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { idempotencyKeyOf, publishPost, reminderNotice, AI_LABEL_HE, tiktokMode, tiktokModeFor } from '../src/publish/index.js';
 import { publishZernio, ZernioError } from '../src/publish/zernio.js';
 import { reslotOverdue, OVERDUE_REASON } from '../src/publish/hold.js';
@@ -19,7 +18,7 @@ import { reasonHe } from '../src/web/ui.js';
 import { setSetting } from '../src/core/store.js';
 import { israelDate, israelInstant } from '../src/schedule/israel.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
 
 // A customer's post goes out only when a person approved it, and a post that did not go out can be sent again.
 //
@@ -88,7 +87,7 @@ before(async () => {
   ctx.mediaRoot = home.home;
   globalThis.fetch = async (url, init) => (new URL(String(url)).hostname === 'zernio.com' ? Z.handle(url, init) : realFetch(url, init));
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'a'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'a'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

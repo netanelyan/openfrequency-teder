@@ -6,13 +6,12 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { notify, subscribe } from '../src/notify/index.js';
 import { __onboarding } from '../src/web/onboarding.js';
 import { monthKey, nowIso } from '../src/core/clock.js';
 import { closeBrowser } from '../src/render/render.js';
 import { ROOT } from '../src/core/paths.js';
-import { customer, fakeAccounts, operator, opened, tempHome, viewingAs } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, tempHome, viewingAs } from './helpers.js';
 
 // Workspace A sees nothing of workspace B, and changes nothing of it.
 //
@@ -67,7 +66,7 @@ before(async () => {
   assert.ok(A.post && B.post, 'both posts were drafted');
 
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env } });
   server = s.server;
   handler = s.handler;
   base = `http://127.0.0.1:${s.port}`;

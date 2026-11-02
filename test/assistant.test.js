@@ -6,14 +6,13 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
 import { now, setNow } from '../src/core/clock.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { DIR, signature, verify, mediaLink } from '../src/assistant/sign.js';
 import { prefsOf, setPrefs } from '../src/assistant/data.js';
 import { assistantTick, deliver, detect, quietUntil, UNPOSTED_MIN } from '../src/assistant/events.js';
-import { fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { fakeAccounts, listenFree, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // The WhatsApp assistant's door (src/assistant): signed requests and nothing else, each once; one customer never
 // reaches another's posts; the quota and the redos counted as the website counts them; and the events, found once,
@@ -59,7 +58,7 @@ before(async () => {
   assert.equal(loadPost(db, A.post).status, 'queued');
   assert.equal(loadPost(db, B.post).status, 'queued');
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env, ...ENV } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env, ...ENV } });
   server = s.server;
   handler = s.handler;
   port = s.port;
@@ -163,7 +162,7 @@ test('the same signed request is refused the second time, also after a restart',
   assert.deepEqual([again.status, again.body.error], [401, 'replay']);
 
   // A second server on the same database (a restart) knows the nonce too.
-  const s2 = await listen(ctx, { port: 0, env: { ...process.env, ...fake.env, ...ENV } });
+  const s2 = await listenFree(ctx, { env: { ...process.env, ...fake.env, ...ENV } });
   try {
     const res = await fetch(`http://127.0.0.1:${s2.port}${p}`, { headers: { 'x-of-signature': first.sig } });
     assert.deepEqual([res.status, (await res.json()).error], [401, 'replay']);
@@ -184,7 +183,7 @@ test('the API is never answered through the proxy, under the public name or with
     assert.equal((await rawCall(p, { host: `127.0.0.1:${port}`, ...h })).status, 404, JSON.stringify(h));
   }
   // Under the public name, as the proxy would pass it on.
-  const s2 = await listen(ctx, { port: 0, env: { ...process.env, ...fake.env, ...ENV, PUBLIC_HOST: 'teder.test' } });
+  const s2 = await listenFree(ctx, { env: { ...process.env, ...fake.env, ...ENV, PUBLIC_HOST: 'teder.test' } });
   try {
     const res = await new Promise((resolve) => {
       const req = http.request({ host: '127.0.0.1', port: s2.port, path: p, headers: { host: 'teder.test', 'x-forwarded-proto': 'https', 'x-of-signature': signature(SECRET, { dir: DIR.in, method: 'GET', path: p, body: '' }) } }, resolve);
@@ -195,7 +194,7 @@ test('the API is never answered through the proxy, under the public name or with
     await new Promise((r) => s2.server.close(r));
   }
   // No secret, no API.
-  const s3 = await listen(ctx, { port: 0, env: { ...process.env, ...fake.env, OF_ASSISTANT_SECRET: '' } });
+  const s3 = await listenFree(ctx, { env: { ...process.env, ...fake.env, OF_ASSISTANT_SECRET: '' } });
   try {
     const res = await fetch(`http://127.0.0.1:${s3.port}${p}`, { headers: { 'x-of-signature': signature(SECRET, { dir: DIR.in, method: 'GET', path: p, body: '' }) } });
     assert.deepEqual([res.status, (await res.json()).error], [503, 'not_configured']);

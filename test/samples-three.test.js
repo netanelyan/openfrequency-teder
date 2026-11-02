@@ -4,9 +4,8 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { SAMPLE_ENOUGH, SAMPLE_TARGET, samplesLine } from '../src/web/onboarding.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // A new account goes on with three samples that passed (the owner, 2026-10-31, asked whether setup could finish at 3
 // instead of 5: "ok"). A press still asks for five; three are enough for "עברתי על הדוגמאות" and then going live.
@@ -25,7 +24,7 @@ before(async () => {
   ctx.mediaDir = path.join(home.home, 'media');
   db.run("UPDATE accounts SET workspace_id = 1, status = 'onboarding' WHERE id = 'demo'");
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 't'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 't'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

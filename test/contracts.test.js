@@ -7,9 +7,8 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { ROOT } from '../src/core/paths.js';
-import { listen } from '../src/web/server.js';
 import { workspaceCleanups } from '../src/web/workspace-delete.js';
-import { INTERNAL_TOKEN, fakeAccounts, opened, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // The contracts between the services (PRA-QA-003). openfrequency-accounts keeps one file for each internal API in its
 // docs/contracts, and its README there says how they are written and kept; test/fixtures/contracts is a copy of that
@@ -127,9 +126,9 @@ before(async () => {
   fake = await fakeAccounts();
   // Teder as it runs: its public name on openfrequency.co.il, where accounts keeps a step's link.
   const env = { ...process.env, SESSION_SECRET: 'c'.repeat(40), ...fake.env, PUBLIC_HOST: 'teder.openfrequency.co.il' };
-  main = await listen(ctx, { port: 0, env });
+  main = await listenFree(ctx, { env });
   // The same Teder with no OF_INTERNAL_TOKEN of its own: the 503 cases.
-  bare = await listen(ctx, { port: 0, env: { ...env, OF_INTERNAL_TOKEN: '' } });
+  bare = await listenFree(ctx, { env: { ...env, OF_INTERNAL_TOKEN: '' } });
 });
 
 after(async () => {

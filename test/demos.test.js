@@ -5,12 +5,11 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { fromWebsite, joinUrl, running } from '../src/web/demos.js';
 import { checkDraft, checkFact } from '../src/demos/write.js';
 import { readArticles } from '../src/demos/build.js';
 import { storeDocument } from '../src/demos/store.js';
-import { INTERNAL_TOKEN, fakeAccounts, customer, operator, opened, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, fakeAccounts, customer, listenFree, operator, opened, tempHome } from './helpers.js';
 
 // A store's demo, from the website's request to the store's page (src/web/demos.js, src/demos):
 // the request is taken only from this machine with the token; the demo is built in the background, on a topic from
@@ -92,7 +91,7 @@ before(async () => {
   PHOTO = path.join(home.home, 'pexels.jpg');
   writeFileSync(PHOTO, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
   op = fake.session(operator()).cookie;
@@ -328,7 +327,7 @@ test("Toran's dashboard reads every demo at /internal/demos: from this machine a
   assert.match(demos[0].readyAt, /^\d{4}-\d\d-\d\dT/);
 
   // On the VPS the page's address is the public name's, over HTTPS, whatever address Toran asked at.
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env, PUBLIC_HOST: 'teder.example.test' } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env, PUBLIC_HOST: 'teder.example.test' } });
   try {
     const out = await (await feed({}, `http://127.0.0.1:${s.port}`)).json();
     assert.equal(out.demos[0].pageUrl, `https://teder.example.test/s/${d.slug}`);

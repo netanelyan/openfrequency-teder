@@ -7,7 +7,6 @@ import { loadAll } from '../src/packs/load.js';
 import { validatePack } from '../src/packs/validate.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { captionOf, publishPost } from '../src/publish/index.js';
@@ -18,7 +17,7 @@ import { publishErrorHe, connectErrorHe } from '../src/publish/errors.js';
 import { recordTakedown } from '../src/publish/takedown.js';
 import { collectMetrics } from '../src/metrics/collect.js';
 import { mediaOf, mediaSizes } from '../src/core/platforms.js';
-import { fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { fakeAccounts, listenFree, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // A customer's Facebook Page, through Zernio (src/publish/connect.js, src/publish/zernio.js): connected from the same
 // panel as TikTok and Instagram, the Page picked on our own page (Zernio posts to a Page, never to a profile), sent
@@ -132,7 +131,7 @@ before(async () => {
   paidWorkspaces(db, [1, 2]);
   globalThis.fetch = async (url, init) => (new URL(String(url)).hostname === 'zernio.com' ? Z.handle(url, init) : realFetch(url, init));
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'g'.repeat(40), OF_ASSISTANT_SECRET: SECRET, PUBLIC_HOST: 'teder.test', ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'g'.repeat(40), OF_ASSISTANT_SECRET: SECRET, PUBLIC_HOST: 'teder.test', ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

@@ -6,9 +6,8 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, tempHome } from './helpers.js';
 
 // The website: a session accounts vouches for on everything, a CSRF token on every change, Hebrew right to left
 // on every page, and the approve and edit flows end to end. Signed in as the owner of the workspace the demo
@@ -32,7 +31,7 @@ before(async () => {
   db.run('UPDATE accounts SET workspace_id = 1');
   fake = await fakeAccounts();
   postId = (await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' })).postId;
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'x'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'x'.repeat(40), ...fake.env } });
   server = s.server;
   port = s.port;
   base = `http://127.0.0.1:${s.port}`;

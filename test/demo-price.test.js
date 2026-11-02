@@ -7,9 +7,8 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { setSetting } from '../src/core/store.js';
-import { listen } from '../src/web/server.js';
 import { demoPage, offerOf } from '../src/web/demos.js';
-import { fakeAccounts, operator, opened, tempHome } from './helpers.js';
+import { fakeAccounts, listenFree, operator, opened, tempHome } from './helpers.js';
 
 // A store's demo page (src/web/demos.js demoPage) is minimal, and shows both of Teder's plans (the owner, 2026-11-01,
 // on the live page: "in demo, there is also a cheaper option"; of "ככה מתחילים": "remove that, unnecessary
@@ -61,7 +60,7 @@ before(async () => {
     media_json: { tiktok: [0, 1, 2].map((i) => file(`tt-${i}.png`)), instagram: [0, 1, 2].map((i) => file(`ig-${i}.png`)) },
   });
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
   op = fake.session(operator()).cookie;

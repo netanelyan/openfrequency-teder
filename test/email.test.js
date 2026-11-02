@@ -4,11 +4,10 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { emailPrefsOf, emailTick, notifyClient, setEmailPrefs } from '../src/notify/email.js';
 import { setSetting } from '../src/core/store.js';
 import { israelDate, israelInstant } from '../src/schedule/israel.js';
-import { customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // What the owner hears by email: Teder writes it, accounts sends it to the workspace's owners (POST /internal/notify).
 // Posts waiting for approval once a day after they are written, Sunday's week, the 1st's month of results (what the
@@ -50,7 +49,7 @@ before(async () => {
   db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'bravo'");
   fake = await fakeAccounts();
   client = notifyClient({ env: { ...fake.env, PUBLIC_HOST: 'teder.openfrequency.co.il' } });
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'e'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'e'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

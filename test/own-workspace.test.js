@@ -20,12 +20,11 @@ import { quotasPanel, settingsPage } from '../src/web/pages.js';
 import { workspaceHealth } from '../src/web/health.js';
 import { forWorkspace, owns } from '../src/web/workspace.js';
 import { emailTick } from '../src/notify/email.js';
-import { listen } from '../src/web/server.js';
 import { DIR, signature } from '../src/assistant/sign.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
 
 // The company's own accounts sit in a workspace of accounts so that its people see them in Teder, and they stay the
 // operator's (OF_OWN_WORKSPACES, src/billing/own.js). With workspace 1 named, an account in it behaves as an account in
@@ -222,7 +221,7 @@ test("the paywall: an own workspace is never asked about nor refused, on the web
   const { db, ctx, cleanup } = home();
   const fake = await fakeAccounts();
   const secret = 'o'.repeat(48);
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'q'.repeat(40), OF_ASSISTANT_SECRET: secret, ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'q'.repeat(40), OF_ASSISTANT_SECRET: secret, ...fake.env } });
   const base = `http://127.0.0.1:${s.port}`;
   try {
     // accounts says workspace 1 has not paid, and counts each question about it.
@@ -324,7 +323,7 @@ test('retention: an own workspace is never disconnected, whatever answer is kept
 test("who sees what does not change: workspace 1's people see its accounts, workspace 2's do not, and the looks are kept apart within it", async () => {
   const { db, ctx, cleanup } = home();
   const fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'v'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'v'.repeat(40), ...fake.env } });
   const base = `http://127.0.0.1:${s.port}`;
   try {
     paidWorkspaces(db, [2]);

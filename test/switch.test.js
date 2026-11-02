@@ -5,9 +5,8 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // One account's pages at a time: the switcher at the top picks it, a cookie keeps it, and a link that names an
 // account (a post, ?account=) switches to that one. What waits in the others is counted on the switcher.
@@ -37,7 +36,7 @@ before(async () => {
   db.run('UPDATE accounts SET workspace_id = 1');
   fake = await fakeAccounts();
   otherPost = (await buildPost(ctx, { pack: ctx.pack('second'), formatKey: 'care-guide' })).postId;
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'x'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'x'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

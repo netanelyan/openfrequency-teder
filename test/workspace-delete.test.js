@@ -6,13 +6,12 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { workspaceCleanups } from '../src/web/workspace-delete.js';
 import { audit, getSetting, setSetting } from '../src/core/store.js';
 import { REMOVALS, retentionPass } from '../src/billing/retention.js';
 import { setEmailPrefs } from '../src/notify/email.js';
 import { closeBrowser } from '../src/render/render.js';
-import { INTERNAL_TOKEN, customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // A customer deleted their workspace in accounts, and accounts asks Teder to forget it: POST
 // /internal/workspaces/<id>/delete, from this machine alone, with OF_INTERNAL_TOKEN. Its accounts are paused and go,
@@ -65,7 +64,7 @@ before(async () => {
     return new Response(JSON.stringify(status === 200 ? { message: 'deleted' } : { error: 'not found' }), { status, headers: { 'content-type': 'application/json' } });
   };
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

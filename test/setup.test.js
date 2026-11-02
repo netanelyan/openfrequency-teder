@@ -4,9 +4,8 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { __onboarding } from '../src/web/onboarding.js';
-import { INTERNAL_TOKEN, fakeAccounts, opened, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // Accounts' setup checklist reads a workspace's steps in Teder at GET /internal/setup?workspace=<id> (src/web/setup.js):
 // from this machine alone, with OF_INTERNAL_TOKEN, never through the proxy. The steps follow the new-account flow
@@ -37,7 +36,7 @@ before(async () => {
   opened.push(db);
   ctx = makeContext({ db, packs: loadAll({ dir: path.join(home.home, 'packs') }), log: () => {} });
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 's'.repeat(40), ...fake.env, PUBLIC_HOST: 'teder.test' } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 's'.repeat(40), ...fake.env, PUBLIC_HOST: 'teder.test' } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

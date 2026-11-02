@@ -6,9 +6,8 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // What the owner saw (2026-10-31), "the text is not centered." and "the text in here is without any space. fix every
 // visual that is incorrect. also mobile": a sample the checks stopped, on a new account's setup page, drawn with its
@@ -51,7 +50,7 @@ before(async () => {
   db.insert('onboarding', { id: 'o-lay', seed_json: { niche: 'צמחי בית' }, status: 'samples', pack_id: 'demo', workspace_id: 1, candidates_json: { samples: { made: 1, failure: 'refused', at: t } }, created_at: t, updated_at: t });
 
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'l'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'l'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

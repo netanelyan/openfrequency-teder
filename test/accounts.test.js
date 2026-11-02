@@ -5,9 +5,8 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { accountsClient, CACHE_MS, sessionIdFrom } from '../src/web/accounts.js';
-import { INTERNAL_TOKEN, customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, operator, opened, tempHome } from './helpers.js';
 
 // Who is signed in is openfrequency-accounts' answer (its docs/internal-session.md). One test per row of that
 // document's errors table, what Teder sends, which cookie it reads, the minute a page may reuse an answer, and that
@@ -27,7 +26,7 @@ before(async () => {
   ctx = makeContext({ db, packs: loadAll({ dir: path.join(home.home, 'packs') }), log: () => {} });
   db.run('UPDATE accounts SET workspace_id = 1');
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...fake.env } });
   server = s.server;
   port = s.port;
   base = `http://127.0.0.1:${port}`;
@@ -46,7 +45,7 @@ const loginTo = (p) => `https://accounts.test/login?next=${encodeURIComponent(`h
 
 /** A Teder with its own settings, against the same fake accounts. */
 async function another(env) {
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...env } });
   return { url: `http://127.0.0.1:${s.port}`, close: () => s.server.close() };
 }
 

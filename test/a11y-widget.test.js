@@ -6,10 +6,9 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
 import { A11Y_URL, layout } from '../src/web/ui.js';
-import { customer, fakeAccounts, opened, operator, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, tempHome } from './helpers.js';
 
 // The owner (2026-10-31): "accesebillity widget should be available in each subdomain. not only on the web repo". The
 // website's panel (openfrequency-web src/layout.mjs, site.js, style.css) is on every page of Teder's layout: the round
@@ -43,7 +42,7 @@ before(async () => {
   db.insert('onboarding', { id: 'o-a11y', seed_json: { niche: 'צמחי בית' }, status: 'samples', pack_id: 'demo', workspace_id: 1, candidates_json: { samples: { made: 0, at: t } }, created_at: t, updated_at: t });
   PAGES = ['/', '/posts', `/post/${postId}`, '/accounts', '/results', '/sources', '/facts', '/topics', '/rivals', '/sounds', '/settings', '/more', '/styles', '/new', '/new/o-a11y', '/all', '/no-such-page'];
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'a'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'a'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

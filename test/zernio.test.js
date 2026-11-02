@@ -6,7 +6,6 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { closeBrowser } from '../src/render/render.js';
 import { assertAllowed, WRITE_RULES } from '../src/core/net.js';
 import { israelInstant } from '../src/schedule/israel.js';
@@ -33,7 +32,7 @@ import {
   zernioCost,
   zernioTick,
 } from '../src/publish/connect.js';
-import { customer, fakeAccounts, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
 
 // Zernio as the publisher of customer accounts (src/publish/connect.js, src/publish/zernio.js): one profile per
 // account, the customer's own connect, its health, TikTok drafts and Instagram carousels to the connected accounts,
@@ -122,7 +121,7 @@ before(async () => {
   paidWorkspaces(db, [1, 2]);
   globalThis.fetch = async (url, init) => (new URL(String(url)).hostname === 'zernio.com' ? Z.handle(url, init) : realFetch(url, init));
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

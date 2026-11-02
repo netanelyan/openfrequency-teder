@@ -5,9 +5,8 @@ import { chromium } from 'playwright';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { __onboarding } from '../src/web/onboarding.js';
-import { customer, fakeAccounts, operator, opened, tempHome, viewingAs } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, tempHome, viewingAs } from './helpers.js';
 
 // Home's block of work in progress (src/web/progress.js; the owner, 2026-10-31: "when something is being done, i want
 // the main dashboard page show a block that shows whats loading, and when done, a url to the place"). A new account's
@@ -32,7 +31,7 @@ before(async () => {
   ctx.mediaDir = path.join(home.home, 'media');
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'demo'");
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'g'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'g'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

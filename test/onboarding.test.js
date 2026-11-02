@@ -9,11 +9,10 @@ import { discover, heuristicScore } from '../src/onboarding/discover.js';
 import { suggestApis } from '../src/onboarding/apis.js';
 import { createPack, newTheme, paletteFor } from '../src/onboarding/pack.js';
 import { contrast } from '../src/render/color.js';
-import { listen } from '../src/web/server.js';
 import { __onboarding, recoverOnboarding } from '../src/web/onboarding.js';
 import { choiceOf, scheduleOf } from '../src/schedule/choice.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, operator, opened, tempHome } from './helpers.js';
 
 after(() => closeBrowser());
 
@@ -97,7 +96,7 @@ test('a discovery that runs too long is stopped and failed; the page says so in 
     ctx.discoveryTimeoutMs = 60;
     ctx.discoverOpts = { readSite: () => new Promise((r) => setTimeout(() => r([]), 400)) };
     fake = await fakeAccounts();
-    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...fake.env } });
+    const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'z'.repeat(40), ...fake.env } });
     server = s.server;
     const base = `http://127.0.0.1:${s.port}`;
     const { cookie } = fake.session(customer(3));
@@ -158,7 +157,7 @@ test('a search a restart cut off is failed at boot, or when its page opens, and 
     // A row left searching after boot (no job in this process): its page fails it.
     ctx.db.run("UPDATE onboarding SET status = 'discovering' WHERE id = 'o-late'");
     fake = await fakeAccounts();
-    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env } });
+    const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'w'.repeat(40), ...fake.env } });
     server = s.server;
     const { cookie } = fake.session(customer(4));
     const page = await (await fetch(`http://127.0.0.1:${s.port}/new/o-late`, { headers: { cookie } })).text();
@@ -212,7 +211,7 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
   try {
     const ctx = contextFor(home);
     fake = await fakeAccounts();
-    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'y'.repeat(40), ...fake.env } });
+    const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'y'.repeat(40), ...fake.env } });
     server = s.server;
     const base = `http://127.0.0.1:${s.port}`;
     // The owner of workspace 7 starts the account: it is that workspace's.

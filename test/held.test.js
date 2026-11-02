@@ -5,7 +5,6 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
-import { listen } from '../src/web/server.js';
 import { publishPost, sendDraft } from '../src/publish/index.js';
 import { heldReason, needsConnection, releaseHeld, unconnectedPlatforms } from '../src/publish/hold.js';
 import { connectErrorHe, publishErrorHe } from '../src/publish/errors.js';
@@ -16,7 +15,7 @@ import { setSetting } from '../src/core/store.js';
 import { israelDate, israelInstant } from '../src/schedule/israel.js';
 import { doneLink } from '../src/publish/connect.js';
 import { closeBrowser } from '../src/render/render.js';
-import { fakeAccounts, opened, operator, tempHome } from './helpers.js';
+import { fakeAccounts, listenFree, opened, operator, tempHome } from './helpers.js';
 
 // A post approved for a platform the customer has not connected waits for the connection instead of failing in English
 // and pausing the account after three tries. The website says what to connect and what each platform needs; once one
@@ -70,7 +69,7 @@ before(async () => {
   ctx.mediaRoot = home.home;
   globalThis.fetch = async (url, init) => (new URL(String(url)).hostname === 'zernio.com' ? Z.handle(url, init) : realFetch(url, init));
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'h'.repeat(40), OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'h'.repeat(40), OF_ASSISTANT_SECRET: SECRET, ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

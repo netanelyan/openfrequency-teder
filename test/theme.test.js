@@ -7,14 +7,13 @@ import { chromium } from 'playwright';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { THEME_COLOR, THEME_COOKIE, themeCookie, themeFrom } from '../src/web/static/theme.js';
 import { layout, themeButton, themeOf } from '../src/web/ui.js';
 import { errorPage, gatePage } from '../src/web/pages.js';
 import { goPage } from '../src/web/connect.js';
 import { demoPage, goneHtml } from '../src/web/demos.js';
 import { readDemo } from '../src/demos/build.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // Light or dark, one choice for every OpenFrequency site (the owner, 2026-11-02: "make sure that every repo starts on
 // light mode. changing it on one subdomain changes it on all of the subdomains"). The four repos keep one contract: the
@@ -63,7 +62,7 @@ before(async () => {
   });
   fake = await fakeAccounts();
   fake.entitlement(3, 'unpaid');
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 't'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 't'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
   paid = fake.session(customer(1));

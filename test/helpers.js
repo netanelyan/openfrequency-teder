@@ -94,6 +94,68 @@ const readdir = (d) => readdirSync(d);
 
 export const INTERNAL_TOKEN = 'test-internal-token-000000000000000000000';
 
+// ---- a port the tests can reach
+//
+// A test server listens on port 0, and the system picks the port. fetch (undici, in Node) and the browsers refuse to
+// connect to some ports whatever answers there, and on a machine whose dynamic range starts low (the development
+// machine's starts at 1024, `netsh int ipv4 show dynamicport tcp`; Windows' own default is 49152) the system can pick
+// one of them: every request of that test file then fails with "fetch failed: bad port" (test/switch.test.js did, 2026-11-02).
+// So every test listens through onFreePort, which listens again until the port is one fetch accepts.
+
+/**
+ * The ports fetch will not connect to: the Fetch standard's "bad port" list (https://fetch.spec.whatwg.org/#port-blocking),
+ * as undici, Node's fetch, carries it (undici lib/web/fetch/constants.js, badPorts). Checked 2026-11-02 against Node
+ * 24.18.0's own fetch (undici 7.28.0), port by port from 1 to 65535: it refused exactly these 82 with "bad port" and
+ * tried every other one. test/ports.test.js asks this Node's fetch about each of them on every run.
+ */
+export const BAD_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119,
+  123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989,
+  990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+
+/**
+ * Listen on a port the system picks, and again while it picks one fetch refuses. `open()` starts one listener on port 0
+ * and resolves to { port, close() } (close resolving once it is closed); what it resolved to last is returned. Gives up
+ * after `tries`, which a machine never reaches by chance: 82 ports of 64511.
+ */
+export async function onFreePort(open, { tries = 20, blocked = BAD_PORTS } = {}) {
+  for (let i = 0; i < tries; i++) {
+    const got = await open();
+    if (!blocked.has(got.port)) return got;
+    await got.close();
+  }
+  throw new Error(`no port fetch accepts in ${tries} tries`);
+}
+
+/**
+ * Teder's own server (src/web/server.js listen) for a test, on a port fetch accepts: what listen() resolves to,
+ * { server, port, handler }, and close(). `opts` are listen()'s, without the port. Imported when first called, so the
+ * server's modules load after this file has set the test environment above.
+ */
+export async function listenFree(ctx, opts = {}) {
+  const { listen } = await import('../src/web/server.js');
+  return onFreePort(async () => {
+    const s = await listen(ctx, { ...opts, port: 0 });
+    return { ...s, close: () => new Promise((resolve) => s.server.close(() => resolve())) };
+  });
+}
+
+/** A server of a test's own (http, https, net) listening on `host` at a port fetch accepts. Resolves to the port. */
+export async function serverFree(server, host = '127.0.0.1') {
+  const got = await onFreePort(
+    () =>
+      new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, host, () => {
+          server.off('error', reject);
+          resolve({ port: server.address().port, close: () => new Promise((done) => server.close(() => done())) });
+        });
+      })
+  );
+  return got.port;
+}
+
 /**
  * Answers each session id with what it was given ({ status, body }, or a 200 body), and anything else with 401
  * no_session; a wrong token gets 401 bad_token, as accounts does. `calls` counts the questions, `last` is the last one.
@@ -162,8 +224,7 @@ export async function fakeAccounts() {
     if (typeof a === 'function') return a(req, res);
     return a.status ? out(a.status, a.body) : out(200, a);
   });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const port = server.address().port;
+  const port = await serverFree(server);
   let n = 0;
   return {
     port,

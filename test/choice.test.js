@@ -4,13 +4,12 @@ import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { generationTargets } from '../src/autonomy/runner.js';
 import { DEFAULT_CHOICE, choiceOf, monthOf, readChoice, saveChoice, scheduleOf, timesOf } from '../src/schedule/choice.js';
 import { datesOf, monthSlots, slotsFor } from '../src/schedule/slots.js';
 import { restAt } from '../src/schedule/shabbat.js';
 import { hhmm, israelDate, israelInstant, weekday } from '../src/schedule/israel.js';
-import { customer, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // The days and times an account posts on, chosen by its owner (src/schedule/choice.js): validated, laid over the
 // pack's schedule, never on Shabbat or a festival, and thinned to the month's plan so the plan lasts the month.
@@ -29,7 +28,7 @@ before(async () => {
   ctx = makeContext({ db, packs: loadAll({ dir: path.join(home.home, 'packs') }), log: () => {} });
   db.run('UPDATE accounts SET workspace_id = 1');
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'c'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'c'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });

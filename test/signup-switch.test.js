@@ -8,10 +8,9 @@ import { makeContext } from '../src/engine.js';
 import { ROOT } from '../src/core/paths.js';
 import { NetError } from '../src/core/net.js';
 import { getSetting } from '../src/core/store.js';
-import { listen } from '../src/web/server.js';
 import { joinUrl, signupOpen } from '../src/web/demos.js';
 import { accountsSignup, ALERT_FLOOR_MS, checkSignupSwitch, NOTES, SITE_EXPORT, siteSignup } from '../src/web/signup-switch.js';
-import { INTERNAL_TOKEN, opened, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, listenFree, opened, tempHome } from './helpers.js';
 
 // One sign-up switch in three places (the owner, 2026-11-02): Teder's OF_SIGNUP_OPEN, accounts' OF_SIGNUP and
 // OF_SIGNUP_PRODUCTS (GET /internal/signup), the website's "signup" (signup.teder in its support.json). Checked once at
@@ -184,7 +183,7 @@ test('a source that never answers is given up on its own timeout, and the websit
     const db = new Db(path.join(home, 'data.db'));
     opened.push(db);
     const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home, 'packs') }), log: () => {} });
-    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 's'.repeat(40) } });
+    const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 's'.repeat(40) } });
     try {
       let release;
       const held = new Promise((r) => (release = r));

@@ -4,6 +4,7 @@ import { createServer as httpsServer } from 'node:https';
 import { createServer as httpServer } from 'node:http';
 import { __testNet, blockedAddress, doorFetch, getText, NetError } from '../src/core/net.js';
 import { selfSigned } from './tls.js';
+import { serverFree } from './helpers.js';
 
 // The open web is the public internet, on every hop: a source that is this machine, a private network or a cloud's
 // metadata service, by its own address, by a name that resolves to one, or by a redirect onto one, is refused before
@@ -50,7 +51,8 @@ before(async () => {
     hits++;
     res.end('secret');
   });
-  for (const s of [redirector, target, plain]) await new Promise((r) => s.listen(0, '127.0.0.1', r));
+  // Each on a port fetch accepts (test/helpers.js serverFree).
+  for (const s of [redirector, target, plain]) await serverFree(s);
   restore = __testNet({
     lookup: async (host) => {
       lookups.push(host);

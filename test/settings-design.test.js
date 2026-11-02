@@ -5,9 +5,8 @@ import { chromium } from 'playwright';
 import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
-import { listen } from '../src/web/server.js';
 import { backOf } from '../src/web/styles.js';
-import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // Settings is where an account's slideshows are set: their kinds (src/web/formats.js) and their design, A to E, with
 // the way to the page that shows the last one in every design (the owner, 2026-10-31: "also choosing the design of the
@@ -29,7 +28,7 @@ before(async () => {
   ctx.mediaDir = path.join(home.home, 'media');
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'demo'");
   fake = await fakeAccounts();
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
+  const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });
