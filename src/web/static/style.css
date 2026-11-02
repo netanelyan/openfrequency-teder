@@ -500,6 +500,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .promo .seg label { min-height: 44px; }
 /* the promise whole on a phone: two lines, not a field that cuts it off */
 .promo textarea { min-height: 0; resize: none; }
+/* a new account's line that its closing slide is unfinished: the way to Settings reads as a link */
+#promo-later a { color: var(--accent-p); text-decoration: underline; text-underline-offset: 3px; }
 @supports selector(:has(a)) {
   .promo .promo-if { display: none; }
   .promo:has([name='promo_target'][value='site']:checked) label.promo-if.site,

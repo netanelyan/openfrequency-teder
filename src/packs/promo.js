@@ -16,7 +16,7 @@
 //
 // A customer's is filled in on /new from their store's site (src/onboarding/promo.js) and changed on Settings
 // (src/web/promo.js). An address the engine fills in by itself is on the store's own domain (promoProblems' `domain`);
-// one the customer typed may be anywhere, https only. Text is kept as it goes on a slide: no control or direction
+// one the customer typed may be anywhere, kept as https (an http:// one is upgraded). Text is kept as it goes on a slide: no control or direction
 // marks, one space between words, trimmed.
 
 export const PROMO_MAX = { name: 40, promise: 90, product: 60, url: 300 };
@@ -38,8 +38,10 @@ export const promoText = (s) =>
     .trim();
 
 /**
- * An https address as typed: "shop.co.il" is https://shop.co.il/. { url } (normalised), or { problem } with
- * 'missing', 'https' (it is http://) or 'url' (no address at all: another scheme, a sign-in, a port, no real host).
+ * An https address as typed: "shop.co.il" is https://shop.co.il/, and "http://shop.co.il" is too, silently (the follow-up
+ * on item 1, 2026-11-02: "An http:// address the customer types is upgraded to https:// silently instead of refused"). { url }
+ * (normalised), or { problem } with 'missing' or 'url' (no address at all: another scheme, a sign-in, a port, no real
+ * host).
  */
 export function httpsUrl(input) {
   const t = String(input ?? '').trim();
@@ -51,7 +53,8 @@ export function httpsUrl(input) {
   } catch {
     return { problem: 'url' };
   }
-  if (u.protocol === 'http:') return { problem: 'https' };
+  // A port on http:// is refused like any port; port 80 is http's own and the URL already dropped it.
+  if (u.protocol === 'http:' && !u.port) u.protocol = 'https:';
   if (u.protocol !== 'https:' || u.username || u.password || u.port || !HOST.test(u.hostname)) return { problem: 'url' };
   return { url: u.href };
 }
@@ -80,7 +83,7 @@ export const onDomain = (url, domain) => {
  *   target       no target, or not site, product or bio
  *   product      a product with no name      productLong   its name over PROMO_MAX.product
  *   siteUrl      a site with no address      productUrl    a product with no address
- *   url          not an address              https         an http:// address
+ *   url          not an address (an http:// one is upgraded to https, never refused)
  *   domain       an address off `domain`, the store's (checked only when it is given: what the engine fills in itself)
  */
 export function promoProblems(p, { domain = null } = {}) {
@@ -120,8 +123,7 @@ const EN = {
   productLong: `promo.target.name is over ${PROMO_MAX.product} characters`,
   siteUrl: 'promo.target is a site: it needs its https url',
   productUrl: "promo.target is a product: it needs its page's https url",
-  url: 'promo.target.url is not an address',
-  https: 'promo.target.url must be https',
+  url: 'promo.target.url is not an https address (no other scheme, sign-in or port)',
   domain: "promo.target.url is not on the store's domain",
 };
 

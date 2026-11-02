@@ -21,7 +21,7 @@ import { scheduleData, schedulePanel } from './schedule.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
 import { storeOrigin } from '../demos/store.js';
 import { reading, startSiteRead } from '../onboarding/promo.js';
-import { newPromoPanel, promoFromDraft, promoFromForm } from './promo.js';
+import { draftFromForm, newPromoPanel, promoFromForm, promoLater, settlePromo } from './promo.js';
 
 // The new-account flow, on the website:
 //
@@ -534,29 +534,63 @@ const siteOf = (url) => {
  * line with its site under it, a plain word where one helps, and the site to open. The operator also sees every score
  * and the reasons, with why it is trusted to edit, folded under the row; the customer's is the reason found, as it is.
  */
-function sourceRow(pc, c) {
+function sourceRow(pc, c, { on = strong(c), why = null } = {}) {
   const s = c.score || {};
   const fresh = c.newest && Date.now() - Date.parse(c.newest) < 2 * DAY_MS;
   const chips = pc.operator
     ? `<span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${s.authority >= 7 ? 'ok' : s.authority >= 5 ? '' : 'warn'}">סמכות ${s.authority}/10</span><span class="chip">עדכניות ${s.freshness}/10</span>${s.relevance != null ? `<span class="chip ${s.relevance >= 6 ? '' : 'warn'}">רלוונטיות ${s.relevance}/10</span>` : ''}<span class="chip ${s.terms === 'ok' ? 'ok' : s.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[s.terms] || s.terms)}</span>`
     : `${c.origin === 'example' ? '<span class="chip">מהאתרים שלכם</span>' : ''}${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`;
   const more = pc.operator
-    ? `<details class="srcmore"><summary class="muted small" dir="auto">${esc(`${s.reason || ''}${s.relevanceReason ? ` · ${s.relevanceReason}` : ''}${s.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}`)}</summary><label class="f">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(c.why || s.reason)}" maxlength="300"></label></details>`
+    ? `<details class="srcmore"><summary class="muted small" dir="auto">${esc(`${s.reason || ''}${s.relevanceReason ? ` · ${s.relevanceReason}` : ''}${s.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}`)}</summary><label class="f">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(why ?? (c.why || s.reason))}" maxlength="300"></label></details>`
     : '';
-  return `<li class="srcrow"><label><input type="checkbox" name="approve_${esc(c.id)}"${strong(c) ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}><span class="srcwho"><b dir="auto">${esc(c.name)}</b><span class="ltr">${esc(siteOf(c.url))}</span></span>${chips ? `<span class="srctags">${chips}</span>` : ''}</label><a class="srcopen" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`לפתוח את ${c.name}`)}" title="${esc(c.url)}">${icon('ext')}</a>${more}</li>`;
+  return `<li class="srcrow"><label><input type="checkbox" name="approve_${esc(c.id)}"${on ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}><span class="srcwho"><b dir="auto">${esc(c.name)}</b><span class="ltr">${esc(siteOf(c.url))}</span></span>${chips ? `<span class="srctags">${chips}</span>` : ''}</label><a class="srcopen" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`לפתוח את ${c.name}`)}" title="${esc(c.url)}">${icon('ext')}</a>${more}</li>`;
+}
+
+/**
+ * What the customer chose on the sources step, from the form they sent: every source's tick and (the operator) reason by
+ * its address, and the kinds of slideshow. Kept on the onboarding (setup.chosen) before anything is checked, so the
+ * step that comes back after a refusal shows what they chose, with or without the page's script (the
+ * follow-up on item 1, 2026-11-02: "Source ticks and every other field the customer changed must survive any redirect").
+ */
+const chosenFrom = (r, f) => {
+  const cands = r.found.candidates || [];
+  return {
+    shown: cands.map((c) => c.url),
+    approve: cands.filter((c) => f[`approve_${c.id}`] === 'on').map((c) => c.url),
+    why: Object.fromEntries(cands.filter((c) => f[`why_${c.id}`] != null).map((c) => [c.url, String(f[`why_${c.id}`]).trim().slice(0, 300)])),
+    formats: f.formats_shown ? pickedFrom(f) : null,
+  };
+};
+
+/** setup.chosen read back for the step's page: { on(c), why(c), formats }, or null before the step was ever sent. A source
+ * the last send did not have (a search since) starts as it is offered. */
+function chosenOf(r) {
+  const ch = r.setup.chosen;
+  if (!Array.isArray(ch?.shown)) return null;
+  const seen = new Set(ch.shown);
+  const approve = new Set(ch.approve || []);
+  return {
+    on: (c) => (seen.has(c.url) ? approve.has(c.url) : strong(c)),
+    why: (c) => (seen.has(c.url) ? (ch.why?.[c.url] ?? null) : null),
+    formats: Array.isArray(ch.formats) ? ch.formats : null,
+  };
 }
 
 /** How many sources the list shows open; the rest fold away (still sent with the form, ticked or not). */
 const SOURCES_SHOWN = 8;
 
-/** The sources found, as rows: the ticked ones first, 8 in all, the rest under "עוד", and (the operator) those not offered. */
-function sourcesPanel(pc, shown, hidden) {
+/**
+ * The sources found, as rows: the ticked ones first, 8 in all, the rest under "עוד", and (the operator) those not offered.
+ * `chosen` is what the customer ticked when this step last came back (chosenOf): those ticks, in the same order.
+ */
+function sourcesPanel(pc, shown, hidden, chosen = null) {
   const ticked = shown.filter(strong);
   const ordered = [...ticked, ...shown.filter((c) => !strong(c))];
   const first = ordered.slice(0, SOURCES_SHOWN);
   const rest = ordered.slice(SOURCES_SHOWN);
-  const restTicked = rest.filter(strong).length;
-  const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c)).join('')}</ul>`;
+  const on = (c) => (chosen ? chosen.on(c) : strong(c));
+  const restTicked = rest.filter(on).length;
+  const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c, { on: on(c), why: chosen?.why(c) ?? null })).join('')}</ul>`;
   const said = `${ticked.length ? `סימנו ${ticked.length === 1 ? 'מקור חזק אחד' : `${ticked.length} מקורות חזקים`}. ` : ''}תדר כותב רק ממקורות מסומנים.`;
   const more = `${rest.length === 1 ? 'עוד מקור אחד' : `עוד ${rest.length} מקורות`}${restTicked ? `, ${restTicked === rest.length ? (rest.length === 1 ? 'מסומן' : 'כולם מסומנים') : restTicked === 1 ? 'אחד מהם מסומן' : `${restTicked} מהם מסומנים`}` : ''}`;
   return `<section class="panel" id="found"><header><h2>המקורות שמצאנו</h2></header><p class="muted small m0">${esc(said)}</p>
@@ -631,12 +665,15 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
     // The customer is offered the good ones only; the operator sees the rest too, folded away.
     const shown = cands.filter(offered);
     const hidden = cands.filter((c) => !offered(c));
+    // Back after a refusal: the ticks, the kinds of slideshow, the name and the closing slide as the customer left them.
+    const chosen = chosenOf(r);
+    const picked = chosen?.formats ? Object.fromEntries(chosen.formats.map((id) => [`fmt_${id}`, 'on'])) : null;
     return layout(
       { ...pc, title: 'בחירת מקורות', active: 'new' },
       `${head}${capped ? activateBanner(pc, { good: 0, capped }) : ''}${saidBanner(r.found.said)}${shown.length < FEW && !capped ? fewPanel(pc, r, shown.length) : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
-<div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
-<div class="grid12">${formatsSection()}${newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
+<div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden, chosen) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
+<div class="grid12">${formatsSection(picked)}${newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
 ${nameFields(pc, r)}
 <p class="muted small m0">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
 <button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button></div></section>
@@ -661,7 +698,7 @@ ${formatsPanel}</div></div></form>
   // account, its networks and its days and times.
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}
+    `${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
 <section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
@@ -788,7 +825,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         beforeAccount(r);
         const got = promoFromForm(f);
         saveSetup(ctx.db, r.id, { promo: got.draft, promoBy: 'customer' });
-        if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems });
+        if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems, back: `/new/${r.id}#promo` });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, promo: Boolean(got.promo) } });
         return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#promo` };
       },
@@ -855,22 +892,20 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         // reuse is nobody's.
         const may = (c) => c.score?.terms !== 'no' && (offered(c) || user.operator);
         const candidates = (r.found.candidates || []).map((c) => ({ ...c, approved: f[`approve_${c.id}`] === 'on' && may(c), why: String(f[`why_${c.id}`] || c.why || c.score?.reason || '').trim() }));
-        saveSetup(ctx.db, r.id, typed(f));
+        // Everything chosen here is kept before anything is checked, so a refusal brings the step back as it was left:
+        // the name and handle, the ticks and kinds of slideshow (chosenFrom), and the closing slide as typed.
+        saveSetup(ctx.db, r.id, { ...typed(f), chosen: chosenFrom(r, f), ...(f.promo_shown ? { promo: draftFromForm(f), promoBy: 'customer' } : {}) });
         const n = checkName(f, { packs: engine(ctx).packs });
         if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
         // The kinds of slideshow picked on this step (src/web/formats.js), at least three; a form that did not show the
         // choice (an older page) gets the defaults.
         const formatIds = f.formats_shown ? pickedFrom(f) : DEFAULT_PICKED;
         if (formatIds.length < MIN_PICKED) throw new ActionError(FORMATS_FEW, 422);
-        // What the last slide sends people to, as this step showed it (src/web/promo.js): left empty, none, and the
-        // last slide asks to follow the account. A form that did not show it (an older page) takes the setup's draft.
-        let promo = promoFromDraft(r.setup.promo);
-        if (f.promo_shown) {
-          const got = promoFromForm(f);
-          saveSetup(ctx.db, r.id, { promo: got.draft, promoBy: 'customer' });
-          if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems });
-          promo = got.promo;
-        }
+        // What the last slide sends people to, as this step showed it (src/web/promo.js; an older page's form, the
+        // setup's draft). It never stops the account (the follow-up on item 1, 2026-11-02: "A half-filled promo must never block
+        // creating the account or lose what the customer chose"): one that is not finished makes an account without one,
+        // the draft stays on the onboarding for Settings to offer, and the next page says it can be finished there.
+        const { promo, unfinished } = settlePromo(f.promo_shown ? draftFromForm(f) : r.setup.promo);
         // The account's voice and scenes are paid calls: before paying, under the setup's cap and counted against it.
         capCheck(ctx, user, r.workspace_id);
         let made;
@@ -890,6 +925,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         // TikTok and Instagram connected before the account existed: the account takes the profile over.
         carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
         ctx.reloadPacks();
+        saveSetup(ctx.db, r.id, { promoUnfinished: unfinished });
         ctx.db.update('onboarding', r.id, { status: 'samples', pack_id: made.id, candidates_json: { ...r.found, candidates }, updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: made.id, detail: { sources: candidates.filter((c) => c.approved).length } });
         return { ok: true, message: 'החשבון נוצר.', redirect: `/new/${r.id}` };

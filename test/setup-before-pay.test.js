@@ -285,6 +285,17 @@ test('before paying: the closing slide promo is saved on /new before the account
   assert.equal(setup.promoBy, 'customer');
   assert.equal(setup.promo.name, 'שתיל ועלה');
   await settle();
+  // Made with the promo half filled in: the account is made, and the note says Settings opens after activating, with no
+  // link to it (Settings is the paywall's).
+  const first = JSON.parse(db.get('SELECT candidates_json FROM onboarding WHERE id = ?', id).candidates_json).candidates[0].id;
+  const made = await b.post(`/new/${id}/create`, { [`approve_${first}`]: 'on', displayName: 'שתיל ועלה', handle: 'shatil.ws8', promo_shown: '1', promo_name: 'שתיל ועלה', promo_promise: '', promo_target: 'site', promo_site: 'shatil-vaale.example' });
+  assert.equal(made.status, 303, 'the account is made');
+  assert.ok(db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id);
+  const html = await (await b.get(`/new/${id}`)).text();
+  assert.ok(html.includes('id="promo-later"'), 'the note');
+  assert.ok(html.includes('אפשר להשלים אותו בהגדרות אחרי ההפעלה.'));
+  const note = html.slice(html.indexOf('id="promo-later"'), html.indexOf('</div></div>', html.indexOf('id="promo-later"')));
+  assert.doesNotMatch(note, /<a /, 'no link to Settings in it before paying');
 });
 
 test('a comp and a paid workspace: exactly as before, never counted against the cap', async () => {

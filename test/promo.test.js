@@ -14,7 +14,7 @@ import { promiseFrom, readSitePromo, reading } from '../src/onboarding/promo.js'
 import { CLOSING, closingOf, httpsUrl, onDomain, promoConfigProblems, promoOf, promoProblems, promoText } from '../src/packs/promo.js';
 import { setPackPromo } from '../src/packs/write.js';
 import { siteDescription } from '../src/demos/store.js';
-import { PROMO_HE, promoFromForm, readNote } from '../src/web/promo.js';
+import { PROMO_HE, promoFromForm, readNote, settlePromo } from '../src/web/promo.js';
 import { closeBrowser } from '../src/render/render.js';
 import { copyPack, customer, fakeAccounts, opened, tempHome } from './helpers.js';
 
@@ -43,7 +43,8 @@ test('a promo: the three targets pass; each bad value is named', () => {
     ['no target', good({ target: null }), 'target'],
     ['an unknown target', good({ target: { kind: 'shop', url: SITE.url } }), 'target'],
     ['a site with no address', good({ target: { kind: 'site', url: '' } }), 'siteUrl'],
-    ['http', good({ target: { kind: 'site', url: 'http://shatil-vaale.example' } }), 'https'],
+    ['an http address with a port', good({ target: { kind: 'site', url: 'http://shatil-vaale.example:8080/' } }), 'url'],
+    ['ftp', good({ target: { kind: 'site', url: 'ftp://shatil-vaale.example/' } }), 'url'],
     ['javascript', good({ target: { kind: 'site', url: 'javascript:alert(1)' } }), 'url'],
     ['a sign-in in the address', good({ target: { kind: 'site', url: 'https://me:pw@shatil-vaale.example/' } }), 'url'],
     ['a port', good({ target: { kind: 'site', url: 'https://shatil-vaale.example:8443/' } }), 'url'],
@@ -58,9 +59,16 @@ test('a promo: the three targets pass; each bad value is named', () => {
   assert.deepEqual(promoProblems(good({ name: 'א'.repeat(40), promise: 'ב'.repeat(90) })), []);
 });
 
-test("an address: https only, a bare domain is https, and what the engine fills in itself stays on the store's domain", () => {
+test("an address: https, a bare domain and http:// made https without a word, and what the engine fills in itself stays on the store's domain", () => {
   assert.deepEqual(httpsUrl('shatil-vaale.example'), { url: 'https://shatil-vaale.example/' });
   assert.deepEqual(httpsUrl(' https://www.shatil-vaale.example/products/a?x=1 '), { url: 'https://www.shatil-vaale.example/products/a?x=1' });
+  // http:// typed by the customer is upgraded silently (the owner, 2026-11-02); its own default port 80 too.
+  assert.deepEqual(httpsUrl('http://shatil-vaale.example/products/a?x=1'), { url: 'https://shatil-vaale.example/products/a?x=1' });
+  assert.deepEqual(httpsUrl('HTTP://Shatil-Vaale.example:80'), { url: 'https://shatil-vaale.example/' });
+  // Other schemes, a sign-in and a port are still refused, on http:// as on https://.
+  assert.deepEqual(httpsUrl('http://shatil-vaale.example:8080/'), { problem: 'url' });
+  assert.deepEqual(httpsUrl('http://me:pw@shatil-vaale.example/'), { problem: 'url' });
+  assert.deepEqual(httpsUrl('https://shatil-vaale.example:443x/'), { problem: 'url' });
   assert.deepEqual(httpsUrl('ftp://shatil-vaale.example/'), { problem: 'url' });
   assert.deepEqual(httpsUrl(''), { problem: 'missing' });
   assert.ok(onDomain('https://www.shatil-vaale.example/a', 'shatil-vaale.example'));
@@ -87,8 +95,17 @@ test('the form: left empty it is no promo; half filled in it is refused in Hebre
   assert.deepEqual(promoFromForm({ promo_name: 'שתיל ועלה', promo_promise: '', promo_target: 'site', promo_site: '' }).promo, null, 'the name alone is filled in for them: no promo');
   const half = promoFromForm({ promo_name: 'שתיל ועלה', promo_promise: '', promo_target: 'site', promo_site: 'shatil-vaale.example' });
   assert.deepEqual(half.problems, ['צריך לכתוב במשפט אחד מה מקבלים אצלכם.']);
-  const bad = promoFromForm({ promo_name: '', promo_promise: 'צמחי בית ועציצים מקרמיקה', promo_target: 'product', promo_product: '', promo_product_url: 'http://shatil-vaale.example/p' });
-  assert.deepEqual(bad.problems, ['צריך לכתוב את השם שיופיע בשקף.', 'צריך לכתוב את שם המוצר.', 'הכתובת צריכה להתחיל ב-https, למשל https://shop.co.il']);
+  const bad = promoFromForm({ promo_name: '', promo_promise: 'צמחי בית ועציצים מקרמיקה', promo_target: 'product', promo_product: '', promo_product_url: 'ftp://shatil-vaale.example/p' });
+  assert.deepEqual(bad.problems, ['צריך לכתוב את השם שיופיע בשקף.', 'צריך לכתוב את שם המוצר.', 'הכתובת לא נראית כמו כתובת של אתר, למשל shop.co.il']);
+  // An http:// address is no problem: it is kept as https.
+  const http = promoFromForm({ promo_name: 'שתיל ועלה', promo_promise: 'צמחי בית ועציצים מקרמיקה', promo_target: 'product', promo_product: 'מונסטרה', promo_product_url: 'http://shatil-vaale.example/products/monstera' });
+  assert.equal(http.problems, undefined);
+  assert.equal(http.promo.target.url, 'https://shatil-vaale.example/products/monstera');
+  // As a new account takes a draft: whole, it is the promo; empty, none; half done, none and unfinished.
+  assert.deepEqual(settlePromo(http.draft), { promo: http.promo, unfinished: false });
+  assert.deepEqual(settlePromo(half.draft), { promo: null, unfinished: true });
+  assert.deepEqual(settlePromo({ name: 'שתיל ועלה', promise: '', target: { kind: 'site', url: '' } }), { promo: null, unfinished: false });
+  assert.deepEqual(settlePromo(null), { promo: null, unfinished: false });
   // What /new says beside it: nothing about the site once the customer saved their own, even if the read failed after.
   assert.equal(readNote({ promoBy: 'customer', siteRead: 'failed' }, { busy: true }), '');
   assert.match(readNote({ siteRead: 'failed' }), /לא הצלחנו לקרוא את האתר שלכם/);
@@ -112,8 +129,12 @@ test('in a pack: checked like the rest of pack.json; none, or null, is "follow t
     assert.deepEqual(validatePack({ ...pack, meta: { ...pack.meta, promo: null } }), []);
     assert.deepEqual(validatePack({ ...pack, meta: { ...pack.meta, promo: good() } }), []);
     assert.deepEqual(closingOf({ ...pack, meta: { ...pack.meta, promo: good() } }), { kind: 'promo', ...good() });
-    const bad = validatePack({ ...pack, meta: { ...pack.meta, promo: good({ promise: '', target: { kind: 'site', url: 'http://x.example' } }) } });
-    assert.deepEqual(bad, ['pack.json: promo.promise says what the viewer gets, at least 6 characters', 'pack.json: promo.target.url must be https']);
+    const bad = validatePack({ ...pack, meta: { ...pack.meta, promo: good({ promise: '', target: { kind: 'site', url: 'ftp://x.example' } }) } });
+    assert.deepEqual(bad, ['pack.json: promo.promise says what the viewer gets, at least 6 characters', 'pack.json: promo.target.url is not an https address (no other scheme, sign-in or port)']);
+    // A hand-written http:// address passes, and is read as https.
+    const http = { ...pack, meta: { ...pack.meta, promo: good({ target: { kind: 'site', url: 'http://shatil-vaale.example/' } }) } };
+    assert.deepEqual(validatePack(http), []);
+    assert.equal(promoOf(http).target.url, 'https://shatil-vaale.example/');
     assert.deepEqual(promoConfigProblems('a string'), ['pack.json: promo is { name, promise, target }, or left out (the closing slide then asks to follow the account)']);
     // Written by the website as the style is: the rest of pack.json kept, a bad one refused with nothing written.
     const before = JSON.parse(readFileSync(path.join(dir, 'pack.json'), 'utf8'));
@@ -322,7 +343,7 @@ test('/new asks for the business\'s site, once and optional, and fills the closi
   assert.equal(closingOf(ctx.pack(packId)).kind, 'promo');
 });
 
-test('a site that cannot be read: the customer types it; a promo half filled in stops the account from being made, with what is missing', async () => {
+test('a site that cannot be read: the customer types it; the waiting page\'s own save refuses half done and, with no script, comes back with what was typed', async () => {
   const { cookie } = fake.session(customer(8));
   ctx.siteOpts = fakeStore({ down: true });
   const open = holdDiscovery();
@@ -332,18 +353,85 @@ test('a site that cannot be read: the customer types it; a promo half filled in 
   assert.equal(value(waiting, 'promo_promise'), '');
   assert.equal(value(waiting, 'promo_site'), 'https://shatil-vaale.example/', 'the address they typed is kept');
   assert.equal(value(waiting, 'promo_name'), 'Workspace 8', "the business's name is offered");
+  // A plain form post, as a browser with no script sends it: refused, back to the page, which shows what was typed.
+  const typed = { promo_shown: '1', promo_name: 'שתיל ועלה', promo_promise: '', promo_target: 'product', promo_product: 'מונסטרה בעציץ קרמיקה', promo_product_url: 'http://shatil-vaale.example/products/monstera' };
+  const refused = await post(`/new/${id}/promo`, cookie, typed);
+  assert.equal(refused.status, 303);
+  assert.equal(refused.headers.get('location'), `/new/${id}#promo`, 'back to the form itself, with no referer to go by');
+  assert.match(decodeURIComponent(refused.headers.get('set-cookie') || ''), /צריך לכתוב במשפט אחד מה מקבלים אצלכם/, 'the message comes with it');
+  const back = await (await get(`/new/${id}`, cookie)).text();
+  assert.equal(checked(back), 'product');
+  assert.equal(value(back, 'promo_name'), 'שתיל ועלה');
+  assert.equal(value(back, 'promo_product'), 'מונסטרה בעציץ קרמיקה');
+  assert.equal(value(back, 'promo_product_url'), 'http://shatil-vaale.example/products/monstera', 'as typed');
+  assert.doesNotMatch(back, /לא הצלחנו לקרוא את האתר/, 'their own now');
   open();
   await settle();
   const cand = JSON.parse(db.get('SELECT candidates_json FROM onboarding WHERE id = ?', id).candidates_json).candidates[0].id;
-  const base8 = { [`approve_${cand}`]: 'on', displayName: 'שתיל ועלה', handle: 'shatil.second', promo_shown: '1', promo_name: 'שתיל ועלה', promo_target: 'site', promo_site: 'shatil-vaale.example' };
-  const refused = await post(`/new/${id}/create`, cookie, { ...base8, promo_promise: '' }, { ajax: true });
-  assert.equal(refused.status, 422);
-  assert.match((await refused.json()).message, /צריך לכתוב במשפט אחד מה מקבלים אצלכם/);
-  assert.equal(db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id, null, 'no account');
-  assert.equal(value(await (await get(`/new/${id}`, cookie)).text(), 'promo_site'), 'shatil-vaale.example', 'and the form comes back with what was typed');
-  const made = await post(`/new/${id}/create`, cookie, { ...base8, promo_promise: 'צמחי בית ועציצים מקרמיקה' }, { ajax: true });
+  const made = await post(`/new/${id}/create`, cookie, { [`approve_${cand}`]: 'on', displayName: 'שתיל ועלה', handle: 'shatil.second', ...typed, promo_promise: 'מונסטרה גדולה בעציץ קרמיקה' }, { ajax: true });
   assert.deepEqual([made.status, (await made.json()).message], [200, 'החשבון נוצר.']);
-  assert.equal(promoOf(ctx.pack(db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id)).target.url, 'https://shatil-vaale.example/');
+  assert.equal(promoOf(ctx.pack(db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id)).target.url, 'https://shatil-vaale.example/products/monstera', 'http:// kept as https');
+});
+
+test('the sources step never loses a choice: a refused send comes back with every tick, kind and field as left, and a half-done closing slide never stops the account', async () => {
+  const { cookie } = fake.session(customer(11));
+  // Two sites of the customer's own (always offered) and what the search adds.
+  ctx.discoverOpts = { readSite: async (url) => [{ type: 'web', url, name: url.includes('leaves') ? 'Leaves' : 'Garden', newest: null }] };
+  const id = (await post('/new', cookie, { niche: 'צמחי בית', examples: 'https://garden.example/\nhttps://leaves.example/' })).headers.get('location').split('/').pop();
+  await settle();
+  const cands = JSON.parse(db.get('SELECT candidates_json FROM onboarding WHERE id = ?', id).candidates_json).candidates;
+  const box = (html, c) => new RegExp(`name="approve_${c.id}"[^>]*?( checked)?[ >]`).exec(html)?.[1] === ' checked';
+  const first = await (await get(`/new/${id}`, cookie)).text();
+  const offeredHere = cands.filter((c) => new RegExp(`name="approve_${c.id}"`).test(first));
+  assert.ok(offeredHere.length >= 2, `two sources or more to choose from, got ${offeredHere.length}`);
+  // The customer turns every tick around, picks four kinds, and leaves the closing slide half done.
+  const ticks = Object.fromEntries(offeredHere.filter((c) => !box(first, c)).map((c) => [`approve_${c.id}`, 'on']));
+  assert.ok(Object.keys(ticks).length >= 1);
+  const kinds = { formats_shown: '1', fmt_facts: 'on', fmt_story: 'on', fmt_ranking: 'on', fmt_iceberg: 'on' };
+  const half = { promo_shown: '1', promo_name: 'שתיל ועלה', promo_promise: 'צמחי בית ועציצים מקרמיקה', promo_target: 'product', promo_product: '', promo_product_url: 'shatil-vaale.example/products/monstera' };
+  // Refused for its name (left empty), as a browser with no script sends it.
+  const refused = await post(`/new/${id}/create`, cookie, { ...ticks, ...kinds, ...half, displayName: '', handle: 'shatil.kept' });
+  assert.equal(refused.status, 303);
+  assert.equal(db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id, null);
+  const back = await (await get(`/new/${id}`, cookie)).text();
+  for (const c of offeredHere) assert.equal(box(back, c), Boolean(ticks[`approve_${c.id}`]), `${c.name}: as the customer left it`);
+  for (const f of ['facts', 'story', 'ranking', 'iceberg', 'tips', 'myth-fact']) assert.equal(new RegExp(`name="fmt_${f}" checked`).test(back), Boolean(kinds[`fmt_${f}`]), `the kind ${f}`);
+  assert.equal(value(back, 'handle'), 'shatil.kept');
+  assert.equal(checked(back), 'product');
+  assert.equal(value(back, 'promo_product_url'), 'shatil-vaale.example/products/monstera');
+  assert.equal(value(back, 'promo_promise'), 'צמחי בית ועציצים מקרמיקה');
+  // Sent again with the name: the account is made, the closing slide half done or not.
+  const made = await post(`/new/${id}/create`, cookie, { ...ticks, ...kinds, ...half, displayName: 'שתיל ועלה', handle: 'shatil.kept' });
+  assert.equal(made.status, 303);
+  assert.equal(made.headers.get('location'), `/new/${id}`);
+  const packId = db.get('SELECT pack_id FROM onboarding WHERE id = ?', id).pack_id;
+  assert.ok(packId, 'the account exists');
+  const pack = ctx.pack(packId);
+  assert.equal('promo' in JSON.parse(readFileSync(path.join(pack.dir, 'pack.json'), 'utf8')), false, 'with no promo: one is whole or it is none');
+  assert.equal(closingOf(pack).kind, 'follow');
+  const approved = db.all("SELECT url FROM sources WHERE account_id = ? AND status = 'approved'", packId).map((s) => s.url).sort();
+  assert.deepEqual(approved, offeredHere.filter((c) => ticks[`approve_${c.id}`]).map((c) => c.url).sort(), 'the sources it was made with are the ticked ones');
+  assert.deepEqual(pack.formats.formats.map((f) => f.id).sort(), ['facts', 'iceberg', 'ranking', 'story']);
+  // The next page says, once and calmly, where to finish it.
+  const next = await (await get(`/new/${id}`, cookie)).text();
+  assert.equal(next.match(/id="promo-later"/g)?.length, 1);
+  assert.match(next, /השקף האחרון עוד לא גמור, ובינתיים הוא מבקש לעקוב אחרי החשבון. אפשר <a href="\/settings\?account=shatil-kept#promo-shatil-kept">להשלים אותו בהגדרות<\/a>/);
+  // Settings offers what was typed, to finish.
+  const settings = await (await get(`/settings?account=${packId}`, cookie)).text();
+  assert.match(settings, /כאן מה שכתבתם כשפתחתם את החשבון/);
+  assert.equal(checked(settings), 'product');
+  assert.equal(value(settings, 'promo_promise'), 'צמחי בית ועציצים מקרמיקה');
+  assert.equal(value(settings, 'promo_product_url'), 'shatil-vaale.example/products/monstera');
+  // Finished there: the account has it, and neither page says it is unfinished.
+  const done = await post(`/accounts/${packId}/promo`, cookie, { ...half, promo_product: 'מונסטרה בעציץ קרמיקה' }, { from: '/settings', ajax: true });
+  assert.equal(done.status, 200);
+  assert.equal(promoOf(ctx.pack(packId)).target.name, 'מונסטרה בעציץ קרמיקה');
+  assert.doesNotMatch(await (await get(`/new/${id}`, cookie)).text(), /id="promo-later"/);
+  // Emptied on purpose later, Settings does not bring the old draft back.
+  await post(`/accounts/${packId}/promo`, cookie, { promo_shown: '1', promo_name: 'שתיל ועלה', promo_promise: '', promo_target: 'site', promo_site: '' }, { from: '/settings', ajax: true });
+  const empty = await (await get(`/settings?account=${packId}`, cookie)).text();
+  assert.match(empty, /עוד לא מילאתם את זה/);
+  assert.equal(value(empty, 'promo_promise'), '');
 });
 
 test('an account set up with no site and the step left empty has no promo, and its last slide asks to follow it', async () => {
@@ -395,10 +483,13 @@ test('Settings: the closing slide as it is, saved, read again after a reload, re
   assert.equal(checked(await (await get('/settings', cookie)).text()), 'bio');
   // Half done: refused in Hebrew, the file as it was (in the page, the form stays as typed: data-ajax).
   const before = readFileSync(path.join(home.home, 'packs', 'demo', 'pack.json'), 'utf8');
-  const bad = await post('/accounts/demo/promo', cookie, { ...fields, promo_target: 'product', promo_product: '', promo_product_url: 'http://shatil-vaale.example/p' }, { from: '/settings', ajax: true });
+  const bad = await post('/accounts/demo/promo', cookie, { ...fields, promo_target: 'product', promo_product: '', promo_product_url: 'https://shatil-vaale.example:8443/p' }, { from: '/settings', ajax: true });
   assert.equal(bad.status, 422);
-  assert.deepEqual((await bad.json()).problems, ['צריך לכתוב את שם המוצר.', 'הכתובת צריכה להתחיל ב-https, למשל https://shop.co.il']);
+  assert.deepEqual((await bad.json()).problems, ['צריך לכתוב את שם המוצר.', 'הכתובת לא נראית כמו כתובת של אתר, למשל shop.co.il']);
   assert.equal(readFileSync(path.join(home.home, 'packs', 'demo', 'pack.json'), 'utf8'), before);
+  // An http:// address is saved, as https.
+  await post('/accounts/demo/promo', cookie, { ...fields, promo_site: 'http://shatil-vaale.example/' }, { from: '/settings' });
+  assert.equal(ctx.pack('demo').meta.promo.target.url, 'https://shatil-vaale.example/');
   // Emptied: no promo, and the last slide asks to follow.
   const none = await post('/accounts/demo/promo', cookie, { promo_shown: '1', promo_name: 'שתיל ועלה', promo_promise: '', promo_target: 'site', promo_site: '' }, { from: '/settings', ajax: true });
   assert.equal(none.status, 200);

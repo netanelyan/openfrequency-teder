@@ -2196,8 +2196,9 @@ customer can edit it in Settings. Our own accounts can have no promo; in that ca
 the account." It lives in pack.json "promo", beside the style and endSlide: what a slide says is the pack's, the
 website already writes the style and the formats into the pack, and the writer and the renderer read pack.meta. Shape
 (src/packs/promo.js): name 1 to 40 characters, promise 6 to 90, target { kind: "site", url }, { kind: "product",
-name (1 to 60), url } or { kind: "bio" }; addresses https only (a bare "shop.co.il" is https), no sign-in, port or
-other scheme; text without control or direction marks, one space, trimmed. validatePack checks it like the rest of the
+name (1 to 60), url } or { kind: "bio" }; addresses kept as https (a bare "shop.co.il" is https, and an http://
+one is made https without a word: "An http:// address the customer types is upgraded to https:// silently instead of
+refused"), no sign-in, port or other scheme; text without control or direction marks, one space, trimmed. validatePack checks it like the rest of the
 file. No key (every pack before this, and our own accounts) or null is a state of its own: closingOf(pack) answers
 { kind: "follow", handle }, else { kind: "promo", name, promise, target }, for the closing slide to come (item 2).
 An address the engine fills in by itself must be on the store's own domain; one the customer typed may be anywhere.
@@ -2207,7 +2208,14 @@ six seconds so the page usually opens filled in, and keeps a draft on the onboar
 domain), the first sentence of its homepage's own description that fits a slide, in Hebrew, with no "the best", "number
 one" or hurry (src/onboarding/promo.js promiseFrom), and the site as the target. No model is asked, so nothing is spent.
 The step ("השקף האחרון") stands on the page that waits for the sources with its own save, and on the sources step inside
-the form that makes the account: the account is made with it as shown. A form left empty is no promo; one half filled in
-is refused with what is missing. A site that could not be read says so, and the customer types it. Settings has the same
-fields after the design (POST /accounts/<id>/promo, src/web/promo.js), saved into pack.json (src/packs/write.js
-setPackPromo); emptied, the key goes and the last slide asks to follow. The slides themselves are unchanged until item 2.
+the form that makes the account: the account is made with it as shown. A form left empty is no promo. One half filled in
+never stops the account (the follow-up on this item, the same day: "A half-filled promo must never block creating the account or lose
+what the customer chose"): a promo is whole or it is none, so the account is made without one, the draft stays on the
+onboarding, the next page says once that the last slide can be finished in Settings, and Settings offers the draft until
+it is saved there. Everything chosen on that step (each source's tick, the kinds of slideshow, the name and handle, the
+closing slide) is kept before anything is checked (setup.chosen), so a step refused for anything else comes back as it
+was left, with or without the page's script. The waiting page's own save still refuses a half-done one with what is
+missing, and comes back to the form with what was typed. A site that could not be read says so, and the customer types
+it. Settings has the same fields after the design (POST /accounts/<id>/promo, src/web/promo.js), saved into pack.json
+(src/packs/write.js setPackPromo); emptied, the key goes and the last slide asks to follow. The slides themselves are
+unchanged until item 2.

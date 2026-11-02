@@ -36,6 +36,7 @@ import { scheduleData } from './schedule.js';
 import { emailPrefsOf } from '../notify/email.js';
 import { missingConnections } from '../publish/hold.js';
 import { autonomyMode, isCustomerAccount, mayResume } from '../autonomy/rails.js';
+import { unfinishedPromo } from './promo.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -312,7 +313,8 @@ export function settingsData(ctx) {
     // The days and times the account shown posts on (src/schedule/choice.js): its owner chooses them here.
     schedule: ctx.packs[0] ? scheduleData(ctx.db, ctx.packs[0]) : null,
     // The account shown: its kinds of slideshow and its design are set here (src/web/formats.js, styles.js designPanel).
-    account: ctx.packs[0] ? { pack: ctx.packs[0], customer: isCustomerAccount(ctx.db, ctx.packs[0].id), style: lockedStyle(ctx.db, ctx.packs[0], (ctx.root || ctx).packs).theme.style?.name || null } : null,
+    // Its closing slide too (src/web/promo.js), with the draft left unfinished when it was made, if there is one.
+    account: ctx.packs[0] ? { pack: ctx.packs[0], customer: isCustomerAccount(ctx.db, ctx.packs[0].id), style: lockedStyle(ctx.db, ctx.packs[0], (ctx.root || ctx).packs).theme.style?.name || null, promoDraft: unfinishedPromo(ctx.db, ctx.packs[0]) } : null,
     // Which emails the workspace's owners get (src/notify/email.js).
     email: operator ? null : emailPrefsOf(ctx.db, ctx.workspaceId),
   };

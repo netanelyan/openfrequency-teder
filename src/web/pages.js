@@ -1128,7 +1128,7 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <div class="set-cols">
 ${acct && picksFormats(acct.pack, acct.customer) ? formatsPanel(ctx, acct.pack, { heading: 'h2' }) : ''}
 ${acct ? designPanel(acct.pack, acct.style, { back: '/settings' }) : ''}
-${acct ? promoPanel(ctx, acct.pack) : ''}
+${acct ? promoPanel(ctx, acct.pack, { draft: acct.promoDraft }) : ''}
 ${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
 ${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
 ${d.quotas ? quotasPanel(ctx, d.quotas) : ''}

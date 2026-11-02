@@ -1,8 +1,9 @@
 import { audit } from '../core/store.js';
+import { j } from '../db/index.js';
 import { cleanPromo, PROMO_MAX, promoOf, promoProblems, promoText, TARGETS } from '../packs/promo.js';
 import { setPackPromo } from '../packs/write.js';
 import { ActionError } from './actions.js';
-import { csrfField, esc } from './ui.js';
+import { csrfField, esc, icon } from './ui.js';
 
 // What the account's slideshows send people to (src/packs/promo.js), as the customer reads and changes it: a step of
 // /new (src/web/onboarding.js), filled in from their site, and a panel on Settings. One set of fields on both: the name,
@@ -10,11 +11,15 @@ import { csrfField, esc } from './ui.js';
 // fields shown for the choice made (CSS :has, every field where a browser has no :has).
 //
 // A form left empty (no promise, no address, no product: the name alone is filled in for them) is no promo, and the
-// last slide asks to follow the account. A form half filled in is refused with what is missing, never kept as half.
+// last slide asks to follow the account. A form half filled in is never kept as half: its own save (the waiting page,
+// Settings) refuses it with what is missing and keeps what was typed; the step that makes the account makes it
+// anyway, with no promo, keeps the draft on the onboarding and offers it on Settings until it is finished there
+// (settlePromo, promoLater, unfinishedPromo).
 
 export const PROMO_TITLE = 'השקף האחרון';
 const LEDE = 'כל מצגת נגמרת בשקף ששולח את מי שצפה בה אליכם. כאן בוחרים לאן, ומה מחכה שם.';
 const NONE = 'עוד לא מילאתם את זה, אז בינתיים השקף האחרון מבקש לעקוב אחרי החשבון.';
+const LATER = 'כאן מה שכתבתם כשפתחתם את החשבון. נשאר להשלים את מה שחסר ולשמור, ועד אז השקף האחרון מבקש לעקוב אחרי החשבון.';
 const TARGET_HE = { site: 'לאתר', product: 'למוצר אחד', bio: 'ללינק בביו' };
 
 /** What the customer reads about a promo that will not do, a line a problem (src/packs/promo.js promoProblems). */
@@ -30,7 +35,6 @@ export const PROMO_HE = {
   siteUrl: 'צריך לכתוב את הכתובת של האתר.',
   productUrl: 'צריך לכתוב את הכתובת של המוצר.',
   url: 'הכתובת לא נראית כמו כתובת של אתר, למשל shop.co.il',
-  https: 'הכתובת צריכה להתחיל ב-https, למשל https://shop.co.il',
   domain: 'הכתובת לא באתר שלכם.',
 };
 
@@ -51,7 +55,7 @@ const emptyDraft = (d) => !d.promise && !d.target?.url && !d.target?.name;
 
 /**
  * The form, checked: { promo, draft } (promo null for a form left empty: no promo), or { problems, draft } in Hebrew.
- * An address may be anywhere the customer typed, https only.
+ * An address may be anywhere the customer typed, kept as https.
  */
 export function promoFromForm(f) {
   const draft = draftFromForm(f);
@@ -60,8 +64,29 @@ export function promoFromForm(f) {
   return codes.length ? { problems: [...new Set(codes.map((c) => PROMO_HE[c] || PROMO_HE.shape))], draft } : { promo: cleanPromo(draft), draft };
 }
 
-/** A draft kept on an onboarding, as the account takes it when no form sent one: valid, or none. */
-export const promoFromDraft = (d) => (d && !emptyDraft(d) && !promoProblems(d).length ? cleanPromo(d) : null);
+/**
+ * A draft as a new account takes it, never refused: { promo, unfinished }. Valid, it is the promo; left empty, none;
+ * half done or wrong, none as well (a promo is whole or it is not one), and `unfinished` says so.
+ */
+export function settlePromo(d) {
+  if (!d || typeof d !== 'object' || emptyDraft(d)) return { promo: null, unfinished: false };
+  return promoProblems(d).length ? { promo: null, unfinished: true } : { promo: cleanPromo(d), unfinished: false };
+}
+
+/** The line a new account's next page shows while the closing slide it was made with is unfinished: where to finish it. */
+// Before paying Settings is the paywall's (src/web/server.js SETUP_OPEN), so `locked` says when it opens, with no link.
+export const promoLater = (pack, { locked = false } = {}) =>
+  `<div class="banner info" id="promo-later">${icon('settings')}<div><p class="m0">השקף האחרון עוד לא גמור, ובינתיים הוא מבקש לעקוב אחרי החשבון. ${locked ? 'אפשר להשלים אותו בהגדרות אחרי ההפעלה.' : `אפשר <a href="/settings?account=${esc(encodeURIComponent(pack.id))}#promo-${esc(pack.id)}">להשלים אותו בהגדרות</a>.`}</p></div></div>`;
+
+/**
+ * The closing slide a customer left unfinished when their account was made (the onboarding's draft), for Settings to
+ * offer while the account has none; null otherwise.
+ */
+export function unfinishedPromo(db, pack) {
+  if (!pack || pack.meta.promo) return null;
+  const s = j(db.get('SELECT setup_json FROM onboarding WHERE pack_id = ? ORDER BY updated_at DESC LIMIT 1', pack.id)?.setup_json, {}) || {};
+  return s.promoUnfinished && s.promo && typeof s.promo === 'object' ? s.promo : null;
+}
 
 const input = (name, value, { max, ltr = false, placeholder = '' } = {}) =>
   `<input type="text" name="${name}" maxlength="${max}" value="${esc(value)}"${placeholder ? ` placeholder="${esc(placeholder)}"` : ''}${ltr ? ' dir="ltr" inputmode="url" autocapitalize="off" autocomplete="url" spellcheck="false"' : ''}>`;
@@ -109,12 +134,16 @@ export function newPromoPanel(pc, r, { action = null, busy = false, nameDefault 
 <div><button class="btn" type="submit">שמירה</button></div></form></section>`;
 }
 
-/** Settings' panel: the account's promo as it is, and the way to change it. */
-export function promoPanel(ctx, pack) {
+/**
+ * Settings' panel: the account's promo as it is, and the way to change it. `draft` is one left unfinished when the
+ * account was made (unfinishedPromo), offered while the account has none, so nothing the customer typed is lost.
+ */
+export function promoPanel(ctx, pack, { draft = null } = {}) {
   const p = promoOf(pack);
+  const note = p ? '' : draft ? LATER : NONE;
   return `<section class="panel" id="promo-${esc(pack.id)}"><header><h2>${PROMO_TITLE}</h2></header>
-<p class="muted m0">${LEDE}</p>${p ? '' : `<p class="small m6">${NONE}</p>`}
-<form method="post" action="/accounts/${esc(pack.id)}/promo" class="formgrid promo mt12" data-ajax="reload">${csrfField(ctx)}${promoFields(p, { key: pack.id, nameDefault: pack.meta.displayName })}
+<p class="muted m0">${LEDE}</p>${note ? `<p class="small m6">${note}</p>` : ''}
+<form method="post" action="/accounts/${esc(pack.id)}/promo" class="formgrid promo mt12" data-ajax="reload">${csrfField(ctx)}${promoFields(p || draft, { key: pack.id, nameDefault: pack.meta.displayName })}
 <div><button class="btn" type="submit">שמירה</button></div></form></section>`;
 }
 
@@ -126,6 +155,11 @@ export function setPromo(ctx, user, { id }, form) {
   if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems });
   const before = pack.meta.promo || null;
   const after = setPackPromo(pack, got.promo);
+  // Saved here, the draft left from the account's setup is done with: Settings no longer offers it.
+  for (const o of ctx.db.all('SELECT id, setup_json FROM onboarding WHERE pack_id = ?', id)) {
+    const s = j(o.setup_json, {}) || {};
+    if (s.promoUnfinished) ctx.db.update('onboarding', o.id, { setup_json: { ...s, promoUnfinished: false } });
+  }
   audit(ctx.db, { actor: user.name, action: 'promo', accountId: id, detail: { before, after } });
   return { ok: true, message: after ? 'נשמר.' : 'נשמר. בלי משפט, השקף האחרון מבקש לעקוב אחרי החשבון.', redirect: `/settings#promo-${encodeURIComponent(id)}` };
 }

@@ -430,7 +430,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             if (cur && p === '/sounds/save') return again(pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
             if (cur && p === '/topics/add') return again(pages.topicsPage({ ...pageCtx(), csrf }, { ...data.topicsFor(c, cur), form, problems: e.problems || [e.message] }));
             if (cur && p === '/rivals/save') return again(pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
-            return redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
+            // An error may name the page its form is on (`back`, a path here), so a form refused without the page's script
+            // comes back to itself, whatever the browser sent as its referer (src/web/onboarding.js, the closing slide).
+            const home = typeof e.back === 'string' && /^\/(?!\/)/.test(e.back) ? e.back : null;
+            return redirect(res, home || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/'), { 'set-cookie': flash(e.message) });
           }
         }
         return ajax ? json(req, res, 404, { ok: false, message: 'אין פעולה כזו' }) : send(req, res, 404, pages.errorPage({ kind: 'no_action', back: backOf(req, host), v: V, theme }));
