@@ -2234,3 +2234,20 @@ and the events code), the `assistant_events` and `assistant_prefs` tables (still
 and `OF_ASSISTANT_SECRET`, which also signs the connect links. The demo asked for by a WhatsApp code is apart and
 stays. test/whatsapp-off.test.js: a tick with the secret set and a post waiting finds nothing and reaches nobody (on the
 code before, five post.ready events went out), and Settings has no WhatsApp panel and no such button.
+
+### The paywall hears of a payment at once, and has "בדקו שוב" (2026-11-02)
+
+The owner's audit, item 3: "The paywall clears the cache: support the notification from accounts (item 3 there), and add
+a "בדקו שוב" button on the paywall that forces a fresh check." Accounts now tells Teder the moment a workspace's access
+changes (a payment recorded, comp, a subscription saved by hand, a cancellation or its undo, a product or the workspace
+turned off or on): `POST /internal/entitlement/changed` with `{ workspace, reason }`, under the same locks as the other
+internal routes (src/web/entitlement-changed.js; accounts' docs/contracts/entitlement-changed.json). Teder does not drop
+the kept answer: it marks it (`changedAt`), so the next check asks accounts instead of using it for the rest of its 5
+minutes, while the answer still stands the 24 hours accounts may be down, and nothing opens or stops until accounts says
+so. A question already out when the notice comes may carry an answer from before the payment, so what it brings back
+stays marked and the check after it asks again. The paywall's "בדקו שוב" is a plain form (`POST /paywall/check`): accounts
+asked now, at most once in 30 seconds a workspace so a held finger cannot hammer it, then back to the page the customer
+was on, the product when paid, else the paywall with one calm, outlined line: "בדקנו עכשיו, והתשלום עוד לא רשום אצלנו.
+כשנרשום אותו, תדר ייפתח.", "בדקנו לפני רגע, והתשלום עוד לא היה רשום. אפשר לבדוק שוב בעוד חצי דקה." or "לא הצלחנו
+לבדוק את התשלום עכשיו. נסו שוב בעוד דקה." It is not on the gate that says accounts could not be asked, which keeps its
+"לנסות שוב". test/pay-notify.test.js.

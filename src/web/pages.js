@@ -1238,21 +1238,46 @@ export const BEFORE_PAY_HE = {
 };
 
 /**
+ * "בדקו שוב" on the paywall (the owner's audit, 2026-11-02, Teder item 3: "add a "בדקו שוב" button on the paywall that
+ * forces a fresh check"): POST /paywall/check asks accounts now, past the 5 minutes, and goes back to the page the
+ * customer was on (src/web/server.js). Still not paid, the paywall comes back with one of these lines, which says what
+ * was found: asked and not paid yet, asked under half a minute ago (the button asks accounts once in 30 seconds for a
+ * workspace), or accounts did not answer.
+ */
+export const RECHECK_HE = {
+  button: 'בדקו שוב',
+  said: {
+    unpaid: 'בדקנו עכשיו, והתשלום עוד לא רשום אצלנו. כשנרשום אותו, תדר ייפתח.',
+    soon: 'בדקנו לפני רגע, והתשלום עוד לא היה רשום. אפשר לבדוק שוב בעוד חצי דקה.',
+    failed: 'לא הצלחנו לבדוק את התשלום עכשיו. נסו שוב בעוד דקה.',
+  },
+};
+export const RECHECK_PATH = '/paywall/check';
+
+/**
  * `setup`, for the paywall (kind 'unpaid') only: what beforePaying gave, { href, started, samples: [{ src, alt }] }. With
  * samples: the owner's line, the first slide of each, and the way to pay. Without: that the setup can be done meanwhile,
  * and the way there. None (a customer whose account was live and who stopped paying): the paywall as it was.
+ * `recheck`, for the paywall too: { csrf, back, said }, the form of "בדקו שוב" (the page to come back to, `back`) and
+ * what the last press found (`said`, a key of RECHECK_HE.said, or null). Without it the page has no such button.
  */
-export function gatePage({ kind, links, v = 1, theme = 'light', setup = null }) {
+export function gatePage({ kind, links, v = 1, theme = 'light', setup = null, recheck = null }) {
   const g = GATE[kind] || GATE.error;
   const before = kind === 'unpaid' && setup ? setup : null;
   const ready = before?.samples?.length ? before : null;
+  // A plain form, so it works without the script: the payment's way first, then this, then signing out.
+  const again =
+    kind === 'unpaid' && recheck
+      ? `<form method="post" action="${RECHECK_PATH}"><input type="hidden" name="_csrf" value="${esc(recheck.csrf)}"><input type="hidden" name="back" value="${esc(recheck.back || '/')}"><button class="btn" type="submit">${esc(RECHECK_HE.button)}</button></form>`
+      : '';
+  const said = kind === 'unpaid' && recheck?.said && Object.hasOwn(RECHECK_HE.said, recheck.said) ? `<p class="said" role="status">${esc(RECHECK_HE.said[recheck.said])}</p>` : '';
   const actions =
     kind === 'error'
       ? '<a class="btn primary" href="">לנסות שוב</a>'
       : before && !ready
-        ? `<a class="btn primary" href="${esc(before.href)}">${before.started ? 'להמשיך בהקמת החשבון' : 'להקים את החשבון'}</a><a class="btn" href="${esc(links.setup)}">איך משלמים</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
+        ? `<a class="btn primary" href="${esc(before.href)}">${before.started ? 'להמשיך בהקמת החשבון' : 'להקים את החשבון'}</a><a class="btn" href="${esc(links.setup)}">איך משלמים</a>${again}<a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'unpaid'
-        ? `<a class="btn primary" href="${esc(links.setup)}">איך משלמים</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
+        ? `<a class="btn primary" href="${esc(links.setup)}">איך משלמים</a>${again}<a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'not_in_plan'
         ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
         : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;
@@ -1269,7 +1294,7 @@ export function gatePage({ kind, links, v = 1, theme = 'light', setup = null }) 
 <div class="hero">${tederMark()}<b>תדר</b></div>
 ${head}
 ${body}
-<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
+${said}<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
 }
 
 /**

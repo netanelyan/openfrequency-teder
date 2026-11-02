@@ -12,15 +12,19 @@ Technical notes about keys and errors are in [operator-notes.md](operator-notes.
 ## 1. Sign-up and payment
 
 1. The business signs up on accounts (`/signup?p=teder`) and confirms its email. Teder shows them the paywall until
-   accounts says the workspace may use Teder (src/billing/entitlement.js, asked every 5 minutes).
+   accounts says the workspace may use Teder (src/billing/entitlement.js, asked every 5 minutes, and at once when accounts
+   records a payment and tells Teder, POST /internal/entitlement/changed).
 2. There is no card payment yet. The customer pays as agreed (transfer or link), and the operator records it on
    accounts' `/admin`, on the workspace's Teder subscription: the month's payment moves `paid_until` on. Press it once:
    a second press records a second month (ACC-03 in the readiness audit).
 3. The invoice is issued outside accounts, and its PDF uploaded to the workspace on `/admin`, where the customer sees
    it.
-4. Within 5 minutes the health table on /all shows the business as "שולם". If it still says "לא שולם" or "לא ידוע",
-   accounts did not answer Teder: check that accounts is up (`curl -s http://127.0.0.1:4741/healthz`) and that both
-   services have the same `OF_INTERNAL_TOKEN`.
+4. Recording the payment tells Teder at once: the customer's next page is Teder, and their paywall's "בדקו שוב" asks
+   accounts too. The health table on /all shows the business as "שולם" once Teder has asked again (the customer's next
+   page or the runner's next pass), at worst within 5 minutes. If it
+   still says "לא שולם" or "לא ידוע", accounts did not answer Teder: check that accounts is up (`curl -s
+   http://127.0.0.1:4741/healthz`) and that both services have the same `OF_INTERNAL_TOKEN`; a payment Teder was not told
+   about is a `teder POST /internal/entitlement/changed` line in `pm2 logs of-accounts`.
 
 ## 2. Setup, the first day
 

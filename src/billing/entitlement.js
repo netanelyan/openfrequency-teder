@@ -22,7 +22,10 @@ import { customerWorkspace } from './own.js';
 // `allowed` is the only thing acted on here. The answer is kept in the settings table (entitlement:<workspace>), so the
 // website and the runner read the same one and a restart keeps it:
 //
-//   - an answer under FRESH_MS (5 minutes) old is used as it is, nothing is asked
+//   - an answer under FRESH_MS (5 minutes) old is used as it is, nothing is asked, unless accounts said since that the
+//     workspace's access changed (POST /internal/entitlement/changed, src/web/entitlement-changed.js: a payment
+//     recorded, comp, a cancellation): then the next check asks afresh, so a customer who just paid sees Teder on the
+//     next page. The answer stays kept underneath, marked (`changedAt`), for the 24 hours below
 //   - 404 no_workspace (an id accounts never had) is an answer: not allowed. A deleted workspace is a 200, access off.
 //   - when accounts cannot answer (down, a timeout, a 5xx, a 401 or 405, a shape that is not the contract's), the last answer it gave
 //     stands for up to STALE_MS (24 hours): a paying customer is never stopped by a hiccup. Asked again after RETRY_MS.
@@ -43,8 +46,20 @@ const MIN_TOKEN = 32;
 
 const keyOf = (workspaceId) => `entitlement:${workspaceId}`;
 
-/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, graceUntil, plan, stoppedAt, checkedAt }, or null. */
+/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, graceUntil, plan, stoppedAt, checkedAt, changedAt? }, or null. */
 export const lastKnown = (db, workspaceId) => getSetting(db, keyOf(workspaceId), null);
+
+/**
+ * accounts said the workspace's access changed: the kept answer is marked (`changedAt`), so the next check asks accounts
+ * instead of using it for the rest of its 5 minutes. The answer itself stays, standing the 24 hours accounts may then be
+ * down, and `allowed` is not touched: nothing opens or stops until accounts says so. Returns whether one was kept.
+ */
+export function markChanged(db, workspaceId, t = now()) {
+  const k = lastKnown(db, workspaceId);
+  if (!k) return false;
+  setSetting(db, keyOf(workspaceId), { ...k, changedAt: new Date(t).toISOString() });
+  return true;
+}
 
 /** Allowed now, from the last answer kept: its `allowed`, while it is under STALE_MS old. Never known is no. */
 export function workspaceAllowed(db, workspaceId, t = now()) {
@@ -91,6 +106,8 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
   const token = String(env.OF_INTERNAL_TOKEN || '').trim();
   const failedAt = new Map();
   const asking = new Map();
+  // When accounts last said a workspace's access changed (changed() below), for a question out at that moment.
+  const changedSince = new Map();
 
   const view = (workspaceId, k, source, t) => ({
     workspace: workspaceId,
@@ -146,7 +163,12 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
     // The plan accounts gave; one it no longer gives (or never gave) is the full plan's. When it stopped: kept from the
     // first answer that said not allowed, until one says allowed again.
     const stoppedAt = a.allowed ? null : had && had.allowed === false && had.stoppedAt ? had.stoppedAt : at;
-    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, graceUntil: a.graceUntil ?? null, plan: planOfAnswer(a), stoppedAt, checkedAt: at };
+    // accounts said the access changed after this question left, so its answer may be from before the change (a payment
+    // committed while it was out): kept marked, and the next check asks again.
+    const since = Math.max(Date.parse(lastKnown(db, workspaceId)?.changedAt ?? '') || 0, changedSince.get(workspaceId) ?? 0);
+    const changedAt = since > t ? new Date(since).toISOString() : null;
+    if (!changedAt) changedSince.delete(workspaceId);
+    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, graceUntil: a.graceUntil ?? null, plan: planOfAnswer(a), stoppedAt, checkedAt: at, ...(changedAt ? { changedAt } : {}) };
     setSetting(db, keyOf(workspaceId), next);
     // Said once per change, not on every answer: the log and the audit.
     if (!had || had.allowed !== next.allowed) {
@@ -161,12 +183,23 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
       if (!Number.isInteger(workspaceId)) throw new Error('entitlement check needs a workspace id');
       const t = clock();
       const k = lastKnown(db, workspaceId);
-      if (!live && k && t - Date.parse(k.checkedAt) < FRESH_MS) return view(workspaceId, k, 'cache', t);
+      if (!live && k && !k.changedAt && t - Date.parse(k.checkedAt) < FRESH_MS) return view(workspaceId, k, 'cache', t);
       const failed = failedAt.get(workspaceId);
       if (!live && failed != null && t - failed < RETRY_MS) return view(workspaceId, k, 'stale', t);
       // One question at a time per workspace: the pages of one browser opened together ask once.
       if (!asking.has(workspaceId)) asking.set(workspaceId, refresh(workspaceId, t).finally(() => asking.delete(workspaceId)));
       return asking.get(workspaceId);
+    },
+    /**
+     * accounts said the workspace's access changed (src/web/entitlement-changed.js): the next check asks it afresh, even
+     * within a minute of a question that failed. A question already out may have left before the change: what it brings
+     * back is kept marked, and the check after it asks again. Returns whether an answer was kept for it.
+     */
+    changed(workspaceId) {
+      const t = clock();
+      changedSince.set(workspaceId, t);
+      failedAt.delete(workspaceId);
+      return markChanged(db, workspaceId, t);
     },
   };
 }

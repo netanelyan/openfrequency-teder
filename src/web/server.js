@@ -25,6 +25,7 @@ import { connectRoutes, goPage, publicConnect, publicOnboardingConnect, publicPi
 import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
+import { CHANGED_PATH, entitlementChangedRoute } from './entitlement-changed.js';
 import { entitlementClient } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
@@ -53,8 +54,9 @@ import { themeOf } from './ui.js';
 //     gets the paywall page instead of the product, except the new-account flow up to its samples (SETUP_OPEN below):
 //     going live and connecting stay behind it. The operator, the operator viewing as a customer, and the people of
 //     one of the company's own workspaces (OF_OWN_WORKSPACES), never do
-// /internal/lead, /internal/demos, /internal/setup and /internal/workspaces/<id>/delete are for services on this machine
-// with OF_INTERNAL_TOKEN (src/web/demos.js fromWebsite, src/web/setup.js, src/web/workspace-delete.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
+// /internal/lead, /internal/demos, /internal/setup, /internal/workspaces/<id>/delete and /internal/entitlement/changed are
+// for services on this machine with OF_INTERNAL_TOKEN (src/web/demos.js fromWebsite, src/web/setup.js,
+// src/web/workspace-delete.js, src/web/entitlement-changed.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
 // API (src/assistant/api.js): this machine only, never through the proxy, every
 // request signed. /m/... is one rendered slide behind a signed link that expires,
 // handed out by that API for WhatsApp to fetch. /connect/<account>/<platform> is the
@@ -136,6 +138,18 @@ const SETUP_OPEN = [
 ];
 export const setupOpen = (method, p) => SETUP_OPEN.some(([m, re]) => (m === method || (m === 'GET' && method === 'HEAD')) && re.test(p));
 
+/** How often "בדקו שוב" on the paywall may ask accounts for one workspace: a finger held on it asks once in 30 seconds. */
+export const RECHECK_MS = 30_000;
+/** What "בדקו שוב" leaves for the paywall it goes back to: the key of its line (pages.js RECHECK_HE.said). */
+const RECHECK_SAID = ['unpaid', 'soon', 'failed'];
+const recheckCookie = (said, secure) => `of_recheck=${said}; Path=/; Max-Age=30; SameSite=Strict; HttpOnly${secure ? '; Secure' : ''}`;
+
+/** A path on this site to go back to (the form's `back`), or home: never another site, nor `//host`. */
+export function localPath(v) {
+  const s = String(v ?? '');
+  return /^\/(?![\/\\])/.test(s) && s.length <= 2000 && !/[\u0000-\u001f\u007f]/.test(s) ? s : '/';
+}
+
 /** Where "back" goes on an error page: the page the browser came from, on this site, or home. */
 function backOf(req, host) {
   try {
@@ -157,6 +171,22 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
   // Whether a workspace has paid: the answers are kept in the database, which the runner reads too (canRun).
   const paid = entitlements || entitlementClient({ db: ctx.db, env, log: (m) => ctx.log?.(m) });
   ctx.entitlements ||= paid;
+  // "בדקו שוב" on the paywall: when each workspace last asked accounts from it (RECHECK_MS).
+  const rechecked = new Map();
+  /**
+   * The paywall's "בדקו שוב": accounts asked now, past the 5 minutes the answer is kept, unless this workspace asked from
+   * the button under RECHECK_MS ago (then the answer kept is used, which asks afresh only if accounts said it changed).
+   * { allowed, said }: said is what the paywall's line says when it is still not allowed (pages.js RECHECK_HE.said).
+   */
+  const recheck = async (workspaceId) => {
+    const t = now();
+    const last = rechecked.get(workspaceId);
+    if (last != null && t - last < RECHECK_MS) return { allowed: (await paid.check(workspaceId)).allowed, said: 'soon' };
+    if (rechecked.size > 5000) rechecked.clear();
+    rechecked.set(workspaceId, t);
+    const e = await paid.check(workspaceId, { live: true });
+    return { allowed: e.allowed, said: e.source === 'fresh' ? 'unpaid' : 'failed' };
+  };
   const publicHost = String(env.PUBLIC_HOST || '').trim().toLowerCase() || null;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
   const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
@@ -332,6 +362,12 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         const [status, body] = await workspaceDeleteRoute(ctx, req, env, wd[1]);
         return json(req, res, status, body);
       }
+      // accounts says a workspace's access changed (a payment recorded): the answer kept for it is asked again on its next
+      // page or tick, not 5 minutes later (src/web/entitlement-changed.js). Any method: another than POST is a 405.
+      if (p === CHANGED_PATH) {
+        const [status, body] = await entitlementChangedRoute(ctx, req, env, [paid, ctx.entitlements]);
+        return json(req, res, status, body);
+      }
 
       // ---- everything else needs a session that accounts vouches for (src/web/accounts.js). A page may use an answer
       // up to a minute old; anything else (every POST) asks afresh, so no change acts on a session that has ended.
@@ -360,13 +396,31 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // the company's own workspaces is not a customer's, and accounts is not asked about it (src/billing/own.js).
       const ent = !operator && !user.viewAs && a.workspace && customerWorkspace(a.workspace.id) ? await paid.check(a.workspace.id) : null;
       const unpaid = Boolean(ent && !ent.allowed && ent.known);
+      const csrf = csrfFor(sid, secret);
+      // "בדקו שוב" on the paywall (the owner's audit, 2026-11-02, Teder item 3): a plain form, CSRF and Origin checked like
+      // every POST. Accounts is asked now (recheck, at most once in 30 seconds for a workspace), and the browser goes back
+      // to the page it was on: the product when the workspace is allowed now, the paywall again, with its line, when not.
+      // The operator, view-as and one of our own workspaces are never behind the paywall: they just go back.
+      if (p === pages.RECHECK_PATH) {
+        if (req.method !== 'POST') return redirect(res, '/');
+        const origin = req.headers.origin;
+        if (origin && !origins.has(origin)) return json(req, res, 403, { ok: false, message: 'בקשה מאתר אחר נחסמה.' });
+        const form = await readForm(req, 8_000);
+        if (!csrfOk(form._csrf, sid, secret)) return send(req, res, 403, pages.errorPage({ kind: 'stale', back: '/', v: V, theme }));
+        const back = localPath(form.back);
+        if (!ent || user.readOnly) return redirect(res, back);
+        const r = await recheck(a.workspace.id);
+        return r.allowed ? redirect(res, back) : redirect(res, back, { 'set-cookie': recheckCookie(r.said, secure) });
+      }
       if (ent && !ent.allowed && !(unpaid && setupOpen(req.method, p))) {
         const kind = ent.known ? 'unpaid' : 'error';
         if (!reading) return json(req, res, ent.known ? 402 : 503, { ok: false, message: pages.GATE[kind].text, ...(ent.known ? { pay: links.setup } : {}) });
-        return send(req, res, ent.known ? 402 : 503, pages.gatePage({ v: V, kind, links, theme, setup: unpaid ? beforePaying(ctx, a.workspace.id) : null }));
+        // What the last "בדקו שוב" found, once: the line shows on this page and the cookie goes.
+        const said = RECHECK_SAID.includes(jar.of_recheck) ? jar.of_recheck : null;
+        const page = pages.gatePage({ v: V, kind, links, theme, setup: unpaid ? beforePaying(ctx, a.workspace.id) : null, recheck: unpaid ? { csrf, back: localPath(req.url), said } : null });
+        return send(req, res, ent.known ? 402 : 503, page, 'text/html; charset=utf-8', jar.of_recheck ? { 'set-cookie': 'of_recheck=; Path=/; Max-Age=0; SameSite=Strict; HttpOnly' } : {});
       }
       const c = operator ? ctx : forWorkspace(ctx, a.workspace.id);
-      const csrf = csrfFor(sid, secret);
 
       // ---- the account shown. Every page is one account's; the switcher at the top changes it, and a link that names
       // one (a post, ?account=) switches to that one. A cookie keeps it. Only the workspace's accounts are there to pick.

@@ -881,6 +881,11 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
 .login input { min-height: 52px; }
 .login .btn { width: 100%; min-height: 50px; margin-top: 8px; }
 .login .links { display: grid; gap: 8px; }
+/* "בדקו שוב" on the paywall (pages.js gatePage) is a form, so it works without the script: it sits in the column as the
+   links beside it do, and the line it leaves (what the check found) is calm, never the red of a refusal: outlined, not
+   filled, so it does not read as one more grey button under it. */
+.login .links form { display: grid; margin: 0; }
+.login p.said { margin: 0; padding: 12px 14px; border-radius: var(--r-m); border: 1px solid var(--line-2); color: var(--ink-2); font-size: 13px; line-height: 1.5; }
 /* The paywall before paying, the samples ready (pages.js gatePage): the first slide of each, three to a row, as tall as a
    phone's screen is to its width, whatever the platform drew them for. */
 .login .paysamples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }

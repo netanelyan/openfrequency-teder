@@ -93,7 +93,7 @@ wave on violet; the footer carries the company's, OpenFrequency's halftone on bl
 
 ### For the services on this machine
 
-Four routes answer the other OpenFrequency services on the VPS, never a browser: a
+Five routes answer the other OpenFrequency services on the VPS, never a browser: a
 loopback socket only, `Authorization: Bearer $OF_INTERNAL_TOKEN` (the value
 openfrequency-accounts has, 32 characters or more), and no `X-Forwarded-For`, so Caddy
 never passes them on. Anything else is `403 {"ok":false,"error":"forbidden"}`, and no
@@ -107,6 +107,16 @@ dashboard only, so nothing calls it and Teder sends the assistant no events.
 | `GET /internal/demos` | Toran's dashboard | every demo and its opens |
 | `GET /internal/setup?workspace=<id>` | accounts' `/setup` page | the workspace's setup steps in Teder (`src/web/setup.js`) |
 | `POST /internal/workspaces/<id>/delete` | accounts, when a customer deletes their workspace | that workspace's accounts and their data go (`src/web/workspace-delete.js`) |
+| `POST /internal/entitlement/changed` | accounts, when a workspace's access changes (a payment recorded) | the answer Teder keeps about that workspace is asked again on the next page or tick (`src/web/entitlement-changed.js`) |
+
+`/internal/entitlement/changed` (accounts' `docs/contracts/entitlement-changed.json`) takes
+`{"workspace":7,"reason":"paid"}` and answers `200 {"ok":true,"workspace":7,"cleared":true}`
+at once (`cleared` false when Teder kept nothing for it, which is fine). Its refusals are the
+contract's: `503 not_configured`, `403 forbidden` (not this machine, or through Caddy),
+`401 bad_token`, `405 method_not_allowed` for any method but POST, `400 bad_workspace`.
+It changes nothing that is allowed: the kept answer is marked (`changedAt`), so the next
+check asks accounts instead of using it for the rest of its 5 minutes, and it still stands
+the 24 hours accounts may be down. `reason` is only for the log.
 
 `/internal/setup` answers the contract accounts and Toran share:
 
@@ -180,14 +190,24 @@ Teder asks accounts three more things, on `OF_ACCOUNTS_INTERNAL` (default
   5 minutes, and while accounts does not answer (down, a timeout, a 5xx, a shape that is
   not the contract's) the last answer stands for 24 hours, so a paying customer is never
   stopped by a hiccup. A workspace never answered for, or whose answer is older than
-  that, is not allowed. A customer of a workspace that is not allowed sees a paywall page
+  that, is not allowed. When accounts records a payment (or comp, a cancellation, a
+  product or the workspace turned off) it tells Teder at once, `POST
+  /internal/entitlement/changed` above, and the customer's next page asks afresh: a
+  customer who just paid sees Teder on the next refresh, not 5 minutes later. A customer
+  of a workspace that is not allowed sees a paywall page
   (402, a link to accounts' `/setup`) instead of every page, and every button answers 402,
   except the new-account flow up to its samples and the Sources page (`src/web/server.js` `SETUP_OPEN`): a
   customer who signed up sets the account up and sees its samples before paying, and the
   paywall shows those samples ("המצגות שלכם מוכנות, נשאר רק להפעיל"); going live and
   connecting stay behind it. What that setup may spend before paying is capped at $3.50 a
   workspace (`src/billing/setup-cap.js`, `OF_UNPAID_SETUP_USD`). The operator, and the
-  operator viewing as the customer, never see the paywall. The runner writes, drafts and publishes nothing for its accounts (`canRun` says
+  operator viewing as the customer, never see the paywall. The paywall has "בדקו שוב", a
+  plain form (`POST /paywall/check`, CSRF and Origin checked, no script needed): accounts
+  is asked now, past the 5 minutes, at most once in 30 seconds for a workspace
+  (`RECHECK_MS`), and the browser goes back to the page it was on, the product once it is
+  paid, else the paywall with one line saying what was found ("בדקנו עכשיו, והתשלום עוד
+  לא רשום אצלנו. כשנרשום אותו, תדר ייפתח.", or that it was checked a moment ago, or that
+  accounts did not answer). The runner writes, drafts and publishes nothing for its accounts (`canRun` says
   `unpaid`); nothing is paused or deleted, and the first tick after it pays goes on. An
   account in no workspace is the operator's and never asks. A change is logged and
   audited once.

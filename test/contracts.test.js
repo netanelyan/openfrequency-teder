@@ -8,12 +8,15 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { ROOT } from '../src/core/paths.js';
 import { workspaceCleanups } from '../src/web/workspace-delete.js';
+import { lastKnown } from '../src/billing/entitlement.js';
+import { setSetting } from '../src/core/store.js';
 import { INTERNAL_TOKEN, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
 
 // The contracts between the services (PRA-QA-003). openfrequency-accounts keeps one file for each internal API in its
 // docs/contracts, and its README there says how they are written and kept; test/fixtures/contracts is a copy of that
 // folder, byte for byte, held to the original whenever an accounts checkout is next to this one. Every case of an API
-// Teder serves (setup.json: GET /internal/setup; workspaces-delete.json: POST /internal/workspaces/<id>/delete) is asked
+// Teder serves (setup.json: GET /internal/setup; workspaces-delete.json: POST /internal/workspaces/<id>/delete;
+// entitlement-changed.json: POST /internal/entitlement/changed) is asked
 // of Teder's real route, in a state made for it, and the answer must have the case's status and the shape of its body:
 // the same keys and JSON types, where a field the case calls nullable may be null; an error's body exactly. A case
 // Teder's route cannot be made to answer is in NOT_HERE with the reason, and where Teder answers otherwise than its
@@ -158,6 +161,13 @@ const refused = async (method, p) => [await ask(main, method, p, { token: null }
 
 const SETUP = 'setup /internal/setup :: ';
 const DELETE = 'workspaces-delete /internal/workspaces/<workspace id>/delete :: ';
+const CHANGED = 'entitlement-changed /internal/entitlement/changed :: ';
+
+/** accounts' notice, as its src/web/changed.js sends it: the bearer, a JSON body, and any headers a case adds. */
+async function notice(teder, body, headers = {}) {
+  const res = await fetch(`http://127.0.0.1:${teder.port}/internal/entitlement/changed`, { method: 'POST', headers: { authorization: `Bearer ${INTERNAL_TOKEN}`, 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  return { status: res.status, json: await res.json() };
+}
 
 // Each case, by "<contract> <path> :: <case>": made, then asked. A run may ask more than once (each answer is checked).
 const RUN = {
@@ -182,6 +192,20 @@ const RUN = {
   },
   [`${DELETE}no token, or the wrong one`]: () => refused('POST', '/internal/workspaces/3/delete'),
   [`${DELETE}OF_INTERNAL_TOKEN unset or short here`]: () => ask(bare, 'POST', '/internal/workspaces/3/delete'),
+
+  // A workspace whose answer Teder keeps (as its paywall left it), then one it never asked about.
+  [`${CHANGED}cleared: the next page or check asks accounts afresh`]: async () => {
+    setSetting(db, 'entitlement:7', { allowed: false, access: 'unpaid', paidThrough: null, cancelAt: null, graceUntil: null, plan: null, stoppedAt: AT, checkedAt: AT });
+    const res = await notice(main, { workspace: 7, reason: 'paid' });
+    assert.ok(lastKnown(db, 7).changedAt, 'marked');
+    return res;
+  },
+  [`${CHANGED}nothing kept for that workspace (never asked about, or deleted)`]: () => notice(main, { workspace: 78, reason: 'paid' }),
+  [`${CHANGED}no workspace id in the body (a positive integer)`]: async () => [await notice(main, {}), await notice(main, { workspace: '7' })],
+  [`${CHANGED}no token, or the wrong one`]: () => refused('POST', '/internal/entitlement/changed'),
+  [`${CHANGED}not from this machine, or through Caddy`]: () => notice(main, { workspace: 7 }, { 'x-forwarded-for': '203.0.113.9' }),
+  [`${CHANGED}another method than POST`]: () => ask(main, 'GET', '/internal/entitlement/changed'),
+  [`${CHANGED}OF_INTERNAL_TOKEN unset or short here`]: () => notice(bare, { workspace: 7 }),
 };
 
 // A case Teder's real route cannot be made to answer, and why. Each is still a case of the contract: its other side is
@@ -207,9 +231,9 @@ const DIFFERS = {
   [`${DELETE}nothing of that workspace here (never seen, or deleted already)`]: COUNTED,
 };
 
-test("the contracts Teder serves are setup and workspaces-delete, and every case of theirs is asked here or says why it cannot be", (t) => {
+test("the contracts Teder serves are setup, workspaces-delete and entitlement-changed, and every case of theirs is asked here or says why it cannot be", (t) => {
   const served = Object.values(contracts).filter((c) => c.servedBy.includes('teder'));
-  assert.deepEqual(served.map((c) => c.name).sort(), ['setup', 'workspaces-delete']);
+  assert.deepEqual(served.map((c) => c.name).sort(), ['entitlement-changed', 'setup', 'workspaces-delete']);
   const cases = served.flatMap((c) => c.routes.flatMap((r) => r.answers.map((a) => `${c.name} ${r.path} :: ${a.case}`)));
   for (const key of cases) assert.ok(Boolean(RUN[key]) !== Boolean(NOT_HERE[key]), `${key}: a run, or the reason there is none (one, not both)`);
   for (const key of [...Object.keys(RUN), ...Object.keys(NOT_HERE), ...Object.keys(DIFFERS)]) assert.ok(cases.includes(key), `${key}: no such case in the contracts`);
