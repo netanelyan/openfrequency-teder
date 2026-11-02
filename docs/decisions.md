@@ -2162,7 +2162,9 @@ up costs. Set a cap for unpaid accounts, and show it to me."
 1. *What is open.* The paywall stayed the default: a workspace that has not paid gets it on every page and button except
    a short list (src/web/server.js SETUP_OPEN): /new and an onboarding's page and status, and its steps up to the
    samples (search, search again with more sites, the name, the days and times, choosing the sources and creating the
-   account, the samples, "עברתי על הדוגמאות"), its own slides and the accounts' colours. Going live (/new/<id>/live,
+   account, the samples, "עברתי על הדוגמאות"), its own slides and the accounts' colours, and the Sources page with
+   approving, removing and adding a source (the owner, on the review: "open it"; the topics, the hand-checked facts and
+   the operator's list of outlets stay shut). Going live (/new/<id>/live,
    approving, publishing, the account's mode, days and times and resume) and connecting (/new/<id>/connect/...,
    /new/<id>/connections, /accounts/<id>/connect/...) are not on it, and the signed connect link that needs no session
    refuses an unpaid workspace's account too (src/web/connect.js publicConnect). A list of what is open, not of what is
@@ -2170,7 +2172,8 @@ up costs. Set a cap for unpaid accounts, and show it to me."
    error page, with nothing open: a check that failed is not an unpaid customer.
 2. *The pages say it.* Before paying, the onboarding pages offer nothing that leads to the paywall: no connect buttons
    (a line that it comes after activating), no going live, no designs page, no account days and times after the account
-   exists (they were offered before it), no editing a sample and no way to the sources page. Once three samples passed,
+   exists (they were offered before it) and no editing a sample; the Sources page, open, shows no buttons to the topics
+   or the hand-checked facts before paying. Once three samples passed,
    or at the cap, a banner says "המצגות שלכם מוכנות, נשאר רק להפעיל" with accounts' /setup button. The paywall itself,
    while the setup is not done, shows the first slide of each sample (six at most) with the same line and the one
    primary button, how to pay; before any sample, it leads to the setup. A customer whose account was live and who

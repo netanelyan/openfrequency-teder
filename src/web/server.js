@@ -117,14 +117,18 @@ const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.'
  * through /new (niche, sources, samples) and see the samples. The paywall blocks only going live and connecting
  * accounts"). What a customer whose workspace has not paid may open: the new-account flow's pages and the steps up to
  * its samples (the search, searching again, the name, the days and times, choosing the sources and creating the
- * account, the samples, "עברתי על הדוגמאות"), its own slides, and the accounts' colours. Everything else is the paywall,
- * by default: going live (/new/<id>/live, approving, publishing, the account's mode and days and times), connecting
- * (/new/<id>/connect/..., /new/<id>/connections, /accounts/<id>/connect/...) and every other page and button. What the
- * setup may spend before paying is capped (src/billing/setup-cap.js).
+ * account, the samples, "עברתי על הדוגמאות"), its own slides, the accounts' colours, and the sources page with what it
+ * does (approving, removing and adding a source; the owner, 2026-11-02: "open it", none of them a paid call). Everything
+ * else is the paywall, by default: going live (/new/<id>/live, approving, publishing, the account's mode and days and
+ * times), connecting (/new/<id>/connect/..., /new/<id>/connections, /accounts/<id>/connect/...) and every other page and
+ * button, the topics and the hand-checked facts among them. What the setup may spend before paying is capped
+ * (src/billing/setup-cap.js).
  */
 const SETUP_OPEN = [
   ['GET', /^\/new(\/[\w-]+(\/status)?)?$/],
   ['POST', /^\/new(\/[\w-]+\/(retry|more|name|schedule|create|samples|reviewed))?$/],
+  ['GET', /^\/sources$/],
+  ['POST', /^\/sources\/(\d+\/(approve|remove)|add)$/],
   ['GET', /^\/media\/[\w-]+\/(tiktok|instagram)\/\d+$/],
   ['GET', /^\/static\/accounts\.css$/],
 ];

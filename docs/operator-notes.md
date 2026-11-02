@@ -266,7 +266,8 @@ says which keys are set without showing them.
 ### Setting up before paying, and its cap: $3.50 a workspace
 
 - **What it is.** A customer who signed up and has not paid goes through /new (the niche, the sources, the name, the
-  days and times, the samples, "עברתי על הדוגמאות") and sees the samples; every other page is the paywall, which shows
+  days and times, the samples, "עברתי על הדוגמאות") and sees the samples, and may open the Sources page and approve,
+  remove or add a source there (none of it a paid call, so not counted); every other page is the paywall, which shows
   those samples with "המצגות שלכם מוכנות, נשאר רק להפעיל" and the button to accounts' /setup. Going live, approving,
   publishing and connecting TikTok, Instagram or a Facebook Page stay behind it, the signed connect link included
   (src/web/server.js SETUP_OPEN, src/web/connect.js publicConnect). What that setup may cost us is capped: the search

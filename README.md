@@ -181,7 +181,7 @@ Teder asks accounts three more things, on `OF_ACCOUNTS_INTERNAL` (default
   stopped by a hiccup. A workspace never answered for, or whose answer is older than
   that, is not allowed. A customer of a workspace that is not allowed sees a paywall page
   (402, a link to accounts' `/setup`) instead of every page, and every button answers 402,
-  except the new-account flow up to its samples (`src/web/server.js` `SETUP_OPEN`): a
+  except the new-account flow up to its samples and the Sources page (`src/web/server.js` `SETUP_OPEN`): a
   customer who signed up sets the account up and sees its samples before paying, and the
   paywall shows those samples ("המצגות שלכם מוכנות, נשאר רק להפעיל"); going live and
   connecting stay behind it. What that setup may spend before paying is capped at $3.50 a

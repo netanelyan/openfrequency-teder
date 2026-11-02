@@ -150,7 +150,7 @@ test('before paying: the customer goes through /new end to end and sees the samp
   assert.match(html, /action="\/new\/[\w-]+\/reviewed"/, '"עברתי על הדוגמאות" stays');
   assert.match(html, new RegExp(`action="/new/${id}/samples"`), 'another round is offered (under the cap)');
   // Nothing on the page leads to the paywall.
-  assert.doesNotMatch(html, /\/live"|\/connect\/|\/connections"|\/styles\?|id="schedule"|#edit"|לבחור מקורות/, 'no going live, connecting, designs, days and times, editing or sources page');
+  assert.doesNotMatch(html, /\/live"|\/connect\/|\/connections"|\/styles\?|id="schedule"|#edit"/, 'no going live, connecting, designs, days and times or editing');
   assert.ok(html.includes(CAP_HE.connect), 'connecting is said to come after paying');
   assert.doesNotMatch(html, /[—–]/);
 
@@ -196,8 +196,8 @@ test('before paying: going live and connecting stay behind the paywall, every wa
     // connecting: before the account and after it
     `/new/${id}/connect/tiktok`, `/new/${id}/connect/instagram`, `/new/${id}/connect/facebook`, `/new/${id}/connections`,
     `/accounts/${pack}/connect/tiktok`, `/accounts/${pack}/connect/instagram`, `/accounts/${pack}/connect/facebook`, `/accounts/${pack}/connections`,
-    // and what else changes a live account: a sample's text and photographs, its sources, its design
-    `/post/${sample}/edit`, `/post/${sample}/slide/0/photo`, `/sources/add`, `/accounts/${pack}/style-pick`,
+    // and what else changes a live account: a sample's text and photographs, its design
+    `/post/${sample}/edit`, `/post/${sample}/slide/0/photo`, `/accounts/${pack}/style-pick`,
   ];
   for (const p of paths) {
     for (const ajax of [true, false]) {
@@ -212,7 +212,7 @@ test('before paying: going live and connecting stay behind the paywall, every wa
   assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status <> 'sample'", pack).n, 0, 'nothing approved');
   assert.equal(db.get('SELECT COUNT(*) AS n FROM zernio_connections WHERE account_id = ?', pack).n, 0, 'nothing connected');
   // Every other page is the paywall.
-  for (const p of [`/post/${sample}`, '/posts', '/accounts', '/results', '/sources', '/settings', '/all', '/more', `/styles?account=${pack}`, '/progress.json']) {
+  for (const p of [`/post/${sample}`, '/posts', '/accounts', '/results', '/topics', `/facts?account=${pack}`, '/settings', '/all', '/more', `/styles?account=${pack}`, '/progress.json']) {
     const res = await b.get(p);
     assert.equal(res.status, 402, p);
   }
@@ -233,6 +233,41 @@ test('before paying: going live and connecting stay behind the paywall, every wa
   } finally {
     db.run("UPDATE accounts SET status = 'onboarding' WHERE id = ?", pack);
   }
+});
+
+test('before paying: the sources page is open, with approving, removing and adding a source; nothing on it leads to the paywall, nothing is spent', async () => {
+  assert.ok(three, 'the setup of the first test');
+  const { pack } = three;
+  const b = browser(customer(3));
+  const spent = setupSpend(db, 3);
+  const src = db.get("SELECT id FROM sources WHERE account_id = ? AND status = 'approved' ORDER BY id LIMIT 1", pack);
+  assert.ok(src, 'the source chosen on /new');
+  let res = await b.get('/sources');
+  assert.equal(res.status, 200);
+  let html = await res.text();
+  assert.ok(html.includes(`action="/sources/${src.id}/remove"`), 'its source, with its button');
+  assert.ok(html.includes('action="/sources/add"'), 'the form to add one');
+  assert.doesNotMatch(html, /href="\/topics"|href="\/facts/, 'no topics or hand-checked facts: those are behind the paywall');
+  assert.doesNotMatch(html, /class="err"|[—–]/);
+  assert.equal((await b.get(`/sources?account=${pack}`)).status, 200);
+
+  res = await b.post(`/sources/${src.id}/remove`);
+  assert.equal(res.status, 303, 'removed');
+  assert.equal(db.get('SELECT status FROM sources WHERE id = ?', src.id).status, 'removed');
+  res = await b.post(`/sources/${src.id}/approve`, {}, { ajax: true });
+  assert.equal(res.status, 200, 'approved again, by script');
+  assert.equal((await res.json()).ok, true);
+  assert.equal(db.get('SELECT status FROM sources WHERE id = ?', src.id).status, 'approved');
+  res = await b.post('/sources/add', { account: pack, name: 'גינה עירונית', url: 'https://example.org/garden', type: 'web', why: 'אתר של גננים שבודקים כל צמח לפני שהם כותבים עליו' });
+  assert.equal(res.status, 303, 'added');
+  assert.equal(db.get("SELECT status FROM sources WHERE account_id = ? AND url = 'https://example.org/garden'", pack)?.status, 'approved');
+  html = await (await b.get('/sources')).text();
+  assert.ok(html.includes('גינה עירונית'));
+
+  // The list of outlets is the operator's: before paying, it is the paywall like the rest.
+  assert.equal((await b.post('/sources/catalog', { account: pack, niche: 'football', id: 'x' })).status, 402);
+  // None of it is a paid call: the setup's tally is where it was.
+  assert.deepEqual(setupSpend(db, 3), spent);
 });
 
 test('a comp and a paid workspace: exactly as before, never counted against the cap', async () => {
@@ -383,18 +418,21 @@ test('the meter hears every spend recorded inside the setup, however deep, and n
   assert.equal(Number((setupSpend(db, 3).usd - was).toFixed(6)), 0.5);
 });
 
-test('what is open before paying: the new-account flow up to its samples, and nothing else', () => {
+test('what is open before paying: the new-account flow up to its samples and the sources page, and nothing else', () => {
   const open = [
     ['GET', '/new'], ['GET', '/new/o-1'], ['HEAD', '/new/o-1'], ['GET', '/new/o-1/status'], ['POST', '/new'],
     ['POST', '/new/o-1/retry'], ['POST', '/new/o-1/more'], ['POST', '/new/o-1/name'], ['POST', '/new/o-1/schedule'],
     ['POST', '/new/o-1/create'], ['POST', '/new/o-1/samples'], ['POST', '/new/o-1/reviewed'],
     ['GET', '/media/p-1/tiktok/0'], ['GET', '/media/p-1/instagram/3'], ['GET', '/static/accounts.css'],
+    ['GET', '/sources'], ['HEAD', '/sources'], ['POST', '/sources/12/approve'], ['POST', '/sources/12/remove'], ['POST', '/sources/add'],
   ];
   const shut = [
     ['GET', '/'], ['POST', '/new/o-1/live'], ['POST', '/new/o-1/connect/tiktok'], ['POST', '/new/o-1/connections'],
     ['GET', '/new/o-1/connect/tiktok'], ['POST', '/accounts/a/connect/tiktok'], ['POST', '/post/p-1/approve'],
     ['GET', '/post/p-1'], ['GET', '/posts'], ['POST', '/new/o-1/status'], ['GET', '/new/o-1/samples'], ['POST', '/media/p-1/tiktok/0'],
     ['GET', '/new/o-1/x/status'], ['GET', '/newx'], ['POST', '/new/o-1/livex'],
+    ['POST', '/sources/catalog'], ['POST', '/sources'], ['GET', '/sources/12'], ['POST', '/sources/x/approve'], ['POST', '/sources/12/approvex'],
+    ['GET', '/topics'], ['GET', '/facts'], ['POST', '/facts/add'],
   ];
   for (const [m, p] of open) assert.equal(setupOpen(m, p), true, `${m} ${p}`);
   for (const [m, p] of shut) assert.equal(setupOpen(m, p), false, `${m} ${p}`);
