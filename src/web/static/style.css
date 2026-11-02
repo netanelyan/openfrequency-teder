@@ -224,6 +224,12 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .top .logout:hover { text-decoration: none; background: var(--fill-2); color: var(--ink); }
 .top .logout svg.i { width: 18px; height: 18px; }
 @media (max-width: 520px) { .top .logout { padding: 0; } .top .logout .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
+/* Light or dark (the .theme button, at the end of this file), on every page: on a phone between the month's count and
+   signing out, round and their height, 8px from each; on a desk at the end of the sign-out row. Its place is kept
+   while the script that shows it loads, so nothing in the bar moves when it appears. */
+.top .theme { width: 40px; height: 40px; flex: none; background: var(--fill); color: var(--ink-2); }
+.top .theme svg { width: 20px; height: 20px; stroke-width: 1.7; }
+@media (hover: hover) { .top .theme:hover { background: var(--fill-2); color: var(--ink); } }
 
 /* The account switcher: the account the site shows, beside the logo on a phone and under it on a desk. It opens
    the list of accounts, each with what waits in it; a dot on the closed switcher says something waits elsewhere. */
@@ -251,13 +257,16 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .acctswitch .badge { margin-inline-start: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 
 /* On a phone the bar is the logo, the account and the spend: the logo's word gives the account's name its room. */
-@media (max-width: 899px) { .acctswitch > summary .nm small { display: none; } .acctswitch > summary { max-width: 58vw; } .top .wrap:has(.acctswitch) .brand b { display: none; } }
+@media (max-width: 899px) { .acctswitch > summary .nm small { display: none; } .acctswitch > summary { max-width: 58vw; } .top .wrap:has(.acctswitch) .brand b { display: none; } .top .wrap:has(.acctswitch) .brand { padding-inline-end: 0; } }
 /* On a phone the account's name keeps its room (it was down to "ע" at 360): tighter gaps, and the switcher drops its
-   chevron, the pill itself is the button. Under 380px the month's count drops its " / 40", the ring shows how full. */
+   chevron, the pill itself is the button. Under 380px the month's count drops its " / 40", the ring shows how full.
+   With the light or dark switch in the bar too, the logo keeps no space after it and the account's dot only its own
+   width, so "עציץ ושמש" stays whole at 360. */
 @media (max-width: 520px) {
   .top .wrap { gap: 8px; }
   .acctswitch > summary { gap: 8px; padding: 0 10px; }
   .acctswitch > summary > svg.i { display: none; }
+  .acctswitch > summary .ic:has(> .dot) { width: 10px; }
 }
 @media (max-width: 380px) { .spend { gap: 6px; padding: 0 12px 0 10px; } .spend .amt > span { display: none; } }
 .acctswitch .menu form { margin: 0; }
@@ -300,9 +309,14 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   .top .tools { grid-column: 1 / -1; grid-row: 4; align-self: end; margin: 0; }
   .spend { width: 100%; min-height: 48px; padding: 0 12px; border-radius: 14px; gap: 10px; }
   .spend .amt { margin-inline-start: auto; }
-  .top .tools { flex-direction: column; align-items: stretch; gap: 4px; }
-  .top .logout { justify-content: flex-start; gap: 12px; min-height: 42px; padding: 0 12px; border-radius: 12px; background: none; }
+  /* The month's count across the foot, and under it the sign-out row with the light or dark switch at its end. */
+  .top .tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+  .spend { grid-column: 1 / -1; }
+  .top .logout { grid-column: 1; grid-row: 2; justify-content: flex-start; gap: 12px; min-height: 42px; padding: 0 12px; border-radius: 12px; background: none; }
   .top .logout svg.i { color: var(--ink-3); }
+  .top .theme { grid-column: 2; grid-row: 2; width: 42px; height: 42px; border-radius: 12px; background: none; color: var(--ink-3); }
+  .top .theme:focus-visible { border-radius: 12px; }
+  @media (hover: hover) { .top .theme:hover { background: var(--fill); color: var(--ink); } }
 
   /* Collapsed: a rail of icons. The names stay for screen readers and come back as tooltips; the waiting count
      sits on the icon's corner, as on a tab bar; the spend is its ring, with the amount in the tooltip. */
@@ -320,7 +334,9 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   .side-mini .nav a { justify-content: center; padding: 0; }
   .side-mini .nav a > span, .side-mini .spend .lbl, .side-mini .spend .amt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .side-mini .nav .badge { position: absolute; top: 3px; inset-inline-start: calc(50% + 2px); margin: 0; min-width: 16px; height: 16px; line-height: 16px; font-size: 10px; padding: 0 4px; }
-  .side-mini .top .tools { grid-row: 5; justify-self: center; }
+  .side-mini .top .tools { grid-row: 5; justify-self: center; grid-template-columns: 44px; }
+  .side-mini .top .logout, .side-mini .top .theme { grid-column: 1; grid-row: auto; }
+  .side-mini .top .theme { width: 44px; height: 44px; }
   .side-mini .spend { width: 44px; min-height: 44px; padding: 0; justify-content: center; border-radius: 12px; }
   .side-mini .top .logout { width: 44px; min-height: 44px; padding: 0; justify-content: center; }
   .side-mini .top .logout .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -1286,12 +1302,10 @@ html.sk-on #main > :not(.sk-page) { display: none; }
    The website's (openfrequency.co.il, its style.css .a11y; ui.js a11yWidget, app.js): a round glass button at the
    bottom corner, the tab bar's sibling, and over it a panel of four switches, each a class on <html> that the rules
    at the end of this block read. On a phone it stands above the tab bar, and on a post's page above its action bar
-   too, so it never covers either; on a desk, in the corner. Under the toast, which says something and goes. The
-   corner (.corner) holds it and, beside it, the light or dark switch (below). */
-.corner { position: fixed; z-index: 45; bottom: calc(var(--tab) + 20px + env(safe-area-inset-bottom)); inset-inline-end: 16px; display: flex; align-items: flex-end; gap: 8px; }
-@media (max-width: 899px) { body:has(.actionbar) .corner { bottom: calc(var(--tab) + 16px + 60px + 12px + env(safe-area-inset-bottom)); } }
-@media (min-width: 900px) { .corner { bottom: 24px; inset-inline-end: 24px; } }
-.a11y-w { position: relative; }
+   too, so it never covers either; on a desk, in the corner. Under the toast, which says something and goes. */
+.a11y-w { position: fixed; z-index: 45; bottom: calc(var(--tab) + 20px + env(safe-area-inset-bottom)); inset-inline-end: 16px; }
+@media (max-width: 899px) { body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 60px + 12px + env(safe-area-inset-bottom)); } }
+@media (min-width: 900px) { .a11y-w { bottom: 24px; inset-inline-end: 24px; } }
 .a11y-w[hidden], .a11y-p[hidden] { display: none; }
 .a11y-btn { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .a11y-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -1307,23 +1321,20 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .a11y-end { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 14px; }
 .a11y-reset { min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .a11y-end a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-@media (prefers-reduced-transparency: reduce) { .a11y-btn, .a11y-p, .corner .theme { backdrop-filter: none; -webkit-backdrop-filter: none; } }
-@media print { .corner, .login .theme { display: none; } }
+@media (prefers-reduced-transparency: reduce) { .a11y-btn, .a11y-p { backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@media print { .a11y-w, .theme { display: none; } }
 
 /* Light or dark (ui.js themeButton, static/theme.js): the website's own button (openfrequency-web src/style.css
-   .theme), a moon while light and a sun while dark, shown once the script runs. In the corner it is glass like the
-   accessibility button beside it, 8px apart; on a page that stands alone (a card) it sits in the card's top corner. */
+   .theme), a moon while light and a sun while dark, shown once the script runs. In the bar on every page of the
+   layout (.top .theme, with the bar's own rules); on a page that stands alone (a card) in the card's top corner. */
 .theme { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 0.2s ease, transform 0.16s cubic-bezier(0.23, 1, 0.32, 1); }
-.theme[hidden] { display: none; }
+.theme:not(.on) { visibility: hidden; }
 .theme:active { transform: scale(0.94); }
 .theme:focus-visible { border-radius: 50%; }
 .theme svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .theme .sun, [data-theme="dark"] .theme .moon { display: none; }
 [data-theme="dark"] .theme .sun { display: block; }
 @media (hover: hover) { .theme:hover { background: var(--fill); } }
-.corner .theme { width: 48px; height: 48px; background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); }
-.corner .theme svg { width: 24px; height: 24px; stroke-width: 2; }
-@media (hover: hover) { .corner .theme:hover { background: var(--bar-float); } }
 .login .card > .theme { position: absolute; top: 12px; inset-inline-end: 12px; }
 
 /* The switches. Bigger text zooms the page, as the website does, so every size written in px grows with it. A phone
@@ -1333,7 +1344,7 @@ html.a-big body { zoom: 1.2; }
 @media (max-width: 899px) {
   html.a-big .actionbar { flex-wrap: wrap; }
   html.a-big .actionbar .btn.primary { flex-basis: 100%; }
-  html.a-big body:has(.actionbar) .corner { bottom: calc(var(--tab) + 16px + 112px + 12px + env(safe-area-inset-bottom)); }
+  html.a-big body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 112px + 12px + env(safe-area-inset-bottom)); }
 }
 html.a-links a { text-decoration: underline !important; text-decoration-thickness: 2px !important; text-underline-offset: 3px; }
 html.a-still *, html.a-still *::before, html.a-still *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

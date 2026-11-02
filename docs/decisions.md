@@ -2141,8 +2141,12 @@ color-scheme and one theme-color, #eeeff2 or #111113. That covers the layout and
 paywall and the other gates, the error pages, the connect pages and the store's demo page. Every dark rule in style.css
 moved from @media (prefers-color-scheme: dark) onto [data-theme="dark"]; demo.css, light only until now, has the desk's
 dark tokens. The switch is the website's own button (a moon while light, a sun while dark, "מצב כהה", aria-pressed):
-in the corner beside the accessibility button on every page of the layout (the phone's top bar has no room for it
-beside the account's name), in the card's corner on a page that stands alone, at the end of the demo page's top line.
+in the bar on every page of the layout, on a phone between the month's count and signing out, round and their size,
+8px from each (as Toran has it), and on a desk at the end of the sign-out row at the foot of the side bar; in the
+card's corner on a page that stands alone; at the end of the demo page's top line. It first floated beside the
+accessibility button, and on a phone the two covered a card's text. In the bar, the account's name stays whole at 360
+and 390 ("עציץ ושמש"); at 320, and with a long name anywhere, the pill cuts it short with an ellipsis. The switch keeps
+its place, invisible, until its script runs, so nothing beside it moves when it appears.
 Its script, static/theme.js, flips the page at once, writes the cookie and the colours, and follows a choice made
 elsewhere when a tab is looked at again; the CSP is unchanged (a static module, nothing inline). The old POST /theme and
 its of_theme cookie, unused since the switch went, are gone. The slides the renderer draws and the emails are as they

@@ -260,13 +260,14 @@ ul.logos li.more .plus { font-size: 30px; font-weight: 300; line-height: 1; marg
 /* Light or dark: the website's own button (ui.js themeButton, the desk's style.css .theme), a moon while light and a
    sun while dark, at the end of the top line (on the page that is gone, at its foot). Shown once static/theme.js runs. */
 .theme { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 0.2s ease, transform 0.16s cubic-bezier(0.23, 1, 0.32, 1); }
-.theme[hidden] { display: none; }
+.theme:not(.on) { visibility: hidden; }
 .theme:active { transform: scale(0.94); }
 .theme:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .theme svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .theme .sun, [data-theme="dark"] .theme .moon { display: none; }
 [data-theme="dark"] .theme .sun { display: block; }
 @media (hover: hover) { .theme:hover { background: var(--grey-pill); } }
-/* The line keeps its height, and the icon lines up with the page's edge: the button's box reaches into the padding. */
+/* The line keeps its height, and the icon lines up with the page's edge: the button's box reaches into the padding. Its
+   place is kept while the script loads, so the store's name does not move when it appears. */
 .top .by { margin-inline-start: auto; }
 .top .theme { margin-block: -10px; margin-inline-end: -11px; }

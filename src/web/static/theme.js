@@ -34,7 +34,7 @@ if (typeof document !== 'undefined') {
     for (const b of buttons) b.setAttribute('aria-pressed', String(theme === 'dark'));
   };
   for (const b of buttons) {
-    b.hidden = false;
+    b.classList.add('on');
     b.addEventListener('click', () => {
       const theme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       apply(theme);

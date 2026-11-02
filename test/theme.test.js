@@ -35,13 +35,27 @@ let server;
 let base;
 let paid;
 let unpaid;
+let long;
+// The longest name an account may have (30 characters, pack validate.js), in the bar's pill on a phone.
+const LONG = 'בישול טבעוני לסטודנטים בתקציב';
 
 before(async () => {
-  home = tempHome();
+  home = tempHome({
+    packs: {
+      demo: null,
+      longname: (f) => {
+        f.pack.displayName = LONG;
+        f.theme.template = 'poster';
+        f.theme.fonts.display = 'Secular One';
+        Object.assign(f.theme.colors, { bg: '#101820', surface: '#1C2733', ink: '#F4F4F4', muted: '#B8C0C8', accent: '#3FA7D6', onAccent: '#101820' });
+      },
+    },
+  });
   db = new Db(path.join(home.home, 'data.db'));
   opened.push(db);
   const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home.home, 'packs') }), log: () => {} });
   db.run("UPDATE accounts SET workspace_id = 1 WHERE id = 'demo'");
+  db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'longname'");
   const t = new Date().toISOString();
   db.insert('demos', {
     slug: SLUG, url: 'https://shop.example.co.il', domain: 'shop.example.co.il', status: 'approved', created_at: t, updated_at: t, approved_at: t, approved_by: 'auto',
@@ -54,6 +68,7 @@ before(async () => {
   base = `http://127.0.0.1:${s.port}`;
   paid = fake.session(customer(1));
   unpaid = fake.session(customer(3));
+  long = fake.session(customer(2));
 });
 
 after(async () => {
@@ -92,11 +107,11 @@ function assertHead(html, theme, where) {
   assert.doesNotMatch(html, /prefers-color-scheme|content="light dark"/, `${where}: nothing follows the device`);
 }
 
-/** The switch: the website's button, pressed while dark, hidden until its script runs, and that script. */
+/** The switch: the website's button, pressed while dark, invisible until its script runs, and that script. */
 function assertSwitch(html, theme, where) {
   assert.equal((html.match(/data-theme-toggle/g) || []).length, 1, `${where}: one switch`);
   assert.ok(html.includes(themeButton(theme)), `${where}: the switch as ui.js builds it`);
-  assert.match(themeButton(theme), new RegExp(`^<button class="theme" type="button" data-theme-toggle aria-pressed="${theme === 'dark'}" aria-label="מצב כהה" hidden><svg class="moon" [^]*</svg><svg class="sun" [^]*</svg></button>$`));
+  assert.match(themeButton(theme), new RegExp(`^<button class="theme" type="button" data-theme-toggle aria-pressed="${theme === 'dark'}" aria-label="מצב כהה"><svg class="moon" [^]*</svg><svg class="sun" [^]*</svg></button>$`));
   assert.match(html, /<script type="module" src="\/static\/theme\.js\?v=\w+"><\/script>/, `${where}: its script`);
   const at = html.indexOf('data-theme-toggle');
   const form = html.lastIndexOf('<form', at);
@@ -170,7 +185,7 @@ test('no page stylesheet turns dark on the device\'s setting: every dark rule ha
     assert.doesNotMatch(css, /prefers-color-scheme/, `${file}: no @media (prefers-color-scheme)`);
     assert.match(css, /:root\s*\{\s*color-scheme: light;/, `${file}: light first`);
     assert.match(css, /:root\[data-theme="dark"\] \{\s*color-scheme: dark;/, `${file}: dark by the attribute`);
-    for (const part of ['.theme {', '.theme[hidden] { display: none; }', '.theme .sun, [data-theme="dark"] .theme .moon { display: none; }', '[data-theme="dark"] .theme .sun { display: block; }']) assert.ok(css.includes(part), `${file}: ${part}`);
+    for (const part of ['.theme {', '.theme:not(.on) { visibility: hidden; }', '.theme .sun, [data-theme="dark"] .theme .moon { display: none; }', '[data-theme="dark"] .theme .sun { display: block; }']) assert.ok(css.includes(part), `${file}: ${part}`);
   }
   const js = await get('/static/theme.js');
   assert.equal(js.status, 200);
@@ -187,7 +202,7 @@ test('in a real browser, on a device that prefers dark: light, one tap makes it 
       scheme: document.querySelector('meta[name="color-scheme"]').content,
       color: document.querySelector('meta[name="theme-color"]').content,
       pressed: document.querySelector('[data-theme-toggle]').getAttribute('aria-pressed'),
-      shown: !document.querySelector('[data-theme-toggle]').hidden,
+      shown: getComputedStyle(document.querySelector('[data-theme-toggle]')).visibility === 'visible',
       // The desk's pages paint the body, a store's page paints <html>.
       bg: `${getComputedStyle(document.documentElement).backgroundColor} ${getComputedStyle(document.body).backgroundColor}`,
     }));
@@ -268,6 +283,92 @@ test('in a real browser, on a device that prefers dark: light, one tap makes it 
       assert.match(sent.at(-1)[1], /(^|; )of-theme=dark(;|$)/, 'accounts is sent the choice');
       await page.goto(`https://teder.openfrequency.co.il/s/${SLUG}`, { waitUntil: 'load' });
       assert.deepEqual(without(await state(page)), DARK, 'and Teder renders it');
+      await context.close();
+    }
+  } finally {
+    await browser?.close();
+  }
+});
+
+// The coordinator, 2026-11-02, on the switch floating beside the accessibility button over a card's text: "On a phone,
+// put the switch in the top bar instead, the way Toran does: between the meter (1 / 40) and the sign-out button, 8px
+// from each, same size as those round buttons", at 320, 360 and 390 with the longest name; on a desk at the foot of the
+// side bar, on the sign-out row.
+test('in a real browser, the switch is in the bar: on a phone between the month\'s count and signing out, 8px from each and their size, at 320, 360 and 390, the longest name cut short, nothing wrapping or moving; on a desk on the sign-out row', async () => {
+  let browser;
+  try {
+    browser = await chromium.launch();
+    const bar = () => {
+      const box = (sel) => document.querySelector(sel)?.getBoundingClientRect().toJSON() || null;
+      const [wrap, brand, pill, spend, theme, logout] = ['.top .wrap', '.top .brand', '.acctswitch > summary', '.top .spend', '.top .theme', '.top .logout'].map(box);
+      const gap = (a, b) => Math.round(Math.max(b.left - a.right, a.left - b.right, b.top - a.bottom, a.top - b.bottom));
+      const name = document.querySelector('.acctswitch > summary .nm b');
+      const el = document.querySelector('.top .wrap');
+      return {
+        order: [brand, pill, spend, theme, logout].every((r, i, all) => i === 0 || r.right <= all[i - 1].left),
+        gaps: [gap(brand, pill), gap(pill, spend), gap(spend, theme), gap(theme, logout)],
+        inside: [brand, pill, spend, theme, logout].every((r) => r.left >= wrap.left && r.right <= wrap.right && r.top >= wrap.top && r.bottom <= wrap.bottom),
+        theme: [Math.round(theme.width), Math.round(theme.height)],
+        logout: [Math.round(logout.width), Math.round(logout.height)],
+        height: Math.round(wrap.height),
+        overflow: el.scrollWidth - el.clientWidth,
+        name: { shown: name.clientWidth, needs: name.scrollWidth, oneLine: name.getBoundingClientRect().height < 2 * parseFloat(getComputedStyle(name).fontSize) * 1.5, cut: getComputedStyle(name).textOverflow },
+        pill: Math.round(pill.width),
+        side: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    };
+    for (const [who, sid, whole] of [['the demo account', paid.sid, [360, 390]], ['a 30-character name', long.sid, []]]) {
+      for (const width of [320, 360, 390]) {
+        const at = `${who} at ${width}`;
+        const context = await browser.newContext({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true });
+        await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
+        const page = await context.newPage();
+        await page.goto(`${base}/posts`, { waitUntil: 'load' });
+        const m = await page.evaluate(bar);
+        assert.ok(m.order, `${at}: the logo, the account, the month's count, the switch and signing out, in that order`);
+        assert.ok(m.gaps.every((g) => g >= 8), `${at}: 8px or more between them (${m.gaps})`);
+        assert.deepEqual(m.gaps.slice(2), [8, 8], `${at}: the switch 8px from the count and from signing out`);
+        assert.deepEqual(m.theme, m.logout, `${at}: the switch the size of signing out`);
+        assert.deepEqual(m.theme, [40, 40]);
+        assert.ok(m.inside, `${at}: all of it inside the bar`);
+        assert.equal(m.height, 56, `${at}: the bar one line high`);
+        assert.equal(m.overflow, 0, `${at}: nothing past the bar`);
+        assert.equal(m.side, 0, `${at}: no sideways scroll`);
+        assert.ok(m.name.oneLine, `${at}: the name on one line`);
+        if (whole.includes(width)) assert.ok(m.name.shown >= m.name.needs, `${at}: the name whole (${m.name.shown} of ${m.name.needs}px)`);
+        else assert.equal(m.name.cut, 'ellipsis', `${at}: a name that does not fit is cut short with an ellipsis (${m.name.shown} of ${m.name.needs}px)`);
+        // The bar is the same before the script shows the switch: its place is kept, so nothing moves when it appears.
+        const still = await browser.newContext({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, javaScriptEnabled: false });
+        await still.addCookies([{ name: 'of_session', value: sid, url: base }]);
+        const before = await still.newPage();
+        await before.goto(`${base}/posts`, { waitUntil: 'load' });
+        assert.equal(await before.evaluate(() => getComputedStyle(document.querySelector('.top .theme')).visibility), 'hidden', `${at}: without the script the switch is not offered`);
+        assert.equal((await before.evaluate(bar)).pill, m.pill, `${at}: the account's pill as wide before the script as after`);
+        await still.close();
+        await context.close();
+      }
+    }
+
+    // A desk: the switch at the end of the sign-out row at the foot of the side bar; with the side bar folded, a third
+    // icon in its column. 8px from the month's count and from signing out either way.
+    for (const side of [null, 'mini']) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await context.addCookies([{ name: 'of_session', value: paid.sid, url: base }, ...(side ? [{ name: 'of_side', value: side, url: base }] : [])]);
+      const page = await context.newPage();
+      await page.goto(`${base}/`, { waitUntil: 'load' });
+      const m = await page.evaluate(() => {
+        const box = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
+        const [wrap, spend, theme, logout] = ['.top .wrap', '.top .spend', '.top .theme', '.top .logout'].map(box);
+        const gap = (a, b) => Math.round(Math.max(b.left - a.right, a.left - b.right, b.top - a.bottom, a.top - b.bottom));
+        return { shown: getComputedStyle(document.querySelector('.top .theme')).visibility === 'visible', spend: gap(spend, theme), logout: gap(theme, logout), row: Math.abs(theme.top - logout.top) < 2 && theme.right <= logout.left, column: theme.top >= spend.bottom && logout.top >= theme.bottom, inside: theme.left >= wrap.left && theme.right <= wrap.right && theme.bottom <= wrap.bottom };
+      });
+      const at = side ? 'a desk, the side bar folded' : 'a desk';
+      assert.equal(m.shown, true, at);
+      assert.ok(m.spend >= 8 && m.logout >= 8, `${at}: 8px or more from the count (${m.spend}) and from signing out (${m.logout})`);
+      assert.ok(side ? m.column : m.row, `${at}: ${side ? 'between the count and signing out, in the column' : 'on the sign-out row, at its end'}`);
+      assert.ok(m.inside, `${at}: in the side bar`);
+      await page.click('.top .theme');
+      assert.equal(await page.getAttribute('html', 'data-theme'), 'dark', `${at}: and it works there`);
       await context.close();
     }
   } finally {

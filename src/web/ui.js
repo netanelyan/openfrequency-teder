@@ -81,10 +81,11 @@ export const htmlOpen = (theme, cls = '') => `<html lang="he" dir="rtl" data-the
 export const themeMeta = (theme) => `<meta name="color-scheme" content="${themeIs(theme)}"><meta name="theme-color" content="${THEME_COLOR[themeIs(theme)]}">`;
 /**
  * The switch, the website's own button (openfrequency-web src/layout.mjs themeButton): a moon while light, a sun while
- * dark, one name, pressed while dark. Hidden until static/theme.js runs it, so without script nothing is offered.
+ * dark, one name, pressed while dark. Invisible until static/theme.js runs it (it marks it .on), so without script
+ * nothing is offered; its place is kept meanwhile, so nothing beside it moves when it appears.
  */
 export const themeButton = (theme) =>
-  `<button class="theme" type="button" data-theme-toggle aria-pressed="${themeIs(theme) === 'dark'}" aria-label="מצב כהה" hidden><svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>`;
+  `<button class="theme" type="button" data-theme-toggle aria-pressed="${themeIs(theme) === 'dark'}" aria-label="מצב כהה"><svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>`;
 export const themeScript = (v = 1) => `<script type="module" src="/static/theme.js?v=${v}"></script>`;
 
 /**
@@ -205,8 +206,8 @@ export function layout(ctx, body) {
   const taken = Number(q.used) || 0;
   const used = limit ? Math.min(100, Math.round((taken / limit) * 100)) : 0;
   const ring = `<svg class="ring${used >= 90 ? ' bad' : used >= 75 ? ' warn' : ''}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
-  // Light or dark as the browser chose on any of the sites (themeOf); the switch is in the corner, beside the
-  // accessibility button, on every page.
+  // Light or dark as the browser chose on any of the sites (themeOf); the switch is in the bar on every page, between
+  // the month's count and signing out on a phone, on the sign-out row at the foot of the side bar on a desk.
   return `<!doctype html>
 ${htmlOpen(ctx.theme, ctx.side === 'mini' ? 'side-mini' : '')}
 <head>
@@ -230,6 +231,7 @@ ${SPRITE}
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
     <a class="spend" href="/settings#plan" title="הצעות החודש: ${taken} מתוך ${limit}">${ring}<span class="lbl">הצעות</span><span class="amt num ltr"><b>${taken}</b><span> / ${limit}</span></span></a>
+    ${themeButton(ctx.theme)}
     ${ctx.links?.logout ? `<a class="logout" href="${esc(ctx.links.logout)}" title="יציאה">${icon('logout')}<span class="lbl">יציאה</span></a>` : ''}
   </div>
 </div></header>
@@ -240,7 +242,7 @@ ${body}
 </main>
 <nav class="tabbar" aria-label="ניווט">${tabs}</nav>
 <div id="toast" role="status" aria-live="polite"></div>
-<div class="corner">${themeButton(ctx.theme)}${a11yWidget()}</div>
+${a11yWidget()}
 ${themeScript(ctx.v || 1)}
 <script src="/static/app.js?v=${ctx.v || 1}" defer></script>
 </body>
