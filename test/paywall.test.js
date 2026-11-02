@@ -138,10 +138,12 @@ test('allowed is the only thing acted on, and a change is logged once', async ()
 
 const GATE_TEXT = 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.';
 
-test('the website: a workspace that has not paid sees where to read how to pay, its new-account flow too; the operator never does', async () => {
+test('the website: a workspace that has not paid sees where to read how to pay; the operator never does', async () => {
   fake.entitlement(2, 'unpaid');
   const unpaid = fake.session(customer(2)).cookie;
-  for (const p of ['/', '/posts', '/new', '/settings', '/accounts']) {
+  // Its account was live (bravo): the paywall as it always was. The new-account flow is open before paying (the owner,
+  // 2026-11-02; test/setup-before-pay.test.js), and here it says the one account is already open.
+  for (const p of ['/', '/posts', '/settings', '/accounts']) {
     const res = await fetch(`${base}${p}`, { headers: { cookie: unpaid }, redirect: 'manual' });
     assert.equal(res.status, 402, p);
     const html = await res.text();
@@ -154,6 +156,9 @@ test('the website: a workspace that has not paid sees where to read how to pay, 
     assert.doesNotMatch(html, /bravo/i, `${p}: nothing of the product`);
     assert.doesNotMatch(html, /[—–]/);
   }
+  const fresh = await fetch(`${base}/new`, { headers: { cookie: unpaid }, redirect: 'manual' });
+  assert.equal(fresh.status, 200, '/new: open before paying');
+  assert.match(await fresh.text(), /עוד חשבון הוא עוד מנוי/, 'and its one account is open already');
   // A button is refused too, before anything else is looked at.
   const res = await fetch(`${base}/posts/approve-all`, { method: 'POST', headers: { cookie: unpaid, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: 'ids=x' });
   assert.equal(res.status, 402);

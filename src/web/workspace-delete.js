@@ -107,8 +107,9 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
     db.run(`DELETE FROM sources WHERE account_id IN ${inIds}`, ...ids);
     deleted.onboarding = db.run(`DELETE FROM onboarding WHERE workspace_id = ? OR pack_id IN ${inIds}`, workspaceId, ...ids).changes;
     for (const t of ['push_subs', 'assistant_events', 'assistant_prefs']) db.run(`DELETE FROM ${t} WHERE workspace_id = ?`, workspaceId);
-    // The settings kept per workspace (the payment answer, the email choices and what was sent) and per account.
-    db.run("DELETE FROM settings WHERE key = ? OR key = ? OR key LIKE ? ESCAPE '\\' OR key LIKE ? ESCAPE '\\'", `entitlement:${workspaceId}`, `email:prefs:${workspaceId}`, `email:sent:%:${workspaceId}:%`, `email:sent:%:${workspaceId}`);
+    // The settings kept per workspace (the payment answer, what its setup spent before paying, the email choices and
+    // what was sent) and per account.
+    db.run("DELETE FROM settings WHERE key = ? OR key = ? OR key = ? OR key LIKE ? ESCAPE '\\' OR key LIKE ? ESCAPE '\\'", `entitlement:${workspaceId}`, `setup-spend:${workspaceId}`, `email:prefs:${workspaceId}`, `email:sent:%:${workspaceId}:%`, `email:sent:%:${workspaceId}`);
     for (const id of ids) {
       const like = id.replace(/[\\%_]/g, (c) => `\\${c}`);
       db.run("DELETE FROM settings WHERE key LIKE ? ESCAPE '\\' OR key LIKE ? ESCAPE '\\'", `%:${like}`, `%:${like}:%`);

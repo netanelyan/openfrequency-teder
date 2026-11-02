@@ -31,6 +31,41 @@ rather than being tried again in a loop, and inside a post the calls are bounded
 most 6 documents per format offered to the outline, one redraft, two repair rounds,
 two rewrite passes, a replacement tried twice at most).
 
+## Setting up before paying (2026-11-02)
+
+A customer who signed up and has not paid may set the account up and see its samples
+(the owner, item 2 of the audit: "Keep the per-workspace budget so unpaid onboarding
+can't run up costs. Set a cap for unpaid accounts, and show it to me"). What one
+normal setup costs, counted from the code's own calls and priced at `pricing.js`
+(estimated, nothing spent to measure it):
+
+| Step | Calls | Cost |
+|---|---|---|
+| The search for sources (`src/onboarding/discover.js`) | Haiku 5.5: the niche in English (200 tokens out at most), the niche's sites (about 600 in, 1,500 out), scoring the candidates (about 6,000 in, 2,500 out); Brave: up to 6 searches at $0.005, cached 30 days | about **$0.035** (the Claude part $0.003, $0.007 at the most it may write); a niche searched before costs almost nothing on Brave |
+| Creating the account (`src/onboarding/pack.js`) | Sonnet 5.5, the voice (about 2,500 in, 2,000 out, 8,000 at most); Haiku 5.5, the scenes | about **$0.03** ($0.09 at the most) |
+| One round of samples (`src/web/onboarding.js`) | a whole post each (outline, details, slides and their redraft, review, rewrite, the photographs' checks, drawn twice), up to 9 tries for 5 | about **$1.42** |
+| **One normal setup** | | **about $1.50** |
+
+A sample's price: the measured $0.079 a try (section below, 147 tries) is at the
+Message Batches price; the samples are direct calls, which cost twice that, **about
+$0.16 a try** ($0.15 to $0.17). At the measured pass rate (79 of 147, 54%) five
+samples take about nine tries, so a round normally uses all nine of SAMPLE_ATTEMPTS.
+
+**The cap: $3.50 a workspace** while it has not paid (`src/billing/setup-cap.js`
+UNPAID_SETUP_USD, `OF_UNPAID_SETUP_USD` to change it). That is one normal setup and
+one more full round of samples ($2.90), with about $0.60 left for searching again.
+It is weighed before each paid step, so the step that crosses it finishes: a
+workspace costs at most the cap and one sample, about $3.66 ($3.90 if that sample is
+the dearest kind, two repair rounds and two rewrite passes). It is spent once, not a
+month. Without it, the limits that were already there (two rounds of samples a new
+account, one account a customer) held the samples to about $2.85, but searching again
+and rounds that broke on our side were not counted at all.
+
+What is counted is the spend ledger's own figure for every call made inside the setup
+(`settings` key `setup-spend:<workspace>`). On a laptop the Claude Code CLI's calls are
+counted at the batched price the ledger gives them (`api_usd`), so a sample counts
+about half there of what it counts on the server.
+
 The sections below are the measurements as they were made. The ones that speak of a
 cap ($15, then $20), of shares and of the planner cutting volume describe the engine
 before 2026-10-24.

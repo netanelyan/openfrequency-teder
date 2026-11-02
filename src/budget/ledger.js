@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { monthKey, now, nowIso } from '../core/clock.js';
 import { BATCH_FACTOR, MODEL_RATES } from './pricing.js';
 
@@ -54,10 +55,26 @@ export function monthSpend(db, accountId, t = now()) {
   return { usd: row.usd, calls: row.calls, month };
 }
 
+const meters = new AsyncLocalStorage();
+
 export function record(db, { accountId = null, postId = null, api, model = null, units = 1, usd, estimated = false, tag = null, t = now(), batch = false, usage = null, apiUsd = null }) {
   db.insert('spend', { account_id: accountId, post_id: postId, api, model, units, usd, estimated: estimated ? 1 : 0, tag, month: monthKey(t), at: nowIso(), batch: batch ? 1 : 0, usage_json: usage, api_usd: apiUsd });
+  // A meter around the work this call is part of hears what it cost (src/billing/setup-cap.js: the setup of a workspace
+  // that has not paid). A call answered by the Claude Code CLI costs nothing here and is told at its API price, so the
+  // meter counts on a laptop what it would count on the server.
+  const meter = meters.getStore();
+  if (meter) {
+    const cost = Math.max(Number(usd) || 0, Number(apiUsd) || 0);
+    if (cost > 0) meter(cost);
+  }
   return usd;
 }
+
+/**
+ * Run `fn` with every spend recorded inside it, however deep and however long after (its awaits, its timers), also told
+ * to `onSpend(usd)`. Nothing is refused here: the meter only counts, and whoever holds it decides what to do with that.
+ */
+export const meterSpend = (onSpend, fn) => meters.run(onSpend, fn);
 
 /**
  * What a call answered by the Claude Code CLI would cost through the API, from

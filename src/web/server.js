@@ -13,7 +13,7 @@ import { forWorkspace, owns } from './workspace.js';
 import * as data from './data.js';
 import * as pages from './pages.js';
 import * as act from './actions.js';
-import { onboardingRoutes } from './onboarding.js';
+import { beforePaying, onboardingRoutes } from './onboarding.js';
 import { previewFile, stylesRoutes } from './styles.js';
 import { demoPage, demosFeed, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicDemo, recordOpen, sendPreview, sendSlide, visitorOf } from './demos.js';
 import { loadPost } from '../pipeline/build.js';
@@ -49,8 +49,9 @@ import { themeOf } from './ui.js';
 //     that is ours; a read-only session (the operator viewing as a customer)
 //     changes nothing
 //   - a customer's workspace that has not paid for Teder (accounts' /internal/entitlement, src/billing/entitlement.js)
-//     gets the paywall page instead of the product, its onboarding included; the operator, the operator viewing
-//     as a customer, and the people of one of the company's own workspaces (OF_OWN_WORKSPACES), never do
+//     gets the paywall page instead of the product, except the new-account flow up to its samples (SETUP_OPEN below):
+//     going live and connecting stay behind it. The operator, the operator viewing as a customer, and the people of
+//     one of the company's own workspaces (OF_OWN_WORKSPACES), never do
 // /internal/lead, /internal/demos, /internal/setup and /internal/workspaces/<id>/delete are for services on this machine
 // with OF_INTERNAL_TOKEN (src/web/demos.js fromWebsite, src/web/setup.js, src/web/workspace-delete.js). Three more doors need no session. /internal/assistant/* is the WhatsApp assistant's
 // API (src/assistant/api.js): this machine only, never through the proxy, every
@@ -110,6 +111,24 @@ const factDates = () => {
 
 /** The answer to a POST from a read-only session (accounts' view-as). */
 const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.';
+
+/**
+ * Setting up before paying (the owner, 2026-11-02, item 2 of the audit: "a customer who signed up and hasn't paid can go
+ * through /new (niche, sources, samples) and see the samples. The paywall blocks only going live and connecting
+ * accounts"). What a customer whose workspace has not paid may open: the new-account flow's pages and the steps up to
+ * its samples (the search, searching again, the name, the days and times, choosing the sources and creating the
+ * account, the samples, "עברתי על הדוגמאות"), its own slides, and the accounts' colours. Everything else is the paywall,
+ * by default: going live (/new/<id>/live, approving, publishing, the account's mode and days and times), connecting
+ * (/new/<id>/connect/..., /new/<id>/connections, /accounts/<id>/connect/...) and every other page and button. What the
+ * setup may spend before paying is capped (src/billing/setup-cap.js).
+ */
+const SETUP_OPEN = [
+  ['GET', /^\/new(\/[\w-]+(\/status)?)?$/],
+  ['POST', /^\/new(\/[\w-]+\/(retry|more|name|schedule|create|samples|reviewed))?$/],
+  ['GET', /^\/media\/[\w-]+\/(tiktok|instagram)\/\d+$/],
+  ['GET', /^\/static\/accounts\.css$/],
+];
+export const setupOpen = (method, p) => SETUP_OPEN.some(([m, re]) => (m === method || (m === 'GET' && method === 'HEAD')) && re.test(p));
 
 /** Where "back" goes on an error page: the page the browser came from, on this site, or home. */
 function backOf(req, host) {
@@ -328,15 +347,17 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // workspace viewed, read-only, like everyone with a workspace.
       const operator = a.role === 'superadmin' && !a.workspace;
       const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
-      // The paywall: a customer whose workspace has not paid sees where to read how to pay, not the product. With no
-      // answer to go by (accounts has not answered for a day, or never), the page says the check failed rather than ask
-      // them to pay. The operator viewing as the customer (read-only) sees what is there. One of the company's own
-      // workspaces is not a customer's, and accounts is not asked about it (src/billing/own.js).
+      // The paywall: a customer whose workspace has not paid sees where to read how to pay, not the product, except the
+      // new-account flow up to its samples (SETUP_OPEN), and the paywall shows those samples once there are some. With
+      // no answer to go by (accounts has not answered for a day, or never), the page says the check failed rather than
+      // ask them to pay, and nothing is open. The operator viewing as the customer (read-only) sees what is there. One of
+      // the company's own workspaces is not a customer's, and accounts is not asked about it (src/billing/own.js).
       const ent = !operator && !user.viewAs && a.workspace && customerWorkspace(a.workspace.id) ? await paid.check(a.workspace.id) : null;
-      if (ent && !ent.allowed) {
+      const unpaid = Boolean(ent && !ent.allowed && ent.known);
+      if (ent && !ent.allowed && !(unpaid && setupOpen(req.method, p))) {
         const kind = ent.known ? 'unpaid' : 'error';
         if (!reading) return json(req, res, ent.known ? 402 : 503, { ok: false, message: pages.GATE[kind].text, ...(ent.known ? { pay: links.setup } : {}) });
-        return send(req, res, ent.known ? 402 : 503, pages.gatePage({ v: V, kind, links, theme }));
+        return send(req, res, ent.known ? 402 : 503, pages.gatePage({ v: V, kind, links, theme, setup: unpaid ? beforePaying(ctx, a.workspace.id) : null }));
       }
       const c = operator ? ctx : forWorkspace(ctx, a.workspace.id);
       const csrf = csrfFor(sid, secret);
@@ -446,7 +467,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const clearFlash = setCookies.length ? { 'set-cookie': setCookies } : {};
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator };
+        // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);

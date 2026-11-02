@@ -263,6 +263,27 @@ says which keys are set without showing them.
   EDIT_CHECKS_PER_DAY); past that the edit is refused for the day with a Hebrew line that says so. The operator is not
   limited, nor is one of our own workspaces (`OF_OWN_WORKSPACES`, below).
 
+### Setting up before paying, and its cap: $3.50 a workspace
+
+- **What it is.** A customer who signed up and has not paid goes through /new (the niche, the sources, the name, the
+  days and times, the samples, "עברתי על הדוגמאות") and sees the samples; every other page is the paywall, which shows
+  those samples with "המצגות שלכם מוכנות, נשאר רק להפעיל" and the button to accounts' /setup. Going live, approving,
+  publishing and connecting TikTok, Instagram or a Facebook Page stay behind it, the signed connect link included
+  (src/web/server.js SETUP_OPEN, src/web/connect.js publicConnect). What that setup may cost us is capped: the search
+  for sources, creating the account and every sample written count, in dollars, from the spend ledger
+  (src/billing/setup-cap.js). Past $3.50 nothing more starts: the page says the samples are ready and the rest opens
+  after activating, and a search or another round is refused with the same words. The step that crosses the cap
+  finishes, so a workspace costs at most the cap and one sample (about $0.16, $0.40 at the very worst). Not a month's
+  allowance: it is not renewed. The per-workspace limits on rounds of samples (two a new account, six a month) stand
+  as they are. Where $3.50 comes from: docs/costs.md, "Setting up before paying".
+- **Where it shows.** `settings`, key `setup-spend:<workspace>` = { usd, calls, at }: what the workspace's setup spent
+  while it had not paid. The log says "[onboarding] ... stopped before try N: the setup of a workspace that has not paid
+  reached its cap". A workspace that pays (paid, comp or due), one of ours and the operator are never counted or
+  stopped; what the operator asks for on a customer's setup is not counted either.
+- **What to do.** To change the cap for everyone, set `OF_UNPAID_SETUP_USD` (dollars, 0 or more; 0 lets nothing paid run
+  before paying) in the service's .env and restart. To give one prospect another try, lower their tally:
+  `DELETE FROM settings WHERE key = 'setup-spend:<workspace>'`, or set its usd lower.
+
 ### What is deleted on its own, and when
 
 - **What it is.** One pass a day in the runner (src/billing/retention.js), from the periods on the privacy page:

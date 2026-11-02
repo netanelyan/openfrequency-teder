@@ -370,15 +370,17 @@ test('the new routes keep to their workspace, and to the paywall', async () => {
   assert.equal((await get('/new/o-iso/status', A)).status, 404);
   assert.deepEqual(setupOf(db, 'o-iso'), {}, 'nothing of B changed');
   assert.equal(Z.profiles.filter((x) => x.externalId === 'o-iso').length, 0);
-  // Unpaid: the paywall, before anything.
+  // Unpaid: the setup is open before paying (the owner, 2026-11-02; test/setup-before-pay.test.js), and connecting is
+  // the paywall's, before anything.
   fake.entitlement(2, 'unpaid');
   const B = fake.session(customer(2)).cookie;
-  assert.equal((await get('/new/o-iso/status', B)).status, 402);
-  const csrf = /name="_csrf" value="([^"]+)"/.exec(await (await get('/new', fake.session(customer(1)).cookie)).text());
-  assert.ok(csrf);
-  const r = await fetch(`${base}/new/o-iso/name`, { method: 'POST', headers: { cookie: B, 'content-type': 'application/x-www-form-urlencoded', origin: base, 'x-of-ajax': '1' }, body: 'displayName=x&handle=xx' });
-  assert.equal(r.status, 402);
+  assert.equal((await get('/new/o-iso/status', B)).status, 200);
+  for (const p of ['/new/o-iso/connect/tiktok', '/new/o-iso/connect/instagram', '/new/o-iso/connections']) {
+    const r = await fetch(`${base}${p}`, { method: 'POST', headers: { cookie: B, 'content-type': 'application/x-www-form-urlencoded', origin: base, 'x-of-ajax': '1' }, body: '' });
+    assert.equal(r.status, 402, p);
+  }
   assert.deepEqual(setupOf(db, 'o-iso'), {});
+  assert.equal(Z.profiles.filter((x) => x.externalId === 'o-iso').length, 0, 'no Zernio profile made for it');
   fake.entitlement(2, null);
   // The return from Zernio is signed for its onboarding alone.
   const link = new URL(onboardingDoneLink(SECRET, { base, onboardingId: 'o-iso', platform: 'tiktok' }));

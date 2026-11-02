@@ -2151,3 +2151,35 @@ Its script, static/theme.js, flips the page at once, writes the cookie and the c
 elsewhere when a tab is looked at again; the CSP is unchanged (a static module, nothing inline). The old POST /theme and
 its of_theme cookie, unused since the switch went, are gone. The slides the renderer draws and the emails are as they
 were. The footer is the mark and the name, not the website's dark panel, so it stays as it is.
+
+### Setting up before paying, under a cap (2026-11-02)
+
+Item 2 of the owner's audit: "Setup before paying: a customer who signed up and hasn't paid can go through /new (niche,
+sources, samples) and see the samples. The paywall blocks only going live and connecting accounts. The paywall's copy
+shows the samples ("המצגות שלכם מוכנות, נשאר רק להפעיל"). Keep the per-workspace budget so unpaid onboarding can't run
+up costs. Set a cap for unpaid accounts, and show it to me."
+
+1. *What is open.* The paywall stayed the default: a workspace that has not paid gets it on every page and button except
+   a short list (src/web/server.js SETUP_OPEN): /new and an onboarding's page and status, and its steps up to the
+   samples (search, search again with more sites, the name, the days and times, choosing the sources and creating the
+   account, the samples, "עברתי על הדוגמאות"), its own slides and the accounts' colours. Going live (/new/<id>/live,
+   approving, publishing, the account's mode, days and times and resume) and connecting (/new/<id>/connect/...,
+   /new/<id>/connections, /accounts/<id>/connect/...) are not on it, and the signed connect link that needs no session
+   refuses an unpaid workspace's account too (src/web/connect.js publicConnect). A list of what is open, not of what is
+   shut, so a page added later is behind the paywall until someone says otherwise. Accounts not answering is still the
+   error page, with nothing open: a check that failed is not an unpaid customer.
+2. *The pages say it.* Before paying, the onboarding pages offer nothing that leads to the paywall: no connect buttons
+   (a line that it comes after activating), no going live, no designs page, no account days and times after the account
+   exists (they were offered before it), no editing a sample and no way to the sources page. Once three samples passed,
+   or at the cap, a banner says "המצגות שלכם מוכנות, נשאר רק להפעיל" with accounts' /setup button. The paywall itself,
+   while the setup is not done, shows the first slide of each sample (six at most) with the same line and the one
+   primary button, how to pay; before any sample, it leads to the setup. A customer whose account was live and who
+   stopped paying sees the paywall exactly as before.
+3. *The cap.* The per-workspace limits stay (two rounds of samples a new account, six a month, one account a customer).
+   Over them, while the workspace has not paid, its setup may spend $3.50 in all (src/billing/setup-cap.js
+   UNPAID_SETUP_USD, OF_UNPAID_SETUP_USD to change it): one normal setup is about $1.50 (docs/costs.md, "Setting up
+   before paying"), and $3.50 is that and one more full round, with room to search again. Counted in dollars, from the
+   spend ledger: a meter follows the setup's work (src/budget/ledger.js meterSpend) and hears every call recorded inside
+   it, however deep, so a call added to the search or the samples later is counted without anyone remembering to. It is
+   weighed before each paid step (a search, creating the account, each sample), so the step that crosses it finishes
+   and nothing starts after it. Paid, comp and due workspaces, ours and the operator are never counted or stopped.

@@ -4,6 +4,7 @@ import { TIKTOK_MODES } from '../packs/validate.js';
 import { setPackPublishing } from '../packs/write.js';
 import { tiktokMode, wantedPublisher } from '../publish/index.js';
 import { isCustomerAccount } from '../autonomy/rails.js';
+import { accountAllowed } from '../billing/entitlement.js';
 import { OWN_APP } from '../publish/tiktok-app.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { GONE, carryOnboardingZernio, connectLink, connectLinkOk, connectState, doneLink, doneLinkOk, holdPick, onboardingDoneLinkOk, profileIdOf, refreshConnections, refreshOnboardingConnections, selectionOf, startConnect, takePick, zernioCost } from '../publish/connect.js';
@@ -389,6 +390,9 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const pack = ctx.pack(account);
   const sig = { accountId: account, platform, e: query.get('e'), s: query.get('s'), t };
   if (!pack || !(done ? doneLinkOk(secret, sig) : connectLinkOk(secret, sig))) return [404, expired(account, theme)];
+  // Connecting is the paywall's (src/web/server.js SETUP_OPEN): a customer's workspace that has not paid connects
+  // nothing, from this link either. Coming back from Zernio (done) finishes a connect started while it could.
+  if (!done && !accountAllowed(ctx.db, pack.id, t)) return [402, resultPage({ theme, title: 'החיבור נפתח אחרי ההפעלה', text: 'אפשר לחבר את טיקטוק, אינסטגרם ופייסבוק אחרי שתדר מופעל בחשבון שלכם.' })];
   const name = PLATFORM_NAME[platform];
   if (!zernioConfigured()) return [503, resultPage({ theme, title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;

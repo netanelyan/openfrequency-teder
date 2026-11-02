@@ -288,7 +288,7 @@ ${strip(post)}
 ${trustLine(post)}
 <div class="actions">
 ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary', ajax: 'remove' }) : ''}
-${EDITABLE.includes(post.status) ? `<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}לערוך</a>` : ''}
+${EDITABLE.includes(post.status) && !ctx.unpaid ? `<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}לערוך</a>` : ''}
 ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button>` : ''}
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 </div>
@@ -1243,21 +1243,51 @@ export const GATE = {
   unpaid: { title: 'תדר מחכה לתשלום', text: 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
 };
 
-export function gatePage({ kind, links, v = 1, theme = 'light' }) {
+/** The owner's line for a customer whose samples are ready and who has not paid yet (2026-11-02, the audit's item 2). */
+export const READY_LINE = 'המצגות שלכם מוכנות, נשאר רק להפעיל';
+
+/**
+ * The paywall while the setup is not done (src/web/onboarding.js beforePaying): the new-account flow is open before
+ * paying (src/web/server.js SETUP_OPEN), so the page shows its samples once there are some, else the way to set up.
+ */
+export const BEFORE_PAY_HE = {
+  ready: 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים.',
+  setup: 'תדר נפתח אחרי שהתשלום מגיע אלינו. עד אז אפשר כבר להקים את החשבון ולראות פוסטים לדוגמה.',
+  all: 'לכל הפוסטים לדוגמה',
+};
+
+/**
+ * `setup`, for the paywall (kind 'unpaid') only: what beforePaying gave, { href, started, samples: [{ src, alt }] }. With
+ * samples: the owner's line, the first slide of each, and the way to pay. Without: that the setup can be done meanwhile,
+ * and the way there. None (a customer whose account was live and who stopped paying): the paywall as it was.
+ */
+export function gatePage({ kind, links, v = 1, theme = 'light', setup = null }) {
   const g = GATE[kind] || GATE.error;
+  const before = kind === 'unpaid' && setup ? setup : null;
+  const ready = before?.samples?.length ? before : null;
   const actions =
     kind === 'error'
       ? '<a class="btn primary" href="">לנסות שוב</a>'
+      : before && !ready
+        ? `<a class="btn primary" href="${esc(before.href)}">${before.started ? 'להמשיך בהקמת החשבון' : 'להקים את החשבון'}</a><a class="btn" href="${esc(links.setup)}">איך משלמים</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'unpaid'
         ? `<a class="btn primary" href="${esc(links.setup)}">איך משלמים</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'not_in_plan'
         ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
         : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;
-  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<title>${esc(g.title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
-<body class="login"><main class="card">${themeButton(theme)}
+  const title = ready ? READY_LINE : g.title;
+  // Before the setup is done nothing is wrong: the title is said plainly, not in the red box of a refusal.
+  const head = before ? `<h1>${esc(title)}</h1>` : `<h1 class="err" role="alert">${esc(g.title)}</h1>`;
+  const body = ready
+    ? `<ul class="paysamples" aria-label="פוסטים לדוגמה">${ready.samples.map((s) => `<li><img src="${esc(s.src)}" alt="${esc(s.alt)}" width="270" height="480" decoding="async"></li>`).join('')}</ul>
+<p class="small"><a href="${esc(ready.href)}#samples">${esc(BEFORE_PAY_HE.all)}</a></p>
+<p>${esc(BEFORE_PAY_HE.ready)}</p>`
+    : `<p>${esc(before ? BEFORE_PAY_HE.setup : g.text)}</p>`;
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
+<body class="login"><main class="card${ready ? ' paywall' : ''}">${themeButton(theme)}
 <div class="hero">${tederMark()}<b>תדר</b></div>
-<h1 class="err" role="alert">${esc(g.title)}</h1>
-<p>${esc(g.text)}</p>
+${head}
+${body}
 <div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
 }
 

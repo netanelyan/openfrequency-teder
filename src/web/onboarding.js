@@ -1,5 +1,6 @@
 import { monthKey, newId, now, nowIso } from '../core/clock.js';
 import { customerWorkspace } from '../billing/own.js';
+import { meterSetup, setupRoom } from '../billing/setup-cap.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
 import { FEW, discover, offered, strong } from '../onboarding/discover.js';
@@ -14,7 +15,7 @@ import { FORMATS_FEW, formatsSection } from './formats.js';
 import { designPanel } from './styles.js';
 import { lockedStyle } from '../render/style.js';
 import { DEFAULT_PICKED, MIN_PICKED, pickedFrom } from '../formats/library.js';
-import { postCard } from './pages.js';
+import { READY_LINE, postCard } from './pages.js';
 import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
@@ -111,7 +112,10 @@ export const SAMPLE_ROUNDS = { perOnboarding: 2, perWorkspaceMonth: 6 };
 
 const counted = (found) => (found?.rounds || []).filter((x) => x.counted !== false);
 
-/** May this onboarding's customer start another round of samples? { ok, why: null | 'live' | 'onboarding' | 'month' }. */
+/**
+ * May this onboarding's customer start another round of samples? { ok, why: null | 'live' | 'onboarding' | 'month' | 'cap' }.
+ * 'cap': the workspace has not paid and its setup reached the cap for that (src/billing/setup-cap.js).
+ */
 export function sampleRoom(db, r, t = now()) {
   if (r.status === 'live') return { ok: false, why: 'live' };
   if (counted(r.found).length >= SAMPLE_ROUNDS.perOnboarding) return { ok: false, why: 'onboarding' };
@@ -122,7 +126,32 @@ export function sampleRoom(db, r, t = now()) {
       .reduce((n, o) => n + counted(j(o.candidates_json, {})).filter((x) => monthKey(Date.parse(x.at)) === month).length, 0);
     if (used >= SAMPLE_ROUNDS.perWorkspaceMonth) return { ok: false, why: 'month' };
   }
+  if (!setupRoom(db, r.workspace_id ?? null, { t }).ok) return { ok: false, why: 'cap' };
   return { ok: true, why: null };
+}
+
+/**
+ * The setup of a workspace that has not paid reached its cap (src/billing/setup-cap.js): what the customer reads. With
+ * samples, that they are ready and what opens once Teder is paid for; without, that what they built is kept.
+ */
+export const CAP_HE = {
+  more: 'עוד דוגמאות, החיבור לרשתות והעלייה לאוויר נפתחים אחרי ההפעלה.',
+  after: 'אחרי ההפעלה החשבון עולה לאוויר, ואפשר לחבר אותו לטיקטוק, לאינסטגרם ולפייסבוק.',
+  noneTitle: 'ההמשך נפתח אחרי ההפעלה',
+  none: 'מה שכבר בניתם נשמר, ואחרי ההפעלה ממשיכים מאותה נקודה.',
+  connect: 'את החיבור לטיקטוק, לאינסטגרם ולפייסבוק עושים אחרי ההפעלה. כל השאר אפשר לסדר כבר עכשיו.',
+};
+
+/** Samples that passed, in a workspace's accounts. */
+const goodSamples = (db, workspaceId) => db.get("SELECT COUNT(*) AS n FROM posts WHERE sample = 1 AND status = 'sample' AND account_id IN (SELECT id FROM accounts WHERE workspace_id = ?)", workspaceId).n;
+
+/** What a paid step refused at the cap says: the samples are ready, or what was built is kept. */
+const capMessage = (db, workspaceId) => (goodSamples(db, workspaceId) ? `${READY_LINE}. ${CAP_HE.more}` : `${CAP_HE.noneTitle}. ${CAP_HE.none}`);
+
+/** A paid step of the setup (a search, creating the account): refused once a workspace that has not paid reached the cap. */
+function capCheck(ctx, user, workspaceId) {
+  if (user.operator) return;
+  if (!setupRoom(ctx.db, workspaceId ?? null).ok) throw new ActionError(capMessage(ctx.db, workspaceId), 409);
 }
 
 /** Why no more samples, as the customer reads it. */
@@ -130,6 +159,7 @@ export const ROUNDS_HE = {
   live: 'החשבון כבר באוויר. מעכשיו הפוסטים שלו נכתבים כל יום, לפי הימים והשעות שבחרתם.',
   onboarding: `כבר כתבנו לחשבון הזה פוסטים לדוגמה ${SAMPLE_ROUNDS.perOnboarding} פעמים, וזה המקסימום לחשבון חדש. אם צריך עוד דוגמאות, כתבו לנו.`,
   month: `החודש כבר כתבנו לכם פוסטים לדוגמה ${SAMPLE_ROUNDS.perWorkspaceMonth} פעמים, בכל החשבונות החדשים יחד, וזה המקסימום לחודש. אם צריך עוד, כתבו לנו.`,
+  cap: `${READY_LINE}. ${CAP_HE.more}`,
 };
 const running = new Map();
 /** What a running job is doing now: { step, done, total } (src/onboarding/discover.js onProgress, and the samples). */
@@ -156,7 +186,10 @@ const row = (ctx, id, { recover = true } = {}) => {
   return { ...r, seed: j(r.seed_json, {}), found: j(r.candidates_json, {}), notes: j(r.notes_json, []), setup: j(r.setup_json, {}) || {} };
 };
 
-function startDiscovery(ctx, id) {
+/** A paid step, counted against the workspace's setup while it has not paid (src/billing/setup-cap.js); the operator's is not. */
+const metered = (db, r, fn, counts = true) => (counts ? meterSetup(db, r.workspace_id ?? null, fn) : fn());
+
+function startDiscovery(ctx, id, { counted: counts = true } = {}) {
   if (running.has(id)) return;
   const r = row(ctx, id, { recover: false });
   ctx = engine(ctx);
@@ -171,7 +204,7 @@ function startDiscovery(ctx, id) {
     timer.unref?.();
   });
   progress.set(id, { step: 'search' });
-  const found = discover(ctx, r.seed, { ...(ctx.discoverOpts || {}), signal: stop.signal, onProgress: (p) => progress.set(id, p) });
+  const found = metered(ctx.db, r, () => discover(ctx, r.seed, { ...(ctx.discoverOpts || {}), signal: stop.signal, onProgress: (p) => progress.set(id, p) }), counts);
   const job = Promise.race([found, timeout])
     .then((out) => {
       // The niche's English words, found by the model, are kept with the seed for the pack (YouTube's search).
@@ -216,11 +249,12 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
   let round = null;
   const save = (samples) => {
     const now = row(ctx, id, { recover: false });
-    // A round that wrote nothing because something broke on our side is not the customer's.
-    const rounds = (now.found.rounds || []).map((x) => (x.at === round && samples.failure === 'error' && !samples.made ? { ...x, counted: false } : x.at === round ? { ...x, made: samples.made } : x));
+    // A round that wrote nothing because something broke on our side, or because the setup's cap stopped it before
+    // paying, is not the customer's.
+    const rounds = (now.found.rounds || []).map((x) => (x.at === round && ['error', 'cap'].includes(samples.failure) && !samples.made ? { ...x, counted: false } : x.at === round ? { ...x, made: samples.made } : x));
     ctx.db.update('onboarding', id, { status: now.status === 'ready' || now.status === 'live' ? now.status : 'samples', candidates_json: { ...now.found, rounds, samplesFailed: Boolean(samples.failure), samples }, notes_json: [...now.notes, ...notes], updated_at: nowIso() });
   };
-  const job = (async () => {
+  const job = metered(ctx.db, r, async () => {
     const before = count();
     progress.set(id, { step: 'read' });
     const got = await read(ctx, pack);
@@ -241,7 +275,14 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     const at = row(ctx, id, { recover: false });
     ctx.db.update('onboarding', id, { candidates_json: { ...at.found, rounds: [...(at.found.rounds || []), { at: round, by: counts ? 'customer' : 'operator', ...(counts ? {} : { counted: false }) }] }, updated_at: nowIso() });
     progress.set(id, { step: 'write', done: 0, total: SAMPLE_TARGET });
+    let capped = false;
     while (count() - before < SAMPLE_TARGET && tries < SAMPLE_ATTEMPTS) {
+      // A workspace that has not paid stops at its setup's cap (src/billing/setup-cap.js), before the next sample costs.
+      if (counts && !setupRoom(ctx.db, r.workspace_id ?? null).ok) {
+        capped = true;
+        say(`stopped before try ${tries + 1}: the setup of a workspace that has not paid reached its cap`);
+        break;
+      }
       tries++;
       let res;
       try {
@@ -268,11 +309,11 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
       }
     }
     const made = count() - before;
-    const failure = made >= SAMPLE_ENOUGH ? null : errors >= 2 ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
+    const failure = made >= SAMPLE_ENOUGH ? null : capped ? 'cap' : errors >= 2 ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
     if (made < SAMPLE_TARGET && ctx.mode === 'recorded') notes.push(RECORDED_NOTE);
     say(`${made} sample(s) in ${tries} tries${failure ? `, failed: ${failure}` : ''}`);
     return save({ made, failure, at: nowIso() });
-  })()
+  }, counts)
     .catch((e) => {
       say(`the samples stopped: ${e.stack || e.message}`);
       notes.push(String(e.message));
@@ -420,9 +461,22 @@ const obConnectData = (ctx, r) => ({
 });
 
 function connectSection(ctx, pc, r) {
+  // Before paying, connecting is the paywall's (src/web/server.js SETUP_OPEN): said, with no button that leads to it.
+  if (pc.unpaid) return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header><p class="muted m0">${esc(CAP_HE.connect)}</p></section>`;
   return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header>
 <p class="muted">אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. כשהחשבון ייווצר החיבור יעבור אליו, ולא תצטרכו לחבר שוב.</p>
 ${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`;
+}
+
+/**
+ * Before paying (the owner, 2026-11-02: "המצגות שלכם מוכנות, נשאר רק להפעיל"): the samples are ready and the rest opens
+ * once Teder is paid for, with the paywall's own way to pay (accounts' /setup page). `capped`: the setup reached its cap
+ * (src/billing/setup-cap.js), so more samples wait too. Without a sample, that what was built is kept.
+ */
+function activateBanner(pc, { good, capped }) {
+  const pay = `<a class="btn sm primary" href="${esc(pc.links?.setup || '')}">איך משלמים</a>`;
+  if (!good) return `<div class="banner info" id="activate">${icon('check')}<div><b>${esc(CAP_HE.noneTitle)}</b><p>${esc(CAP_HE.none)}</p></div>${pay}</div>`;
+  return `<div class="banner info" id="activate">${icon('check')}<div><b>${esc(READY_LINE)}</b><p>${esc(capped ? CAP_HE.more : CAP_HE.after)}</p></div>${pay}</div>`;
 }
 
 /** The days and times, before the account exists: the onboarding's choice, else the one a new account starts with. */
@@ -439,10 +493,13 @@ function listPage(ctx, pc) {
   // the way back to their account's samples step among them.
   const one = hasAccount(ctx.db, ctx.workspaceId);
   const rows = (ctx.workspaceId == null ? ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20') : ctx.db.all('SELECT * FROM onboarding WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 20', ctx.workspaceId)).map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
+  // Before paying, at the setup's cap: no form for a search that would be refused, the way to pay instead.
+  const capped = !one && !pc.operator && !setupRoom(ctx.db, ctx.workspaceId ?? null).ok;
   return layout(
     { ...pc, title: 'חשבון חדש', active: 'new' },
-    `<div class="head"><h1>חשבון חדש</h1>${one ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים פוסטים לדוגמה.</span>'}</div>
-<div class="cols">${one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
+    `<div class="head"><h1>חשבון חדש</h1>${one || capped ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים פוסטים לדוגמה.</span>'}</div>
+${capped ? activateBanner(pc, { good: goodSamples(ctx.db, ctx.workspaceId), capped: true }) : ''}
+<div class="cols">${capped ? '' : one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
 <div class="actions p0"><a class="btn" href="/accounts">לחשבון שלכם</a></div></section>` : `<section class="panel"><header><h2>מתחילים מכאן</h2></header>
 <p class="muted">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
@@ -516,6 +573,9 @@ const SAMPLES_HE = {
   unreadable: 'לא הצלחנו לקרוא את המקורות שבחרתם. אפשר להוסיף מקורות או לבחור אחרים, או לנסות שוב בעוד כמה דקות.',
   error: 'משהו נתקע אצלנו באמצע הכתיבה. אפשר לנסות שוב.',
   refused: 'הפוסטים שכתבנו לא עברו את הבדיקות שלנו, ולכן לא הראינו אותם. אפשר לנסות שוב, או להוסיף מקורות עם יותר עובדות.',
+  // Stopped at the setup's cap before paying (src/billing/setup-cap.js). While the cap still holds, the page says what
+  // opens after activating instead (activateBanner); this is for once it no longer does.
+  cap: 'הכתיבה נעצרה לפני ההפעלה. אפשר לנסות שוב.',
 };
 
 /** The samples' outcome, said with what helps. `more` is sampleRoom's answer: whether another round may be asked for. */
@@ -523,9 +583,12 @@ function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
   const s = r.found.samples;
   const failed = busy ? null : s ? s.failure : r.found.samplesFailed ? 'error' : null;
   if (!failed) return '';
+  // At the setup's cap before paying, the page says what opens after activating instead (activateBanner).
+  if (more.why === 'cap') return '';
   const made = s?.made || 0;
   const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
-  const toSources = failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
+  // The sources page is behind the paywall before paying (src/web/server.js SETUP_OPEN).
+  const toSources = failed !== 'error' && pack && !pc.unpaid ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
   const again = more.ok ? postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' }) : '';
   return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b>${more.ok ? '' : `<p>${withSupport(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
 }
@@ -533,21 +596,23 @@ function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
 function detailPage(ctx, pc, r) {
   const head = `<div class="head"><div><a class="muted small back" href="/new">${icon('chev')}חשבון חדש</a><h1>${esc(r.seed.niche)}</h1></div><span class="end"><span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span></span></div>`;
   const ops = operatorNotes(pc, r.notes);
+  // Before paying, at the setup's cap (src/billing/setup-cap.js): a search or a new account would be refused.
+  const capped = !pc.operator && !setupRoom(ctx.db, r.workspace_id ?? null).ok;
   if (r.status === 'discovering') {
     return layout(
       { ...pc, title: 'מחפשים מקורות', active: 'new' },
       `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
 <p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
 ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
-<p class="muted mt12">בינתיים אפשר לסדר כאן את השם, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק. מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
+<p class="muted mt12">${pc.unpaid ? 'בינתיים אפשר לסדר כאן את השם ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
 <div class="cols"><div class="grid12">${namePanel(pc, r)}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
     );
   }
   if (r.status === 'failed') {
     return layout(
       { ...pc, title: 'החיפוש נעצר', active: 'new' },
-      `${head}<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>${withSupport('אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.')}</div>
-<div class="actions">${postButton(pc, `/new/${r.id}/retry`, `${icon('spark')}לנסות שוב`, { cls: 'btn primary' })}<a class="btn" href="/new">להתחיל מחדש</a></div>${ops}`
+      `${head}${capped ? activateBanner(pc, { good: 0, capped }) : `<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>${withSupport('אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.')}</div>
+<div class="actions">${postButton(pc, `/new/${r.id}/retry`, `${icon('spark')}לנסות שוב`, { cls: 'btn primary' })}<a class="btn" href="/new">להתחיל מחדש</a></div>`}${ops}`
     );
   }
   const cands = r.found.candidates || [];
@@ -563,7 +628,7 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
     const hidden = cands.filter((c) => !offered(c));
     return layout(
       { ...pc, title: 'בחירת מקורות', active: 'new' },
-      `${head}${saidBanner(r.found.said)}${shown.length < FEW ? fewPanel(pc, r, shown.length) : ''}
+      `${head}${capped ? activateBanner(pc, { good: 0, capped }) : ''}${saidBanner(r.found.said)}${shown.length < FEW && !capped ? fewPanel(pc, r, shown.length) : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
 <div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
 <div class="grid12">${formatsSection()}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
@@ -581,24 +646,28 @@ ${formatsPanel}</div></div></form>
   const reviewed = r.status === 'ready';
   // Another round of samples: the customer's are limited (sampleRoom), the operator's are not.
   const more = pc.operator ? { ok: true, why: null } : sampleRoom(ctx.db, r);
-  const sched = pack && r.status !== 'live' ? scheduleData(ctx.db, pack) : null;
+  // Before paying (src/web/server.js SETUP_OPEN), what is the paywall's is not offered here: going live, connecting, the
+  // designs page and the account's days and times. The samples ready, the page says what is left, with the way to pay.
+  const locked = Boolean(pc.unpaid);
+  const sched = pack && r.status !== 'live' && !locked ? scheduleData(ctx.db, pack) : null;
+  const activate = locked && r.status !== 'live' && (more.why === 'cap' || good >= SAMPLE_ENOUGH) ? activateBanner(pc, { good, capped: more.why === 'cap' }) : '';
   // The samples lead the page (the owner, 2026-10-31: "why are the slideshows at the end of the page? make them at the
   // top"): how many passed and the buttons that act on them, the progress while more are written, the cards; then the
   // account, its networks and its days and times.
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `${head}${samplesSaid(pc, r, pack, { busy, more })}
+    `${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}
 <section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
-<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
+<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
-${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
+${reviewed && !locked ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
 ${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>` : ''}</section>
-${pack && good ? designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` }) : ''}
+${pack && good && !locked ? designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` }) : ''}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
-${pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
+${pack && locked ? `<p class="muted mt12" id="connect">${esc(CAP_HE.connect)}</p>` : pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
 ${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
 ${ops}`
   );
@@ -637,6 +706,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       /^\/new$/,
       (ctx, user, _m, f) => {
         if (hasAccount(ctx.db, ctx.workspaceId)) throw new ActionError(ONE_ACCOUNT, 409);
+        capCheck(ctx, user, ctx.workspaceId);
         const niche = String(f.niche || '').trim();
         if (niche.length < 2) throw new ActionError('צריך לכתוב במה החשבון יעסוק');
         const id = newId('o');
@@ -644,7 +714,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         const seed = { niche, nicheEn: String(f.nicheEn || '').trim(), language: 'he', audience: String(f.audience || '').trim(), topics: listField(f.topics, TOPICS), examples: listField(f.examples) };
         ctx.db.insert('onboarding', { id, seed_json: seed, status: 'discovering', workspace_id: ctx.workspaceId ?? null, created_at: nowIso(), updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche } });
-        startDiscovery(ctx, id);
+        startDiscovery(ctx, id, { counted: !user.operator });
         return { ok: true, message: 'מחפשים מקורות.', redirect: `/new/${id}` };
       },
     ],
@@ -654,9 +724,10 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       (ctx, user, m) => {
         const r = row(ctx, m[1]);
         if (r.status !== 'failed') throw new ActionError('החיפוש הזה לא נעצר, אין מה לנסות שוב.', 409);
+        capCheck(ctx, user, r.workspace_id);
         ctx.db.update('onboarding', r.id, { status: 'discovering', candidates_json: {}, notes_json: [], updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, retry: true } });
-        startDiscovery(ctx, r.id);
+        startDiscovery(ctx, r.id, { counted: !user.operator });
         return { ok: true, message: 'מחפשים שוב.', redirect: `/new/${r.id}` };
       },
     ],
@@ -668,10 +739,11 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         if (r.status !== 'review') throw new ActionError('אפשר לחפש שוב רק לפני שהחשבון נוצר.', 409);
         const added = listField(f.examples);
         if (!added.length) throw new ActionError('צריך לכתוב לפחות כתובת אחת של אתר.');
+        capCheck(ctx, user, r.workspace_id);
         const seed = { ...r.seed, examples: [...new Set([...(r.seed.examples || []), ...added])].slice(0, 10) };
         ctx.db.update('onboarding', r.id, { status: 'discovering', seed_json: seed, candidates_json: {}, notes_json: [], updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, more: added.length } });
-        startDiscovery(ctx, r.id);
+        startDiscovery(ctx, r.id, { counted: !user.operator });
         return { ok: true, message: 'מחפשים שוב, עם האתרים שהוספתם.', redirect: `/new/${r.id}` };
       },
     ],
@@ -758,9 +830,11 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         // choice (an older page) gets the defaults.
         const formatIds = f.formats_shown ? pickedFrom(f) : DEFAULT_PICKED;
         if (formatIds.length < MIN_PICKED) throw new ActionError(FORMATS_FEW, 422);
+        // The account's voice and scenes are paid calls: before paying, under the setup's cap and counted against it.
+        capCheck(ctx, user, r.workspace_id);
         let made;
         try {
-          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds });
+          made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds }), !user.operator);
         } catch (e) {
           throw createError(ctx, e);
         }
@@ -788,7 +862,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         if (!r.pack_id) throw new ActionError('קודם יוצרים את החשבון');
         if (!user.operator) {
           const more = sampleRoom(ctx.db, r);
-          if (!more.ok) throw new ActionError(ROUNDS_HE[more.why], 409);
+          if (!more.ok) throw new ActionError(more.why === 'cap' ? capMessage(ctx.db, r.workspace_id) : ROUNDS_HE[more.why], 409);
         }
         startSamples(ctx, r.id, { counted: !user.operator });
         return { ok: true, message: 'כותבים פוסטים לדוגמה.', redirect: `/new/${r.id}` };
@@ -823,5 +897,26 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
 
 /** Whether this onboarding has work running in the background (its discovery, or its sample posts). */
 export const onboardingBusy = (id) => running.has(id);
+
+/** The most samples the paywall shows. */
+export const PAYWALL_SAMPLES = 6;
+
+/**
+ * What the paywall shows a customer whose workspace has not paid (src/web/server.js, pages.js gatePage), while its setup
+ * is not done: { href, started, samples: [{ src, alt }] }, the first slide of each sample that passed (PAYWALL_SAMPLES at
+ * most) and where the setup goes on. null once an account of the workspace has been live: that customer stopped paying,
+ * and the paywall says what it said before.
+ */
+export function beforePaying(ctx, workspaceId) {
+  const { db } = ctx;
+  if (db.get("SELECT 1 FROM accounts WHERE workspace_id = ? AND status <> 'onboarding' LIMIT 1", workspaceId)) return null;
+  const ob = db.get("SELECT id, pack_id FROM onboarding WHERE workspace_id = ? AND status NOT IN ('live', 'abandoned') ORDER BY pack_id IS NULL, updated_at DESC LIMIT 1", workspaceId);
+  const posts = ob?.pack_id ? db.all("SELECT id FROM posts WHERE account_id = ? AND sample = 1 AND status = 'sample' ORDER BY created_at LIMIT ?", ob.pack_id, PAYWALL_SAMPLES).map((x) => loadPost(db, x.id)) : [];
+  const first = (p) => {
+    const platform = p.media?.tiktok?.length ? 'tiktok' : p.media?.instagram?.length ? 'instagram' : null;
+    return platform ? { src: `/media/${encodeURIComponent(p.id)}/${platform}/0`, alt: String(p.hook || '') } : null;
+  };
+  return { href: ob ? `/new/${ob.id}` : '/new', started: Boolean(ob), samples: posts.map(first).filter(Boolean) };
+}
 
 export const __onboarding = { running, progress };
