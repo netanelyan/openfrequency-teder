@@ -83,18 +83,8 @@ const STEP_HE = {
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
   whatsapp: 'מוואטסאפ',
 };
-/** What a customer did through the WhatsApp assistant, in the post's trace. */
+/** What a customer did through the WhatsApp assistant (until 2026-11-02), in the post's trace. */
 const WHATSAPP_HE = { approve: 'אישור', reject: 'דחייה', edit: 'עריכה' };
-/** The assistant's messages, as the Settings page lists them (src/assistant/data.js EVENT_TYPES). */
-const EVENT_HE = {
-  'post.ready': 'פוסט חדש מחכה לאישור',
-  'post.reminder': 'הגיעה השעה לפרסם פוסט',
-  'post.published': 'פוסט עלה',
-  'post.unposted': 'עברה שעה והפוסט עוד לא עלה',
-  'quota.low': 'נשארו 8 הצעות החודש',
-  'weekly.summary': 'סיכום השבוע, ביום ראשון ב-9:00',
-  'account.reconnect': 'טיקטוק או אינסטגרם צריכים חיבור מחדש',
-};
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
 const CHECK_HE = {
   facts: 'שער העובדות: מספר שלא בציטוט', shape: 'צורת הפורמט', visuals: 'גרפיקות', details: 'פרטים מהמחקר', caption: 'כיתוב (אורך, חסר)', keywords: 'מילות מפתח', length: 'אורך כותרת או שקף', overlay: 'טקסט על התמונה',
@@ -1139,7 +1129,6 @@ ${d.quotas ? quotasPanel(ctx, d.quotas) : ''}
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
 ${d.email ? emailPanel(ctx, d.email) : ''}
-${d.assistant ? assistantPanel(ctx, d.assistant) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>` : ''}
 <section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
@@ -1160,18 +1149,6 @@ function emailPanel(ctx, prefs) {
 <p class="muted">תדר שולח מייל לבעלי החשבון רק על מה שמסומן כאן.</p>
 <form method="post" action="/settings/email" class="prefs">${csrfField(ctx)}
 <fieldset><legend>מה לשלוח</legend>${Object.keys(EMAIL_HE).map(box).join('')}</fieldset>
-<button class="btn" type="submit">שמירה</button></form></section>`;
-}
-
-/** The customer's choices for the WhatsApp assistant: which messages reach them, and their quiet hours. */
-function assistantPanel(ctx, a) {
-  const box = (name, on, label) => `<label class="check"><input type="checkbox" name="${esc(name)}" value="1"${on ? ' checked' : ''}> ${esc(label)}</label>`;
-  return `<section class="panel" id="whatsapp"><header><h2>הודעות בוואטסאפ</h2></header>
-<p class="muted">העוזר של OpenFrequency בוואטסאפ שולח לכם רק את ההודעות שמסומנות כאן.</p>
-<form method="post" action="/settings/whatsapp" class="prefs">${csrfField(ctx)}
-<fieldset><legend>מה לשלוח</legend>${Object.entries(EVENT_HE).map(([k, he]) => box(`ev_${k}`, a.events[k], he)).join('')}</fieldset>
-<fieldset><legend>שעות שקטות</legend>${box('quiet_nights', a.quiet.nights, 'לא לשלוח בין 22:00 ל-8:00')}${box('quiet_shabbat', a.quiet.shabbat, 'לא לשלוח בשבת ובחג')}
-<p class="muted small m0">מה שקורה בשעות האלה מגיע אליכם כשהן נגמרות. תזכורת שהזמן שלה כבר עבר לא נשלחת.</p></fieldset>
 <button class="btn" type="submit">שמירה</button></form></section>`;
 }
 

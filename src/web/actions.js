@@ -29,7 +29,6 @@ import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budg
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
 import { customerWorkspace } from '../billing/own.js';
-import { EVENT_TYPES, setPrefs } from '../assistant/data.js';
 import { EMAIL_KINDS, setEmailPrefs } from '../notify/email.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
@@ -616,18 +615,6 @@ export function removeSoundAction(ctx, user, _p, form) {
   if (!gone) throw new ActionError('אין סאונד כזה', 404);
   audit(ctx.db, { actor: user.name, action: 'sound_removed', accountId: pack.id, detail: { name: gone.name } });
   return { ok: true, message: `"${gone.name}" הוסר.`, redirect: `/sounds?account=${encodeURIComponent(pack.id)}` };
-}
-
-/**
- * The customer's choices for the WhatsApp assistant (src/assistant/data.js): which messages reach them, and their
- * quiet hours. Every box on the form is sent; one left unticked is off.
- */
-export function setAssistantPrefs(ctx, user, _p, form) {
-  if (ctx.workspaceId == null) throw new ActionError('את זה בוחר כל לקוח בחשבון שלו', 403);
-  const events = Object.fromEntries(EVENT_TYPES.map((k) => [k, form[`ev_${k}`] === '1']));
-  const r = setPrefs(ctx.db, ctx.workspaceId, { events, quiet: { nights: form.quiet_nights === '1', shabbat: form.quiet_shabbat === '1' } }, { by: user.name });
-  audit(ctx.db, { actor: user.name, action: 'assistant_prefs', detail: { workspace: ctx.workspaceId, ...r } });
-  return { ok: true, message: 'נשמר.' };
 }
 
 /** Which emails the workspace's owners get (src/notify/email.js): a box per kind, unticked is off. */

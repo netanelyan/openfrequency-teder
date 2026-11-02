@@ -20,7 +20,6 @@ import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
 import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/events.js';
 import { refreshSource } from '../sources/index.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
-import { assistantTick } from '../assistant/events.js';
 import { zernioTick } from '../publish/connect.js';
 import { accountAllowed, refreshEntitlements } from '../billing/entitlement.js';
 import { releaseHeld, reslotOverdue } from '../publish/hold.js';
@@ -71,9 +70,11 @@ import { alertOperator } from '../notify/operator.js';
 //      Shabbat and the festivals (those the account does not post on)
 //   4z. a send under way for 15 minutes was cut off: the post is failed, for a
 //      person to check and send again (stuckPublishing)
-//   4b. tell the WhatsApp assistant what happened (src/assistant/events.js): a post
-//      that waits, the slot, a post out or still not out an hour on, the month's
-//      last suggestions, Sunday's summary; held through the customer's quiet hours
+//   4b. (until 2026-11-02) tell the WhatsApp assistant what happened, src/assistant/events.js.
+//      Off: the owner, 2026-11-02, "managing teder through whatsapp, only through the
+//      dashboard". Nothing is found or sent to openfrequency-toran any more, so no
+//      customer hears of a post on WhatsApp; the dashboard, its push notifications and
+//      the emails say it
 //   5. read metrics, credit them to formats at 72 hours, judge the formats
 //   6. write yesterday's summary
 //   7. once a day, what the privacy policy says goes (src/billing/retention.js): demos past six months, the TikTok and
@@ -384,13 +385,7 @@ export async function tick(ctx, { t = now() } = {}) {
   // ---- 2c. an account that should be posting and drafted nothing in a day: the operator hears, once a day
   await nothingDrafted(ctx, report, { t }).catch((e) => report.errors.push({ step: 'nothing drafted', error: e.message }));
 
-  // ---- 4b. what the WhatsApp assistant tells the customer, once OF_ASSISTANT_SECRET is set
-  try {
-    const told = await assistantTick(ctx, { t });
-    if (told) report.assistant = told;
-  } catch (e) {
-    report.errors.push({ step: 'assistant', error: e.message });
-  }
+  // ---- 4b. nothing for the WhatsApp assistant since 2026-11-02: Teder is managed on its dashboard only (see above)
 
   // ---- 4c. Zernio: what each customer connected and whether it still works (hourly), what Zernio billed (daily)
   try {

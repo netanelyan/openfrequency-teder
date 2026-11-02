@@ -98,7 +98,8 @@ loopback socket only, `Authorization: Bearer $OF_INTERNAL_TOKEN` (the value
 openfrequency-accounts has, 32 characters or more), and no `X-Forwarded-For`, so Caddy
 never passes them on. Anything else is `403 {"ok":false,"error":"forbidden"}`, and no
 answer is cached. The WhatsApp assistant's own API is apart, signed with
-`OF_ASSISTANT_SECRET` ([docs/assistant-api.md](docs/assistant-api.md)).
+`OF_ASSISTANT_SECRET` ([docs/assistant-api.md](docs/assistant-api.md)); since 2026-11-02 Teder is managed on its
+dashboard only, so nothing calls it and Teder sends the assistant no events.
 
 | Route | Who asks | |
 |---|---|---|
@@ -542,12 +543,12 @@ later if the owner did not. The account page switches between the drafts and
 and the bill, and can send one private test post.
 
 **Connecting a customer's accounts.** Each account gets its own Zernio profile the
-first time someone presses "connect" on the account page or the onboarding page, or
-opens the link the WhatsApp assistant sends (`GET /customers/:ws/accounts/:id/connect`,
+first time someone presses "connect" on the account page or the onboarding page (until
+2026-11-02 also from a link the WhatsApp assistant sent, `GET /customers/:ws/accounts/:id/connect`,
 [docs/assistant-api.md](docs/assistant-api.md)). The customer logs into their own
 TikTok or Instagram on Zernio's screens. Teder reads what got connected, and whether it
 still works, from Zernio after a connect and once an hour. An expired token shows as
-"צריך לחבר מחדש", and the assistant is told once with a fresh link. Only
+"צריך לחבר מחדש" (until 2026-11-02 the WhatsApp assistant was told too, once, with a fresh link). Only
 `ZERNIO_API_KEY` lives in `$OF_HOME/.env`; the profile and account ids live in the
 database. What Zernio bills each profile is read daily into the operator's ledger, next
 to the API spend. Zernio publishes both platforms: `"instagram": "zernio"` is new
@@ -701,8 +702,9 @@ tested end to end in a clean container by `deploy/test/run.sh`.
    `OF_INTERNAL_TOKEN` (the same value as openfrequency-accounts'; sign-in is that
    service's, see [docs/workspace-move.md](docs/workspace-move.md)), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
    (Wikimedia rate-limits readers without one), and the keys you have.
-   For the WhatsApp assistant, `OF_ASSISTANT_SECRET` (the same value as openfrequency-toran's; see
-   [docs/assistant-api.md](docs/assistant-api.md)).
+   `OF_ASSISTANT_SECRET` (the same value as openfrequency-toran's; see
+   [docs/assistant-api.md](docs/assistant-api.md)) signs the connect links; the WhatsApp assistant it was made for is
+   off since 2026-11-02.
 4. **The service:** copy `deploy/openfrequency.service` to `/etc/systemd/system/`,
    `systemctl daemon-reload`, `systemctl enable openfrequency`, then the first release with
    `deploy/deploy.sh --first` ([docs/deploy-releases.md](docs/deploy-releases.md)): the service runs from
@@ -746,7 +748,7 @@ src/trends      formats that work on YouTube Shorts
 src/autonomy    the runner and its rails
 src/onboarding  source discovery, the API catalogue, writing a new pack
 src/web         Teder: server, who is signed in (accounts.js), workspaces, pages, actions, one stylesheet, one script
-src/assistant   the WhatsApp assistant's signed internal API and the events Teder sends it (docs/assistant-api.md)
+src/assistant   the WhatsApp assistant's signed internal API and its events, unused since 2026-11-02 (docs/assistant-api.md)
 assets/        the bundled fonts and the brand marks (assets/brand)
 examples/       the fictional demo pack and the blank pack
 scripts/        the commands above

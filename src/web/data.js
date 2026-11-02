@@ -28,7 +28,6 @@ import path from 'node:path';
 import { PASS, topicById, topicsOf, watchList } from '../topics/index.js';
 import { youtubeConfigured } from '../trends/index.js';
 import { owns } from './workspace.js';
-import { prefsOf } from '../assistant/data.js';
 import { connectData } from './connect.js';
 import { zernioCost } from '../publish/connect.js';
 import { scheduleOf, timesOf } from '../schedule/choice.js';
@@ -308,8 +307,6 @@ export function settingsData(ctx) {
     quotas: operator ? quotasData(ctx) : null,
     // The customer's month, account by account: what the plan promises and what is used of it.
     plans: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id) })),
-    // The customer's choices for the WhatsApp assistant: a workspace's own, the operator has none.
-    assistant: operator ? null : prefsOf(ctx.db, ctx.workspaceId),
     // The days and times the account shown posts on (src/schedule/choice.js): its owner chooses them here.
     schedule: ctx.packs[0] ? scheduleData(ctx.db, ctx.packs[0]) : null,
     // The account shown: its kinds of slideshow and its design are set here (src/web/formats.js, styles.js designPanel).

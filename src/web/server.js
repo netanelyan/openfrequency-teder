@@ -222,7 +222,6 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/rivals\/remove$/, (c, u, m, f) => act.removeRivalAction(c, u, {}, f)],
     ['POST', /^\/sounds\/save$/, (c, u, m, f) => act.saveSoundAction(c, u, {}, f)],
     ['POST', /^\/sounds\/remove$/, (c, u, m, f) => act.removeSoundAction(c, u, {}, f)],
-    ['POST', /^\/settings\/whatsapp$/, (c, u, m, f) => act.setAssistantPrefs(c, u, {}, f)],
     ['POST', /^\/settings\/email$/, (c, u, m, f) => act.setEmailPrefsAction(c, u, {}, f)],
     ['POST', /^\/push\/subscribe$/, (c, u, m, f) => act.subscribePush(c, u, {}, f)],
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],

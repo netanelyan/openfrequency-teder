@@ -55,6 +55,6 @@ export const KEYS = [
   { name: 'OPENVERSE_TOKEN', group: 'images', what: 'Openverse: a higher allowance than the anonymous one (optional)', he: 'Openverse: מכסה גבוהה יותר מהאנונימית (לא חובה)' },
   { name: 'SESSION_SECRET', group: 'website', what: "signs the forms' CSRF tokens", he: 'חתימה על הטפסים באתר' },
   { name: 'OF_INTERNAL_TOKEN', group: 'website', what: 'asks openfrequency-accounts who is signed in, and lets the website hand in a demo request', he: 'הבדיקה מול שירות הכניסה מי נכנס, ובקשות לדמו שמגיעות מהאתר' },
-  { name: 'OF_ASSISTANT_SECRET', group: 'website', what: 'signs what Teder and the WhatsApp assistant (openfrequency-toran) send each other', he: 'החתימה בין תדר לבין העוזר בוואטסאפ' },
-  { name: 'OF_TORAN_URL', group: 'website', what: "where the WhatsApp assistant takes Teder's events, on this machine", he: 'הכתובת שבה העוזר בוואטסאפ מקבל את ההודעות מתדר' },
+  { name: 'OF_ASSISTANT_SECRET', group: 'website', what: "signs the connect links, and what Teder and openfrequency-toran send each other (Teder's news to WhatsApp stopped on 2026-11-02)", he: 'החתימה על קישורי החיבור, ובין תדר לבין תורן' },
+  { name: 'OF_TORAN_URL', group: 'website', what: "unused since 2026-11-02: Teder is managed on its dashboard only, and sends no events to openfrequency-toran", he: 'לא בשימוש מאז 2.11.2026, כי את תדר מנהלים רק מלוח הבקרה' },
 ];

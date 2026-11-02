@@ -2219,3 +2219,18 @@ missing, and comes back to the form with what was typed. A site that could not b
 it. Settings has the same fields after the design (POST /accounts/<id>/promo, src/web/promo.js), saved into pack.json
 (src/packs/write.js setPackPromo); emptied, the key goes and the last slide asks to follow. The slides themselves are
 unchanged until item 2.
+
+### Teder is managed on its dashboard only, not on WhatsApp (2026-11-02)
+
+The owner: "managing teder through whatsapp, only through the dashboard. the demo stays". The runner no longer tells
+the WhatsApp assistant anything (its step 4b, `assistantTick`, is gone from src/autonomy/runner.js): no event is found
+or sent to openfrequency-toran, whatever `OF_ASSISTANT_SECRET` and `OF_TORAN_URL` say, so no customer hears of a post
+on WhatsApp; the dashboard, its push notifications and the emails (posts waiting, the week, the month, a connection to
+make again, a post that failed) say it. Settings lost its "הודעות בוואטסאפ" panel ("העוזר של OpenFrequency בוואטסאפ
+שולח לכם רק את ההודעות שמסומנות כאן.", the message types and the quiet hours) and its route, `POST /settings/whatsapp`.
+Toran stops on its side too (its src/owners/notify.ts `TEDER_ON_WHATSAPP`), and no longer calls the assistant's door
+for a customer's posts. Kept, unused: `src/assistant/` (the door, still loopback-only, signed and behind the paywall,
+and the events code), the `assistant_events` and `assistant_prefs` tables (still emptied when a workspace is deleted),
+and `OF_ASSISTANT_SECRET`, which also signs the connect links. The demo asked for by a WhatsApp code is apart and
+stays. test/whatsapp-off.test.js: a tick with the secret set and a post waiting finds nothing and reaches nobody (on the
+code before, five post.ready events went out), and Settings has no WhatsApp panel and no such button.

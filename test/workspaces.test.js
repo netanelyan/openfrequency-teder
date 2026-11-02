@@ -283,8 +283,6 @@ const casesFor = () => {
     // A browser's endpoint is a secret only that browser has; A turning off B's is refused, A's own is A's.
     ['/push/unsubscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/bravo-browser' }, { ownOk: true }],
     ['/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/alpha-browser' }, { ownOk: true }],
-    // The WhatsApp assistant's choices are the session's workspace's: A sets A's, whatever the form names.
-    ['/settings/whatsapp', { workspace: '2', 'ev_post.ready': '1', quiet_nights: '1' }, { ownOk: true }],
     // The email choices too: A turning emails off turns off A's.
     ['/settings/email', { workspace: '2', em_weekly: '1' }, { ownOk: true }],
     ['/new', { niche: 'AlphaNiche' }, { ownOk: true }],

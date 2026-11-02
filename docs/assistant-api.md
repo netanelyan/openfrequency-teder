@@ -1,5 +1,13 @@
 # Teder and the WhatsApp assistant
 
+**Off since 2026-11-02.** The owner decided: "managing teder through whatsapp, only through the dashboard. the demo
+stays". A customer runs their posts on Teder's dashboard only. Teder finds and sends no events now: the runner's
+step 4b is gone (`src/autonomy/runner.js`), so nothing reaches `OF_TORAN_URL`, and openfrequency-toran ends any event
+it still gets without writing to anyone. Settings no longer has the "הודעות בוואטסאפ" panel (`POST /settings/whatsapp`
+is gone with it). Toran no longer calls `/internal/assistant/*` for a customer's posts; the door below stays as it
+was (loopback, signed, the paywall), unused, and `OF_ASSISTANT_SECRET` still signs the connect links. The rest of this
+document is the contract as it was built. The demo asked for by a WhatsApp code is a different path and stays.
+
 The OpenFrequency WhatsApp assistant (openfrequency-toran) lets a customer run their posts from WhatsApp: see what
 waits, approve, reject, fix a slide's text, ask where they stand, and get told when something happens. Teder owns the
 posts; the assistant owns the conversation and the phone numbers. They talk server to server, on the same VPS, and
