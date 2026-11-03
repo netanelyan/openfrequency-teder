@@ -1,6 +1,7 @@
 import { HOUR, now } from '../core/clock.js';
 import { localFetch } from '../core/net.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
+import { addDays, israelDate } from '../schedule/israel.js';
 import { customerWorkspace } from './own.js';
 
 // Whether a workspace has paid for Teder: openfrequency-accounts owns subscriptions, Teder asks.
@@ -35,6 +36,9 @@ import { customerWorkspace } from './own.js';
 // not allowed writes nothing, drafts nothing to TikTok and publishes nothing; its posts, sources and settings stay as
 // they are. An account in no workspace (the operator's own) is never asked about, and neither is one in a workspace
 // OF_OWN_WORKSPACES names (src/billing/own.js): the company's own accounts, put there so its people see them.
+//
+// The same answer says when to remind a customer to pay (payReminder below, the line at the top of every page of the
+// dashboard, src/web/ui.js payBanner): the last days paid for, and the grace. It only says; it opens and stops nothing.
 
 export const PRODUCT = 'teder';
 export const FRESH_MS = 5 * 60_000;
@@ -71,6 +75,40 @@ export function workspaceAllowed(db, workspaceId, t = now()) {
 export function accountAllowed(db, accountId, t = now()) {
   const ws = db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null;
   return !customerWorkspace(ws) || workspaceAllowed(db, ws, t);
+}
+
+/**
+ * The last Israel days paid for in which the dashboard offers to pay for the next month: a week, the days accounts
+ * already takes a month ahead in (its src/accounts/billing.js PAY_AHEAD_DAYS).
+ */
+export const REMIND_DAYS = 7;
+
+/**
+ * What the dashboard reminds a customer of, from the check's answer (entitlementClient().check()) at `t` (the owner,
+ * 2026-11-03: "add a reminder to pay for the new month ... A user has 72 hours to pay for a new month once their
+ * subscription has ended"):
+ *   { state: 'soon', until: paidThrough }  access paid, and today (Israel) is one of the last REMIND_DAYS days paid for
+ *   { state: 'due', until: graceUntil }    access due: the month paid for is over, and Teder works until graceUntil
+ *   null                                   anything else: comp, cancelled (they chose to stop), off, unpaid (the
+ *                                          paywall says it), an access not known here, no answer to go by
+ * The days are accounts' instants, never a count of ours: an answer without its instant, or whose instant has passed
+ * (kept from before, while accounts does not answer), reminds of nothing rather than of a day that is wrong.
+ */
+export function payReminder(ent, t = now()) {
+  if (!ent?.known || !ent.allowed) return null;
+  const at = (iso) => {
+    const ms = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    return Number.isFinite(ms) && t <= ms ? new Date(ms).toISOString() : null;
+  };
+  if (ent.access === 'paid') {
+    const until = at(ent.paidThrough);
+    return until && israelDate(t) >= addDays(israelDate(Date.parse(until)), 1 - REMIND_DAYS) ? { state: 'soon', until } : null;
+  }
+  if (ent.access === 'due') {
+    const until = at(ent.graceUntil);
+    return until ? { state: 'due', until } : null;
+  }
+  return null;
 }
 
 /** The most slideshows or redos a plan from accounts may give a month: a typo there must not open thousands of posts. */

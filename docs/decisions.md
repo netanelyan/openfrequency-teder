@@ -2516,3 +2516,24 @@ present, its place closed when absent, a light logo on a dark tile, and the load
 of the widest letters drawn in every look, the line still over the action; a line pushed into the rail refused on the
 older templates and the styles; the last content slide the same with and without a
 call to action once the post has its closing slide, an older post keeping its own, and the call to action still stored.
+
+### The dashboard reminds a customer to pay for the next month (2026-11-03)
+
+The owner: "add a reminder to pay for the new month, whatsapp, email and dashboard. A user has 72 hours to pay for a
+new month once their subscription has ended". Teder's part is the dashboard; the emails and the 72 hours are
+accounts', and the WhatsApp message comes later. Every page of a customer's workspace, for its owners and its members,
+opens with one line made from the answer the paywall already reads (src/billing/entitlement.js `payReminder`, drawn by
+src/web/ui.js `payBanner` above the page's headline). In the last 7 Israel days paid for (access `paid`; the week
+accounts already takes a month ahead in), calm, on the glass of an info banner: "המנוי לתדר שולם עד <date>." and
+"אפשר כבר לשלם על החודש הבא, כדי שתדר ימשיך לעבוד בלי הפסקה." While access is `due` (the month is over and the grace
+runs), in the warning's colour: "החודש ששילמתם עליו נגמר, והתשלום על החודש הבא עוד לא הגיע אלינו." and "תדר ממשיך
+לעבוד עד סוף <day, date>, ואז ייעצר עד שהתשלום יגיע." One button in each, the paywall's own "איך משלמים" to accounts'
+/setup, grey in the week and blue in the grace. The days are accounts' instants (`paidThrough`, `graceUntil`) read in
+Israel time, never a count of Teder's: an answer without its instant, or whose instant has passed (kept from before
+while accounts does not answer), says nothing rather than a wrong day. Nothing for comp, cancelled (they chose to stop),
+off or unpaid (the paywall says it), an answer older than a day or none, and nothing for the operator, the operator
+viewing as the customer, or one of our own workspaces, which are never asked. A customer's /all is a page of their
+workspace and has it; the operator's /all has no workspace and so no line, and its health table, which already has each
+workspace's payment, says "מחכה לתשלום" (accounts' word) for one in its grace instead of the raw `due`. The test fake's
+paid dates now count from the day a test runs, so no other test's pages fall into the last week by the calendar.
+test/pay-reminder.test.js.

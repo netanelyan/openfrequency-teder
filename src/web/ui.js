@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { now } from '../core/clock.js';
 import { assetsDir } from '../core/paths.js';
 import { THEME_COLOR, THEME_COOKIE } from './static/theme.js';
 
@@ -27,6 +28,10 @@ const F = {
   time: fmt({ hour: '2-digit', minute: '2-digit', hour12: false }),
   stamp: fmt({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }),
   wd: fmt({ weekday: 'narrow' }),
+  date: fmt({ day: 'numeric', month: 'long' }),
+  dateY: fmt({ day: 'numeric', month: 'long', year: 'numeric' }),
+  dayY: fmt({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+  year: fmt({ year: 'numeric' }),
 };
 export const dayHe = (t) => F.day.format(new Date(t));
 export const shortDate = (t) => (t ? F.short.format(new Date(t)) : '');
@@ -193,6 +198,33 @@ export function viewAsBanner(ctx) {
   return `<div class="banner info viewas" role="status">${icon('shield')}<div><b>${text}</b></div>${end}</div>`;
 }
 
+/**
+ * The reminder to pay for the next month (src/billing/entitlement.js payReminder), each state's two lines: the last
+ * week paid for, calm, and the days of grace after it, in the warning's colour. The day is Israel's, of accounts' own
+ * instant; its year only when it is not this year's.
+ */
+export const PAY_HE = {
+  soon: { title: (date) => `המנוי לתדר שולם עד ${date}.`, text: () => 'אפשר כבר לשלם על החודש הבא, כדי שתדר ימשיך לעבוד בלי הפסקה.' },
+  due: { title: () => 'החודש ששילמתם עליו נגמר, והתשלום על החודש הבא עוד לא הגיע אלינו.', text: (day) => `תדר ממשיך לעבוד עד סוף ${day}, ואז ייעצר עד שהתשלום יגיע.` },
+  button: 'איך משלמים',
+};
+const sameYear = (a, b) => F.year.format(new Date(a)) === F.year.format(new Date(b));
+/** "10 בנובמבר" (the date) or "יום שלישי, 10 בנובמבר" (with its day), in Israel time. */
+export const untilHe = (iso, { weekday = false, t = now() } = {}) => (sameYear(iso, t) ? (weekday ? F.day : F.date) : weekday ? F.dayY : F.dateY).format(new Date(iso));
+
+/**
+ * The reminder at the top of every page of a customer's workspace (ctx.pay, from server.js: payReminder of the check's
+ * answer, or null), with one way to pay: the paywall's own, accounts' /setup page.
+ */
+export function payBanner(ctx) {
+  const r = ctx.pay;
+  if (!r || !PAY_HE[r.state] || !ctx.links?.setup) return '';
+  const due = r.state === 'due';
+  const when = untilHe(r.until, { weekday: due });
+  const he = PAY_HE[r.state];
+  return `<div class="banner ${due ? 'warn' : 'info'} pay" id="pay">${icon(due ? 'alert' : 'clock')}<div><b>${esc(he.title(when))}</b><p>${esc(he.text(when))}</p></div><a class="btn sm${due ? ' primary' : ''}" href="${esc(ctx.links.setup)}">${esc(PAY_HE.button)}</a></div>`;
+}
+
 /** The page around a body. ctx: { title, active, csrf, quota: { used, limit }, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
@@ -237,6 +269,7 @@ ${SPRITE}
 </div></header>
 <main class="wrap" id="main">
 ${viewAsBanner(ctx)}
+${payBanner(ctx)}
 ${body}
 <footer class="foot">${ofMark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>
 </main>

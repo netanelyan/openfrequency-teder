@@ -26,7 +26,7 @@ import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
 import { CHANGED_PATH, entitlementChangedRoute } from './entitlement-changed.js';
-import { entitlementClient } from '../billing/entitlement.js';
+import { entitlementClient, payReminder } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
@@ -528,10 +528,13 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const flashMsg = jar.of_flash ? jar.of_flash : null;
       if (flashMsg) setCookies.push('of_flash=; Path=/; Max-Age=0; SameSite=Strict');
       const clearFlash = setCookies.length ? { 'set-cookie': setCookies } : {};
+      // The reminder to pay for the next month, at the top of every page (ui.js payBanner): a customer's alone, from the
+      // answer the paywall just read (ent; none for the operator, view-as and our own workspaces).
+      const pay = payReminder(ent, now());
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);

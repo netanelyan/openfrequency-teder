@@ -217,7 +217,11 @@ Teder asks accounts three more things, on `OF_ACCOUNTS_INTERNAL` (default
   accounts did not answer). The runner writes, drafts and publishes nothing for its accounts (`canRun` says
   `unpaid`); nothing is paused or deleted, and the first tick after it pays goes on. An
   account in no workspace is the operator's and never asks. A change is logged and
-  audited once.
+  audited once. In the last 7 days paid for, and through the grace after them (access
+  `due`), every page of the workspace opens with one line saying until when it is paid,
+  or until when Teder works before it stops, with the paywall's "איך משלמים"
+  (`payReminder` in `src/billing/entitlement.js`, drawn by `src/web/ui.js` `payBanner`),
+  from accounts' own `paidThrough` and `graceUntil`.
 - **Send an email.** `POST /internal/notify` with
   `{ workspace, product: "teder", kind, subject, text, html, link }`, `202 {ok:true,sent}`;
   accounts sends it to the workspace's owners and keeps their own opt-out

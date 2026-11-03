@@ -423,6 +423,9 @@ h3 { font-size: 14px; margin: 0; font-weight: 600; }
 .banner p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
 .banner > div { flex: 1; min-width: 0; }
 .banner form, .banner > .btn { margin-inline-start: auto; flex: none; }
+/* The reminder to pay for the next month (ui.js payBanner) is the subscription's, not the page's: above the page's
+   headline on every page, set off from it by more than the banners under a headline are. */
+.banner.pay { margin-bottom: 24px; }
 /* A row of buttons at the banner's end is as wide as its buttons: as a div it took half the banner from the words. */
 .banner > .actions { flex: none; margin-inline-start: auto; }
 /* On a phone the banner's buttons go under its words, in line with them, not beside them in a column that left the

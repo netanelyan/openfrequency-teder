@@ -85,7 +85,8 @@ export function workspaceHealth(ctx, { t = now() } = {}) {
   return [...rows.values()].map((r) => ({ ...r, daysSinceDraft: r.lastDraft ? Math.floor((t - Date.parse(r.lastDraft)) / DAY) : null }));
 }
 
-const ACCESS_HE = { ours: ['ok', 'שלנו'], paid: ['ok', 'שולם'], comp: ['ok', 'חינם'], cancelled: ['warn', 'בוטל'], unpaid: ['bad', 'לא שולם'], off: ['bad', 'כבוי'], unknown: ['warn', 'לא ידוע'] };
+// `due`: the month paid for is over and the grace runs, so it still works (the customer's pages say until when).
+const ACCESS_HE = { ours: ['ok', 'שלנו'], paid: ['ok', 'שולם'], comp: ['ok', 'חינם'], due: ['warn', 'מחכה לתשלום'], cancelled: ['warn', 'בוטל'], unpaid: ['bad', 'לא שולם'], off: ['bad', 'כבוי'], unknown: ['warn', 'לא ידוע'] };
 
 /** The operator's table on /all: a workspace a line, the trouble first in its own colour. */
 export function healthPanel(rows, alerts = []) {
