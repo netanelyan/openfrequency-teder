@@ -14,7 +14,7 @@ import { waitingImages } from '../images/index.js';
 import { approvedByPerson, canRun } from '../autonomy/rails.js';
 import { notify } from '../notify/index.js';
 import { externalPosts, matchDraft, postBody, publishZernio, zernioConfigured } from './zernio.js';
-import { captionOf, publicUrls, publisherFor, recheck, soundFor, tiktokModeFor } from './index.js';
+import { captionOf, closingRecheck, publicUrls, publisherFor, recheck, soundFor, tiktokModeFor } from './index.js';
 import { zernioAccountId } from './connect.js';
 
 const MINUTE = 60_000;
@@ -192,6 +192,16 @@ async function fallback(ctx, pack, post, { t, said }) {
     flow.error = `בדיקת העובדות נכשלה לפני הפרסום האוטומטי: ${problems[0]}`;
     save(db, post.id, results);
     step(db, post.id, 'tiktok', 'failed', { flow: 'stopped', kind: 'fact_check', problems });
+    await said('fallback_failed', `${pack.meta.displayName}: הפרסום האוטומטי נעצר`, `${oneLine(post.hook)}\n${flow.error}`);
+    return { state: 'stopped' };
+  }
+  // The closing slide too: Settings may have changed since the draft went to the app.
+  const closing = closingRecheck(post, pack);
+  if (closing.length) {
+    flow.state = 'stopped';
+    flow.error = `הפרסום האוטומטי נעצר בגלל השקף האחרון: ${closing[0]}`;
+    save(db, post.id, results);
+    step(db, post.id, 'tiktok', 'failed', { flow: 'stopped', kind: 'closing', problems: closing });
     await said('fallback_failed', `${pack.meta.displayName}: הפרסום האוטומטי נעצר`, `${oneLine(post.hook)}\n${flow.error}`);
     return { state: 'stopped' };
   }

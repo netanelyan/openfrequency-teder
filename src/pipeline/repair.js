@@ -1,5 +1,6 @@
 import { mechanicalFix } from '../voice/tells.js';
 import { numbersIn } from '../verify/claims.js';
+import { oneLineOf } from './closing.js';
 
 // The repair: a draft the code checks refused, mended where it failed and nowhere else.
 //
@@ -12,6 +13,11 @@ import { numbersIn } from '../verify/claims.js';
 //
 // What is never repaired: the law, honesty and the account's own rules (a post that broke them is blocked as
 // it is), and a problem no single text owns (the slides out of order, too few details): those keep the redraft.
+//
+// THE CLOSING SLIDE (src/pipeline/closing.js closingProblems) is a text of its own, the target "closing": every problem
+// of it, whatever rule its line broke, is its line's to mend, since the line is the writer's only text there (its
+// action is the code's). What the repair cannot mend in REPAIR_ATTEMPTS is the promo's own words' to stand in for
+// (build.js), or the post is blocked.
 //
 // FACTS. A number the gate could not find in a cited quote is repaired in two ways only: the number goes, or
 // the slide cites one of the post's own verified facts whose quote holds it. The code holds the writer to it:
@@ -31,6 +37,7 @@ export function targetText(draft, target) {
   if (target === 'caption') return draft.caption || '';
   if (target === 'caption short') return draft.captionShort || '';
   if (target === 'keywords') return (draft.keywords || []).join(', ');
+  if (target === 'closing') return draft.closing?.line || '';
   const s = draft.slides[slideIndex(target)];
   return s ? `${s.title} ${s.body} ${s.a || ''} ${s.b || ''}` : '';
 }
@@ -42,6 +49,7 @@ const slideIndex = (target) => Number(/^slide (\d+)$/.exec(target)?.[1] ?? -1);
  * A number the gate found on the cover or in the captions belongs to whichever of their texts states it.
  */
 export function targetsOf(draft, p) {
+  if (p.where === 'closing') return ['closing'];
   if (NEVER.test(p.code || '')) return null;
   // The cover's lines are counted with the line under it, and either can carry the line it is short of.
   if (p.where === 'cover' && / lines? of text: /.test(p.msg)) return ['cover', 'cover line 2'];
@@ -95,7 +103,11 @@ export function applyRepair(draft, target, r, { facts, factLock = false }) {
   else if (target === 'caption') next.caption = String(r.text || '').split('\n').map(fix).filter(Boolean).join('\n\n');
   else if (target === 'caption short') next.captionShort = fix(r.text);
   else if (target === 'keywords') next.keywords = String(r.text || '').split(/[,،\n]/).map((k) => k.trim()).filter(Boolean).slice(0, 6);
-  else {
+  else if (target === 'closing') {
+    // The line alone: what the slide sends people to, and the action, stay the code's.
+    if (!next.closing) return { refused: 'the post has no closing slide to repair' };
+    next.closing = { ...next.closing, line: oneLineOf(r.text), by: 'repair' };
+  } else {
     const s = next.slides[slideIndex(target)];
     if (!s) return { refused: `${target} is not a slide of this post` };
     const cites = (r.facts || []).map(String);

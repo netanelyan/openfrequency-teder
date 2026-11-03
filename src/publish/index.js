@@ -22,7 +22,8 @@ import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInst
 import { zernioAccountId } from './connect.js';
 import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
 import { heldReason, needsConnection } from './hold.js';
-import { FACT_CHECK_HE, publishErrorHe } from './errors.js';
+import { CLOSING_HE, FACT_CHECK_HE, publishErrorHe } from './errors.js';
+import { storedClosingProblems } from '../pipeline/closing.js';
 import { mediaOf } from '../core/platforms.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
@@ -111,6 +112,24 @@ export function recheck(db, post, pack) {
   problems.push(...g.problems);
   if (post.checks?.token && g.token !== post.checks.token) problems.push('the text changed after it was checked');
   return problems;
+}
+
+/**
+ * The closing slide of a stored post checked again before anything of it is sent (src/pipeline/closing.js
+ * closingProblems): there, with its line and an action on every platform, its line within the rules, and sending people
+ * where the account's promo does now. The problems' words, [] when it may go out. Every send meets it (mustBeSendable:
+ * the post at its slot, publish now, publish again, the TikTok draft at the approval and the runner's), and so do an
+ * approval (src/web/actions.js approve) and the draft-fallback's direct send (src/publish/draft.js).
+ */
+export const closingRecheck = (post, pack) => storedClosingProblems(post, pack);
+
+/**
+ * A post whose closing slide failed its check: blocked, the customer told why in Hebrew (CLOSING_HE), and the step
+ * "closing" in its trace with where it was stopped and what failed. It is never sent, and never sent as it is.
+ */
+export function blockForClosing(db, post, problems, at) {
+  db.update('posts', post.id, { status: 'blocked', reason: CLOSING_HE, updated_at: nowIso() });
+  step(db, post.id, 'closing', 'failed', { kind: 'closing', at, problems });
 }
 
 /**
@@ -231,6 +250,13 @@ function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', be
     db.update('posts', post.id, { status: 'blocked', reason: stepName === 'publish' ? FACT_CHECK_HE : `בדיקת העובדות עצרה את המצגת ${before}: עובדה בה כבר לא תואמת למקור שלה, או שהמקור הוסר.`, updated_at: nowIso() });
     step(db, post.id, stepName, 'failed', { kind: 'fact_check', problems });
     throw new PublishRefused(`fact check failed ${stepName === 'publish' ? 'before publishing' : 'before the TikTok draft'}: ${problems[0]}`, 'fact_check');
+  }
+  // The closing slide (the owner, 2026-11-02: a slideshow without one, or whose closing slide doesn't mention the promo,
+  // "doesn't go out like that"): blocked here, on every send.
+  const closing = closingRecheck(post, pack);
+  if (closing.length) {
+    blockForClosing(db, post, closing, stepName);
+    throw new PublishRefused(`the closing slide failed its check ${stepName === 'publish' ? 'before publishing' : 'before the TikTok draft'}: ${closing[0]}`, 'closing');
   }
 
   // Five hashtags at most, counted on the caption as it would go out: the post's own and any a caption picked up.
@@ -519,7 +545,7 @@ export async function sendDraft(ctx, postId, { t = now() } = {}) {
     mustBeSendable(db, pack, post, t, ['tiktok'], { stepName: 'tiktok', before: 'לפני השליחה לטיקטוק' });
   } catch (e) {
     if (!(e instanceof PublishRefused)) throw e;
-    return { state: e.code === 'fact_check' ? 'blocked' : 'held', why: e.message, code: e.code };
+    return { state: ['fact_check', 'closing'].includes(e.code) ? 'blocked' : 'held', why: e.message, code: e.code };
   }
   // Nothing connected on TikTok: no draft is tried (it could only fail); the post waits for the connection.
   if (needsConnection(db, pack, 'tiktok')) return { state: 'held', why: heldReason(['tiktok']), code: 'not_connected' };

@@ -313,12 +313,19 @@ account's own rules) and for what a closing slide never says: "הכי", "ביו�
 and other claims the store did not make, urgency or scarcity ("רק היום", "נשארו רק",
 "אל תפספסו"), an offer or a number neither the promo nor the facts hold, the action
 itself or a generic "visit our site", and a line that does not name the product or the
-store. A line that breaks a rule is never used: the slide takes the first line made of
-the promo's own words that passes (the product at the store, the store's name and its
-promise, more of the account's topic), and the post's trace says what the writer's line
-broke. The line and the action are in what the fact gate signs. Its own design in each
-style is still to come; for now the line is set as large as the style holds it, with
-the action under it.
+store. A closing slide that is missing, has no line, breaks a rule or no longer sends
+people where Settings does is a check like any other (the owner, 2026-11-02: it "goes
+through the repair loop and doesn't go out like that"): the line goes back to the writer
+in the repair call with the rule it broke, the post's topic and the promo, at most twice;
+only then does the slide take the first line made of the promo's own words that passes
+the same rules (the product at the store, the store's name and its promise, more of the
+account's topic), and with none the post is blocked. The trace's step "השקף האחרון" (as Settings calls the slide) says
+whose line it carries and what the first one broke. The line and the action are in what
+the fact gate signs, and the same check runs on the stored post before anything is sent:
+an approval, the TikTok draft, the runner at the slot, publish now, publish again and the
+draft-fallback's direct send each refuse one that fails, and the post is blocked with a
+reason in Hebrew. Its own design in each style is still to come; for now the line is set
+as large as the style holds it, with the action under it.
 
 Every post has 5 to 8 slides, one idea a slide, keywords in Hebrew and English for
 TikTok's search, a TikTok caption and a short Instagram one led by the cover line.

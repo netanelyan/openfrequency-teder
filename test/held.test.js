@@ -92,8 +92,14 @@ after(async () => {
 
 const pack = () => ctx.pack('alpha');
 const connect = (platform) => db.insert('zernio_connections', { account_id: 'alpha', platform, zernio_account_id: `z-${platform}`, username: `alpha.${platform}`, status: 'connected', connected_at: new Date().toISOString(), checked_at: new Date().toISOString() });
+// Each from its own document: a format drafts a document once, and a post the pipeline blocked is no post to approve
+// (it has no slides and no closing slide, and is never sent).
+const FORMATS = ['care-guide', 'quick-facts', 'mistakes', 'quick-facts'];
+let made = 0;
 async function approvedPost(slot) {
-  const id = (await buildPost(ctx, { pack: pack(), formatKey: 'care-guide' })).postId;
+  const res = await buildPost(ctx, { pack: pack(), formatKey: FORMATS[made++] });
+  assert.equal(res.status, 'queued', `${FORMATS[made - 1]}: ${res.reason}`);
+  const id = res.postId;
   db.run("UPDATE posts SET status = 'approved', approved_by = 'owner', slot_at = ? WHERE id = ?", new Date(slot).toISOString(), id);
   return id;
 }

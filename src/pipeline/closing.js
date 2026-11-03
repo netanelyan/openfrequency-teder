@@ -20,9 +20,16 @@ import { mechanicalFix, normHe, sentencesOf, tellsIn } from '../voice/tells.js';
 // did not make ("הכי", "ביותר", "מספר 1"), urgency or scarcity ("רק היום", "נשארו רק", "אל תפספסו"), an offer or a
 // number the promo does not hold, the action itself or a generic one ("בקרו באתר", "הלינק בביו", an address), and a
 // line about a promo that does not name it. What code can fix, code fixes first (a long dash, an exclamation mark).
-// A line that still breaks a rule is never used: the slide takes the first line made of the promo's own words that
-// passes the same rules (safeLines), and with none, no line at all (the action alone). Nothing is asked again here:
-// the repair loop that sends a refused line back to the writer is item 3.
+//
+// A LINE THAT BREAKS A RULE IS A CHECK THE REPAIR LOOP OWNS (item 3, the owner, 2026-11-02: "a slideshow without a
+// closing slide, or whose closing slide doesn't mention the promo, goes through the repair loop and doesn't go out like
+// that"). closingProblems is part of every check of a draft (src/pipeline/build.js checkPost): a closing slide that is
+// missing, has no line, has no action for a platform, sends people somewhere the account no longer does, or whose line
+// breaks a rule (closingLineProblems) is a problem, its target "closing". The repair (src/pipeline/repair.js) sends the
+// line back to the writer with the rule it broke, the post's topic and the promo, at most REPAIR_ATTEMPTS times. Only
+// then, as the last step, the slide takes the first line made of the promo's own words that passes the same rules
+// (closingSlide, safeLines); with none, the post is blocked. The same check runs on a stored post before anything is
+// sent (storedClosingProblems, src/publish/index.js closingRecheck): one that fails is blocked there, never sent.
 //
 // THE SLIDE IS DATA the renderer draws (src/render/render.js, after the last content slide) and the post keeps
 // (posts.data_json "closing"), inside what the fact gate signs (build.js extraOf): { kind, line, by, handle, name,
@@ -204,7 +211,7 @@ export function safeLines(base, pack = null) {
 }
 
 /** One line, as the slide sets it: its breaks and spaces made one, what code can fix fixed (a long dash, a "!"). */
-const oneLineOf = (line) => mechanicalFix(String(line ?? '').replace(/\\n|\s+/g, ' ').trim()).text.replace(/\s+/g, ' ').trim();
+export const oneLineOf = (line) => mechanicalFix(String(line ?? '').replace(/\\n|\s+/g, ' ').trim()).text.replace(/\s+/g, ' ').trim();
 
 /**
  * The post's closing slide from the writer's line: { closing, refused }. `closing` is the slide's data (see the head of
@@ -226,6 +233,51 @@ export function closingSlide(pack, { line = '', facts = [], others = [] } = {}) 
 
 /** The closing slide as the fact gate and the renderer take it with the post's other texts (build.js extraOf). */
 export const closingExtra = (draft) => (draft?.closing ? { closing: draft.closing } : {});
+
+/**
+ * The post's closing slide with this line as it is, checked by nobody yet: what the writer wrote (by 'writer') or a
+ * repair (by 'repair'), for closingProblems to judge. Its action is the code's, from the account's promo, as always.
+ */
+export function closingFrom(pack, line, by = 'writer') {
+  const base = closingBase(pack);
+  return { kind: base.kind, line: oneLineOf(line), by, ...base, actions: closingActions(base) };
+}
+
+/** What the closing slide sends people to, as the slide draws it: its kind, the store, the product, the address, the handle. */
+const destination = (c) => [c?.kind, c?.name || '', c?.product || '', c?.url || '', c?.kind === 'follow' ? c?.handle || '' : ''].join('|');
+const said = (c) => (c?.kind === 'follow' ? `following @${c.handle}` : c?.kind === 'product' ? `"${c.product}" of ${c.name}` : c ? `${c.name}${c.url ? ` (${c.url})` : ''}` : 'nothing');
+
+/**
+ * Every way a post's closing slide fails, as check problems ({ where: 'closing', code: 'closing', msg }, English, the
+ * writer's and the trace's words), [] for one that may go out: none at all; no action for one of the platforms; a
+ * destination that is not the account's promo now (a promo changed, added or taken away after the post was written);
+ * no line; a line that breaks a rule (closingLineProblems, held to the promo it names: a line of the promo's own words,
+ * by 'safe', need not be a sentence or name it again). `facts`: the post's, for the numbers a line may state.
+ */
+export function closingProblems(closing, { pack, others = [], facts = [] } = {}) {
+  const out = [];
+  const add = (msg) => out.push({ where: 'closing', code: 'closing', msg });
+  if (!closing) {
+    add('the post has no closing slide: every post ends on one, its line tying the topic to what the account sends people to');
+    return out;
+  }
+  for (const p of ['tiktok', 'instagram', 'facebook']) if (!closing.actions?.[p]?.text) add(`the closing slide has no action for ${p}`);
+  const now = closingBase(pack);
+  if (destination(closing) !== destination(now)) add(`the closing slide sends people to ${said(closing)}, and the account now sends them to ${said(now)}`);
+  if (!String(closing.line || '').trim()) {
+    add("the closing slide has no line: write one short line that ties this post's topic to what the slide sends people to");
+    return out;
+  }
+  for (const p of closingLineProblems(closing.line, { base: closing, pack, others, facts, writer: closing.by !== 'safe' })) add(p.msg);
+  return out;
+}
+
+/** A stored post's closing slide checked again before it is sent: the problems' words, [] when it may go out. */
+export const storedClosingProblems = (post, pack, { others = [] } = {}) =>
+  closingProblems(post?.data?.closing || null, { pack, others, facts: (post?.facts || []).filter((f) => f.verified) }).map((p) => p.msg);
+
+/** Is this check problem the closing slide's? */
+export const isClosingProblem = (p) => p?.where === 'closing';
 
 // ---------------------------------------------------------------- the writer's instructions
 

@@ -30,7 +30,7 @@ import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, everyPhoto, visualsNeeded } from './prompts.js';
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
-import { closingExtra, closingSlide } from './closing.js';
+import { CLOSING_LINE, closingExtra, closingFrom, closingProblems, closingSlide, isClosingProblem } from './closing.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
 import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
@@ -306,6 +306,9 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   for (const x of hookProblems(pack, f, draft, facts)) problems.push(x);
   // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
   for (const x of overlayProblems(draft, pack)) problems.push(x);
+  // The closing slide (src/pipeline/closing.js): there, with an action on every platform, sending people where the
+  // account does now, and a line that keeps the rules and names the promo. A post that fails it is repaired or blocked.
+  for (const x of closingProblems(draft.closing, { pack, others: ctx.packs || [], facts: facts.filter((f) => f.verified) })) problems.push(x);
   // The account's slide style (src/render/styles): every text fits it at the style's smallest size, and every
   // highlight is a short phrase of its own headline.
   const style = draft.style || null;
@@ -557,12 +560,12 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
   const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
-  // Every post ends on its closing slide (src/pipeline/closing.js): the writer's line when it passes the closing slide's
-  // rules, else a line of the promo's own words, and the action under it always the code's. It never stops a post.
-  const closed = closingSlide(pack, { line: d.closing?.line, facts, others: ctx.packs || [] });
-  draft.closing = closed.closing;
+  // Every post ends on its closing slide (src/pipeline/closing.js): the writer's line as written, its action the code's.
+  // A line that breaks a rule is a check like any other (checkPost): the repair mends it, and only after it the
+  // promo's own words stand in (buildPost).
+  draft.closing = closingFrom(pack, d.closing?.line, 'writer');
   const checked = checkDraft(ctx, pack, { draft, format, facts, items, attempt, moment: outline?.momentKeys || null });
-  return { draft, checked, fixes, closing: { by: closed.closing.by, line: closed.closing.line, refused: closed.refused } };
+  return { draft, checked, fixes, closing: { line: draft.closing.line, broke: checked.problems.filter(isClosingProblem).map((p) => p.msg) } };
 }
 
 /**
@@ -596,14 +599,16 @@ export function checkDraft(ctx, pack, { draft, format, facts, items, attempt = 0
 
 // Which limits a repaired text is told, by target.
 const TARGET_KIND = { cover: 'cover', 'cover line 2': 'sub', caption: 'captionLong', 'caption short': 'captionShort' };
+// The closing slide's line: one short line (src/pipeline/closing.js CLOSING_LINE).
+const CLOSING_LIMITS = { maxChars: CLOSING_LINE.maxChars, sentences: CLOSING_LINE.sentences };
 
 /** One target as the repair call is shown it: its text now, its role, its limits and the checks it failed. */
 function repairTarget(draft, pack, target, problems) {
   const s = /^slide \d+$/.test(target) ? draft.slides[Number(target.slice(6))] : null;
-  const text = target === 'keywords' ? (draft.keywords || []).join(', ') : { cover: draft.hook, 'cover line 2': draft.sub, caption: draft.caption, 'caption short': draft.captionShort }[target];
+  const text = target === 'keywords' ? (draft.keywords || []).join(', ') : { cover: draft.hook, 'cover line 2': draft.sub, caption: draft.caption, 'caption short': draft.captionShort, closing: draft.closing?.line }[target];
   return {
     target, role: s?.role, problems: problems.map((p) => p.msg),
-    limits: TARGET_KIND[target] ? limitsFor(TARGET_KIND[target], pack) : s ? limitsFor('slideBody', pack) : null,
+    limits: TARGET_KIND[target] ? limitsFor(TARGET_KIND[target], pack) : target === 'closing' ? CLOSING_LIMITS : s ? limitsFor('slideBody', pack) : null,
     now: s ? { title: s.title, body: s.body, a: s.a || '', b: s.b || '', facts: s.factKeys || [] } : { text: text || '' },
   };
 }
@@ -1162,29 +1167,53 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       lastAnswer = res.data;
     }
     if (!draft) return block('voice', 'הטיוטה לא נכתבה');
-    // The closing slide: whose line it carries, and what a refused line of the writer's broke.
-    step(db, postId, 'closing', closed.by === 'writer' ? 'ok' : 'info', { kind: draft.closing.kind, by: closed.by, line: closed.line, broke: closed.refused });
     // A graphic is decoration: one the redraft left malformed (a compare of one item) is dropped and the post checked
     // again without it, not lost with every fact in it verified. The count of slides with a visual is still checked.
-    if (checked.problems.length && checked.problems.every((p) => p.where === 'visual' && /^(slide \d+|the cover): /.test(p.msg))) {
-      const bad = new Set(checked.problems.map((p) => p.msg.split(':')[0]));
+    // (The closing slide's problems are the repair's, below, and do not keep a malformed graphic.)
+    const notClosing = checked.problems.filter((p) => !isClosingProblem(p));
+    if (notClosing.length && notClosing.every((p) => p.where === 'visual' && /^(slide \d+|the cover): /.test(p.msg))) {
+      const bad = new Set(notClosing.map((p) => p.msg.split(':')[0]));
       draft.slides.forEach((s, i) => bad.has(`slide ${i}`) && (s.visual = null));
       if (bad.has('the cover')) draft.coverVisual = null;
       checked = checkPost(pctx, pack, draft, facts, format);
-      step(db, postId, 'visual', checked.problems.length ? 'failed' : 'ok', { dropped: [...bad], problems: checked.problems.map(say) });
+      // The closing slide's problems are the repair's next, not the graphic's: the step says what the graphic left.
+      step(db, postId, 'visual', checked.problems.some((p) => !isClosingProblem(p)) ? 'failed' : 'ok', { dropped: [...bad], problems: checked.problems.map(say) });
     }
     // ---- the repair: each refused text mended where it failed, with the checks' own words, before the post is blocked
     let repairs = 0;
+    let closingRepairs = 0;
     if (checked.problems.length) {
       const fixed = await repairDraft(pctx, pack, { draft, checked, format, facts, items, outline, attempt: 1, ttl, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id } });
       for (const r of fixed.rounds) step(db, postId, 'repair', r.left.length ? 'failed' : 'ok', { round: r.round, targets: r.targets, kept: r.kept, refused: r.refused, ...(r.dropped ? { visualsDropped: r.dropped } : {}), problems: r.left }, r.usd);
       repairs = fixed.rounds.length;
+      closingRepairs = fixed.rounds.filter((r) => r.targets.includes('closing')).length;
       draft = fixed.draft;
       checked = fixed.checked;
     }
+    // ---- the closing slide's last step: a line the writer and the repair could not get right takes the promo's own
+    // words, checked by the same rules (closingSlide: the product at the store, the store and its promise, more of the
+    // account's topic). A post with no line that passes is blocked below, never sent without its closing slide.
+    if (checked.problems.some(isClosingProblem)) {
+      const safe = closingSlide(pack, { line: '', facts, others: pctx.packs || [] }).closing;
+      if (safe.line) {
+        const next = { ...structuredClone(draft), closing: safe };
+        const after = checkDraft(pctx, pack, { draft: next, format, facts, items, attempt: 1, moment: outline?.momentKeys || null });
+        const before = new Set(checked.problems.map(say));
+        if (!after.problems.some(isClosingProblem) && after.problems.every((p) => before.has(say(p)))) {
+          draft = next;
+          checked = after;
+        }
+      }
+    }
+    // The closing slide in the trace: whose line it carries (the writer's, a repair's, the promo's own words), what the
+    // writer's first line broke, and how many repairs it took; failed when it is what stops the post.
+    const closingLeft = checked.problems.filter(isClosingProblem);
+    step(db, postId, 'closing', closingLeft.length ? 'failed' : draft.closing.by === 'safe' ? 'info' : 'ok', {
+      kind: draft.closing.kind, by: draft.closing.by, line: draft.closing.line, broke: closed?.broke || [], repairs: closingRepairs, ...(closingLeft.length ? { problems: closingLeft.map((p) => p.msg) } : {}),
+    });
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
-      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay|fit|hook)$/.test(p.code) ? 2 : 3);
+      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay|fit|hook|closing)$/.test(p.code) ? 2 : 3);
       const sorted = checked.problems.slice().sort((a, b) => rank(a) - rank(b));
       const kind = rank(sorted[0]) === 0 ? 'rules' : rank(sorted[0]) === 1 ? 'fact_check' : rank(sorted[0]) === 2 ? 'shape' : 'voice';
       return block(kind, `${sorted.slice(0, 3).map(say).join(' · ')}${repairs ? ` (${repairs === 1 ? 'אחרי תיקון אחד' : `אחרי ${repairs} תיקונים`})` : ''}`, { problems: sorted.map(say), checks: checksOf(sorted), repairs });

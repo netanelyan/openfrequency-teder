@@ -387,6 +387,7 @@ The code checks refused some texts of one post. The request gives each of those 
 - The cover ("cover"), the line under it ("cover line 2") and the Instagram caption ("caption short"): return the text in "text". A cover written from a cover template keeps the template's own words and changes only what fills its slots, or, when its promise cannot be kept, becomes a plain line with none of the template's words.
 - The TikTok caption ("caption"): "text" holds four lines, hook, problem, discovery and result, one a line, the closing question at the end of the last.
 - The keywords ("keywords"): "text", separated by commas, at least one in Hebrew and one in English letters.
+- The closing slide ("closing"): its one line in "text", as CLOSING SLIDE in the request says: this post's topic tied to what the slide sends people to, naming it, within the rules listed there. Its action is the code's: never in the line.
 A NUMBER THE QUOTES DO NOT HOLD is repaired one of two ways, never a third: remove the number, or cite (in facts) a listed fact whose quote holds it. Never a new fact, a new source or a different number: the code refuses a repair that states a number its text did not, or that cites an id that is not listed.
 Return one repair for each target, with the target exactly as given, and "" in the fields it does not use.`,
 };
@@ -617,6 +618,8 @@ export function repairUser({ format, topic, facts, targets, pack = null, style =
     `TOPIC: ${topic}`,
     linesRule(pack),
     styleRoomFor(pack, style),
+    // The closing line is repaired knowing what it is for: the topic, the promo, the action under it and the rules.
+    pack?.meta && targets.some((t) => t.target === 'closing') ? closingRequest(pack, { topic }) : '',
     'FACTS THE POST MAY CITE (each with its id and the words of its source):',
     ...facts.map((f) => `- ${f.key}${f.who ? ` (ATTRIBUTED to ${f.whoHe || f.who}: name them and that they said it)` : ''}: ${f.claim}  [quote: "${f.quote}"]`),
     '',

@@ -12,11 +12,19 @@ export const STUCK_REASON = 'השליחה נקטעה באמצע, ולא ברור
 export const FACT_CHECK_HE = 'בדיקת העובדות עצרה את המצגת לפני השליחה: עובדה בה כבר לא תואמת למקור שלה, או שהמקור הוסר. המצגת לא תעלה.';
 
 /**
+ * Said when the closing slide's check stops a post before it is sent (src/publish/index.js closingRecheck): the slide is
+ * missing, has no line, breaks a rule, or sends people somewhere other than Settings says now. The details are in the
+ * post's steps.
+ */
+export const CLOSING_HE = 'המצגת הזו לא תעלה, כי השקף האחרון שלה חסר או לא מפנה למה שכתוב עכשיו בהגדרות. את המצגות הבאות נכתוב עם השקף האחרון הנכון.';
+
+/**
  * A send refused before anything went (src/publish/index.js PublishRefused), by its code. The ones whose message is
  * already the customer's (Shabbat, a pause, a photograph to look at) keep it.
  */
 const REFUSED_HE = {
   fact_check: FACT_CHECK_HE,
+  closing: CLOSING_HE,
   not_approved: 'המצגת כבר לא מאושרת, ולכן היא לא נשלחה.',
   hashtags: 'בכיתוב יש יותר מ-5 האשטגים. מורידים כמה בעריכה, ואז שולחים.',
   draft_in_flight: 'הטיוטה כבר בדרך לטיקטוק. עוד רגע זה ממשיך לבד.',

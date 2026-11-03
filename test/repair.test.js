@@ -27,8 +27,10 @@ const contextFor = (home) => {
 
 /**
  * The recorded writer, with its slides answer changed by `edit`, and each repair answered by `repairs[n]`
- * (a function of the request's targets). Counts the repair calls.
+ * (a function of the request's targets). Counts the repair calls. Its answer carries a closing line that passes, as a
+ * writer's does since the closing slide (the recordings were made before it): the repairs here are the slides'.
  */
+const CLOSING_LINE = 'עוד צמחים שמחזיקים מעמד בדירה קטנה, בפוסטים הבאים';
 const writer = (ctx, edit, repairs = []) => {
   const calls = { repair: 0, users: [] };
   return {
@@ -43,6 +45,7 @@ const writer = (ctx, edit, repairs = []) => {
       const r = await ctx.llm.json(req);
       if (req.task !== 'slides') return r;
       const data = structuredClone(r.data);
+      data.closing = { line: CLOSING_LINE };
       edit(data);
       return { ...r, data };
     } },

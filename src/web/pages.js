@@ -79,16 +79,24 @@ function redoBanners(d) {
   return out.join('');
 }
 const STEP_HE = {
-  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'שקף הסיום', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
+  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'השקף האחרון', repair: 'תיקון אחרי הבדיקות', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
   whatsapp: 'מוואטסאפ',
 };
 /** Whose line the closing slide carries (src/pipeline/closing.js), in the post's trace. */
-const CLOSING_HE = { writer: 'השורה שנכתבה עם השקפים', safe: 'הבדיקה פסלה את השורה שנכתבה, ובמקומה שורה מהפרטים של החשבון', none: 'בלי שורה' };
+const CLOSING_HE = {
+  writer: 'השורה שנכתבה עם השקפים',
+  repair: 'הבדיקה עצרה את השורה הראשונה, וזו נכתבה בתיקון',
+  safe: 'הבדיקה עצרה את השורה גם אחרי התיקונים, ובמקומה שורה מהפרטים של החשבון',
+  safeFirst: 'הבדיקה עצרה את השורה שנכתבה, ובמקומה שורה מהפרטים של החשבון',
+  none: 'בלי שורה',
+  failed: 'השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה',
+};
 /** What a customer did through the WhatsApp assistant (until 2026-11-02), in the post's trace. */
 const WHATSAPP_HE = { approve: 'אישור', reject: 'דחייה', edit: 'עריכה' };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
 const CHECK_HE = {
+  closing: 'השקף האחרון',
   facts: 'שער העובדות: מספר שלא בציטוט', shape: 'צורת הפורמט', visuals: 'גרפיקות', details: 'פרטים מהמחקר', caption: 'כיתוב (אורך, חסר)', keywords: 'מילות מפתח', length: 'אורך כותרת או שקף', overlay: 'טקסט על התמונה',
   'voice:banned': 'קול: מילה אסורה', 'voice:phrase': 'קול: ביטוי של בוט', 'voice:register': 'קול: משלב', 'voice:structure': 'קול: מבנה', 'voice:length': 'קול: אורך ומשפטים', 'voice:language': 'קול: שפה', 'voice:url': 'קול: קישור', 'voice:artefact': 'קול: שארית של מודל', 'voice:empty': 'טקסט ריק',
   'kind:no_source': 'אין מסמך שמחזיק פוסט', 'kind:no_photo': 'אין תמונה מורשית לשקף', 'kind:fact_check': 'עובדות שלא אומתו (בתכנון)', 'kind:voice': 'נשמע כמו בוט (ציון הבודק)', 'kind:review': 'הבודק: יותר מהעובדות', 'kind:budget': 'תקציב', 'kind:shape': 'צורת הפורמט', 'kind:rules': 'חוק או כלל של החשבון',
@@ -527,7 +535,7 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.why) bits.push(det.why);
       if (det.error && ctx.operator) bits.push(det.error);
       if (det.stuck) bits.push('נקטע באמצע השליחה');
-      if (s.step === 'closing') bits.push(...[CLOSING_HE[det.by], det.line ? `"${det.line}"` : '', ctx.operator ? (det.broke || []).slice(0, 2).join(' · ') : ''].filter(Boolean));
+      if (s.step === 'closing') bits.push(...[s.status === 'failed' ? CLOSING_HE.failed : det.by === 'safe' && !det.repairs ? CLOSING_HE.safeFirst : CLOSING_HE[det.by], det.line ? `"${det.line}"` : '', ctx.operator ? (det.broke || []).slice(0, 2).join(' · ') : ''].filter(Boolean));
       if (s.step === 'whatsapp') bits.push(...[WHATSAPP_HE[det.action] || det.action, det.by, det.slide ? `שקף ${det.slide}` : ''].filter(Boolean));
       else if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : det.via === 'whatsapp' ? 'מוואטסאפ' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);

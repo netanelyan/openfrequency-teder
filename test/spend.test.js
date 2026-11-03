@@ -101,6 +101,8 @@ const require_ = (key, pack) => JSON.parse(readFileSync(path.join(pack.recording
 function fakeBatchApi(pack, { onCreate = () => {} } = {}) {
   const batches = new Map();
   const rec = JSON.parse(JSON.stringify(require_('basil-containers', pack)));
+  // The writer's answer as the slides schema has it now: with the closing slide's line (the recording is older).
+  rec.slides.closing = { line: 'עוד צמחים שמחזיקים מעמד בדירה קטנה, בפוסטים הבאים' };
   let n = 0;
   return {
     batches,

@@ -11,7 +11,8 @@ import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
 import { canRun, isCustomerAccount, mayResume, pauseAccount, resumeAccount } from '../autonomy/rails.js';
-import { publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
+import { blockForClosing, closingRecheck, publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
+import { CLOSING_HE } from '../publish/errors.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { rulesFor } from '../schedule/choice.js';
@@ -80,9 +81,16 @@ const DRAFT_LEFT = 'הטיוטה הקודמת כבר בתיבת הטיוטות �
 export function approve(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   if (post.status !== 'queued') throw new ActionError(`אי אפשר לאשר פוסט במצב "${post.status}"`);
+  const pack = ctx.pack(post.account_id);
+  // A post whose closing slide fails its check is never approved: it could not go out, so it is blocked here and said
+  // (the owner, 2026-11-02: a slideshow without one, or whose closing slide doesn't mention the promo, "doesn't go out").
+  const closing = pack ? closingRecheck(post, pack) : [];
+  if (closing.length) {
+    blockForClosing(ctx.db, post, closing, 'approve');
+    throw new ActionError(CLOSING_HE, 422);
+  }
   ctx.db.update('posts', id, { status: 'approved', approved_at: nowIso(), approved_by: user.name, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id, detail: via(user) });
-  const pack = ctx.pack(post.account_id);
   if (pack && tiktokModeFor(ctx.db, pack, loadPost(ctx.db, id)) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
     const rest = restAt(now(), rulesFor(ctx.db, pack));
     const at = post.slot_at ? ` תזכורת תגיע ב-${timeHe(post.slot_at)}.` : '';
@@ -101,22 +109,34 @@ export function approveAll(ctx, user, params, form) {
   const jobs = [];
   const drafting = new Set();
   let done = 0;
+  let stopped = 0;
   for (const id of ids) {
     const row = ctx.db.get('SELECT status, account_id FROM posts WHERE id = ?', id);
     if (row?.status !== 'queued' || !owns(ctx, row.account_id)) continue;
-    const r = approve(ctx, user, { id });
+    let r;
+    try {
+      r = approve(ctx, user, { id });
+    } catch (e) {
+      // One the closing slide's check stopped is blocked and said on its own page; the others go on.
+      if (e instanceof ActionError && e.message === CLOSING_HE) {
+        stopped++;
+        continue;
+      }
+      throw e;
+    }
     done++;
     if (r.job) {
       jobs.push(r.job);
       drafting.add(row.account_id);
     }
   }
-  if (!done) throw new ActionError('אף אחד מהפוסטים האלה כבר לא מחכה לאישור');
-  const skipped = ids.length - done;
+  if (!done) throw new ActionError(stopped ? CLOSING_HE : 'אף אחד מהפוסטים האלה כבר לא מחכה לאישור');
+  const skipped = ids.length - done - stopped;
   // Each account keeps Shabbat or not by its own choice: the drafts wait if any of theirs does.
   const rest = [...drafting].map((a) => ctx.pack(a)).filter(Boolean).map((p) => restAt(now(), rulesFor(ctx.db, p))).find(Boolean) || null;
   const next = jobs.length ? (rest ? ` הטיוטות יישלחו לטיקטוק כש${rest} ייגמר.` : ' הטיוטות נשלחות לטיקטוק.') : ' כל פוסט ייצא בשעה שלו.';
-  const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped} כבר לא חיכו)` : ''}.${next}` };
+  const held = stopped ? ` ${stopped === 1 ? 'מצגת אחת לא אושרה' : `${stopped} מצגות לא אושרו`}, כי השקף האחרון שלהן חסר או לא מפנה למה שכתוב עכשיו בהגדרות.` : '';
+  const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped} כבר לא חיכו)` : ''}.${next}${held}` };
   Object.defineProperty(result, 'job', { value: Promise.all(jobs) });
   return result;
 }

@@ -30,7 +30,9 @@ function withReviewer(home, review, rewrite = () => ({ rewrites: [] }), calls = 
       calls.push({ task: req.task, model: req.model });
       if (req.task === 'review') return { data: review(req), usage: { input_tokens: 3000, output_tokens: 600 }, model: req.model };
       if (req.task === 'rewrite') return { data: rewrite(req), usage: { input_tokens: 4000, output_tokens: 300 }, model: req.model };
-      return recorded.json(req);
+      // The writer's answer as the slides schema has it now: with the closing slide's line (the recordings are older).
+      const got = await recorded.json(req);
+      return req.task === 'slides' ? { ...got, data: { ...got.data, closing: { line: 'עוד צמחים שמחזיקים מעמד בדירה קטנה, בפוסטים הבאים' } } } : got;
     },
   };
   return ctx;

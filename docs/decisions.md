@@ -2267,7 +2267,7 @@ takes the first line made of the promo's own words that passes the same rules (t
 then the product with the promise, the product, the store; the store's name and its promise, then the promise, then the
 name; "עוד על <the account's first topic> בפוסטים הבאים" for an account with no promo), and with none, no line, the
 action alone. The post's trace has a step for it ("שקף הסיום"): whose line it carries, the line, and for the operator
-what the writer's line broke. A refused line is not sent back to the writer here: that is item 3's repair loop.
+what the writer's line broke. A refused line is not sent back to the writer here: that is item 3's repair loop. (Since item 3, below, it is sent back first, and the promo's own words are the last step.)
 
 Where it lives: the closing slide is the post's, not the kind's. It is kept beside the slides, in the draft and in
 posts.data_json `closing` ({ kind, line, by: writer | safe | none, the promo's name, promise, product, url, the handle,
@@ -2290,6 +2290,72 @@ safe line and never a line that breaks the rules, the prompt carrying the topic,
 every format of the demo built through the pipeline with a product promo and a stubbed writer (the closing slide last on
 both platforms, the writer's line or the safe line, the trace, the gate before publishing), an account with no promo,
 and the closing slide drawn in every style and in the older templates with a 60-character line.
+
+### The closing slide's checks: repaired, then the promo's own words, else blocked, and checked again before any send (2026-11-03, item 3 of the closing slide)
+
+The owner: "The checks: a slideshow without a closing slide, or whose closing slide doesn't mention the promo, goes
+through the repair loop and doesn't go out like that. Add a test that every format produces one."
+
+The check (src/pipeline/closing.js closingProblems) is part of every check of a draft (build.js checkPost), so the loop
+the slides' checks use owns it: the redraft, the repair, the final gate. A closing slide fails it when it is missing;
+when it has no action for TikTok, Instagram or Facebook; when it sends people somewhere the account's promo no longer
+does (a promo changed, added or taken away after the post was written: its kind, store, product, address or handle);
+when it has no line; and when its line breaks a closing rule (closingLineProblems, item 2's: the voice, honesty, the
+law and the account's rules, claims, urgency, an offer or a number the promo and the facts do not hold, the action
+itself, and a line that names neither the product nor the store, for a product the product). Each is a problem
+`{ where: 'closing', code: 'closing' }`, the repair target "closing" (src/pipeline/repair.js): whatever rule the line
+broke, the line is the writer's only text there, so it is the line's to mend, honesty included (its action is the
+code's). The repair call sends the line with the checks' exact words and the CLOSING SLIDE section (the post's topic,
+the promo, the action the code will write, the rules), within REPAIR_ATTEMPTS (two), like any other repair, and keeps a
+repair only when it clears a check and adds none. The writer's line is no longer replaced silently: draftFromAnswer keeps
+it as written (closingFrom), and the check says what is wrong with it.
+
+THE FALLBACK STAYS, AS THE LAST STEP. When the repair's two tries leave the line failing (or the repair could not run),
+the slide takes the first line made of the promo's own words that passes the same rules ("<product> אצל <store>",
+"<store>. <promise>", "עוד על <the account's first topic> בפוסטים הבאים", down to the name), and the post goes on; with
+none that passes (a promo whose own name breaks honesty, a fake badge), the post is blocked, its reason the closing
+slide's problems. Why it stays: such a line never goes out "like that": it names the promo by construction, passes every
+rule the writer's line is held to, and costs nothing, while a post whose facts, slides and photographs all passed would
+otherwise be lost for one line the code can write correctly from the customer's own words. What it gives up is the
+topic: a line of the promo's words does not start from the post, so it comes only after the writer had its two tries, and
+the trace says so.
+
+DOESN'T GO OUT LIKE THAT, ON EVERY PATH. The same check runs on a stored post (storedClosingProblems; src/publish/index.js
+closingRecheck) wherever it could leave: mustBeSendable, which every send meets (the post at its slot, so the runner;
+publish now; publish again; the TikTok draft, at an approval and in the runner's pass), refuses it with the code
+"closing"; an approval (src/web/actions.js approve) refuses it before the post is approved, and approve-all skips it and
+says how many it left; the draft-fallback's direct send an hour after the slot (src/publish/draft.js) stops it. A post
+stopped at a send or an approval is blocked (blockForClosing) with one Hebrew reason, CLOSING_HE, and a failed step
+"closing" with where it was stopped and what failed; one stopped at the draft-fallback, already out on Instagram, has its
+TikTok flow stopped and its owner told. Nothing of it is sent. A stopped post is not repaired at the send: what was
+approved is what goes out, and a change made after the approval would be one nobody saw. Posts made before the closing
+slide existed have none, and are stopped this way if they are still waiting when this goes live.
+
+What the owner sees. On the post's page, the trace's step "השקף האחרון" (renamed from item 2's "שקף הסיום": Settings and the reasons call the slide that) says whose line the slide carries: "השורה שנכתבה עם
+השקפים", "הבדיקה עצרה את השורה הראשונה, וזו נכתבה בתיקון", "הבדיקה עצרה את השורה שנכתבה, ובמקומה שורה מהפרטים של
+החשבון" (no repair could run) or "הבדיקה עצרה את השורה גם אחרי התיקונים, ובמקומה שורה מהפרטים של החשבון", then the line;
+the repair rounds show as "תיקון אחרי הבדיקות" (a label that step lacked); the operator also sees what the first line
+broke. A post the check stopped while it was written is blocked like any other ("הבדיקות שלנו עצרו את המצגת הזו בזמן
+הכתיבה", the details for the operator), its step "השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה". One stopped at a
+send or an approval says on its page, in its banner and on the approve button's answer: "המצגת הזו לא תעלה, כי השקף
+האחרון שלה חסר או לא מפנה למה שכתוב עכשיו בהגדרות. את המצגות הבאות נכתוב עם השקף האחרון הנכון." The Results page's block
+rates count it as "השקף האחרון".
+
+Where it does not go: the drawing (src/render/, item 4, on its own branch) is untouched, and the action's data keeps its
+shape. The demo's recorded answers predate the closing line: drafted offline, their posts make the repair's call, find
+no recording, and close on the promo's own words (or, with no promo, on more of the account's topic). The tests whose
+fake writers answer from those recordings and count the calls (repair, review, spend) give the answer a closing line, as
+a writer's has now.
+
+test/closing-checks.test.js, 7, all failing on the code before: every format id of the demo pack (14, a format added
+later included) built with a product promo and with none, ending on its closing slide on both platforms, by the
+writer, by a repair of a banned line, or by a repair of an answer with no line, and passing the check before sending; a
+line missing, empty, naming neither, or banned, repaired in one call that is told the rule, the topic and the promo, and
+shown on the post's page; a repair that fails twice ending on the promo's own words, and a promo whose own words break
+honesty blocking the post; a stored post with its closing slide missing, empty, naming neither, banned, or pointing at a
+promo that changed, refused and blocked by an approval, the TikTok draft, the runner, publish now and publish again, the
+reason in Hebrew on its page; an account with no promo passing every path with its follow line; the draft-fallback
+stopped by a promo changed after the draft; and the repair target's own plumbing.
 
 ### Teder is managed on its dashboard only, not on WhatsApp (2026-11-02)
 
