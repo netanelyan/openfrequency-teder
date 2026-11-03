@@ -10,7 +10,7 @@ import { customerWorkspace } from './own.js';
 //        cancelAt, graceUntil, plan: { name: "full" | "small", slideshows, redos } }
 //
 // The contract is openfrequency-accounts' docs/contracts/entitlement.json. `due` (2026-10-29) is a paid period that is
-// over while the 14 days of grace the terms give run (graceUntil, allowed: true); then it is unpaid. An access this file
+// over while the grace the terms give runs (72 hours since 2026-11-03, until graceUntil, allowed: true); then it is unpaid. An access this file
 // does not know yet is still an answer: the decision is `allowed`'s alone, and `access` only says why.
 //
 // `allowed` is the only thing that opens or stops Teder. `plan` is the size of the workspace's month (src/budget/quota.js:

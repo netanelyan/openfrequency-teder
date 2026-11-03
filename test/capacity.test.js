@@ -18,7 +18,7 @@ import { newTheme, createPack } from '../src/onboarding/pack.js';
 import { DISPLAY_FACES } from '../src/render/fonts.js';
 import { ALL_LOOKS } from '../src/render/templates/registry.js';
 import { backup, verifyCopy } from '../src/db/backup.js';
-import { REMOVALS, queueRemovals, retentionPass, stoppedWorkspaces } from '../src/billing/retention.js';
+import { REMOVALS, STOP_GRACE_DAYS, queueRemovals, retentionPass, stoppedWorkspaces } from '../src/billing/retention.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { closeBrowser } from '../src/render/render.js';
 import { DEMO, fakeAccounts, opened, paidWorkspaces, tempHome } from './helpers.js';
@@ -328,7 +328,7 @@ test('retention: a demo six months past its last contact goes with its opens and
   }
 });
 
-test("retention: a workspace whose Teder stopped has its TikTok and Instagram disconnected a day after the stop; a failed removal is tried again until done", async () => {
+test("retention: a workspace whose Teder stopped has its TikTok and Instagram disconnected 3 days after the stop; a failed removal is tried again until done", async () => {
   const { db, ctx, cleanup } = three();
   const realFetch = globalThis.fetch;
   const calls = [];
@@ -341,15 +341,20 @@ test("retention: a workspace whose Teder stopped has its TikTok and Instagram di
   };
   process.env.ZERNIO_API_KEY = 'zk_test_key';
   try {
+    // The owner's 3 days (2026-11-03), as the privacy policy says: kept until 3 days after the service stops.
+    assert.equal(STOP_GRACE_DAYS, 3);
     const t = Date.parse('2026-10-29T08:00:00Z');
     db.update('accounts', 'alpha', { zernio_profile_id: 'prof-alpha' });
     db.insert('zernio_connections', { account_id: 'alpha', platform: 'tiktok', zernio_account_id: 'tk-alpha', username: 'a', status: 'connected', connected_at: 'x', checked_at: 'x' });
     db.insert('zernio_connections', { account_id: 'loose', platform: 'tiktok', zernio_account_id: 'tk-loose', username: 'l', status: 'connected', connected_at: 'x', checked_at: 'x' });
-    // Unpaid (accounts' 14 days of grace, `due`, are over) since an hour ago: not yet, a payment recorded late is not punished.
-    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 3_600_000).toISOString(), checkedAt: new Date(t).toISOString() });
-    assert.deepEqual(stoppedWorkspaces(db, t), []);
-    // Stopped two days ago: the service stopped.
-    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 2 * 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
+    // Unpaid (accounts' 72 hours, `due`, are over) since an hour ago, and since an hour short of 3 days: not yet, a
+    // payment recorded a few days late is not punished.
+    for (const ago of [3_600_000, 3 * 86_400_000 - 3_600_000]) {
+      setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - ago).toISOString(), checkedAt: new Date(t).toISOString() });
+      assert.deepEqual(stoppedWorkspaces(db, t), [], `${ago / 3_600_000} hours`);
+    }
+    // Stopped 3 days ago: the service stopped.
+    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 3 * 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
     const out = await retentionPass(ctx, { t });
     assert.deepEqual(out.stopped, [{ workspace: 1, access: 'unpaid', connections: 1 }]);
     assert.equal(db.get("SELECT COUNT(*) AS n FROM zernio_connections WHERE account_id = 'alpha'").n, 0, 'forgotten here');
@@ -365,10 +370,12 @@ test("retention: a workspace whose Teder stopped has its TikTok and Instagram di
     assert.deepEqual([next.removals.removed, next.removals.left], [1, 0]);
     assert.deepEqual(getSetting(db, REMOVALS), []);
 
-    // A cancelled workspace is disconnected at the next pass; one that paid again before its removal went keeps it.
+    // A cancelled workspace is disconnected at the first pass 3 days after its stop; one that paid again before its
+    // removal went keeps it.
     db.run("UPDATE accounts SET workspace_id = 2 WHERE id = 'bravo'");
     db.insert('zernio_connections', { account_id: 'bravo', platform: 'instagram', zernio_account_id: 'ig-bravo', username: 'b', status: 'connected', connected_at: 'x', checked_at: 'x' });
-    setSetting(db, 'entitlement:2', { allowed: false, access: 'cancelled', plan: null, stoppedAt: new Date(t + 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
+    setSetting(db, 'entitlement:2', { allowed: false, access: 'cancelled', plan: null, stoppedAt: new Date(t - 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
+    assert.deepEqual(stoppedWorkspaces(db, t + 2 * 86_400_000 - 1).map((s) => s.workspace), [], 'a moment short of 3 days');
     assert.deepEqual(stoppedWorkspaces(db, t + 2 * 86_400_000).map((s) => s.workspace), [2]);
     queueRemovals(db, [{ kind: 'account', id: 'tk-back', account: 'alpha', workspace: 1, reason: 'stopped' }]);
     paidWorkspaces(db, [1]);

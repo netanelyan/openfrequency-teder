@@ -11,7 +11,7 @@ import { autonomyMode, canRun, isCustomerAccount, UNPAID } from '../src/autonomy
 import { tiktokMode, tiktokModeFor } from '../src/publish/index.js';
 import { accountAllowed, lastKnown, refreshEntitlements } from '../src/billing/entitlement.js';
 import { monthShare, monthsOf, planOf, room, setPlan, sharing, usage } from '../src/budget/quota.js';
-import { REMOVALS, queueRemovals, retentionPass, stoppedWorkspaces } from '../src/billing/retention.js';
+import { REMOVALS, STOP_GRACE_DAYS, queueRemovals, retentionPass, stoppedWorkspaces } from '../src/billing/retention.js';
 import { EDIT_CHECKS_PER_DAY, edit, setMode, setQuota } from '../src/web/actions.js';
 import { sampleRoom } from '../src/web/onboarding.js';
 import { connectData, connectRoutes, tiktokModePanel } from '../src/web/connect.js';
@@ -293,8 +293,8 @@ test('retention: an own workspace is never disconnected, whatever answer is kept
     const t = Date.parse('2026-10-29T08:00:00Z');
     db.update('accounts', 'alpha', { zernio_profile_id: 'prof-alpha' });
     db.insert('zernio_connections', { account_id: 'alpha', platform: 'tiktok', zernio_account_id: 'tk-alpha', username: 'a', status: 'connected', connected_at: 'x', checked_at: 'x' });
-    // An answer kept from before (accounts said not allowed two days ago), and a removal queued for that stop.
-    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - 2 * 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
+    // An answer kept from before (accounts said not allowed STOP_GRACE_DAYS ago), and a removal queued for that stop.
+    setSetting(db, 'entitlement:1', { allowed: false, access: 'unpaid', plan: null, stoppedAt: new Date(t - STOP_GRACE_DAYS * 86_400_000).toISOString(), checkedAt: new Date(t).toISOString() });
     queueRemovals(db, [{ kind: 'account', id: 'tk-old', account: 'alpha', workspace: 1, reason: 'stopped' }]);
 
     own('1');

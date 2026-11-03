@@ -18,13 +18,14 @@ import { ownWorkspace } from './own.js';
 //                         request on the website: its WhatsApp number, its catalogue and its slides. Removed, with its
 //                         page's opens and its pictures, LEAD_MONTHS after its last contact: the later of its last
 //                         update (a new request for the same store updates it) and the last time its page was opened.
-//   TikTok and Instagram  "הרשאות של חשבונות ברשתות: עד שמנתקים אותן, או עד שהשירות נעצר". Once a workspace's Teder has
+//   TikTok and Instagram  the policy keeps the networks' permissions until they are disconnected, or until 3 days after
+//                         the service stops (the owner, 2026-11-03). Once a workspace's Teder has
 //                         stopped (accounts' entitlement answer says not allowed, src/billing/entitlement.js stoppedAt),
 //                         everything it connected through Zernio is disconnected from our team and its connection rows
-//                         go, STOP_GRACE_DAYS after the stop: a payment recorded a day late, or one answer by mistake,
-//                         does not cost the customer their connections. The 14 days the terms give a payment that did
-//                         not go through ("אם הוא לא הוסדר תוך 14 יום") are accounts' `due`, which is still allowed, so
-//                         an unpaid answer means they are over. Their posts, sources and settings stay: the policy
+//                         go, STOP_GRACE_DAYS (3, the owner's, 2026-11-03) after the stop: a payment recorded a few days
+//                         late, or one answer by mistake, does not cost the customer their connections. The 72 hours the
+//                         terms give to pay for a new month are accounts' `due`, which is still allowed, so an unpaid
+//                         answer means they are over. Their posts, sources and settings stay: the policy
 //                         promises nothing about them after a stop, and the customer deletes them by deleting the
 //                         workspace (src/web/workspace-delete.js). One of the company's own workspaces
 //                         (OF_OWN_WORKSPACES, src/billing/own.js) is never disconnected: its Teder is ours, not sold.
@@ -38,7 +39,7 @@ import { ownWorkspace } from './own.js';
 // (seven years, accounts).
 
 export const LEAD_MONTHS = 6;
-export const STOP_GRACE_DAYS = 1;
+export const STOP_GRACE_DAYS = 3;
 export const PUBLIC_KEEP_DAYS = 3;
 export const REMOVALS = 'zernio:removals';
 
