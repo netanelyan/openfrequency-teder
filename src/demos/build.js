@@ -9,6 +9,7 @@ import { RenderError, renderPost } from '../render/render.js';
 import { themeOf } from '../render/styles/index.js';
 import { wikipediaDocs } from '../sources/index.js';
 import { findImage, MIN_SIDE } from '../images/index.js';
+import { imageExt } from '../images/size.js';
 import { DemoError, domainOf, readStore, shelfOf, storeDocument, storeOrigin, storeStats } from './store.js';
 import { chooseTopic, writeDemo } from './write.js';
 
@@ -68,15 +69,6 @@ export function requestDemo(db, { url, whatsapp = null, origin = 'website' }) {
   const id = db.insert('demos', { slug: slugFor(domain), url: home, domain, whatsapp, origin, status: 'new', created_at: t, updated_at: t });
   return { demo: db.get('SELECT * FROM demos WHERE id = ?', id), created: true };
 }
-
-/** A picture's kind from its first bytes: 'png', 'jpg', 'webp', or null. */
-export const imageExt = (buf) => {
-  const b = Buffer.from(buf || []);
-  if (b.length > 8 && b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG') return 'png';
-  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8) return 'jpg';
-  if (b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'webp';
-  return null;
-};
 
 const set = (db, id, patch) => db.update('demos', id, { ...patch, updated_at: nowIso() });
 

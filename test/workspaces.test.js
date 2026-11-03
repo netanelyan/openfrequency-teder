@@ -150,6 +150,8 @@ function snapshotB() {
     facts: existsSync(factsDir) ? readdirSync(factsDir).map((f) => [f, readFileSync(path.join(factsDir, f), 'utf8')]) : [],
     // B's pack.json: its style, its formats' kind and what its slideshows send people to (promo) are written there.
     pack: readFileSync(path.join(home.home, 'packs', 'bravo', 'pack.json'), 'utf8'),
+    // B's logo, on its closing slide: B's to put there or take away.
+    brand: existsSync(path.join(home.home, 'packs', 'bravo', 'brand')) ? readdirSync(path.join(home.home, 'packs', 'bravo', 'brand')) : [],
   });
 }
 
@@ -159,7 +161,7 @@ const pagesFor = () => [
   '/static/accounts.css', '/notifications/latest.json', '/progress.json',
   '/?account=bravo', '/posts?account=bravo', '/accounts?account=bravo', '/results?account=bravo', '/sources?account=bravo', '/facts?account=bravo', '/topics?account=bravo', '/rivals?account=bravo', '/sounds?account=bravo', '/settings?account=loose',
   `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`, `/new/${B.onboarding}/status`,
-  '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`,
+  '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`, '/accounts/bravo/logo',
   '/demos', `/demos/${B.demo}`, `/demos/${B.demo}/img/tiktok/0`,
 ];
 
@@ -243,6 +245,9 @@ const casesFor = () => {
     ['/accounts/bravo/formats', { fmt_facts: 'on', fmt_tips: 'on', fmt_story: 'on' }],
     // What B's slideshows send people to is B's to say.
     ['/accounts/bravo/promo', { promo_shown: '1', promo_name: 'A', promo_promise: 'A sends B somewhere else', promo_target: 'site', promo_site: 'a.example.org' }],
+    // So is its logo (a form with a file, test/logo.test.js; sent here without one, the account is not found first).
+    ['/accounts/bravo/logo'],
+    ['/accounts/bravo/logo/remove'],
     ['/accounts/bravo/style-pick', { style: 'B' }],
     ['/accounts/bravo/style-test', { on: '1' }],
     ['/accounts/bravo/kill'],

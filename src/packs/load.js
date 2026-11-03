@@ -4,6 +4,7 @@ import { examplesDir, packsDir } from '../core/paths.js';
 import { nowIso } from '../core/clock.js';
 import { packWarnings, validateAll, validatePack, voiceExamples } from './validate.js';
 import { factsSource } from '../sources/facts.js';
+import { LOGO_FILES } from './logo.js';
 
 // Packs are folders of configuration. The engine reads them from $OF_HOME/packs;
 // the one tracked pack, examples/packs/demo, is read from the repo only when it
@@ -41,10 +42,10 @@ export function readPack(dir) {
   pack.id = meta.id;
   pack.examples = voiceExamples(pack.voice);
   pack.recordingsDir = path.join(dir, 'recordings');
-  // The account's logo (brand/logo.png, .svg, .jpg, .jpeg or .webp): on its closing slide, first, on a tile of its own
+  // The account's logo (brand/logo.png, .svg, .webp, .jpg or .jpeg): on its closing slide, first, on a tile of its own
   // (src/render/styles/index.js, src/render/end.js closingPage); on a post made before the closing slide, small on the
-  // last slide. A customer's account has none until one is put there (README, "The closing slide").
-  pack.brandLogo = ['logo.png', 'logo.svg', 'logo.webp', 'logo.jpg', 'logo.jpeg'].map((f) => path.join(dir, 'brand', f)).find((f) => existsSync(f)) || null;
+  // last slide. A customer's comes from their store's site when the account is made, or from Settings (src/packs/logo.js).
+  pack.brandLogo = LOGO_FILES.map((f) => path.join(dir, 'brand', f)).find((f) => existsSync(f)) || null;
   // A facts/ folder: hand-checked facts, one more approved source (src/sources/facts.js).
   pack.facts = factsSource(path.join(dir, 'facts'));
   return pack;

@@ -32,6 +32,8 @@ import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
 import { setFormats } from './formats.js';
 import { setPromo } from './promo.js';
+import { dropLogo, LOGO_HE, logoType, setLogo } from './logo.js';
+import { LOGO_MAX_BYTES } from '../packs/logo.js';
 import { themeOf } from './ui.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
@@ -97,6 +99,54 @@ async function readForm(req, limit = 200_000) {
     chunks.push(c);
   }
   return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
+}
+
+/** The paths whose form carries a file (multipart/form-data, readUpload): Settings' logo. Every other form is URL-encoded. */
+const UPLOADS = [/^\/accounts\/[\w-]+\/logo$/];
+/** An upload's body: the file's own cap (src/packs/logo.js) and room for the form's other fields. */
+const UPLOAD_LIMIT = LOGO_MAX_BYTES + 64_000;
+/** A body this far over it is not read to its end: the connection is cut. */
+const UPLOAD_CUT = 32 * 1024 * 1024;
+
+/**
+ * A form that carries a file: its fields, as readForm gives them, and its files on `uploads` ([{ field, name, buf }], a
+ * property no field of the form can set). A body over `limit` is read to its end and dropped, so the browser gets the
+ * answer (an ActionError, 413) rather than a connection cut halfway; one over UPLOAD_CUT is cut. A form sent
+ * URL-encoded is read as one, with no files.
+ */
+async function readUpload(req, limit = UPLOAD_LIMIT) {
+  const type = String(req.headers['content-type'] || '');
+  const body = await new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > UPLOAD_CUT) {
+        req.destroy();
+        reject(Object.assign(new Error('body too large'), { status: 413 }));
+      } else if (size <= limit) chunks.push(c);
+    });
+    req.on('end', () => resolve(size > limit ? null : Buffer.concat(chunks)));
+    req.on('error', reject);
+    // A browser that went away halfway: once the body has ended this is too late to matter.
+    req.on('close', () => reject(Object.assign(new Error('the upload stopped halfway'), { status: 400 })));
+  });
+  if (!body) throw new act.ActionError(LOGO_HE.large, 413);
+  const fields = [];
+  const uploads = [];
+  if (/^multipart\/form-data\s*;/i.test(type)) {
+    let parts;
+    try {
+      parts = await new Response(body, { headers: { 'content-type': type } }).formData();
+    } catch {
+      throw new act.ActionError(LOGO_HE.empty, 400);
+    }
+    for (const [k, v] of parts) {
+      if (typeof v === 'string') fields.push([k, v]);
+      else uploads.push({ field: k, name: v.name, buf: Buffer.from(await v.arrayBuffer()) });
+    }
+  } else fields.push(...new URLSearchParams(body.toString('utf8')));
+  return Object.defineProperty(Object.fromEntries(fields), 'uploads', { value: uploads });
 }
 
 /** accounts.css: each account's own colour as --acc, so pages need no inline style. */
@@ -233,6 +283,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/accounts\/([\w-]+)\/style$/, (c, u, m) => act.applyStyle(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/formats$/, (c, u, m, f) => setFormats(c, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/promo$/, (c, u, m, f) => setPromo(c, u, { id: m[1] }, f)],
+    ['POST', /^\/accounts\/([\w-]+)\/logo$/, (c, u, m, f) => setLogo(c, u, { id: m[1] }, f)],
+    ['POST', /^\/accounts\/([\w-]+)\/logo\/remove$/, (c, u, m) => dropLogo(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/kill$/, (c, u, m) => act.killAccount(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/resume$/, (c, u, m) => act.resume(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/quota$/, (c, u, m, f) => act.setQuota(c, u, { id: m[1] }, f)],
@@ -437,7 +489,14 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (req.method === 'POST') {
         const origin = req.headers.origin;
         if (origin && !origins.has(origin)) return json(req, res, 403, { ok: false, message: 'בקשה מאתר אחר נחסמה.' });
-        const form = await readForm(req);
+        let form;
+        try {
+          form = UPLOADS.some((re) => re.test(p)) ? await readUpload(req) : await readForm(req);
+        } catch (e) {
+          // A file over the cap: nothing in it was read, so nothing changes, and the page it came from says why.
+          if (!(e instanceof act.ActionError)) throw e;
+          return ajax ? json(req, res, e.status, { ok: false, message: e.message }) : redirect(res, backOf(req, host), { 'set-cookie': flash(e.message) });
+        }
         if (!csrfOk(form._csrf, sid, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, pages.errorPage({ kind: 'stale', back: backOf(req, host), v: V, theme }));
         // View-as (and any session accounts marks read-only) changes nothing, whatever the button: refused here, on
         // the server, not only by the buttons it does not see.
@@ -510,6 +569,15 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         const file = pk ? previewFile(pk, sm[2], sm[3], sm[4]) : null;
         if (!file) return send(req, res, 404, 'no such preview', 'text/plain; charset=utf-8');
         res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' });
+        return createReadStream(file).pipe(res);
+      }
+      // ---- an account's logo, for its panel on Settings (src/web/logo.js): the workspace's accounts only. An SVG (one of
+      // our own accounts', put there by hand) is sent so that, opened on its own, it runs nothing.
+      const lg = /^\/accounts\/([\w-]+)\/logo$/.exec(p);
+      if (lg) {
+        const file = owns(c, lg[1]) ? c.pack(lg[1])?.brandLogo : null;
+        if (!file || !existsSync(file)) return send(req, res, 404, 'no such logo', 'text/plain; charset=utf-8');
+        res.writeHead(200, { 'content-type': logoType(file), 'content-length': statSync(file).size, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" });
         return createReadStream(file).pipe(res);
       }
       // ---- a demo's slides on its operator page (src/web/demos.js); for anyone else there is no such thing

@@ -2471,13 +2471,9 @@ grounds record, the no-bare-slides check).
 The logo. A pack's logo is packs/<id>/brand/logo.png or .svg (src/packs/load.js), now also .webp, .jpg or .jpeg, the
 formats a store's site serves. On the closing slide it comes first, in the bands like the words, on a tile of its own:
 white, or dark when the renderer finds a light logo (light letters on a clear ground, made for a dark site). With none,
-nothing is drawn in its place: the group is shorter by the logo and its gap. Where a customer's logo would come from: the
-site read on /new (src/onboarding/promo.js readSitePromo through src/demos/store.js readStore, which for a store on
-Shopify, WooCommerce or Wix already finds the logo's address with logoOf, as the store demos use it) drops it, and no
-step saves a picture into a customer's pack. To fill it: keep that address on the onboarding's draft (setup_json), fetch
-it when the account is made (PNG, JPEG or WebP only, never an SVG from a site, at least about 120 px tall, as
-src/demos/build.js fetches a store's logo), write it to brand/logo.<ext>, and let Settings replace or remove it. Until
-then a customer's closing slide is drawn without one, and our own accounts draw theirs where their pack has it.
+nothing is drawn in its place: the group is shorter by the logo and its gap. Where a customer's logo comes from: the
+site read on /new, kept on the onboarding and fetched when the account is made, and Settings (the next section, "The
+customer's logo").
 
 The bands and the rules are enforced, not only designed. Every styled slide was already checked on all four sides; an
 older template's slide only on the top and the bottom. The closing slide on an older template now has a frame padded to
@@ -2537,3 +2533,61 @@ workspace and has it; the operator's /all has no workspace and so no line, and i
 workspace's payment, says "מחכה לתשלום" (accounts' word) for one in its grace instead of the raw `due`. The test fake's
 paid dates now count from the day a test runs, so no other test's pages fall into the last week by the calendar.
 test/pay-reminder.test.js.
+
+### The customer's logo, from their site and on Settings (2026-11-03)
+
+The owner approved it on 2026-11-03: the closing slide draws the account's logo when it has one (the section above), and
+no customer had one. The site read on /new found it and dropped it: src/onboarding/promo.js readSitePromo took the name
+and the description from src/demos/store.js readStore and left its `logo`, which readStore returns for Shopify,
+WooCommerce and Wix alike (logoOf, on the homepage: the first picture whose class, name or file says logo, or whose text
+is the store's name; never an SVG address). Now:
+
+- **Kept on the onboarding.** readSitePromo returns the address beside the draft, from readStore, or from the homepage
+  alone for a site on none of the three, and startSiteRead keeps it in setup_json as `siteLogo`, whoever wrote the promo.
+- **Fetched when the account is made, never waited for.** /new/<id>/create starts src/onboarding/promo.js startLogoFetch
+  after the pack is written and answers at once. In the background (a site read still running is waited for first) the
+  picture is fetched through the network's one door, src/core/net.js getBytes: https only, the public internet only, every
+  redirect checked, the connection pinned to the address checked, asking for PNG, WebP or JPEG first, with `width=640` for
+  a CDN that draws to size (Shopify's), and read no further than 2 MB: getBytes now stops a body at its cap, refusing one
+  whose length says more without reading it and cutting one that keeps coming, where it used to read the whole body
+  first (the demos' pictures and the image libraries go through the same). It is written to brand/logo.<ext> unless the
+  customer put one there meanwhile. One that does not come or will not do is one line for the operator, `[onboarding]
+  <id> (<account>): the store's logo <address> was not kept, and the account has none: <why>`, and the account has no
+  logo.
+- **Settings, for the account's people and the operator.** A panel after the closing slide's: the logo on the tile the
+  slide sets it on (white, or dark for a light logo, told in the page by the renderer's own test), one button to put one
+  there or replace it (with the page's script the file is sent as soon as it is picked, and one over 2 MB is said without
+  being sent; without the script, the browser's file field and a save), and a remove that asks for a second tap. The
+  form is multipart/form-data, the one form that is: src/web/server.js reads it on that path alone (readUpload, Node's
+  own parser), and its CSRF token, its Origin, the session's workspace (another workspace's account is not found) and the
+  read-only view-as are checked as on every form. Who may change it is who may change the rest of Settings: anyone of
+  the account's workspace who is signed in and not viewing as, and the operator. Accounts' roles (client_owner,
+  client_member) are not told apart there, so they are not here either. The picture is served back to the panel on
+  /accounts/<id>/logo, the workspace's accounts only, under a sandboxing CSP (an SVG of our own accounts runs nothing).
+- **The same rules both ways** (src/packs/logo.js): PNG, JPEG or WebP by the file's own first bytes (a PNG's whole
+  signature and its header chunk), never by its name or the type it came with, and never an SVG, which can carry a
+  script; 2 MB at most (the slide draws a logo at most 380 by 92 pixels); 32 to 5000 pixels a side, read from its header,
+  and one whose header cannot be read is refused. 32 rather than the "about 120 px tall" the design section suggested:
+  a store's header logo is often 60 to 100 pixels tall (the recorded Wix store's address asks for 79), the slide draws it
+  at 92 at most, and refusing those would leave most customers without one. 5000 because past it the renderer's browser
+  opens a picture into hundreds of megabytes. One file: a form with two is refused. Written whole: a temporary file in
+  brand/ renamed over logo.<ext>, then every other logo.* taken out (logo.png is read before logo.webp). Removing takes
+  them all out, and the closing slide closes up.
+- **What changes on the slides:** nothing in the renderer. The pack's brandLogo is set when the file is written, so the
+  next slideshow (and any slide drawn again) has it; slides already drawn keep what they were drawn with.
+
+UNVERIFIED: whether Wix's image service, whose logo addresses ask for `enc_avif`, answers with PNG, WebP or JPEG when
+asked for those first (an AVIF is refused, and the account is made without a logo); and whether logoOf finds the header
+logo of today's live Shopify themes (the recorded Shopify store's homepage was trimmed without one; two of the WooCommerce
+recordings and one of the Wix ones have theirs).
+
+test/logo.test.js (new, 8): the rules by bytes (an SVG, an SVG named .png, a PNG's first bytes on something else, a GIF,
+over 2 MB, 20 pixels, 6000 pixels refused; a WebP's size in its three kinds of first chunk); the file written whole, the
+one before it taken out, removed to none; the site read keeping the address on a store and on a site that is none; the
+fetch through the door (the kinds asked for, the cap, an SVG, a private address, http, a body that keeps coming and one
+that says 50 MB); /new keeping the address, the account made while the picture is still on its way, the picture landing
+in brand/ and the closing slide in style A on TikTok drawing it on a white tile; a refused and a failed fetch, a log line
+and an account without a logo; Settings adding, replacing and removing it, refusing an SVG, two files, no file, a tiny
+one, one over 2 MB and a body far over it, no CSRF, another site, another workspace and view-as, the operator allowed;
+and in a browser at 390 and 1280 pixels, a light logo on a dark tile, the buttons apart and nothing sideways.
+test/workspaces.test.js has the new routes.

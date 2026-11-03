@@ -512,6 +512,24 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .promo:has([name='promo_target'][value='bio']:checked) p.promo-if.bio { display: block; }
 }
 
+/* the account's logo (src/web/logo.js): on a pane of its own, on the tile its closing slide sets it on (white, dark for a
+   light logo: app.js), at the slide's own proportion; one button to put one there, remove beside it. With the script
+   the button picks the file and sends it; without it the browser's own file field and a save. */
+.logo-stage { display: grid; place-items: center; min-height: 128px; margin-top: 16px; padding: 20px; border-radius: var(--r-m); background: var(--inset); box-shadow: inset 0 0 0 1px var(--line); }
+.logo-tile { display: inline-grid; place-items: center; max-width: 100%; padding: 14px 22px; border-radius: 14px; background: #ffffff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06); }
+.logo-tile.dark { background: #141414; }
+.logo-tile img { display: block; height: 56px; width: auto; max-width: min(232px, 100%); object-fit: contain; }
+.logo-tile.none { width: 132px; height: 84px; padding: 0; background: none; box-shadow: none; border: 1.5px dashed var(--line-2); color: var(--ink-3); cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease; }
+.logo-tile.none svg.i { width: 24px; height: 24px; }
+.logo-tile.none:hover { border-color: var(--ink-3); color: var(--ink-2); }
+.logo-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.logo-acts form { display: contents; }
+.logo-up .pick { display: none; }
+.js .logo-up .pick { display: inline-flex; }
+.js .logo-up .logo-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.logo-up:has(.logo-file:focus-visible) .pick { outline: 3px solid color-mix(in srgb, var(--accent-fill) 60%, transparent); outline-offset: 2px; }
+.logo-file { max-width: 100%; font: inherit; font-size: 13px; color: var(--ink-2); }
+
 /* meters */
 meter { width: 100%; height: 6px; border-radius: 3px; background: var(--fill); border: 0; display: block; }
 meter::-webkit-meter-bar { background: var(--fill); border-radius: 3px; border: 0; height: 6px; }

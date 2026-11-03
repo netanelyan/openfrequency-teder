@@ -391,9 +391,20 @@ export async function getBytes(url, { maxBytes = 12_000_000, timeoutMs, headers 
   if (!res.ok) throw new NetError(`HTTP ${res.status}: ${url}`, { status: res.status, code: 'http' });
   const type = (res.headers.get('content-type') || '').split(';')[0].trim();
   if (!/^image\//.test(type)) throw new NetError(`not an image (${type}): ${url}`, { code: 'type' });
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > maxBytes) throw new NetError(`too large (${buf.length} bytes): ${url}`, { code: 'too_large' });
-  return { buf, type };
+  // Read only as far as maxBytes: a picture that says it is larger, or keeps coming past it, is stopped there.
+  const said = Number(res.headers.get('content-length') || 0);
+  if (said > maxBytes) {
+    await res.body?.cancel().catch(() => {});
+    throw new NetError(`too large (${said} bytes): ${url}`, { code: 'too_large' });
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const c of res.body || []) {
+    size += c.length;
+    if (size > maxBytes) throw new NetError(`too large (over ${maxBytes} bytes): ${url}`, { code: 'too_large' });
+    chunks.push(c);
+  }
+  return { buf: Buffer.concat(chunks), type };
 }
 
 /** DELETE (an Instagram post a takedown notice named). Throws like postJson, with the body attached. */

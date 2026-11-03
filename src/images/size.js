@@ -29,6 +29,31 @@ export function imageSize(buf) {
   return null;
 }
 
+/** A picture's kind from its first bytes: 'png', 'jpg', 'webp', or null. */
+export const imageExt = (buf) => {
+  const b = Buffer.from(buf || []);
+  if (b.length > 8 && b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG') return 'png';
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8) return 'jpg';
+  if (b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return null;
+};
+
+/** { type: 'webp', width, height } from a WebP's first chunk (VP8, VP8L or VP8X), or null. Pure. */
+export function webpSize(buf) {
+  if (!buf || buf.length < 30 || imageExt(buf) !== 'webp') return null;
+  const chunk = buf.toString('latin1', 12, 16);
+  // Lossy: the key frame's start code, then 14 bits of width and of height.
+  if (chunk === 'VP8 ' && buf[23] === 0x9d && buf[24] === 0x01 && buf[25] === 0x2a) return { type: 'webp', width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
+  // Lossless: its signature, then 14 bits each of width and height less one.
+  if (chunk === 'VP8L' && buf[20] === 0x2f) {
+    const bits = buf.readUInt32LE(21);
+    return { type: 'webp', width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  // Extended: the canvas, 24 bits each less one.
+  if (chunk === 'VP8X') return { type: 'webp', width: buf.readUIntLE(24, 3) + 1, height: buf.readUIntLE(27, 3) + 1 };
+  return null;
+}
+
 /** Whether a cover photograph fills the slide, or is framed over its own blurred copy. */
 export const fillsCover = (buf) => {
   const s = imageSize(buf);

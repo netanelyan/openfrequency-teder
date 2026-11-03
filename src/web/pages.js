@@ -18,6 +18,7 @@ import { libraryFormat } from '../formats/library.js';
 import { formatsPanel, picksFormats } from './formats.js';
 import { designPanel } from './styles.js';
 import { promoPanel } from './promo.js';
+import { logoPanel } from './logo.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -125,6 +126,7 @@ const AUDIT_HE = {
   takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', assistant_prefs: 'הגדרות וואטסאפ', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
   publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', rival_added: 'מתחרה נוסף', rival_updated: 'מתחרה עודכן', rival_removed: 'מתחרה הוסר', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
+  logo: 'לוגו נשמר', logo_removed: 'לוגו הוסר',
 };
 
 const media = (post, platform, i) => `/media/${encodeURIComponent(post.id)}/${platform}/${i}?v=${encodeURIComponent(String(post.updated_at || '').replace(/D/g, '').slice(-10))}`;
@@ -1132,6 +1134,7 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 ${acct && picksFormats(acct.pack, acct.customer) ? formatsPanel(ctx, acct.pack, { heading: 'h2' }) : ''}
 ${acct ? designPanel(acct.pack, acct.style, { back: '/settings' }) : ''}
 ${acct ? promoPanel(ctx, acct.pack, { draft: acct.promoDraft }) : ''}
+${acct ? logoPanel(ctx, acct.pack) : ''}
 ${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
 ${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
 ${d.quotas ? quotasPanel(ctx, d.quotas) : ''}

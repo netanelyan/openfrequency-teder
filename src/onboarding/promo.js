@@ -1,5 +1,6 @@
 import { getText } from '../core/net.js';
-import { domainOf, readStore, siteDescription, siteName, storeOrigin } from '../demos/store.js';
+import { domainOf, logoOf, readStore, siteDescription, siteName, storeOrigin } from '../demos/store.js';
+import { fetchLogo, saveLogo } from '../packs/logo.js';
 import { PROMISE_MIN, PROMO_MAX, promoProblems, promoText } from '../packs/promo.js';
 import { hebrewShare, normHe } from '../voice/tells.js';
 import { saveSetup, setupOf } from './setup.js';
@@ -18,6 +19,12 @@ import { saveSetup, setupOf } from './setup.js';
 // promoBy 'site') unless the customer saved their own first (promoBy 'customer'), and siteRead says how it went: 'ok',
 // or 'failed' when the site could not be read at all, and the customer types it. The draft is what the page offers;
 // the account takes it only as the create form sends it, checked (src/web/onboarding.js).
+//
+// The site's logo comes with it: the address of the picture its homepage marks as its logo (src/demos/store.js logoOf,
+// as a store's demo finds it), kept on the onboarding (setup_json siteLogo) whoever wrote the promo. When the account is
+// made the picture is fetched into its brand/ folder in the background (startLogoFetch, src/packs/logo.js: PNG, JPEG or
+// WebP by its own bytes, never an SVG, 2 MB at most), and the account never waits for it: one that does not come is a
+// line in the log and an account without a logo, which the customer can add on Settings.
 
 /** A store's claims about itself a closing slide does not repeat: the best, the leading, number one, and a hurry. */
 const HYPE = /(?:^| )(?:ו|ה|וה|ב|ל|מ|ש|כ)?(?:הכי|ביותר|מוביל|מובילה|מובילים|מובילות|מספר 1|נמבר 1|רק היום|לזמן מוגבל|מהרו|תמהרו|אל תפספסו|עד גמר המלאי|מבצע|סייל)(?= |$)/u;
@@ -68,17 +75,20 @@ const nameFrom = (name, origin) => {
  * The draft promo a site gives: { name, promise, target: { kind: 'site', url } }, any text it had none for left ''.
  * null for an address that is not one. `read` is readStore, and get/getPage what it reads with (fakes in the tests).
  * Throws nothing: a site that does not answer gives a draft with only its address, and `read: false` beside it.
+ * `logo` beside them is the address of the site's logo, when its homepage marks one.
  */
 export async function readSitePromo(url, { read = readStore, get, getPage = getText } = {}) {
   const origin = storeOrigin(url);
   if (!origin) return null;
   let name = '';
   let description = '';
+  let logo = null;
   let ok = true;
   try {
     const s = await read(origin, { get, getPage });
     name = s.name;
     description = s.description || '';
+    logo = s.logo || null;
   } catch {
     // Not a store on Shopify, WooCommerce or Wix, or it did not answer: its homepage alone.
     const page = await getPage(origin).catch(() => null);
@@ -86,13 +96,14 @@ export async function readSitePromo(url, { read = readStore, get, getPage = getT
     if (html) {
       name = siteName(html) || '';
       description = siteDescription(html);
+      logo = logoOf(html, origin, name);
     } else ok = false;
   }
   const draft = { name: nameFrom(name, origin), promise: '', target: { kind: 'site', url: `${origin}/` } };
   draft.promise = promiseFrom(description, { name: draft.name || name });
   // What the engine fills in by itself stays on the store's own domain (src/packs/promo.js).
   if (promoProblems(draft, { domain: domainOf(origin) }).includes('domain')) draft.target = { kind: 'site', url: '' };
-  return { draft, read: ok };
+  return { draft, read: ok, ...(logo ? { logo } : {}) };
 }
 
 /** The reads running now, by onboarding id: the page says it is still reading. */
@@ -110,7 +121,7 @@ export function startSiteRead(db, id, site, { opts = {}, log = null } = {}) {
       if (!got) return saveSetup(db, id, { siteRead: 'failed' });
       if (!got.read) log?.(`[onboarding] ${id}: the store's site ${site} did not answer; the customer writes the closing slide`);
       const mine = setupOf(db, id).promoBy === 'customer';
-      return saveSetup(db, id, { siteRead: got.read ? 'ok' : 'failed', ...(mine ? {} : { promo: got.draft, promoBy: 'site' }) });
+      return saveSetup(db, id, { siteRead: got.read ? 'ok' : 'failed', ...(mine ? {} : { promo: got.draft, promoBy: 'site' }), ...(got.logo ? { siteLogo: got.logo } : {}) });
     })
     .catch((e) => {
       log?.(`[onboarding] ${id}: reading ${site} stopped: ${e.message}`);
@@ -118,5 +129,35 @@ export function startSiteRead(db, id, site, { opts = {}, log = null } = {}) {
     })
     .finally(() => reading.delete(id));
   reading.set(id, job);
+  return job;
+}
+
+/** The logos being fetched now, by account: the tests wait for them. */
+export const fetchingLogos = new Map();
+
+/**
+ * A new account's logo, from the address its site read kept (setup_json siteLogo; a read still running is waited for
+ * first), fetched into its brand/ folder in the background once the account is made. A logo the customer put on
+ * Settings meanwhile stays. Never throws: no address is nothing to do, and a picture that did not come or will not do
+ * is one line for the operator. `ctx` is the engine's (every account); `opts.fetchImage` is the tests' fake.
+ */
+export function startLogoFetch(ctx, onboardingId, packId, { opts = {}, log = null } = {}) {
+  if (fetchingLogos.has(packId)) return fetchingLogos.get(packId);
+  let url = null;
+  const job = Promise.resolve(reading.get(onboardingId))
+    .then(async () => {
+      url = setupOf(ctx.db, onboardingId).siteLogo || null;
+      if (!url) return null;
+      const { buf } = await fetchLogo(url, { fetchImage: opts.fetchImage });
+      // The account as the engine holds it now: the packs may have been read again while the picture came.
+      const pack = ctx.pack(packId);
+      return pack && !pack.brandLogo ? saveLogo(pack, buf) : null;
+    })
+    .catch((e) => {
+      log?.(`[onboarding] ${onboardingId} (${packId}): the store's logo ${url} was not kept, and the account has none: ${e.message}`);
+      return null;
+    })
+    .finally(() => fetchingLogos.delete(packId));
+  fetchingLogos.set(packId, job);
   return job;
 }

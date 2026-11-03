@@ -363,11 +363,18 @@ only the top and the bottom), the logo inside them as well, nothing outlined or
 shadowed, and every word at 4.5:1 against the pixels actually behind it (the slide
 drawn again with its letters taken away); a slide that misses one is refused.
 
-The logo is `packs/<id>/brand/logo.png` (or `.svg`, `.webp`, `.jpg`). A customer's
-account has none yet: the store's site is read on /new (`src/demos/store.js` finds its
-logo's address, as the store demos use it), but nothing keeps the address or saves the
-picture into the account. Until something does, a customer's closing slide is drawn
-without one.
+The logo is `packs/<id>/brand/logo.png` (or `.svg`, `.webp`, `.jpg`, `.jpeg`). A
+customer's comes from their store's site: the site read on /new keeps the address of the
+picture its homepage marks as its logo (`src/demos/store.js` logoOf, as the store demos
+find it), and when the account is made the picture is fetched into brand/ in the
+background (`src/onboarding/promo.js` startLogoFetch), through the network's one door.
+The account never waits for it; a picture that does not come or will not do is a line
+in the log and an account without a logo. On Settings the account's people (and the
+operator) see the logo on its tile, replace it with a file of their own, or remove it
+(`src/web/logo.js`). Either way the same rules (`src/packs/logo.js`): PNG, JPEG or WebP
+by the file's own first bytes, never an SVG; 2 MB at most; 32 to 5000 pixels a side,
+read from its header; one file, written whole (a temporary file renamed over it, every
+other logo.* taken out).
 
 Every post has 5 to 8 slides, one idea a slide, keywords in Hebrew and English for
 TikTok's search, a TikTok caption and a short Instagram one led by the cover line.

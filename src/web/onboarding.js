@@ -20,7 +20,7 @@ import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
 import { storeOrigin } from '../demos/store.js';
-import { reading, startSiteRead } from '../onboarding/promo.js';
+import { reading, startLogoFetch, startSiteRead } from '../onboarding/promo.js';
 import { draftFromForm, newPromoPanel, promoFromForm, promoLater, settlePromo } from './promo.js';
 
 // The new-account flow, on the website:
@@ -925,6 +925,9 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         // TikTok and Instagram connected before the account existed: the account takes the profile over.
         carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
         ctx.reloadPacks();
+        // The logo the site read found, fetched into the account in the background: the account is made whether or not
+        // it comes (src/onboarding/promo.js startLogoFetch).
+        if (r.seed.site) startLogoFetch(engine(ctx), r.id, made.id, { opts: engine(ctx).siteOpts || {}, log: ctx.log });
         saveSetup(ctx.db, r.id, { promoUnfinished: unfinished });
         ctx.db.update('onboarding', r.id, { status: 'samples', pack_id: made.id, candidates_json: { ...r.found, candidates }, updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: made.id, detail: { sources: candidates.filter((c) => c.approved).length } });

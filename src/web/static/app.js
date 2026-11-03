@@ -188,6 +188,50 @@
     form.addEventListener('change', () => form.requestSubmit());
   });
 
+  // A file picked on Settings (the logo) is sent as soon as it is picked, unless it is over the size the server takes
+  // (data-upload, in bytes): that is said here, and nothing is sent.
+  document.querySelectorAll('form[data-upload]').forEach((form) => {
+    const input = form.querySelector('input[type=file]');
+    input?.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > Number(form.dataset.upload)) {
+        input.value = '';
+        return say(form.dataset.tooLarge, true);
+      }
+      form.querySelector('.pick')?.setAttribute('aria-busy', 'true');
+      form.requestSubmit();
+    });
+  });
+
+  // The logo on Settings sits on the tile its closing slide gives it: white, or dark for light letters on a clear ground
+  // (the renderer's own test, src/render/render.js), so a white logo is seen here as it will be there.
+  for (const img of document.querySelectorAll('[data-logo-tile] img')) {
+    const tile = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 64;
+        c.height = Math.max(1, Math.round((64 * (img.naturalHeight || 1)) / (img.naturalWidth || 1)));
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+        let ink = 0;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 128) continue;
+          n++;
+          ink += 0.2126 * lin(d[i]) + 0.7152 * lin(d[i + 1]) + 0.0722 * lin(d[i + 2]);
+        }
+        img.closest('[data-logo-tile]').classList.toggle('dark', n > 0 && n < (d.length / 4) * 0.95 && ink / n > 0.6);
+      } catch {
+        // a picture the canvas cannot read: the white tile
+      }
+    };
+    if (img.complete && img.naturalWidth) tile();
+    else img.addEventListener('load', tile, { once: true });
+  }
+
   // A list typed one item at a time (a new account's topics and sites, [data-pills]): Enter makes what was typed a pill,
   // the pills sit in a row, × takes one out, and Backspace in the empty box takes the last. The form sends the field it
   // had, the pills one a line (the server reads them so: onboarding.js listField), and something typed and not yet a
