@@ -2251,3 +2251,31 @@ was on, the product when paid, else the paywall with one calm, outlined line: "�
 כשנרשום אותו, תדר ייפתח.", "בדקנו לפני רגע, והתשלום עוד לא היה רשום. אפשר לבדוק שוב בעוד חצי דקה." or "לא הצלחנו
 לבדוק את התשלום עכשיו. נסו שוב בעוד דקה." It is not on the gate that says accounts could not be asked, which keeps its
 "לנסות שוב". test/pay-notify.test.js.
+
+### The operator's alerts reach the operator's own WhatsApp, through Toran (2026-11-03)
+
+The owner: "alerts can be sent to my own whatsapp". Teder's alerts (an account that drafted nothing in a day, a batch
+given up, a sign-up switch that disagrees) went to the server's alert command alone, `OF_ALERT_CMD` or
+`/usr/local/bin/of-alert`, which is not on the VPS, so each was a log line and a row in /all's table. Now each alert that
+is due is also posted to openfrequency-toran on this machine, `POST {OF_TORAN_INTERNAL}/internal/ops/alert` (default
+`http://127.0.0.1:4710`, `off` for none) with the bearer `OF_INTERNAL_TOKEN` and `{ key, title, body, everyMinutes }`,
+and Toran sends it to the operator's number (its `TORAN_ALERT_WA`) as its approved WhatsApp template `operator_alert`,
+from our number. Teder never reaches WhatsApp itself: Toran holds the number, the token and the template, as it already
+does for every other message on our number. The command runs beside it, as before (both at once, each with its own
+timeout, 15 seconds for the command and 5 for Toran).
+
+**A new setting, not `OF_TORAN_URL`:** that one is the full address of Toran's events route, unused since 2026-11-02;
+reading a base out of it would bring a stale setting back to life with another meaning. `OF_TORAN_INTERNAL` follows the
+name every other service on this machine has (`OF_ACCOUNTS_INTERNAL` here; `TEDER_INTERNAL`, `OF_WEB_INTERNAL` in
+Toran).
+
+**How often:** Teder still says a key once in its `every` (alert:<key> in settings), and sends that window as
+`everyMinutes`; Toran says it once in the same window again, and its phone gets one key at most once an hour, ten an hour
+at most over both products, and none for an hour after Meta refuses one. A failure to reach Toran (down, a refusal, no
+answer in 5 seconds, an address not on this machine, which localFetch refuses) is one line, `[alert] Toran did not take
+<key>: <why>`; the alert is kept and logged already, is not tried again, and nothing throws.
+
+**The contract:** the route is between Teder and Toran alone, not one of accounts' contracts; test/fixtures/ops-alert.json
+is its example, the same file in both repositories, read by both sides' tests, each checking the other's copy when it is
+beside it. test/alert-toran.test.js: posted once with the token and the example's body, not again inside the window;
+Toran down, refusing, or not on this machine a log line; no token or `off`, nothing; the command still run beside it.

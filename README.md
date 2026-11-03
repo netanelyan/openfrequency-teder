@@ -109,6 +109,13 @@ dashboard only, so nothing calls it and Teder sends the assistant no events.
 | `POST /internal/workspaces/<id>/delete` | accounts, when a customer deletes their workspace | that workspace's accounts and their data go (`src/web/workspace-delete.js`) |
 | `POST /internal/entitlement/changed` | accounts, when a workspace's access changes (a payment recorded) | the answer Teder keeps about that workspace is asked again on the next page or tick (`src/web/entitlement-changed.js`) |
 
+Teder calls one route of Toran's the same way: each operator alert that is due goes to
+`POST http://127.0.0.1:4710/internal/ops/alert` (`OF_TORAN_INTERNAL`, `off` for none) with the bearer token, as
+`{"key":"nothing-drafted:demo","title":"Teder: ...","body":"...","everyMinutes":1200}`
+(`test/fixtures/ops-alert.json`, the same file in openfrequency-toran), and Toran sends it to the operator's own
+WhatsApp. Toran down is a log line; the server's alert command runs beside it as before
+([docs/operator-notes.md](docs/operator-notes.md), "The health table on /all, and the alerts").
+
 `/internal/entitlement/changed` (accounts' `docs/contracts/entitlement-changed.json`) takes
 `{"workspace":7,"reason":"paid"}` and answers `200 {"ok":true,"workspace":7,"cleared":true}`
 at once (`cleared` false when Teder kept nothing for it, which is fine). Its refusals are the

@@ -455,10 +455,23 @@ says which keys are set without showing them.
   switch disagreeing or could not check it ("One sign-up switch in three places" above) go to the operator through the
   server's alert command, `/usr/local/bin/of-alert "<title>" "<body>"` (openfrequency-ops; `OF_ALERT_CMD` names
   another). The same command is what the systemd units call when the service or the backup fails. Without it, the
-  alert is in the log ("[alert] ...") and in the table, and nothing reaches the phone.
+  alert is in the log ("[alert] ...") and in the table.
+- **On your WhatsApp** (the owner, 2026-11-03: "alerts can be sent to my own whatsapp"). Beside the command, each alert
+  that is due is handed to openfrequency-toran on this machine: `POST http://127.0.0.1:4710/internal/ops/alert`
+  (`OF_TORAN_INTERNAL` names another address, `off` stops it) with `Authorization: Bearer $OF_INTERNAL_TOKEN` and
+  `{ key, title, body, everyMinutes }` (`test/fixtures/ops-alert.json`, the same file in Toran). Toran sends it to the
+  number in its `TORAN_ALERT_WA` as one approved WhatsApp template (`operator_alert`, Toran's
+  docs/whatsapp-templates.md), from our number. How often: Teder says a key once in its window, as before (20 hours
+  for an account that drafted nothing, 6 for a batch, 10 minutes for the sign-up switch); Toran says it once in the same
+  window, and its phone gets one key at most once an hour, ten alerts an hour at most, and none for an hour after Meta
+  refuses one (as it does until the template is approved). Toran down, refusing or not answering in 5 seconds is one
+  line, `[alert] Toran did not take <key>: <why>`, and nothing else: the alert is already in the log and the table, it is
+  not tried again, and the runner goes on. Only a service on this machine is ever asked.
 - **What to do.** docs/first-customer.md, section by section.
 - **Needed now?** The command is, before the first customer: UNVERIFIED that it is installed on the VPS
-  (`ls -l /usr/local/bin/of-alert && systemctl cat of-alert@.service`).
+  (`ls -l /usr/local/bin/of-alert && systemctl cat of-alert@.service`). The WhatsApp way needs nothing set here (Teder
+  and Toran already share `OF_INTERNAL_TOKEN`), only Toran's `TORAN_ALERT_WA` and the approved template; check with
+  `journalctl -u openfrequency | grep 'Toran did not take'`, which stays empty while Toran takes them.
 
 ### /healthz and /readyz
 

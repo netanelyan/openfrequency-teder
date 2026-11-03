@@ -50,7 +50,8 @@ async function check({ teder = '1', accounts = ACCOUNTS.open, site = SITE.open, 
   const fetchLocal = typeof accounts === 'function' && accounts.calls ? accounts : fake(accounts);
   const fetchSite = typeof site === 'function' && site.calls ? site : fake(site);
   const run = (cmd, args, opts, cb) => (alerts.push(args), cb(null));
-  const fullEnv = { OF_INTERNAL_TOKEN: INTERNAL_TOKEN, OF_ACCOUNTS_INTERNAL: 'http://127.0.0.1:4741', OF_ALERT_CMD: process.execPath, ...(teder == null ? {} : { OF_SIGNUP_OPEN: teder }), ...env };
+  // OF_TORAN_INTERNAL off: the alert is not handed to a Toran on this machine (test/alert-toran.test.js tests that).
+  const fullEnv = { OF_INTERNAL_TOKEN: INTERNAL_TOKEN, OF_ACCOUNTS_INTERNAL: 'http://127.0.0.1:4741', OF_ALERT_CMD: process.execPath, OF_TORAN_INTERNAL: 'off', ...(teder == null ? {} : { OF_SIGNUP_OPEN: teder }), ...env };
   const r = await checkSignupSwitch({ db: d, log: (m) => logs.push(m) }, { env: fullEnv, fetchLocal, fetchSite, run, t });
   for (const said of [...logs, ...alerts.flat(), JSON.stringify(getSetting(d, 'alert:signup-switch', null))]) assert.ok(!said.includes(INTERNAL_TOKEN), `the token is never said: ${said}`);
   return { r, logs, alerts, db: d, accounts: fetchLocal, site: fetchSite, cleanup: () => home?.cleanup() };
