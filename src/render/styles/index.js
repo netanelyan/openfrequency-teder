@@ -1,11 +1,11 @@
 import { esc, he } from '../html.js';
 import { fontFaces, headlineFaces } from '../fonts.js';
-import { rgbList } from '../color.js';
+import { bestInk, contrast, rgbList } from '../color.js';
 import { VISUAL_CSS, visualHtml } from '../visuals.js';
 import { zonesFor } from '../../rules/overlay.js';
 import { familiesOf, resolveStyle, STYLES, themeColors } from './tokens.js';
 import { displayText, slideModel, sourcesOf, textHtml } from './model.js';
-import { BODY_FLOOR, boxFor, fitText, sidesOf, STEP } from './fit.js';
+import { BODY_FLOOR, sidesOf, STEP } from './fit.js';
 import { actionHtml } from '../end.js';
 
 // The five slide styles, drawn (tokens.js has what each one sets, model.js what each slide shows).
@@ -47,6 +47,8 @@ export function geo(size, overlay = null, style = null) {
 }
 
 const HEADS = new Set(['hook', 'title', 'ntitle']);
+// The closing slide's line and action are set in the same proportion on both platforms: both scale as a headline does.
+const SCALED = new Set([...HEADS, 'closing', 'action']);
 
 /** Where A, C and D start a slide's photograph (TikTok px): under the status bar and the tabs, so no face is behind them. */
 const PHOTO_TOP = 150;
@@ -60,13 +62,14 @@ function txt(tag, cls, S, field, text, g, { highlight = '', pre = '' } = {}) {
   const spec = S.text[field];
   if (!String(text || '').trim()) return '';
   const breaks = spec.breaks !== false;
-  const px = HEADS.has(field) ? g.hs(spec.px) : spec.px;
-  const floor = Math.round(HEADS.has(field) ? g.hs(spec.floor || spec.px * BODY_FLOOR) : spec.floor || spec.px * BODY_FLOOR);
+  const px = SCALED.has(field) ? g.hs(spec.px) : spec.px;
+  const floor = Math.round(SCALED.has(field) ? g.hs(spec.floor || spec.px * BODY_FLOOR) : spec.floor || spec.px * BODY_FLOOR);
   const writer = displayText(text, { breaks }).split('\n').length;
   const max = spec.lines || 99;
-  const want = breaks ? Math.min(writer, max) : max;
+  // A spec's own `want` (the closing line's): the lines it is set smaller to keep to, short of the most it may take.
+  const want = spec.want ? Math.min(spec.want, max) : breaks ? Math.min(writer, max) : max;
   const words = `${pre}${textHtml(text, { breaks, highlight })}`;
-  return `<${tag} class="sf ${cls}${breaks ? '' : ' nb'}" style="font-size:${px}px" data-px="${px}" data-floor="${floor}" data-max="${max}" data-want="${want}" data-step="${HEADS.has(field) ? STEP : 2}">${S.inline ? ln(words) : words}</${tag}>`;
+  return `<${tag} class="sf ${cls}${breaks ? '' : ' nb'}" style="font-size:${px}px" data-px="${px}" data-floor="${floor}" data-max="${max}" data-want="${want}" data-step="${HEADS.has(field) || field === 'closing' ? STEP : 2}">${S.inline ? ln(words) : words}</${tag}>`;
 }
 
 /** One inline run of text: E draws its box behind each of the run's lines. */
@@ -101,7 +104,7 @@ function drawA(m, slide, g, S) {
 <div class="blk cov${photo ? '' : ' mid'}">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}</div>`,
     };
   }
-  if (m.kind === 'end') return endHtml(m, g, S);
+  if (m.kind === 'end') return m.closing ? closingA(m, slide, g, S) : endHtml(m, g, S);
   if (m.kind === 'number') {
     const v = m.value;
     const row = m.sides
@@ -175,7 +178,7 @@ function drawB(m, slide, g, S) {
 <div class="cue">החליקו ←</div>`,
     };
   }
-  if (m.kind === 'end') return endHtml(m, g, S);
+  if (m.kind === 'end') return m.closing ? closingB(m, slide, g, S) : endHtml(m, g, S);
   const framed = photo ? photoHtml(slide, 'fr') : '';
   if (m.kind === 'number') {
     const v = m.value;
@@ -233,7 +236,7 @@ function drawC(m, slide, g, S) {
 ${m.key ? `<div class="key">${he(m.key)}</div>` : ''}`,
     };
   }
-  if (m.kind === 'end') return endHtml(m, g, S);
+  if (m.kind === 'end') return m.closing ? closingC(m, slide, g, S) : endHtml(m, g, S);
   // The label sits on the photograph's lower edge; a slide with no photograph has no edge for it, and no label at the
   // top of the screen (a line over the headline reads as an eyebrow, a mark of machine-made posts).
   const chip = m.label && photo ? `<div class="chip">${he(m.label)}</div>` : '';
@@ -288,7 +291,7 @@ function drawD(m, slide, g, S) {
 <div class="blk cov">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}<i class="bar"></i></div>`,
     };
   }
-  if (m.kind === 'end') return endHtml(m, g, S);
+  if (m.kind === 'end') return m.closing ? closingD(m, slide, g, S) : endHtml(m, g, S);
   const chip = m.label ? `<span class="chip">${he(m.label)}</span>` : '';
   const num = m.kind === 'number'
     ? m.sides
@@ -417,7 +420,7 @@ function drawE(m, slide, g, S) {
     };
   }
   // The closing slide stands in the middle of the band, as every other slide of E does.
-  if (m.kind === 'end') return { ...endHtml(m, g, S), bt: g.z.top };
+  if (m.kind === 'end') return m.closing ? closingE(m, slide, g, S, { fit, room, img }) : { ...endHtml(m, g, S), bt: g.z.top };
   const rank = S.rank && m.rank ? `<span class="rk">${he(m.rank)}.</span> ` : '';
   const head = txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: mark(m.highlight), pre: rank });
   // A number's line is one row that never breaks (the renderer sets a long one smaller), on a box of its own.
@@ -487,17 +490,144 @@ function listHtml(body, S, g) {
   return ls.length ? `<ul class="list">${ls.map((l) => `<li>${S.inline ? ln(he(displayText(l))) : he(displayText(l))}</li>`).join('')}</ul>` : '';
 }
 
-/** The closing slide: its line, and the handle the account is followed at. */
+/* ------------------------------------------------------------------------------------------ the closing slide */
+
+// A post's closing slide (src/pipeline/closing.js), item 4 of it, the design (the owner, 2026-11-02: "draw the closing
+// slide in all four styles (A, B, C, D) and style E. It stays inside TikTok's safe zones and keeps the rules (no
+// outlines, no shadows, no page numbers). The customer's logo appears if there is one. A URL appears only on
+// Instagram/Facebook; on TikTok the slide says 'link in bio', because a link in a TikTok image isn't clickable").
+//
+// One design in each style's own terms. The writer's line is the slide: in the style's headline face (tokens.js
+// `closing`), from its full size down to a floor that holds 60 characters in four lines on both platforms. Under it the
+// action the code wrote for this platform (TikTok's never has an address), smaller (the line is at least 1.25 times its
+// size, however the two are fitted), on a block of the account's colour in the style's own shape: A's pill, B's block,
+// C's and D's square chip, E's box. Its words are white or near-black, whichever reads at 4.5:1 on that colour; an
+// accent neither reads on is left off, and the block takes the style's text colour on its ground. The account's logo,
+// when it has one, comes first, on a tile of its own (white, or dark for a light logo: the renderer looks at it); with
+// none, nothing stands in its place and the group closes up. The line and the action are scaled together, so TikTok and
+// Instagram show the same slide.
+//
+// The photograph is the post's own (the least used), sharp and in sight, and the words never sit on it bare:
+//   A  the photograph over the whole slide; the logo, the line and the action on A's card at the foot of the band
+//   B  the photograph framed, wide, over the top of the slide; the line huge on B's ground under it, the product's or
+//      the store's name on a block of colour
+//   C  the photograph on top; the line and the action on C's light panel under it, never on it
+//   D  the photograph over the whole slide, fading into D's dark ground just above the words; the name on a block
+//   E  the photograph over the whole slide, unveiled; the line on TikTok's white boxes and the action on a box of the
+//      colour, in the middle of the band, whatever E's look: its "shadow" look is an edge and a shadow, and the closing
+//      slide has neither in any style
+// Nothing else is on it: no counter, page number, progress bar, handle, source or call to action, and no letter, box or
+// tile has an outline or a shadow (the renderer measures every letter's contrast on it and refuses one of either).
+
+/** The action's block: the accent with the ink that reads on it at 4.5:1, else the style's text colour on its ground. */
+export function chipOf(c, name) {
+  const ink = bestInk(c.accent, '#FFFFFF', '#111111');
+  if (contrast(ink, c.accent) >= 4.5) return { bg: c.accent, ink, accent: true };
+  return name === 'E' ? { bg: '#111111', ink: '#FFFFFF', accent: false } : { bg: c.text, ink: c.bg, accent: false };
+}
+
+const logoHtml = (m) => (m.logo ? `<div class="lg"><img class="logo" src="${m.logo}" alt=""></div>` : '');
+
+/** The action, one text the renderer fits like any other: smaller before it takes a second line. */
+function actionTxt(m, S, g) {
+  if (!m.action) return '';
+  const spec = S.text.action;
+  const px = g.hs(spec.px);
+  const words = actionHtml(m.action);
+  // It keeps its proportion to the line (data-of, data-ratio): a line set smaller to fit sets the action smaller with it,
+  // down to the action's own floor, so the slide is the same on both platforms whatever their widths do to the line.
+  return `<div class="sf act cl-act" style="font-size:${px}px" data-px="${px}" data-floor="${g.hs(spec.floor)}" data-max="${spec.lines}" data-want="1" data-step="2" data-of=".cl-line" data-ratio="${(spec.px / S.text.closing.px).toFixed(4)}">${S.inline ? ln(words) : words}</div>`;
+}
+
+/** The logo, the line and the action, one group. B and D mark the product's or the store's name on a block. */
+function closingGroup(m, S, g, { cls = '', mark = false, rule = false } = {}) {
+  const line = txt('h2', 'hl cl-line', S, 'closing', m.title, g, { highlight: mark ? m.mark : '' });
+  return `<div class="cw${cls}">${logoHtml(m)}${rule && line ? '<i class="mk"></i>' : ''}${line}${actionTxt(m, S, g)}</div>`;
+}
+
+function closingA(m, slide, g, S) {
+  return {
+    bt: g.z.top,
+    html: `${photoHtml(slide, 'ph full')}${hasPhoto(slide) ? '<div class="cl-ov"></div>' : ''}<div class="blk cl">${closingGroup(m, S, g, { cls: ' card' })}</div>`,
+  };
+}
+
+function closingB(m, slide, g, S) {
+  return { bt: g.y(160), html: `<div class="blk cl">${photoHtml(slide, 'cl-fr')}${closingGroup(m, S, g, { mark: true })}</div>` };
+}
+
+/** The photograph over the room the words leave above them, edge to edge, cut to that room around its face. */
+const photoRoom = (slide, cls = '') => (hasPhoto(slide) ? `<div class="cl-pw${cls}">${photoHtml(slide, 'cl-im')}</div>` : '');
+
+function closingC(m, slide, g, S) {
+  return { bt: hasPhoto(slide) ? g.y(150) : g.z.top, html: `<div class="blk cl">${photoRoom(slide)}${closingGroup(m, S, g, { rule: true })}</div>` };
+}
+
+function closingD(m, slide, g, S) {
+  return { bt: hasPhoto(slide) ? 0 : g.z.top, html: `<div class="blk cl">${photoRoom(slide, ' fade')}${closingGroup(m, S, g, { mark: true })}</div>` };
+}
+
+function closingE(m, slide, g, S, { room, img }) {
+  return {
+    bt: room.top,
+    html: `${hasPhoto(slide) ? img : ''}<div class="blk cl${room.hug ? ' hug' : ''}" style="bottom:${g.h - room.bottom}px">${closingGroup(m, S, g)}</div>`,
+  };
+}
+
+/** What every closing slide shares, and each style's own: the group, the logo's tile, the action's block, the photograph. */
+const CLOSING_CSS = (g, S, chip) => {
+  // The photograph's room (C, D): the slide's width, as tall as the words leave it (at least a sixth of the slide).
+  const room = `.cl-pw{position:relative;flex:1 1 0;min-height:${g.y(320)}px;margin:0 -${g.z.right}px 0 -${g.z.left}px;overflow:hidden}
+.cl-im{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%}`;
+  const own = {
+    // The photograph over the whole slide, sharp; the card carries the words, and the slide's foot fades into the ground
+    // where TikTok sets its caption.
+    A: `.blk.cl{justify-content:flex-end}
+.cw.card{align-self:stretch;align-items:flex-start;gap:${g.y(34)}px}
+.cl-ov{position:absolute;left:0;right:0;bottom:0;height:${g.z.bottom + g.y(120)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0),rgba(var(--bg-rgb),.92))}
+.cl-line{font-family:'Heebo';font-weight:900;letter-spacing:-1px;line-height:1.06;color:var(--fg)}
+.cl-act{font-family:'Assistant';font-weight:700;border-radius:999px}`,
+    // The photograph in B's frame, wider than the words (the frame is no text, the bands are the words'), as tall as the
+    // words leave it; the words on B's ground under it.
+    B: `.blk.cl{gap:${g.y(48)}px}
+.cl-fr{display:block;flex:1 1 0;min-height:${g.y(300)}px;width:calc(100% + ${2 * (g.z.left - g.hs(48))}px);margin:0 -${g.z.left - g.hs(48)}px;border-radius:12px;object-fit:cover;object-position:50% 30%}
+.cl-line{font-family:'Karantina Headline';font-weight:700;line-height:.88;color:var(--fg)}
+.cl-act{font-family:'Rubik';font-weight:800;border-radius:12px}`,
+    // C: the photograph on top, under TikTok's tabs, the words on C's panel under it with a clear edge between.
+    C: `.blk.cl{justify-content:flex-end;gap:${g.y(64)}px}
+${room}
+.mk{display:block;width:96px;height:12px;background:var(--accent)}
+.cl-line{font-family:'Rubik';font-weight:900;line-height:1.08;color:var(--fg)}
+.cl-act{font-family:'Rubik';font-weight:800;border-radius:0}`,
+    // D: the photograph from the top of the slide, fading into D's ground over its last stretch, the words on the ground.
+    D: `.blk.cl{justify-content:flex-end;gap:${g.y(8)}px}
+${room}
+.cl-pw.fade::after{content:'';position:absolute;left:0;right:0;bottom:0;height:42%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0),rgba(var(--bg-rgb),.75) 60%,rgba(var(--bg-rgb),1))}
+.cl-line{font-family:'Karantina Headline';font-weight:700;line-height:.92;color:var(--fg)}
+.cl-act{font-family:'Rubik';font-weight:800;border-radius:0}`,
+    // E: the photograph unveiled; each line on a white box, the action's on a box of the colour.
+    E: `.cw{align-items:center;text-align:center}
+.cl-line{font-family:'Heebo';font-weight:800;line-height:1.24;letter-spacing:-.5px}
+.cl-act{font-family:'Heebo';font-weight:800;line-height:1.3;background:none;padding:0}
+.st-E .cl-act .ln{background:var(--chip);color:var(--chip-ink)}`,
+  };
+  return `
+:root{--chip:${chip.bg};--chip-ink:${chip.ink}}
+.cw{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-start;gap:${g.y(40)}px;max-width:100%}
+.cl-line{max-width:100%}
+.cl-line mark.hi{background:linear-gradient(to bottom,transparent 14%,var(--chip) 14%,var(--chip) 97%,transparent 97%);color:var(--chip-ink);padding:0 .12em;margin:0 .04em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.cl-act{background:var(--chip);color:var(--chip-ink);line-height:1.2;padding:${g.hs(16)}px ${g.hs(34)}px;max-width:100%}
+.lg{display:flex;align-items:center;justify-content:center;background:#FFFFFF;border-radius:${g.hs(22)}px;padding:${g.hs(18)}px ${g.hs(28)}px;max-width:100%}
+.lg.dark{background:#141414}
+.lg img{display:block;height:${g.hs(92)}px;width:auto;max-width:${g.hs(380)}px;object-fit:contain}
+/* No letter, box or tile on a closing slide has an outline or a shadow. */
+.st.k-end *{text-shadow:none!important;-webkit-text-stroke:0!important;box-shadow:none!important}
+${own[S.name]}
+`;
+};
+
+/** The account's own follow slide (pack.json endSlide), which the posts made before the closing slide end on. */
 function endHtml(m, g, S) {
-  if (m.closing) {
-    // A post's closing slide (src/pipeline/closing.js): the writer's line set as the style's headline when it holds the
-    // line, else as the line under a cover, else as a slide's text, then the action the code wrote for this platform.
-    // (Its own design in each style comes later: this keeps every line of up to 60 characters inside the slide.)
-    const fits = (field) => S.text[field] && fitText(m.title, S.text[field], { box: boxFor(S.text[field], g.size, null, S.name), scale: HEADS.has(field) && g.ig ? 0.85 : 1 }).ok;
-    const field = ['title', 'sub', 'tbody'].find(fits) || 'tbody';
-    const line = txt(field === 'title' ? 'h2' : 'p', { title: 'hl', sub: 'sub', tbody: 'bd' }[field], S, field, m.title, g);
-    return { bt: g.y(560), html: `<div class="blk">${line}<div class="handle">${actionHtml(m.action)}</div></div>` };
-  }
   return {
     bt: g.y(560),
     html: `<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g)}${txt('p', 'sub', S, 'sub', m.body, g)}<div class="handle"><bdi dir="ltr">@${esc(m.handle)}</bdi></div></div>`,
@@ -553,7 +683,8 @@ mark.hi{color:inherit;background:none}
  * a photograph that already fills the slide, and never a guess-who's answer (its cover has none of its own).
  */
 function backdrop(name, m, slide, g, d) {
-  if (!slide.photo || slide.split || m.kind === 'end') return d;
+  // E's closing slide shows a small photograph as E shows any: whole, over its blurred copy.
+  if (!slide.photo || slide.split || (m.kind === 'end' && !(m.closing && name === 'E'))) return d;
   const full = name === 'E' ? fitE(slide, g).mode === 'cover' : m.kind === 'cover' && name !== 'C';
   if (full) return d;
   const veil = name === 'E' ? 'rgba(0,0,0,.42)' : 'rgba(var(--bg-rgb),.66)';
@@ -564,16 +695,20 @@ function backdrop(name, m, slide, g, d) {
 export function stylePage({ theme, size, slide: given, overlay = null }) {
   const st = theme.style;
   const slide0 = theme.options?.fullPhoto && st.name === 'A' ? { ...given, fullPhoto: true } : given;
-  // E's text look (resolveStyle: "box" unless the pack asks for "shadow").
-  const look = st.name === 'E' ? (st.text === 'box' ? 'box' : 'shadow') : null;
+  // A post's closing slide (its own design above).
+  const closing = given.kind === 'end' && Boolean(given.closing);
+  // E's text look (resolveStyle: "box" unless the pack asks for "shadow"). A closing slide is set on E's boxes in either
+  // look: the "shadow" look is an edge and a shadow, and no closing slide has either.
+  const look = st.name === 'E' ? (closing || st.text === 'box' ? 'box' : 'shadow') : null;
   const slide = look ? { ...slide0, textLook: look } : slide0;
   const S = STYLES[st.name];
   const g = geo(size, overlay, st.name);
   const m = slideModel(slide);
   const d0 = DRAW[st.name](m, slide, g, S);
-  // The closing slide on a photograph of the post, under a veil of the style's own ground, so its words read as they do
-  // on the ground: no slide of a post is a bare dark ground (the owner's call).
-  const d = m.kind === 'end' && slide.photo
+  // The account's old follow slide on a photograph of the post, under a veil of the style's own ground, so its words
+  // read as they do on the ground: no slide of a post is a bare dark ground (the owner's call). A post's closing slide
+  // shows its photograph as its style's design says.
+  const d = m.kind === 'end' && !closing && slide.photo
     ? { ...d0, html: `<img src="${slide.photo}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(var(--bg-rgb),.78)"></div>${d0.html}` }
     : backdrop(st.name, m, slide, g, d0);
   const families = familiesOf(st.name);
@@ -588,8 +723,9 @@ ${karantina ? headlineFaces('Karantina') : ''}
 ${base(g, st.colors, S)}
 ${CSS[st.name](g, S)}
 ${VISUAL_CSS}
+${closing ? CLOSING_CSS(g, S, chipOf(st.colors, st.name)) : ''}
 </style></head>
-<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}${look ? ` tx-${look}` : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0">
+<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}${look ? ` tx-${look}` : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0"${closing ? ' data-closing="1"' : ''}>
 ${d.html}
 <div class="probe">א</div>
 </body></html>`;

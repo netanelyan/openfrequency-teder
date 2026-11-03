@@ -34,6 +34,13 @@ import { bestInk, contrast, isHex, luminance } from '../color.js';
 // is in every line, on both sides (.3em at the text's full size).
 // `inline` (E): a text's words are one inline run, so a box is drawn behind each of its lines, as TikTok draws it.
 // `rank` (E): a ranking's place is set before its title, in the title's own line; the check measures it there.
+//
+// `closing` and `action` are the closing slide's (src/render/styles/index.js, its design): the writer's line in the
+// style's own headline face, from its size down to a floor that holds a 60-character line (the most a closing line has)
+// in four lines on both platforms, so it is never set as a lesser text on one of them (`want`: the lines it is set
+// smaller to keep to; `lines`: at its floor it may take up to six, so a line of the widest letters is drawn, never
+// refused); and the action under it, smaller, its floor under the line's by a clear step (the line is at least 1.25
+// times the action at any fit).
 
 const T = (family, weight, px, lh, more = {}) => ({ family, weight, px, lh, ...more });
 
@@ -54,6 +61,9 @@ export const STYLES = {
       tbody: T('Assistant', 400, 40, 1.45, { lines: 2 }),
       number: T('Heebo', 900, 160, 1),
       label: T('Assistant', 700, 30, 1.2),
+      // On A's card: the card's padding (52) and border (2) on both sides.
+      closing: T('Heebo', 900, 92, 1.06, { lines: 6, want: 4, floor: 64, tracking: -1, breaks: false, inset: 108 }),
+      action: T('Assistant', 700, 42, 1.25, { lines: 2, floor: 34, inset: 108 }),
     },
   },
   B: {
@@ -73,6 +83,8 @@ export const STYLES = {
       tbody: T('Rubik', 400, 40, 1.45, { lines: 4 }),
       number: T('Karantina', 700, 400, 0.8),
       label: T('Rubik', 600, 28, 1.2),
+      closing: T('Karantina Headline', 700, 156, 0.88, { lines: 6, want: 4, floor: 112, breaks: false, mark: 29 }),
+      action: T('Rubik', 800, 46, 1.2, { lines: 2, floor: 36 }),
     },
   },
   C: {
@@ -90,6 +102,8 @@ export const STYLES = {
       tbody: T('Rubik', 400, 42, 1.5, { lines: 4 }),
       number: T('Rubik', 900, 132, 1),
       label: T('Rubik', 900, 60, 1.2),
+      closing: T('Rubik', 900, 92, 1.08, { lines: 6, want: 4, floor: 66, breaks: false }),
+      action: T('Rubik', 800, 42, 1.2, { lines: 2, floor: 34 }),
     },
   },
   D: {
@@ -107,6 +121,8 @@ export const STYLES = {
       tbody: T('Rubik', 400, 32, 1.5, { lines: 3 }),
       number: T('Karantina', 700, 208, 0.9),
       label: T('Rubik', 800, 26, 1.2),
+      closing: T('Karantina Headline', 700, 148, 0.92, { lines: 6, want: 4, floor: 100, breaks: false, mark: 21 }),
+      action: T('Rubik', 800, 42, 1.2, { lines: 2, floor: 34 }),
     },
   },
   E: {
@@ -133,6 +149,9 @@ export const STYLES = {
       tbody: T('Heebo', 700, 54, 1.22, { lines: 6, floor: 42, inset: 24 }),
       number: T('Heebo', 900, 112, 1),
       label: T('Heebo', 400, 22, 1.2),
+      // On TikTok's white boxes in every look of E (src/render/styles/index.js: the closing slide has no edge or shadow).
+      closing: T('Heebo', 800, 84, 1.24, { lines: 6, want: 4, floor: 62, breaks: false, inset: 52 }),
+      action: T('Heebo', 800, 44, 1.3, { lines: 2, floor: 36, inset: 28 }),
     },
   },
 };

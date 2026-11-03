@@ -70,7 +70,7 @@ export function fitText(text, spec, { box, scale = 1 }) {
   if (!held) return { ok: true, px: spec.px * scale, lines: 0, want: 0, max: spec.lines, chars: 0 };
   const writer = held.split('\n').length;
   const max = spec.lines || 99;
-  const want = breaks ? Math.min(writer, max) : max;
+  const want = spec.want ? Math.min(spec.want, max) : breaks ? Math.min(writer, max) : max;
   const base = spec.px * scale;
   const floor = (spec.floor || spec.px * BODY_FLOOR) * scale;
   const set = (t) => {

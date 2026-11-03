@@ -5,7 +5,7 @@ import { ensureDir } from '../core/paths.js';
 import { tokenOf } from '../verify/claims.js';
 import { page, SIZES } from './html.js';
 import { buildSlide, TEMPLATE_IMPL } from './templates/index.js';
-import { endParts } from './end.js';
+import { closingPage, endParts } from './end.js';
 import { everyPhoto, kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
@@ -108,7 +108,7 @@ async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenien
   // A preview (the style picker, a review) is drawn even when it does not fit, and says so: { warnings }.
   const warnings = [];
   const refuse = (message, code) => {
-    if (lenient && ['overflow', 'safe_zone', 'fit'].includes(code)) warnings.push({ code, message });
+    if (lenient && ['overflow', 'safe_zone', 'fit', 'contrast'].includes(code)) warnings.push({ code, message });
     else throw new RenderError(message, code);
   };
   const geo = SIZES[size];
@@ -161,6 +161,38 @@ async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenien
         g.drawImage(img, (cols - img.naturalWidth * r) / 2, (rows - img.naturalHeight * r) * 0.3, img.naturalWidth * r, img.naturalHeight * r);
         img.src = c.toDataURL('image/png');
         await img.decode().catch(() => {});
+      }
+    });
+
+    // An account's logo on a closing slide sits on a tile of its own: white, unless the logo is light letters on a clear
+    // ground (a logo made for a dark site), which would vanish on white: then dark.
+    await tab.evaluate(async () => {
+      for (const img of document.querySelectorAll('img.logo')) {
+        await img.decode().catch(() => {});
+        const tile = img.closest('.lg');
+        if (!tile) continue;
+        let light = false;
+        try {
+          const c = document.createElement('canvas');
+          c.width = 64;
+          c.height = Math.max(1, Math.round((64 * (img.naturalHeight || 1)) / (img.naturalWidth || 1)));
+          const g = c.getContext('2d');
+          g.drawImage(img, 0, 0, c.width, c.height);
+          const d = g.getImageData(0, 0, c.width, c.height).data;
+          const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+          let ink = 0;
+          let n = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] < 128) continue;
+            n++;
+            ink += 0.2126 * lin(d[i]) + 0.7152 * lin(d[i + 1]) + 0.0722 * lin(d[i + 2]);
+          }
+          light = n > 0 && n < (d.length / 4) * 0.95 && ink / n > 0.6;
+        } catch {
+          light = false;
+        }
+        tile.classList.add(light ? 'dark' : 'light');
+        tile.dataset.tile = light ? 'dark' : 'light';
       }
     });
 
@@ -300,12 +332,20 @@ async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenien
           set(el, px);
         }
       };
-      for (const el of els) {
+      const fitAll = (el) => {
         fitOne(el);
         if (sideways(el) && !el.classList.contains('num')) {
           letGo(el);
           fitOne(el);
         }
+      };
+      for (const el of els) fitAll(el);
+      // A text that keeps a proportion to another (a closing slide's action to its line): set from that one's size.
+      for (const el of els.filter((x) => x.dataset.of && x.dataset.ratio)) {
+        const head = document.querySelector(el.dataset.of);
+        if (!head || !at.has(head)) continue;
+        el.dataset.px = String(Math.min(Number(el.dataset.px), at.get(head) * Number(el.dataset.ratio)));
+        fitAll(el);
       }
       // A number and its unit on one row: a long number is set smaller until the row fits the slide's width.
       for (const row of document.querySelectorAll('.nrow, .sides')) {
@@ -442,6 +482,15 @@ async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenien
           }
         }
       }
+      // A text that keeps a proportion to another (a closing slide's action to its line): set from that one's size, down
+      // to its own floor (data-floor, px), never larger than it was.
+      for (const el of els.filter((x) => x.dataset.of && x.dataset.ratio)) {
+        const head = document.querySelector(el.dataset.of);
+        if (!head) continue;
+        const now = parseFloat(getComputedStyle(el).fontSize);
+        const px = Math.max(Number(el.dataset.floor || 0), Math.min(now, parseFloat(getComputedStyle(head).fontSize) * Number(el.dataset.ratio)));
+        if (px < now) el.style.fontSize = `${px}px`;
+      }
       return out;
     }, { floor, scale });
     const failed = fitted.filter((f) => !f.fits);
@@ -507,6 +556,16 @@ async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenien
       refuse(`text in the safe zone (clear above ${zone.top}px and below ${zone.bottom}px${sides}): "${x.text}" sits at ${x.top}-${x.bottom}px${zone.sides ? `, ${x.left}-${x.right}px across` : ''}`, 'safe_zone');
     }
 
+    // A post's closing slide (data-closing): no outline and no shadow on anything on it, its logo inside the bands like
+    // its words, and every letter at 4.5:1 against what is actually drawn behind it, measured on the slide with its
+    // letters taken away (a photograph, a fade, a panel, a box: whatever is there).
+    const closing = (await tab.evaluate(() => document.body.dataset.closing === '1')) ? await measureClosing(tab, zone) : null;
+    if (closing) {
+      if (closing.shadows) refuse(`the closing slide has ${closing.shadows} outlined or shadowed parts: it has none`, 'outline');
+      if (closing.logoOut) refuse(`the logo sits in the safe zone (${JSON.stringify(closing.logo)})`, 'safe_zone');
+      for (const x of closing.contrast) if (x.ratio < 4.5) refuse(`"${x.text}" on the closing slide reads at ${x.ratio.toFixed(2)}:1 against what is behind it, needs 4.5:1`, 'contrast');
+    }
+
     const dir = await tab.evaluate(() => [document.documentElement.dir, document.documentElement.lang]);
     if (dir[0] !== 'rtl' || dir[1] !== 'he') throw new RenderError('the slide is not right to left Hebrew', 'rtl');
 
@@ -514,11 +573,91 @@ async function drawHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenien
     ensureDir(path.dirname(file));
     writeFileSync(`${file}.tmp`, buf);
     renameSync(`${file}.tmp`, file);
-    return { file, fitted, outlined: zone.outlined, bytes: buf.length, warnings };
+    return { file, fitted, outlined: zone.outlined, bytes: buf.length, warnings, zone: { top: zone.top, bottom: zone.bottom, sides: zone.sides }, ...(closing ? { closing } : {}) };
   } finally {
     await context.close().catch(() => {});
     keepWarm();
   }
+}
+
+/**
+ * What a closing slide holds, measured once it is fitted: its line and action (size, box, words), its logo and the
+ * tile it is on, the group they make, every visible word in order, anything outlined or shadowed, and the contrast of
+ * each run of words against the pixels behind it (the 95th brightest for light words, the 5th darkest for dark ones),
+ * from a screenshot of the slide with its letters made transparent, so a box, a band or a chip behind a word counts.
+ */
+async function measureClosing(tab, zone) {
+  const spots = await tab.evaluate((z) => {
+    const rect = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height) };
+    };
+    const one = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? { px: Math.round(parseFloat(getComputedStyle(el).fontSize)), text: el.textContent.replace(/[\s\u00A0]+/g, ' ').trim(), rect: rect(el) } : null;
+    };
+    const runs = [];
+    const words = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.nodeValue.trim() || n.parentElement.closest('.probe,style,script,title')) continue;
+      const cs = getComputedStyle(n.parentElement);
+      if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+      range.selectNodeContents(n);
+      const boxes = [...range.getClientRects()].filter((x) => x.width > 2 && x.height > 2);
+      if (!boxes.length) continue;
+      words.push(n.nodeValue);
+      // The middle of each line's letters, a little in from its ends: what the eye reads, not the line's whole box.
+      runs.push({ text: n.nodeValue.trim().slice(0, 40), color: cs.color, boxes: boxes.map((x) => ({ x: x.left + 2, y: x.top + x.height * 0.3, w: Math.max(1, x.width - 4), h: Math.max(1, x.height * 0.45) })) });
+    }
+    const shadows = [...document.querySelectorAll('body *')].filter((el) => {
+      const cs = getComputedStyle(el);
+      return cs.textShadow !== 'none' || parseFloat(cs.webkitTextStrokeWidth) > 0 || cs.boxShadow !== 'none';
+    }).length;
+    const logo = rect(document.querySelector('img.logo'));
+    const sides = z.sides || [0, innerWidth];
+    const logoOut = Boolean(logo && (logo.top < z.top - 2 || logo.bottom > z.bottom + 2 || logo.left < sides[0] - 2 || logo.right > sides[1] + 2));
+    const hide = document.createElement('style');
+    hide.id = '__hide';
+    hide.textContent = '*{color:transparent!important;-webkit-text-fill-color:transparent!important}';
+    document.head.appendChild(hide);
+    return {
+      line: one('.cl-line'), action: one('.cl-act'), logo, logoOut, tile: document.querySelector('.lg')?.dataset.tile || null, group: rect(document.querySelector('.cw')),
+      text: words.join(' ').replace(/[\s\u00A0]+/g, ' ').trim(), shadows, runs,
+    };
+  }, zone);
+  const shot = await tab.screenshot({ type: 'png' });
+  const contrast = await tab.evaluate(async ({ b64, runs }) => {
+    document.getElementById('__hide')?.remove();
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    const lum = (r, gg, b) => 0.2126 * lin(r) + 0.7152 * lin(gg) + 0.0722 * lin(b);
+    return runs.map((run) => {
+      const [r, gg, b] = (run.color.match(/\d+(\.\d+)?/g) || ['0', '0', '0']).map(Number);
+      const ink = lum(r, gg, b);
+      const seen = [];
+      for (const x of run.boxes) {
+        const d = g.getImageData(Math.max(0, Math.round(x.x)), Math.max(0, Math.round(x.y)), Math.max(1, Math.round(x.w)), Math.max(1, Math.round(x.h))).data;
+        for (let i = 0; i < d.length; i += 8) seen.push(lum(d[i], d[i + 1], d[i + 2]));
+      }
+      seen.sort((p, q) => p - q);
+      const at = (q) => seen[Math.min(seen.length - 1, Math.max(0, Math.floor(q * (seen.length - 1))))] ?? 0;
+      const ground = ink > at(0.5) ? at(0.95) : at(0.05);
+      const [hi, lo] = ink > ground ? [ink, ground] : [ground, ink];
+      return { text: run.text, ratio: (hi + 0.05) / (lo + 0.05) };
+    });
+  }, { b64: shot.toString('base64'), runs: spots.runs });
+  const { runs, ...rest } = spots;
+  return { ...rest, contrast };
 }
 
 /**
@@ -588,7 +727,7 @@ export function planPhotos({ slides, byIdx, postKind }) {
   return { plan, uses, sceneKeys };
 }
 
-const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i.test(file) ? 'image/svg+xml' : 'image/jpeg'};base64,${readFileSync(file).toString('base64')}`;
+const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i.test(file) ? 'image/svg+xml' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg'};base64,${readFileSync(file).toString('base64')}`;
 
 /**
  * Render every slide of a post for every platform of its pack.
@@ -653,6 +792,8 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   // An account drawn in one of the slide styles (src/render/styles): each slide is a page of its own.
   const styled = Boolean(pack.theme.style);
   const warnings = [];
+  // What the renderer measured on each platform's closing slide (drawHtml's `closing`), for the tests and the log.
+  const closingDrawn = {};
   // One slide drawn, at `scale` of its type's size: a slide that does not fit with everything on it is drawn again
   // without its framed photograph (a presentation choice: the text and the graphic are what was checked), then with
   // its type allowed smaller. Returns the size its text came out at, as a share of the design's.
@@ -715,7 +856,10 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         postKind,
         subject: extra.subject || {},
         keywords: extra.keywords || [],
-        cta: extra.cta && !endSlide ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
+        // The closing slide is the only action (the owner, 2026-11-03: each format's old call to action is dropped): a post
+        // with one draws no call to action on its last content slide. The call to action is still chosen and kept on the
+        // post (posts.data_json cta), for the morning feedback that changes it; a post made before closes as it did.
+        cta: extra.cta && !endSlide && !closing ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
         coverVisual: extra.coverVisual || null,
         // The mark goes on the last slide only: on the cover the platform's own page already shows whose post it is,
         // and a logo there reads as an advert (the owner's call).
@@ -794,23 +938,30 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     // What each slide was drawn on, once every slide is drawn: a photograph a slide had to give up is not under it.
     grounds[size] = [];
     for (const d of drawn) grounds[size][d.i] = d.on.filter((k) => !(dropped[size]?.has(d.i) && k === d.own));
-    if (closing && !only) {
-      // One image goes to Instagram and to a Facebook Page (mediaSizes): their action is the same, the address.
+    // The closing slide is drawn after the last content slide, and alone when `only` names its place (slides.length).
+    if (closing && (!only || only.has(slides.length))) {
+      // One image goes to Instagram and to a Facebook Page (mediaSizes): their action is the same, the address. TikTok's
+      // never has one (src/pipeline/closing.js closingActions).
       const action = closing.actions[size === 'tiktok' ? 'tiktok' : 'instagram'] || closing.actions.tiktok;
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
+      // No slide is a bare ground (the owner, 2026-10-31): the closing slide stands on a photograph of the post, sharp. A
+      // style takes the post's least-used one; an older template the post's own (photocard), its ground, else that one.
+      const key = styled ? endKey : bleed && postPhoto ? postKey : ground ? groundKey : endKey;
+      const photo = key != null && uri.has(key) ? key : null;
+      let r;
       if (styled) {
-        const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', closing: true, title: closing.line, action, handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null } }), { size, file, lenient });
-        for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
-        grounds[size][slides.length] = endKey != null && uri.has(endKey) ? [endKey] : [];
+        const sz = photo != null ? imageSize(readFileSync(byIdx.get(photo).file)) : null;
+        const slide = {
+          kind: 'end', closing: true, title: closing.line, action, handle: pack.meta.handle, logo: brand, names: [closing.product, closing.name],
+          photo: photo != null ? uri.get(photo) : null, photoPos: photo != null ? focus.get(photo) || null : null, photoSize: sz ? { w: sz.width, h: sz.height } : null,
+        };
+        r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide }), { size, file, lenient });
       } else {
-        const own = impl.end && bleed && postPhoto;
-        // No slide is a bare ground (the owner, 2026-10-31): the closing slide stands on the post's ground, else on
-        // its least-used photograph, blurred behind the words.
-        const bgKey = ground ? groundKey : endKey != null && uri.has(endKey) ? endKey : null;
-        const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand: own ? null : brand };
-        await renderHtml(page({ theme: pack.theme, overlay, size, slide: sl, parts: own ? impl.end(pack, { closing, action }) : endParts(pack, { closing, action }), ...(own ? { photo: postPhoto } : { bg: bgKey != null ? uri.get(bgKey) : null }) }), { size, file, floor: 0.45 });
-        grounds[size][slides.length] = own ? [postKey] : bgKey != null ? [bgKey] : [];
+        r = await renderHtml(closingPage({ pack, size, closing, action, logo: brand, photo: photo != null ? uri.get(photo) : null, photoPos: photo != null ? focus.get(photo) || null : null, overlay }), { size, file, floor: 0.45, lenient });
       }
+      for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
+      grounds[size][slides.length] = photo != null ? [photo] : [];
+      closingDrawn[size] = r;
       out[size].push(file);
     } else if (end && styled && !only) {
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
@@ -837,5 +988,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   Object.defineProperty(out, 'scales', { value: scales, enumerable: false });
   // What a lenient render (a preview) drew although it did not fit, per slide.
   Object.defineProperty(out, 'warnings', { value: warnings, enumerable: false });
+  // The closing slide as the renderer measured it, per platform: its bands, its line and action, its logo, its contrast.
+  Object.defineProperty(out, 'closing', { value: closingDrawn, enumerable: false });
   return out;
 }

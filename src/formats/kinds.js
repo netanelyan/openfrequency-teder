@@ -9,8 +9,8 @@ import { normHe } from '../voice/tells.js';
 // Every kind fits the rules the research behind the accounts gave:
 //   - 5 to 8 slides in all, the cover included (carousels peak at 5 to 6; past
 //     10 only about a quarter of viewers finish)
-//   - one idea per slide, and the payoff on the last slide: the call to action
-//     is drawn on that slide by the design, not given a slide of its own
+//   - one idea per slide, and the payoff on the last slide; no call to action is
+//     drawn on it (the closing slide is the post's only action, 2026-11-03)
 //   - after the last slide, every post has its closing slide (src/pipeline/closing.js),
 //     the line that sends people to the account's store or asks them to follow it: it is
 //     the post's, not the kind's, and is not counted in the 5 to 8

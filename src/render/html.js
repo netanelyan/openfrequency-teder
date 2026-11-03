@@ -141,7 +141,11 @@ body.no-handle .tag,body.no-handle .who,body.no-handle .kick,body.no-handle .sta
 // at that size a crossbarred 7 reads as a letter. Big numbers on their own keep the face's digits.
 const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
 
-/** The whole page for one slide. `parts` is what a template returns. */
+/**
+ * The whole page for one slide. `parts` is what a template returns: { css, html, bodyClass, bodyStyle }, and for a
+ * closing slide (src/render/end.js closingPage) `safe`, the bands kept clear on all four sides in px, which the
+ * renderer then measures every line against as it does a styled slide's, and `closing`, which has it measured as one.
+ */
 export function page({ theme, size, slide, parts, photo, photoPos = null, blur = false, bg = null, split = null, splitPos = null, overlay = OVERLAY, framed = false }) {
   const zone = { ...OVERLAY.safeZone, ...(overlay?.safeZone || {}) };
   const outline = Number(overlay?.outline ?? OVERLAY.outline);
@@ -161,7 +165,7 @@ ${parts.css}
 ${VISUAL_CSS}
 ${HEADLINE_CSS}
 </style></head>
-<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''} data-zone-top="${zone.top}" data-zone-bottom="${zone.bottom}" data-outline="${outline}">
+<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''} data-zone-top="${zone.top}" data-zone-bottom="${zone.bottom}" data-outline="${outline}"${parts.safe ? ` data-safe="${parts.safe.map(Number).join(',')}"` : ''}${parts.closing ? ' data-closing="1"' : ''}>
 ${photo && framed ? `<img class="photo fill" src="${photo}" alt=""><div class="cframe"><img src="${photo}"${at(photoPos)} alt=""></div><div class="scrim" data-scrim></div>` : ''}
 ${photo && !framed ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}"${blur ? '' : at(photoPos)} alt=""><div class="scrim" data-scrim></div>` : ''}
 ${split ? `<div class="split"><img class="half" src="${split[0]}"${at(splitPos?.[0])} alt=""><img class="half" src="${split[1]}"${at(splitPos?.[1])} alt=""></div><div class="scrim" data-scrim></div>` : ''}

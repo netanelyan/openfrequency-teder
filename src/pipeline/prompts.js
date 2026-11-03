@@ -534,9 +534,9 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
-  // The account's own follow slide (pack.json endSlide) still takes the call to action off the last content slide; the
-  // closing slide itself is the post's (src/pipeline/closing.js), on every post.
-  const end = pack?.meta?.endSlide?.title && !everyPhoto(pack, format, style);
+  // No call to action is drawn on the last content slide any more: the closing slide is the post's only action (the
+  // owner, 2026-11-03; src/pipeline/closing.js). `cta` is still chosen and kept on the post for the morning feedback,
+  // and is not the writer's to place.
   return [
     `${formatHead(format, n)}`,
     // Said first, not left to the format's paragraph: rankings were refused for a place without its graphic, and
@@ -547,7 +547,6 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     templates.length ? `COVER TEMPLATES FOR THIS POST, best first: ${templates.map((t) => `[${t.id}]`).join(', ')}. The cover is written from the first whose promise these facts keep, speaking ${SPEAKER_EN[speakerOf(pack)]}; "" when none does.` : '',
     hook ? `COVER PATTERN${templates.length ? ' (when no template fits)' : ''}: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
-    cta && !legacy && !end ? `The design ends the last content slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
     body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',
     sub.maxChars < LIMITS.sub.maxChars ? `SUB: the line under the cover is at most ${sub.maxChars} characters, one punchy line that makes them swipe (the stakes or a tease, never an explanation of the topic), or "".` : '',
     !legacy && everyPhoto(pack, format, style)

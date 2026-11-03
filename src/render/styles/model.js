@@ -40,6 +40,33 @@ export function displayText(text, { breaks = true } = {}) {
 
 const pattern = (phrase) => new RegExp(String(phrase).trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00A0]+'), 'u');
 
+/**
+ * The words of a closing line that name the product or the store (`names`, the product's first), as the line writes
+ * them: the whole name, else its first two words, else its first, with a prefix written onto it ("בעציץ ושמש"), whole
+ * words only, one short phrase (3 words and 24 characters at most, as any highlight). '' when the line names neither:
+ * the mark is the line's own words, never a word added.
+ */
+export function closingMark(line, names = []) {
+  const t = String(line || '');
+  for (const name of names) {
+    const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+    for (const k of [...new Set([w.length, 2, 1])]) {
+      if (k < 1 || k > w.length) continue;
+      const phrase = w.slice(0, k).join(' ');
+      if ([...phrase].length < 3) continue;
+      const m = pattern(phrase).exec(t);
+      if (!m) continue;
+      let start = m.index;
+      const end = m.index + m[0].length;
+      for (let p = 0; p < 2 && start > 0 && /[ובלמשהכ]/.test(t[start - 1]); p++) start--;
+      if ((start > 0 && /[\p{L}\p{N}]/u.test(t[start - 1])) || (end < t.length && /[\p{L}\p{N}]/u.test(t[end]))) continue;
+      const mark = t.slice(start, end);
+      if ([...mark].length <= 24 && mark.split(/\s+/).length <= 3) return mark;
+    }
+  }
+  return '';
+}
+
 /** Is the highlight a phrase of the text? Only then is it drawn: it marks the checked words, it never adds any. */
 export const highlightIn = (text, phrase) => Boolean(String(phrase || '').trim()) && pattern(phrase).test(String(text || '').replace(/\s+/g, ' '));
 
@@ -82,8 +109,9 @@ export function slideModel(s) {
   if (s.kind === 'cover') {
     return { kind: 'cover', hook: s.hook || '', sub: s.sub || '', highlight: s.highlight || '', key: s.keyLine || '' };
   }
-  // The closing slide: the account's own follow slide, or a post's closing slide (its line and this platform's action).
-  if (s.kind === 'end') return { kind: 'end', title: s.title || '', body: s.body || '', handle: s.handle || '', ...(s.closing ? { closing: true, action: s.action || null } : {}) };
+  // The closing slide: the account's own follow slide, or a post's closing slide (its line, this platform's action, the
+  // account's logo, and the product's or the store's name where the line says it, for a style that marks it).
+  if (s.kind === 'end') return { kind: 'end', title: s.title || '', body: s.body || '', handle: s.handle || '', ...(s.closing ? { closing: true, action: s.action || null, logo: s.logo || null, mark: closingMark(s.title, s.names || []) } : {}) };
   const cta = s.isLast && s.cta?.text ? s.cta.text : '';
   if (s.kind === 'item') {
     // A ranking's place, as a number: the one label of a post's structure style E draws, before the title ("5.").

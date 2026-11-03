@@ -2416,3 +2416,103 @@ answer in 5 seconds, an address not on this machine, which localFetch refuses) i
 is its example, the same file in both repositories, read by both sides' tests, each checking the other's copy when it is
 beside it. test/alert-toran.test.js: posted once with the token and the example's body, not again inside the window;
 Toran down, refusing, or not on this machine a log line; no token or `off`, nothing; the command still run beside it.
+
+### The closing slide's design, in every style (2026-11-03, item 4 of the closing slide)
+
+The owner: "The design: draw the closing slide in all four styles (A, B, C, D) and style E. It stays inside TikTok's
+safe zones and keeps the rules (no outlines, no shadows, no page numbers). The customer's logo appears if there is one.
+A URL appears only on Instagram/Facebook; on TikTok the slide says "link in bio", because a link in a TikTok image isn't
+clickable." And on 2026-11-03: each format's old call to action is dropped, so the closing slide is the only action.
+(src/render/styles/index.js, its closing section; src/render/end.js closingPage for the older templates.)
+
+What item 2's interim look got wrong, seen on a phone: on TikTok B and C set the line smaller than the action (C's in
+small muted grey) and differently from Instagram, because the line took whichever of the style's texts held it on that
+platform; in A to D the photograph was nearly gone under a 78% veil of the ground and the lower half of the slide was
+empty; the action in the accent read badly on a dark ground (the demo's #B4512A on A's ground is 3.7:1); no styled
+closing slide had the logo; the older templates outlined the line (editorial with an up-arrow pill, photocard muddy);
+E's line kept E's edge and shadow; and the older templates' side bands were never checked.
+
+The line is the slide. Each style has one spec for it (tokens.js `closing`, in its own headline face: A Heebo 900, B and
+D Karantina, C Rubik 900, E Heebo 800) from its full size down to a floor that still holds 60 characters, the most a
+closing line has, in four lines on both platforms, so the treatment is the same on TikTok and Instagram and the line is
+never set as a lesser text. At that floor it may take up to six lines (`want` 4, `lines` 6): a 60-character line made
+only of the widest letters (ש and מ) needs six in A's card and in B on TikTok, and a closing slide that does not fit
+would stop the post, so it is drawn in more lines rather than refused; no real line came near it.
+The action (`action`) is under it and smaller: the line is at least 1.25 times its size at
+any fit, and when the line is set smaller to fit, the action follows it in proportion down to its own floor (data-of,
+data-ratio, read by the renderer's fit), so the two keep the same relation on both platforms whatever their widths do to
+the line (A's card is 652 px wide on TikTok and 804 on Instagram: a long line shrinks on one and not the other). The
+action sits on a block of the account's colour in the style's own shape (A's pill, B's block, C's and D's square chip,
+E's box), in white or near-black, whichever reads at 4.5:1 on that colour; an accent neither reads on is left off, and
+the block takes the style's text colour on its ground (dark on C, white elsewhere, E's dark box). B and D also mark the
+product's or the store's name in the line on a block of the same colour (closingMark: the line's own words, the whole
+name, else its first words, with a prefix written onto it; nothing added, nothing when the line names neither, as in a
+follow line).
+
+The photograph is the post's least-used one, sharp, and it shows; the words never sit on it bare, so they read without
+an outline or a shadow:
+- A: the photograph over the whole slide, unveiled; the logo, the line and the action on A's card at the foot of the band,
+  and the slide's foot fading into the ground where TikTok sets its caption.
+- B: the photograph in B's frame, wider than the words (the frame is no text; the bands are the words'), as tall as the
+  words leave it, at least a sixth of the slide; the line huge on B's dark ground under it.
+- C: the photograph under TikTok's tabs, cut to the room the words leave around its face, a clear edge, the words on C's
+  light panel under it.
+- D: the photograph from the top of the slide over the room the words leave, fading into D's ground over its last 42%.
+- E: the photograph over the whole slide with no veil at all; the line on TikTok's white boxes and the action on a box of
+  the colour, in the middle of the band and off a face the screen found, as E's other slides; a small photograph shown
+  whole over its blurred copy. In both of E's looks: its "shadow" look is a dark edge and a shadow on the letters, and the
+  owner's words for the closing slide are "no outlines, no shadows", so no closing slide has either, in any style. (On
+  E's other slides the look is unchanged.)
+On the worst case (60 characters, a logo, the longest address) measured on a red photograph, the share of the slide that
+shows it at most 30% veiled is 52% (A), 20% (B), 26% (C), 21% (D), 84% (E) and 23% (the older templates) on TikTok, more
+on Instagram; on a shorter line, more. A slide is never only the ground: it stands on a photograph of the post (the
+grounds record, the no-bare-slides check).
+
+The logo. A pack's logo is packs/<id>/brand/logo.png or .svg (src/packs/load.js), now also .webp, .jpg or .jpeg, the
+formats a store's site serves. On the closing slide it comes first, in the bands like the words, on a tile of its own:
+white, or dark when the renderer finds a light logo (light letters on a clear ground, made for a dark site). With none,
+nothing is drawn in its place: the group is shorter by the logo and its gap. Where a customer's logo would come from: the
+site read on /new (src/onboarding/promo.js readSitePromo through src/demos/store.js readStore, which for a store on
+Shopify, WooCommerce or Wix already finds the logo's address with logoOf, as the store demos use it) drops it, and no
+step saves a picture into a customer's pack. To fill it: keep that address on the onboarding's draft (setup_json), fetch
+it when the account is made (PNG, JPEG or WebP only, never an SVG from a site, at least about 120 px tall, as
+src/demos/build.js fetches a store's logo), write it to brand/logo.<ext>, and let Settings replace or remove it. Until
+then a customer's closing slide is drawn without one, and our own accounts draw theirs where their pack has it.
+
+The bands and the rules are enforced, not only designed. Every styled slide was already checked on all four sides; an
+older template's slide only on the top and the bottom. The closing slide on an older template now has a frame padded to
+TikTok's bands where they are wider than the template's own (left 160 rather than 100 on TikTok; 120 and 96 rather than
+96 and 92 on Instagram) and carries data-safe, so the renderer measures every line against all four, as a styled slide's:
+a long line pushed into the button rail is refused. On every closing slide (data-closing) the renderer also measures the
+logo against the bands, refuses anything with a text shadow, a text stroke or a box shadow, and measures every run of
+words against the pixels actually behind it: the slide is shot again with its letters made transparent, and the 95th
+brightest pixel under a light word (the 5th darkest under a dark one) must give 4.5:1, or the slide is refused
+('contrast'; a preview is drawn and warned). On white and black stripes, the worst photograph, every line measured
+13:1 to 19:1 and every action 5.06:1 (white on the demo's #B4512A).
+
+Which older templates a customer can get: none. Every account made through /new gets a style (src/onboarding/pack.js
+createPack sets pack.style from suggestStyle), Settings can only switch it among A to E (setPackStyle refuses a style
+without a name), and a store's demo is drawn in A. The older templates (bubble, scoreboard, ledger, editorial, poster,
+card, corner, photocard) are what our own accounts with no style draw in. They share one simple closing slide in the
+account's own colours and faces (closingPage): the photograph from the top fading into the theme's ground, the words on
+the ground, the logo on its tile, the line in the display face, the action on the accent in the ink the theme's own
+check holds at 4.5:1. Photocard's own closing branch is gone; its follow slide stays for the posts made before.
+
+The call to action. build.js still chooses one for each post from its format (ctasOf, the morning feedback's avoidCta
+and ctaText, the last post's left out) and keeps it in posts.data_json cta and in what the fact gate signs; the renderer
+draws none on the last content slide of a post that has its closing slide (render.js: a post made before closes as it
+did, on its call to action or its follow slide), and the writer is no longer told the design ends the last slide with it.
+The feedback that changes it (src/metrics/feedback.js, its "new-cta" steer, which src/pipeline/prompts.js steerLine says) is untouched and its tests pass; routing the
+call to action into the closing line is item 6. A store's demo (src/demos) is not a post of an account: its last slide
+is its own, with the store's address, and is unchanged.
+
+test/closing-design.test.js (new, 6; all 6 fail on item 2's code, run on an export of closing-writer): the closing slide in A to E, E's box look, editorial
+and photocard, on both platforms, with the product line, the follow line and the 60-character line with the longest
+address, through renderPost and not lenient: every band of the platform checked, the sides included, the logo inside
+them, only the line and the action on it, nothing outlined or shadowed, no address on TikTok and the display address on
+Instagram, the line at least 1.25 times the action and in the same proportion on both platforms; the logo drawn when
+present, its place closed when absent, a light logo on a dark tile, and the loader's formats; the photograph showing
+(18% of the slide at least, worst case) and every word at 4.5:1 on stripes, a faint line and a shadow refused; a line
+of the widest letters drawn in every look, the line still over the action; a line pushed into the rail refused on the
+older templates and the styles; the last content slide the same with and without a
+call to action once the post has its closing slide, an older post keeping its own, and the call to action still stored.

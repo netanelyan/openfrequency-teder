@@ -293,9 +293,11 @@ the cover patterns and the calls to action.
 
 The last three are the shapes the slideshows that spread on TikTok take (25 of them
 read slide by slide, `docs/decisions.md`). They, and any post drawn in the native
-style (E), stand on a photograph a slide, end their content on their best slide with no
-call to action drawn on it, and keep to one short line a slide. The closing slide
-still follows them, as it follows every post.
+style (E), stand on a photograph a slide, end their content on their best slide, and
+keep to one short line a slide. No post draws a call to action on its last content
+slide any more (the owner, 2026-11-03): the closing slide that follows every post is its
+only action. Each format's call to action is still chosen and kept on the post
+(`posts.data_json` `cta`), for the morning feedback that changes it.
 
 **The closing slide.** Every post, of every format and in every style, ends on its
 closing slide, after the last content slide and not counted in the 5 to 8
@@ -324,8 +326,44 @@ whose line it carries and what the first one broke. The line and the action are 
 the fact gate signs, and the same check runs on the stored post before anything is sent:
 an approval, the TikTok draft, the runner at the slot, publish now, publish again and the
 draft-fallback's direct send each refuse one that fails, and the post is blocked with a
-reason in Hebrew. Its own design in each style is still to come; for now the line is set
-as large as the style holds it, with the action under it.
+reason in Hebrew.
+
+Its design (`src/render/styles/index.js`, its closing section; the owner: "draw the
+closing slide in all four styles (A, B, C, D) and style E. It stays inside TikTok's
+safe zones and keeps the rules (no outlines, no shadows, no page numbers). The
+customer's logo appears if there is one"). The line is the slide, in the style's own
+headline face, from its full size down to a floor that holds 60 characters in four lines
+on both platforms (and at that floor up to six, so even a line of the widest letters is
+drawn, never refused); the action is under it, smaller (the line is at least 1.25 times its
+size at any fit, and the two keep their proportion when the line is set smaller), on a
+block of the account's colour in the style's shape, its words white or near-black,
+whichever reads at 4.5:1 on that colour (an accent neither reads on is left off for the
+style's text colour on its ground). The account's logo, when it has one, comes first, on
+a white tile (a dark one for a light logo); with none, nothing takes its place. The
+photograph is the post's least-used one, sharp and in sight:
+
+| Style | The closing slide |
+|---|---|
+| A | the photograph over the whole slide; the logo, the line and the action on A's card at the foot of the band |
+| B | the photograph framed, wide, over the top; the line huge on B's ground under it, the product's or store's name in it on a block of colour |
+| C | the photograph on top, cut to the room the words leave; the words on C's light panel under it, never on it |
+| D | the photograph from the top, fading into D's ground over its last stretch; the words on the ground, the name on a block |
+| E | the photograph over the whole slide, unveiled; the line on TikTok's white boxes, the action on a box of the colour, in the middle of the band and off a face, in either of E's looks |
+| older templates | one design in the account's colours and faces: the photograph from the top fading into the theme's ground, the words on the ground |
+
+No closing slide has an outline, a shadow (E's "shadow" look included: it is set on
+E's boxes), a counter, a page number, a progress bar, a handle or a source: only the
+line, the action and the logo. The renderer measures every closing slide: every line
+inside all four of TikTok's bands (the older templates' too, whose other slides keep
+only the top and the bottom), the logo inside them as well, nothing outlined or
+shadowed, and every word at 4.5:1 against the pixels actually behind it (the slide
+drawn again with its letters taken away); a slide that misses one is refused.
+
+The logo is `packs/<id>/brand/logo.png` (or `.svg`, `.webp`, `.jpg`). A customer's
+account has none yet: the store's site is read on /new (`src/demos/store.js` finds its
+logo's address, as the store demos use it), but nothing keeps the address or saves the
+picture into the account. Until something does, a customer's closing slide is drawn
+without one.
 
 Every post has 5 to 8 slides, one idea a slide, keywords in Hebrew and English for
 TikTok's search, a TikTok caption and a short Instagram one led by the cover line.
@@ -423,7 +461,7 @@ and edit its files.
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, the fixed follow slide posts made before the closing slide end on (a new post ends on its closing slide instead; with an endSlide, no call to action is drawn on the last content slide); `promo`, what the closing slide sends people to (`name`, `promise`, `target`: `{ kind: "site", url }`, `{ kind: "product", name, url }` or `{ kind: "bio" }`; none means "follow the account", src/packs/promo.js), filled in on /new from the business's site and changed on Settings; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
+| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, the fixed follow slide posts made before the closing slide end on (a new post ends on its closing slide instead, and no post with one draws a call to action on its last content slide); `promo`, what the closing slide sends people to (`name`, `promise`, `target`: `{ kind: "site", url }`, `{ kind: "product", name, url }` or `{ kind: "bio" }`; none means "follow the account", src/packs/promo.js), filled in on /new from the business's site and changed on Settings; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
 | `voice.md` | who is talking, to whom, how it sounds, with `## שורות טובות` and `## שורות רעות` |
 | `theme.json` | a template and variant from the engine's library, colours, fonts, the graphics it draws (`visuals`), whether slides sit on a blurred photograph and the scenes searched for it (`backgroundQueries`) |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, why it is trusted, what its terms allow, when it was approved. A source taken out of the file is no longer read |
@@ -460,12 +498,12 @@ does not draw its graphic as well; a slide with none stands on a solid dark grou
 its graphic there as in every style. The source is one small, faint line at the foot.
 
 In A to D no letter has an outline or a shadow; E's "shadow" look is the one exception,
-on purpose, since that is how TikTok's own text tool draws plain text. No slide of any
-style carries a progress bar, a counter,
-dots, a handle or a blurred photograph: TikTok draws its own furniture. Text keeps out
-of TikTok's bands on all four sides (top 140, bottom 420, both sides 152 px, since the
-Hebrew app mirrors its button rail; Instagram's 4:5 keeps 80, 120 and 96), and the
-renderer refuses a line inside one. Each slide may mark one `highlight`, a short phrase
+on purpose, since that is how TikTok's own text tool draws plain text, and never on a
+closing slide, which has none in any style. No slide of any style carries a progress
+bar, a counter, dots, a handle or a blurred photograph: TikTok draws its own furniture.
+Text keeps out of TikTok's bands on all four sides (top 220, bottom 470, both sides 160
+px, since the Hebrew app mirrors its button rail; Instagram's 4:5 keeps 80, 120 and 96;
+`src/rules/overlay.js` SAFE_ZONES), and the renderer refuses a line inside one. Each slide may mark one `highlight`, a short phrase
 of its own headline, which the writer chooses. A headline is set smaller in steps down to
 its style's floor before it takes another line; one still too long is a check failure
 the repair loop sends back to the writer, with about how many characters fit
