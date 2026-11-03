@@ -135,7 +135,7 @@ export function approveAll(ctx, user, params, form) {
   // Each account keeps Shabbat or not by its own choice: the drafts wait if any of theirs does.
   const rest = [...drafting].map((a) => ctx.pack(a)).filter(Boolean).map((p) => restAt(now(), rulesFor(ctx.db, p))).find(Boolean) || null;
   const next = jobs.length ? (rest ? ` הטיוטות יישלחו לטיקטוק כש${rest} ייגמר.` : ' הטיוטות נשלחות לטיקטוק.') : ' כל פוסט ייצא בשעה שלו.';
-  const held = stopped ? ` ${stopped === 1 ? 'מצגת אחת לא אושרה' : `${stopped} מצגות לא אושרו`}, כי השקף האחרון שלהן חסר או לא מפנה למה שכתוב עכשיו בהגדרות.` : '';
+  const held = stopped ? ` ${stopped === 1 ? 'מצגת אחת לא אושרה, כי השקף האחרון שלה' : `${stopped} מצגות לא אושרו, כי השקף האחרון שלהן`} חסר או לא מפנה למה שכתוב עכשיו בהגדרות.` : '';
   const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped} כבר לא חיכו)` : ''}.${next}${held}` };
   Object.defineProperty(result, 'job', { value: Promise.all(jobs) });
   return result;
