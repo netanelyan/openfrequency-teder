@@ -81,7 +81,22 @@ const KEY_SHAPES = [
 
 // ---- what the private folder says is real
 const real = [];
-const home = ofHome();
+// A worktree (.claude/worktrees/<name>) has no private/ of its own, and checked no private name at all until
+// 2026-11-03, when two commits made in worktrees were found to have put a real handle and pack ids into the public
+// repository: there, without OF_HOME, the main checkout's private/ is the one read.
+function privateHome() {
+  if (String(process.env.OF_HOME || '').trim()) return ofHome();
+  const own = path.join(ROOT, 'private');
+  if (existsSync(own)) return own;
+  try {
+    const common = path.resolve(ROOT, git('rev-parse', '--git-common-dir').toString().trim());
+    const main = path.join(path.dirname(common), 'private');
+    return path.basename(common) === '.git' && existsSync(main) ? main : own;
+  } catch {
+    return own;
+  }
+}
+const home = privateHome();
 const packsDir = path.join(home, 'packs');
 // The packs in use, and the ones archived (packs/_archive/<id>): an old account's
 // name is still private.

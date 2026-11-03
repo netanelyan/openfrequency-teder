@@ -74,6 +74,50 @@ for (const [why, files, expect] of [
   });
 }
 
+test("check:public in a worktree reads the main checkout's private folder, so a commit made there is checked too", () => {
+  // 2026-11-03: two commits made in .claude/worktrees/<name>, which has no private/ of its own, put a real handle and
+  // pack ids into the public repository; the check had read no private name at all there.
+  const main = mkdtempSync(path.join(os.tmpdir(), 'of-public-main-'));
+  const tree = path.join(main, '.claude', 'worktrees', 'w');
+  const run = (cwd, files, env = {}) => {
+    for (const [f, body] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(cwd, f)), { recursive: true });
+      writeFileSync(path.join(cwd, f), body);
+    }
+    execFileSync('git', ['add', '-f', '.'], { cwd });
+    const { OF_HOME, ...rest } = process.env;
+    return spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'check-public.js')], { env: { ...rest, CHECK_PUBLIC_ROOT: cwd, ...env }, encoding: 'utf8' });
+  };
+  try {
+    const git = (...a) => execFileSync('git', a, { cwd: main, stdio: 'pipe' });
+    git('init', '-q');
+    writeFileSync(path.join(main, '.gitignore'), 'private/\n.claude/\n');
+    writeFileSync(path.join(main, 'a.js'), 'export const a = 1;\n');
+    git('add', '.');
+    git('-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '-q', '-m', 'first');
+    git('worktree', 'add', '-q', tree, '-b', 'w');
+    // With no private folder beside either, only the generic checks run, as before.
+    const bare = run(tree, { 'docs/a.md': 'posted by @zz.real.handle today\n' });
+    assert.equal(bare.status, 0, bare.stderr);
+    assert.match(bare.stdout, /0 private names checked/);
+    // The main checkout's private folder names the account: the worktree's commit is refused.
+    mkdirSync(path.join(main, 'private', 'packs', 'zz-real-pack'), { recursive: true });
+    writeFileSync(path.join(main, 'private', 'packs', 'zz-real-pack', 'pack.json'), JSON.stringify({ id: 'zz-real-pack', handle: 'zz.real.handle' }));
+    const out = run(tree, {});
+    assert.equal(out.status, 1, 'the handle is refused in the worktree');
+    assert.match(out.stderr, /real account handle/);
+    // OF_HOME still decides when it is set.
+    const empty = mkdtempSync(path.join(os.tmpdir(), 'of-private-'));
+    try {
+      assert.equal(run(tree, {}, { OF_HOME: empty }).status, 0);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(main, { recursive: true, force: true });
+  }
+});
+
 test('.gitignore keeps the private folder, keys, databases and media out', () => {
   const gi = readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   for (const line of ['/private/', '.env', '*.db', '/data/', '/packs/', '/out/', '*.jpg', '*.png', '*.mp4']) assert.ok(gi.split(/\r?\n/).includes(line), `.gitignore lacks ${line}`);

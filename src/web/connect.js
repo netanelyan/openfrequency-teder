@@ -224,7 +224,7 @@ export function connectRoutes(links) {
 
 /**
  * A handle in a Hebrew sentence, kept left to right (Unicode's isolates survive the escaping): at the start of a
- * right-to-left line its @ was drawn after the name ("mispar9@").
+ * right-to-left line its @ was drawn after the name ("name@").
  */
 const handleHe = (username) => `⁦@${username}⁩`;
 

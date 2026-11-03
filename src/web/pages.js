@@ -1050,7 +1050,7 @@ ${catalogPanel(ctx, current, sources)}`;
 /**
  * Outlets to add in one tap, per niche, and the ones asked for that cannot be read, with why. The operator's alone: the
  * list is our own first niches' (football, MMA, startups), in English and with robots.txt's words, and a customer's
- * sources come from their account's setup and the form above (the owner, 2026-10-31: "mispar9 is about football only").
+ * sources come from their account's setup and the form above (the owner, 2026-10-31: an account is about its own niche only).
  */
 function catalogPanel(ctx, current, sources) {
   if (!ctx.operator) return '';
