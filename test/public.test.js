@@ -106,6 +106,9 @@ test("check:public in a worktree reads the main checkout's private folder, so a 
     const out = run(tree, {});
     assert.equal(out.status, 1, 'the handle is refused in the worktree');
     assert.match(out.stderr, /real account handle/);
+    // A private/ of the worktree's own (running Teder there makes one, without the packs) changes nothing.
+    mkdirSync(path.join(tree, 'private', 'data'), { recursive: true });
+    assert.equal(run(tree, {}).status, 1, 'still refused with an empty private/ in the worktree');
     // OF_HOME still decides when it is set.
     const empty = mkdtempSync(path.join(os.tmpdir(), 'of-private-'));
     try {

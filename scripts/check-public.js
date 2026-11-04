@@ -83,18 +83,20 @@ const KEY_SHAPES = [
 const real = [];
 // A worktree (.claude/worktrees/<name>) has no private/ of its own, and checked no private name at all until
 // 2026-11-03, when two commits made in worktrees were found to have put a real handle and pack ids into the public
-// repository: there, without OF_HOME, the main checkout's private/ is the one read.
+// repository: there, without OF_HOME, the main checkout's private/ is the one read, even when the worktree has a
+// private/ too (running Teder there makes one, without the packs).
 function privateHome() {
   if (String(process.env.OF_HOME || '').trim()) return ofHome();
   const own = path.join(ROOT, 'private');
-  if (existsSync(own)) return own;
   try {
+    const dir = path.resolve(ROOT, git('rev-parse', '--git-dir').toString().trim());
     const common = path.resolve(ROOT, git('rev-parse', '--git-common-dir').toString().trim());
     const main = path.join(path.dirname(common), 'private');
-    return path.basename(common) === '.git' && existsSync(main) ? main : own;
+    if (dir !== common && path.basename(common) === '.git' && existsSync(main)) return main;
   } catch {
-    return own;
+    /* not a worktree we can read: its own folder */
   }
+  return own;
 }
 const home = privateHome();
 const packsDir = path.join(home, 'packs');
