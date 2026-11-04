@@ -25,14 +25,16 @@ The service refuses to start without a Chromium that draws a test slide (src/ren
 only in `PLAYWRIGHT_BROWSERS_PATH`, `/opt/open-frequency/.browsers` in the unit: installed by another user, or without
 that variable, it looks in that user's own cache and finds nothing. `deploy/deploy.sh` installs it there as the
 service user on every deploy, before the switch. Until the one-time move below, the plain checkout's update needs the
-same step after `git pull` and `npm ci` and before the restart, as root:
+same step after `git pull` and `npm ci` and before the restart. On the VPS today (checked 2026-11-04) `.browsers` is
+`root:root 775`, so `openfrequency` cannot write it: root installs, and the service reads what root put there (Chromium
+1248 for playwright-core 1.64.0 is there and draws, as `openfrequency`):
 
 ```bash
-cd /opt/open-frequency && runuser -u openfrequency -- env PATH=/opt/node24/bin:$PATH PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install chromium
+cd /opt/open-frequency && PATH=/opt/node24/bin:$PATH PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install chromium
 ```
 
-UNVERIFIED on the VPS: that `/opt/node24/bin/npx` is there, and that `openfrequency` may write `.browsers` (`ls -ld
-/opt/open-frequency/.browsers`; if not, `chown -R openfrequency:openfrequency /opt/open-frequency/.browsers` first).
+`deploy/deploy.sh` installs as the service user instead, so a release machine needs `.browsers` owned by `openfrequency`
+(it stops with the `chown -R` to run when it is not). `/opt/node24/bin/npx` is there.
 
 ## Deploying (after the one-time move below)
 
