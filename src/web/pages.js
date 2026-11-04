@@ -624,7 +624,8 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       const bits = [];
       if (det.topic) bits.push(det.topic);
       if (det.verified != null) bits.push(`${det.verified} עובדות אומתו`);
-      if (det.refused?.length) bits.push(`${det.refused.length} נפסלו`);
+      // A repair's refused are rewrites not kept (they cleared no check, or added one); elsewhere, facts not verified.
+      if (det.refused?.length) bits.push(s.step === 'repair' ? (det.refused.length === 1 ? 'תיקון אחד לא נשמר' : `${det.refused.length} תיקונים לא נשמרו`) : det.refused.length === 1 ? 'עובדה אחת לא אומתה' : `${det.refused.length} עובדות לא אומתו`);
       if (det.reviewer) bits.push(`בודק: ${det.reviewer === 'claude' ? 'Claude' : 'אופליין'}, הכי גרוע ${det.worst}/10`);
       // The checks' and the engine's own English (what the writer and the operator are told) is the operator's: a
       // customer reads one plain Hebrew line for what happened instead (traceHe).
@@ -719,7 +720,7 @@ ${post.quota_kind ? `<dt>במכסה</dt><dd>${esc(QUOTA_KIND_HE[post.quota_kind]
 ${ctx.operator ? `<dt>עלות</dt><dd>${usd(post.cost_usd, ctx.dev ? 4 : 2)}${ctx.dev && post.cost_estimated ? ' <span class="muted small">הערכה, בלי מפתח API</span>' : ''}</dd>` : ''}
 ${post.kind && post.kind !== 'list' ? `<dt>סוג</dt><dd>${esc(KIND_HE[post.kind] || post.kind)} · ${post.grp === 'entertaining' ? 'בידור' : 'מספרים'}</dd>` : ''}
 ${post.hook_pattern ? `<dt>תבנית השער</dt><dd><span class="ltr">${esc(post.hook_pattern)}</span></dd>` : ''}
-${post.data?.cta?.text ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
+${post.data?.cta?.text && !post.data?.closing ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
 ${post.data?.keywords?.length ? `<dt>מילות חיפוש</dt><dd>${post.data.keywords.map((x) => `<bdi>${esc(x)}</bdi>`).join(' · ')}</dd>` : ''}
 ${d.image ? `<dt>תמונה</dt><dd>${esc(d.image.provider)} · ${esc(d.image.license)}${d.image.author ? ` · ${esc(d.image.author)}` : ''}${d.image.source_url ? ` · <a href="${esc(d.image.source_url)}" target="_blank" rel="noopener noreferrer">מקור ${icon('ext')}</a>` : ''}${d.image.ai_generated ? ' · <span class="chip warn">AI</span>' : ''}</dd>
 <dt>בדיקת התמונה</dt><dd>${d.image.safety === 'ok' || d.image.reviewed_at ? `<span class="chip ok">${d.image.reviewed_at ? `נבדקה על ידי ${esc(d.image.reviewed_by)}` : 'עברה'}</span>` : d.image.safety ? `<span class="chip warn">מחכה לבדיקה בעין</span>` : '<span class="chip ghost">לא נבדקה</span>'}${screen?.why ? `<div class="muted small" dir="auto">${esc(screen.why)}</div>` : ''}${imageHold ? postButton(ctx, `/post/${post.id}/image-ok`, 'הסתכלתי: אין דם, פציעה או סימן מים', { cls: 'btn sm' }) : ''}</dd>` : ''}

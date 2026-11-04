@@ -105,6 +105,10 @@ test('a post the closing check blocked, while written or before a send: Hebrew f
     const page = postPage(customer, d);
     const mine = traceOf(page);
     assert.doesNotMatch(mine.html, CLOSING_EN);
+    // No count without its noun, and no row for the format's call to action, which a post with a closing slide never shows.
+    assert.doesNotMatch(page, /נפסלו/);
+    assert.doesNotMatch(page, /<dt>קריאה לפעולה<\/dt>/);
+    assert.match(mine.steps.find((x) => x.name === 'תיקון אחרי הבדיקות').d, /^תיקון אחד לא נשמר · /, 'a repair not kept, said in words');
     for (const st of mine.steps) assert.doesNotMatch(st.d, ENGLISH, `the step "${st.name}": ${st.d}`);
     assert.equal(mine.steps.find((x) => x.name === 'נחסם').d, 'השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה', 'the block, in the closing slide\'s words');
     assert.match(mine.steps.find((x) => x.name === 'תיקון אחרי הבדיקות').d, /(?:^|· )השורה בשקף האחרון עוד לא עברה את הבדיקה\.$/, 'the repair that could not mend it');
