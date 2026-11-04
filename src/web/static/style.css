@@ -155,6 +155,8 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-even
 
 a { color: inherit; text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* "כתבו לנו" in a line of text, our WhatsApp (ui.js withSupport): it is the one thing to do there, so it reads as a link */
+a[href^="https://wa.me/"]:not(.btn) { color: var(--accent-p); text-decoration: underline; text-underline-offset: 3px; }
 .ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
 bdi { unicode-bidi: isolate; }
 .num { font-variant-numeric: tabular-nums; }

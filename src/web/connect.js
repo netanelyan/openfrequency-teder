@@ -38,6 +38,12 @@ import { a11yLink, csrfField, esc, htmlOpen, icon, postButton, tederMark, themeB
 export const PLATFORM_NAME = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
 // Names in a row, as Hebrew writes them: טיקטוק, אינסטגרם ופייסבוק.
 export const heList = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} ו${names.at(-1)}`);
+/**
+ * Said to a customer wherever they would connect while this server has no Zernio key (ZERNIO_API_KEY unset): the
+ * connect panel, its buttons' answer, the signed links' pages and accounts' setup checklist. What happened and the one
+ * thing to do; "כתבו לנו" is a link to our WhatsApp where a page shows it (ui.js withSupport), the words alone elsewhere.
+ */
+export const CONNECT_CLOSED_HE = 'החיבור לרשתות עוד לא פתוח אצלנו. כתבו לנו ונגיד לכם מתי הוא נפתח.';
 const STATE_CHIP = {
   connected: ['ok', 'מחובר'],
   reconnect: ['warn', 'צריך לחבר מחדש'],
@@ -104,12 +110,12 @@ export function connectPanel(ctx, d, { base = null, heading = null } = {}) {
     ? 'נפתח המסך של הרשת, מאשרים שם וחוזרים לכאן.'
     : ctx.operator
       ? 'אי אפשר לחבר עכשיו: בשרת לא מוגדר ZERNIO_API_KEY.'
-      : 'החיבור עוד לא זמין בשרת הזה.';
+      : CONNECT_CLOSED_HE;
   const names = esc(heList(d.platforms.map((s) => PLATFORM_NAME[s.platform] || s.platform)));
   const check = d.configured && d.hasProfile ? `<span class="end">${postButton(ctx, `${at}/connections`, 'לבדוק שוב', { cls: 'btn sm ghost' })}</span>` : '';
   const head = heading ? `<header><${heading}>${names}</${heading}>${check}</header>` : `<div class="row"><span>${names}</span>${check}</div>`;
   return `<div class="connect" id="connect-${esc(pack.id)}">${head}
-${d.configured ? requirements(d) : ''}<ul class="factlist nets">${rows}</ul><p class="muted small m0">${esc(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
+${d.configured ? requirements(d) : ''}<ul class="factlist nets">${rows}</ul><p class="muted small m0">${withSupport(note)}</p>${ctx.operator && d.zernio != null ? `<p class="muted small m0">Zernio החודש: ${usd(d.zernio.usd)}</p>` : ''}</div>`;
 }
 
 /**
@@ -166,7 +172,7 @@ export function connectRoutes(links) {
       /^\/accounts\/([\w-]+)\/connect\/(tiktok|instagram|facebook)$/,
       async (ctx, user, m) => {
         const pack = mustPack(ctx, m[1]);
-        if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');
+        if (!zernioConfigured()) throw new ActionError(CONNECT_CLOSED_HE);
         const { base, secret } = links();
         let url;
         try {
@@ -184,7 +190,7 @@ export function connectRoutes(links) {
       /^\/accounts\/([\w-]+)\/connections$/,
       async (ctx, _user, m) => {
         const pack = mustPack(ctx, m[1]);
-        if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');
+        if (!zernioConfigured()) throw new ActionError(CONNECT_CLOSED_HE);
         try {
           await refreshConnections(ctx.db, pack);
         } catch (e) {
@@ -266,6 +272,9 @@ function pickerPage(pages, id, { who = '', platform = 'instagram', theme = 'ligh
   const text = fb ? 'מצאנו כמה עמודים שאתם מנהלים. בוחרים את העמוד שאליו המצגות יעלו.' : 'מצאנו כמה חשבונות אינסטגרם מקצועיים. בוחרים את החשבון שאליו המצגות יעלו.';
   return resultPage({ theme, title: fb ? 'איזה עמוד פייסבוק לחבר?' : 'איזה חשבון אינסטגרם לחבר?', text: `${who ? `${who}, ` : ''}${text}`, actions: links });
 }
+
+/** A signed link opened, or a return from Zernio, while this server has no Zernio key. */
+const CLOSED = { title: 'עוד אי אפשר לחבר', text: CONNECT_CLOSED_HE };
 
 const NO_IG = { title: 'לא מצאנו חשבון אינסטגרם מקצועי', text: 'לא מצאנו עמוד פייסבוק שמחובר אליו חשבון אינסטגרם מקצועי. אפשר להעביר את החשבון לחשבון מקצועי בהגדרות של אינסטגרם, ולחבר שוב.' };
 const NO_FB = { title: 'לא מצאנו עמוד פייסבוק', text: 'לא מצאנו עמוד פייסבוק שאתם מנהלים ויכולים לפרסם בו. אפשר לפרסם רק בעמוד, לא בפרופיל אישי. פותחים עמוד לעסק בפייסבוק, או מבקשים ממי שמנהל את העמוד הרשאה לפרסם בו, ומחברים שוב.' };
@@ -349,7 +358,7 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
   const ob = ctx.db.get('SELECT id, pack_id, seed_json FROM onboarding WHERE id = ?', onboardingId);
   if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ theme, title: 'הלינק הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ theme, title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
+  if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED })];
   const back = `<a class="btn primary" href="/new/${esc(encodeURIComponent(ob.id))}#connect">חזרה להקמת החשבון</a>`;
   const error = query.get('error');
   if (error) {
@@ -394,7 +403,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   // nothing, from this link either. Coming back from Zernio (done) finishes a connect started while it could.
   if (!done && !accountAllowed(ctx.db, pack.id, t)) return [402, resultPage({ theme, title: 'החיבור נפתח אחרי ההפעלה', text: 'אפשר לחבר את טיקטוק, אינסטגרם ופייסבוק אחרי שתדר מופעל בחשבון שלכם.' })];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ theme, title: 'החיבור לא זמין כרגע', text: 'החיבור לרשתות עוד לא זמין. אנחנו מטפלים בזה.' })];
+  if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED })];
   const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;
 
   if (!done) {

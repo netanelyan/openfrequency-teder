@@ -424,8 +424,10 @@ says which keys are set without showing them.
 ### OF_SUPPORT_WA: where "כתבו לנו" leads
 
 - **What it is.** A customer's pages say "כתבו לנו" where only we can help: the error page, a post that did not go
-  out, an account paused that only the operator turns back on, a connect that failed, a new account's search that
-  stopped, the sample rounds used up. With `OF_SUPPORT_WA` (our WhatsApp, international digits, the same value as
+  out, an account paused that only the operator turns back on, a connect that failed, connecting while the server has
+  no `ZERNIO_API_KEY` (src/web/connect.js CONNECT_CLOSED_HE: "החיבור לרשתות עוד לא פתוח אצלנו. כתבו לנו ונגיד לכם
+  מתי הוא נפתח.", on the connect panel, the signed links' pages and accounts' setup checklist), a new account's search
+  that stopped, the sample rounds used up. With `OF_SUPPORT_WA` (our WhatsApp, international digits, the same value as
   accounts' `OF_SUPPORT_WA`) those words are a link to `https://wa.me/<the number>` (src/web/ui.js withSupport). A
   toast, a push and an email keep the words alone, since none of them shows a link. Empty, or not a phone number, and
   the pages say the words with no link, as they did before.

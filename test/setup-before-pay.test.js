@@ -303,14 +303,15 @@ test('a comp and a paid workspace: exactly as before, never counted against the 
   assert.equal((await b.get('/')).status, 200, 'comp: the product');
   price = 0.1;
   const { id, pack, review } = await setUp(b, 4);
-  assert.match(review, /אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן/, 'connecting offered on the sources page');
+  // The connect panel itself: no Zernio key here, so it says connecting is not open yet (src/web/connect.js CONNECT_CLOSED_HE).
+  assert.match(review, /<section class="panel" id="connect">[^]*?<div class="connect" id="connect-/, 'connecting offered on the sources page');
   assert.ok(!review.includes(CAP_HE.connect));
   await b.post(`/new/${id}/samples`);
   await settle();
   let html = await (await b.get(`/new/${id}`)).text();
   assert.doesNotMatch(html, /id="activate"/, 'no banner');
   assert.ok(!html.includes(CAP_HE.connect));
-  assert.match(html, /כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות/, 'the connect panel');
+  assert.match(html, new RegExp(`<div id="connect"[^>]*><div class="connect" id="connect-${pack}"`), 'the connect panel');
   assert.match(html, /id="schedule"/, 'the days and times');
   assert.match(html, /עיצוב המצגות/, 'the designs');
   assert.match(html, /#edit"/, 'a sample can be edited');

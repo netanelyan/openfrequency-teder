@@ -16,7 +16,7 @@ import { designPanel } from './styles.js';
 import { lockedStyle } from '../render/style.js';
 import { DEFAULT_PICKED, MIN_PICKED, pickedFrom } from '../formats/library.js';
 import { READY_LINE, postCard } from './pages.js';
-import { PLATFORM_NAME, connectData, connectPanel } from './connect.js';
+import { CONNECT_CLOSED_HE, PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
 import { storeOrigin } from '../demos/store.js';
@@ -468,8 +468,9 @@ const obConnectData = (ctx, r) => ({
 function connectSection(ctx, pc, r) {
   // Before paying, connecting is the paywall's (src/web/server.js SETUP_OPEN): said, with no button that leads to it.
   if (pc.unpaid) return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header><p class="muted m0">${esc(CAP_HE.connect)}</p></section>`;
+  // While this server has no Zernio key the panel says so (CONNECT_CLOSED_HE), and nothing here says to connect now.
   return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header>
-<p class="muted">אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. כשהחשבון ייווצר החיבור יעבור אליו, ולא תצטרכו לחבר שוב.</p>
+${zernioConfigured() ? '<p class="muted">אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. כשהחשבון ייווצר החיבור יעבור אליו, ולא תצטרכו לחבר שוב.</p>' : ''}
 ${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`;
 }
 
@@ -643,7 +644,7 @@ function detailPage(ctx, pc, r) {
       `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
 <p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
 ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
-<p class="muted mt12">${pc.unpaid ? 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
+<p class="muted mt12">${pc.unpaid || !zernioConfigured() ? 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
 <div class="cols"><div class="grid12">${namePanel(pc, r)}${newPromoPanel(pc, r, { action: `/new/${r.id}/promo`, busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
     );
   }
@@ -709,7 +710,7 @@ ${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack
 ${pack && good && !locked ? designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` }) : ''}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
-${pack && locked ? `<p class="muted mt12" id="connect">${esc(CAP_HE.connect)}</p>` : pack ? `<div id="connect"><p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
+${pack && locked ? `<p class="muted mt12" id="connect">${esc(CAP_HE.connect)}</p>` : pack ? `<div id="connect"${zernioConfigured() ? '' : ' class="mt12"'}>${zernioConfigured() ? '<p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>' : ''}${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
 ${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
 ${ops}`
   );
@@ -848,7 +849,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       /^\/new\/([\w-]+)\/connect\/(tiktok|instagram|facebook)$/,
       async (ctx, user, m) => {
         const r = row(ctx, m[1]);
-        if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');
+        if (!zernioConfigured()) throw new ActionError(CONNECT_CLOSED_HE);
         const { base, secret } = links();
         const pack = r.pack_id ? ctx.pack(r.pack_id) : null;
         let url;
@@ -870,7 +871,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       async (ctx, _user, m) => {
         const r = row(ctx, m[1]);
         beforeAccount(r);
-        if (!zernioConfigured()) throw new ActionError('החיבור עוד לא זמין בשרת הזה.');
+        if (!zernioConfigured()) throw new ActionError(CONNECT_CLOSED_HE);
         try {
           await refreshOnboardingConnections(ctx.db, r.id);
         } catch (e) {

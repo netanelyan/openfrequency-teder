@@ -1,7 +1,7 @@
 import { connectState, onboardingStates } from '../publish/connect.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { internalRefusal } from './demos.js';
-import { PLATFORM_NAME } from './connect.js';
+import { CONNECT_CLOSED_HE, PLATFORM_NAME } from './connect.js';
 import { SAMPLE_ENOUGH, onboardingBusy, samplesLine } from './onboarding.js';
 import { forWorkspace } from './workspace.js';
 
@@ -96,7 +96,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
   const on = states.filter((s) => s.state === 'connected' || s.state === 'meta');
   const CONNECT = 'מחברים את טיקטוק או אינסטגרם';
   if (on.length) steps.push(step('connect', CONNECT, 'done', { detail: on.map((s) => `${PLATFORM_NAME[s.platform]} מחובר${s.username ? ` (@${s.username})` : ''}.`).join(' ') }));
-  else if (!zernioConfigured()) steps.push(step('connect', CONNECT, 'soon', { detail: 'החיבור עוד לא זמין בשרת הזה.' }));
+  else if (!zernioConfigured()) steps.push(step('connect', CONNECT, 'soon', { detail: CONNECT_CLOSED_HE }));
   else if (!pack && !early) steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים אחרי שהחשבון נוצר. בלי חיבור המצגות לא עולות.' }));
   else if (states.some((s) => s.state === 'reconnect')) steps.push(step('connect', CONNECT, 'attention', { detail: 'החיבור הפסיק לעבוד, ומצגות לא עולות עד שמחברים מחדש.', href: panel }));
   else steps.push(step('connect', CONNECT, 'todo', { detail: `${early ? 'אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. ' : ''}מחברים לפחות אחד מהשניים כדי שהמצגות יעלו. אינסטגרם צריך חשבון מקצועי, עסקי או יוצר.`, href: panel }));
@@ -110,7 +110,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
     const s = pack ? connectState(c.db, pack, platform, env) : early ? states.find((x) => x.platform === platform) : null;
     const opt = { required: false };
     if (s?.state === 'meta') steps.push(step(platform, title, 'done', { ...opt, detail: 'מחובר דרך Meta.' }));
-    else if (!zernioConfigured()) steps.push(step(platform, title, 'soon', { ...opt, detail: 'החיבור עוד לא זמין בשרת הזה.' }));
+    else if (!zernioConfigured()) steps.push(step(platform, title, 'soon', { ...opt, detail: CONNECT_CLOSED_HE }));
     else if (!s) steps.push(step(platform, title, 'todo', { ...opt, detail: 'מחברים אחרי שהחשבון נוצר.' }));
     else if (s.state === 'connected') steps.push(step(platform, title, 'done', { ...opt, detail: s.username ? `@${s.username}` : '' }));
     else if (s.state === 'reconnect') steps.push(step(platform, title, 'attention', { ...opt, detail: `החיבור הפסיק לעבוד, ופוסטים לא מגיעים ל${name} עד שמחברים מחדש.`, href: panel }));
