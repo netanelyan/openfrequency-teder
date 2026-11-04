@@ -7,6 +7,7 @@ import { israelDate } from '../schedule/israel.js';
 import { resolveFormat } from '../trends/index.js';
 import { collectMetrics } from './collect.js';
 import { chooseStyle } from '../render/style.js';
+import { closingNote } from '../pipeline/closing.js';
 
 // The morning's feedback, once a day per account, before anything is drafted.
 //
@@ -30,6 +31,16 @@ import { chooseStyle } from '../render/style.js';
 //                                       action and the caption
 //   lh  low views, high conversions     keep the call to action, try a
 //                                       radically different hook and first slide
+//
+// The call to action is the closing slide now (src/pipeline/closing.js; the
+// owner, 2026-11-04: "the morning loop that changes the cta keeps working, and
+// now changes the text of the closing slide"): every post ends on it, and it is
+// the only action a post shows. So changing the call to action writes the next
+// post's closing line another way than the line of the post that did not lead
+// people on, and keeping it keeps that line's way for the next post's topic
+// (the plan's `closing`, closingNote; buildPost gives it to the writer, the
+// check and the promo's own words, closingLesson). The format's call to action
+// is still chosen, kept and changed as before (avoidCta, ctaText).
 //   ll  low views, low conversions      a new format or angle
 //
 // A cover is a format's pattern or one of the hook templates (src/formats/hooks.js,
@@ -58,8 +69,8 @@ export const FEEDBACK = {
 
 export const BOXES = {
   hh: { action: 'variations', he: 'הרבה צפיות, הרבה פעולה', todo: '3 וריאציות על השער' },
-  hl: { action: 'new-cta', he: 'הרבה צפיות, מעט פעולה', todo: 'אותו שער, קריאה לפעולה וכיתוב חדשים' },
-  lh: { action: 'new-hooks', he: 'מעט צפיות, הרבה פעולה', todo: 'אותה קריאה לפעולה, שער ושקופית פתיחה אחרים לגמרי' },
+  hl: { action: 'new-cta', he: 'הרבה צפיות, מעט פעולה', todo: 'אותו שער, עם שורה אחרת בשקף האחרון וכיתוב חדש' },
+  lh: { action: 'new-hooks', he: 'מעט צפיות, הרבה פעולה', todo: 'השורה בשקף האחרון באותה דרך, ושער ושקופית פתיחה אחרים לגמרי' },
   ll: { action: 'new-angle', he: 'מעט צפיות, מעט פעולה', todo: 'פורמט או זווית חדשים' },
 };
 
@@ -151,6 +162,9 @@ export function plansFor(db, pack, entry) {
   const cta = data.cta?.text || null;
   const format = resolveFormat(db, pack, post.format_id);
   const steer = { hook: post.hook, topic: post.topic };
+  // What the post's closing line taught (its call to action now): changed after high views and low action, kept after
+  // low views and high action. Null for a post made before the closing slide.
+  const closing = (keep) => closingNote(data.closing, { keep, hook: post.hook, measure: entry.platforms?.[entry.primary]?.measure || null });
   switch (entry.box) {
     case 'hh': {
       const others = coverOptions(pack, format, post.hook_pattern);
@@ -161,9 +175,9 @@ export function plansFor(db, pack, entry) {
       }));
     }
     case 'hl':
-      return [{ formatKey: post.format_id, hookId: post.hook_pattern || null, avoidCta: cta, steer: { kind: 'new-cta', ...steer, cta } }];
+      return [{ formatKey: post.format_id, hookId: post.hook_pattern || null, avoidCta: cta, closing: closing(false), steer: { kind: 'new-cta', ...steer, cta } }];
     case 'lh':
-      return [{ formatKey: post.format_id, ctaText: cta, avoidHook: post.hook_pattern || null, steer: { kind: 'new-hooks', ...steer, cover: data.coverVisual?.type || null } }];
+      return [{ formatKey: post.format_id, ctaText: cta, avoidHook: post.hook_pattern || null, closing: closing(true), steer: { kind: 'new-hooks', ...steer, cover: data.coverVisual?.type || null } }];
     default:
       return [{ avoidFormats: [post.format_id], steer: { kind: 'new-angle', ...steer, format: format?.name || post.format_id } }];
   }

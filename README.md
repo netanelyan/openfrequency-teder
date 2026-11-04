@@ -301,7 +301,8 @@ style (E), stand on a photograph a slide, end their content on their best slide,
 keep to one short line a slide. No post draws a call to action on its last content
 slide any more (the owner, 2026-11-03): the closing slide that follows every post is its
 only action. Each format's call to action is still chosen and kept on the post
-(`posts.data_json` `cta`), for the morning feedback that changes it.
+(`posts.data_json` `cta`), and the morning feedback that changes it now changes the
+closing slide's line too (below).
 
 **The closing slide.** Every post, of every format and in every style, ends on its
 closing slide, after the last content slide and not counted in the 5 to 8
@@ -592,6 +593,24 @@ and first slide (never that template's mechanism again). Low and low: another fo
 angle. Each answer becomes a plan the day's first free
 slots take, and the writer is told why. Results shows the report and what became of
 each plan (`src/metrics/feedback.js`).
+
+The call to action is the closing slide now (the owner, 2026-11-04: "the morning loop
+that changes the cta keeps working, and now changes the text of the closing slide"), so
+the plan carries what the post's closing line taught (`src/pipeline/closing.js`
+closingNote, closingLesson). After high views and low action the next post's line is
+written another way: the writer is told the line and why, a line equal to it is refused
+by the check and goes to the repair, and the promo's own words, when they are the last
+step, leave it out. After low views and high action the next post's line keeps that
+line's way (a short question and its answer, or one sentence) for its own topic, and
+when that line was the promo's own words, they come first. Every rule of the line stays (60
+characters, the product or the store named, the action the code's), and a lesson about
+another product or store than the promo's now is dropped. The format's call to action is
+still changed and kept as before. Results names the closing slide in what each box
+changes ("אותו שער, עם שורה אחרת בשקף האחרון וכיתוב חדש", "השורה בשקף האחרון באותה דרך,
+ושער ושקופית פתיחה אחרים לגמרי"), and the post's trace says it in Hebrew under "המשוב של
+הבוקר": what the box changes, and for the line, for example "יותר אנשים מהרגיל ראו את
+המצגת "...", אבל פחות מהם עשו לייק, הגיבו, שיתפו או שמרו. השורה בשקף האחרון שלה הייתה
+"...", אז כאן בחרנו לכתוב אותה אחרת."
 
 **The text on a slide.** Short lines broken by hand (4 to 6 words), 3 to 4 lines
 on a slide, titles that react rather than label, nothing in the top 10% or the

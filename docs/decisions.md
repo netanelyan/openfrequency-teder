@@ -2499,7 +2499,7 @@ and ctaText, the last post's left out) and keeps it in posts.data_json cta and i
 draws none on the last content slide of a post that has its closing slide (render.js: a post made before closes as it
 did, on its call to action or its follow slide), and the writer is no longer told the design ends the last slide with it.
 The feedback that changes it (src/metrics/feedback.js, its "new-cta" steer, which src/pipeline/prompts.js steerLine says) is untouched and its tests pass; routing the
-call to action into the closing line is item 6. A store's demo (src/demos) is not a post of an account: its last slide
+call to action into the closing line is item 6 (done on 2026-11-04, its section below). A store's demo (src/demos) is not a post of an account: its last slide
 is its own, with the store's address, and is unchanged.
 
 test/closing-design.test.js (new, 6; all 6 fail on item 2's code, run on an export of closing-writer): the closing slide in A to E, E's box look, editorial
@@ -2641,3 +2641,57 @@ the request each publisher would send carrying the action whole; an Instagram ca
 hashtags shedding them from the last and keeping the action; and the caption made from the stored slide every time (a promo changed afterwards changes neither,
 and the post is stopped), an owner's caption ending on the action given it once, the dry run's files the same caption as
 the publishers', and the post's page showing each action with its link.
+
+### The morning's feedback changes the closing slide's line (2026-11-04, item 6 of the closing slide)
+
+The owner: "Feedback: the morning loop that changes the cta keeps working, and now changes the text of the closing slide."
+
+What the loop had become. Its four boxes (src/metrics/feedback.js) still put each post of the last three days against
+the account's own median and still planned the next posts: high views and low action avoided that post's call to
+action (avoidCta), low views and high action kept it (ctaText). But since item 4 that call to action is the format's
+"send", "save" or "comment" line, chosen and stored and drawn nowhere: the closing slide is every post's only action.
+So the loop was changing a line nobody sees, and what people acted on, or did not, was the closing slide.
+
+How the loop's choice reaches the closing line. The plan of an hl or lh post now carries `closing`, what that post's
+closing line taught (closingNote: the line, whose it was, keep or change, the cover line it closed, how action was
+measured, where it sent people). buildPost turns it into a lesson (closingLesson), dropped when the slide now sends
+people somewhere else (a promo changed since: a lesson about another product is not this one's), and the lesson goes
+three ways, all in code that already existed for the line:
+- To the writer: the CLOSING SLIDE section of the slides call, and of the repair call, says the line and what came of it.
+  Change: "written another way: another tie between this post's topic and <the product, the store, or following
+  @handle>", with the other shape (one sentence after a question, a short question and its answer after a sentence),
+  never its words or shape. Keep: "keeps its way: <its shape> that ties this post's own topic to <it> as that one did",
+  never its words. steerLine's new-cta and new-hooks lines add that the call to action is the closing slide's line.
+- To the check: while the post is written, a line equal to the one to change (whatever its punctuation, sameLine) is a
+  closing problem, so the repair loop owns it like any other (closingProblems' `lesson`; not on the stored post's check
+  before sending, which judges the slide as it was signed).
+- To the promo's own words, the last step: the one to change is left out; the one to keep, when the line was the promo's
+  own words, comes first (safeLines' `lesson`). This is the one place the choice is the code's alone, so it is the one
+  place it holds even when the writer could not get the line right.
+Nothing else of the line changes: 3 to 12 words and 60 characters, the product or the store named, the action the
+code's, every rule and the repair's two tries. The format's call to action is still avoided and kept as before, and
+hh and ll plan as before (a variation keeps its story, a new angle starts over).
+
+Where it is said. The post's trace has the step "המשוב של הבוקר" (a redo's own step is "פוסט חלופי"): what the box changes,
+and for the line, in plain Hebrew, "יותר אנשים מהרגיל ראו את המצגת "<its cover>", אבל פחות מהם עשו לייק, הגיבו, שיתפו או
+שמרו. השורה בשקף האחרון שלה הייתה "<line>", אז כאן בחרנו לכתוב אותה אחרת." or "פחות אנשים מהרגיל ראו את המצגת
+"<its cover>", אבל יותר מהם לחצו על הקישור בביו. השורה בשקף האחרון שלה הייתה "<line>", אז כאן בחרנו לכתוב אותה באותה
+דרך, על הנושא של המצגת הזו." (the verb by what the box measured). The closing slide's step keeps `lesson: change | keep`.
+Results' boxes say what they change in the closing slide's words: hl "אותו שער, עם שורה אחרת בשקף האחרון וכיתוב חדש", lh
+"השורה בשקף האחרון באותה דרך, ושער ושקופית פתיחה אחרים לגמרי". Settings has no place for it: the choice is per post, from the
+numbers of one post, and the trace is where a post says why it is what it is.
+
+What it does not do. It does not prove a line led people on: the box measures the whole post (TikTok's numbers through
+Zernio have no clicks, so there it is likes, comments, shares and saves per view), and the closing slide is now the only
+action on it, which is why its line is what changes. "The same way" is the writer's to follow; the code holds only the
+shape it names in the request, not the result.
+
+test/closing-feedback.test.js (new, 4, all failing on the code of item 5): recorded numbers put a post with a product
+promo in hl and another in lh, the plans keep the format's call to action as before and carry the closing line to change
+and the one to keep, and a day later the first post's new numbers (action kept up, views under what the account's posts
+reach by then) move it to lh, the plan replaced by one that keeps its line's way; Results names the closing slide; a slot
+takes the hl plan as the runner hands it out and the writer, told the lesson, writes the line to change, which the check
+refuses and the repair replaces, the line within every rule and the check before sending, the trace saying why in Hebrew
+on the post's page; when the writer cannot get it right the promo's own words skip the line to change and put the line to
+keep first; and a lesson about a promo that changed is dropped, the request says each way in its own words, the check
+refuses the line to change in any punctuation and nothing without a lesson. test/feedback.test.js passes unchanged.

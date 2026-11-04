@@ -82,7 +82,7 @@ function redoBanners(d) {
   return out.join('');
 }
 const STEP_HE = {
-  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'השקף האחרון', repair: 'תיקון אחרי הבדיקות', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
+  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'השקף האחרון', feedback: 'המשוב של הבוקר', repair: 'תיקון אחרי הבדיקות', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
   whatsapp: 'מוואטסאפ',
 };
@@ -95,6 +95,28 @@ const CLOSING_HE = {
   none: 'בלי שורה',
   failed: 'השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה',
 };
+/** What "action" was on the post the morning's feedback learned from (src/metrics/feedback.js MEASURES), said as a verb. */
+const DID_HE = { link_clicks: 'לחצו על הקישור בביו', engagement: 'עשו לייק, הגיבו, שיתפו או שמרו' };
+
+/**
+ * What the morning's feedback chose for this post and why, in its trace: the box's answer, and what it did with the
+ * closing slide's line (src/pipeline/closing.js closingLesson), the post's call to action now.
+ */
+function feedbackHe(det) {
+  const c = det.closing;
+  const hook = c?.hook || det.steer?.hook || '';
+  const box = BOXES[det.box];
+  const out = box ? [`${box.todo}${hook && !c?.line ? `, בעקבות "${hook}"` : ''}`] : [];
+  if (c?.line) {
+    const was = hook ? `המצגת "${hook}"` : 'המצגת הקודמת';
+    const did = DID_HE[c.measure] || DID_HE.engagement;
+    out.push(c.keep
+      ? `פחות אנשים מהרגיל ראו את ${was}, אבל יותר מהם ${did}. השורה בשקף האחרון שלה הייתה "${c.line}", אז כאן בחרנו לכתוב אותה באותה דרך, על הנושא של המצגת הזו.`
+      : `יותר אנשים מהרגיל ראו את ${was}, אבל פחות מהם ${did}. השורה בשקף האחרון שלה הייתה "${c.line}", אז כאן בחרנו לכתוב אותה אחרת.`);
+  }
+  return out;
+}
+
 /** What a customer did through the WhatsApp assistant (until 2026-11-02), in the post's trace. */
 const WHATSAPP_HE = { approve: 'אישור', reject: 'דחייה', edit: 'עריכה' };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
@@ -593,11 +615,12 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.error && ctx.operator) bits.push(det.error);
       if (det.stuck) bits.push('נקטע באמצע השליחה');
       if (s.step === 'closing') bits.push(...[s.status === 'failed' ? CLOSING_HE.failed : det.by === 'safe' && !det.repairs ? CLOSING_HE.safeFirst : CLOSING_HE[det.by], det.line ? `"${det.line}"` : '', ctx.operator ? (det.broke || []).slice(0, 2).join(' · ') : ''].filter(Boolean));
+      if (s.step === 'feedback') bits.push(...feedbackHe(det));
       if (s.step === 'whatsapp') bits.push(...[WHATSAPP_HE[det.action] || det.action, det.by, det.slide ? `שקף ${det.slide}` : ''].filter(Boolean));
       else if (det.via && typeof det.via === 'object') bits.push(viaLine(ctx, det.via));
       else if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : det.via === 'whatsapp' ? 'מוואטסאפ' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);
-      return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${withSupport(bits.join(' · '))}</div>` : ''}</li>`;
+      return `<li class="${esc(s.status)}"><b>${esc(s.step === 'feedback' && det.steer?.kind === 'redo' ? 'פוסט חלופי' : STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${withSupport(bits.join(' · '))}</div>` : ''}</li>`;
     })
     .join('');
   const scores = post.checks?.scores || [];

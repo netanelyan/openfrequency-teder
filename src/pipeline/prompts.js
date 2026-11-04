@@ -508,8 +508,9 @@ export function steerLine(steer) {
   if (!steer?.kind) return '';
   const was = steer.hook ? `"${steer.hook}"` : 'a recent post';
   if (steer.kind === 'variation') return `FROM THE RESULTS: ${was} reached more people than this account's usual post, and more of them acted on it. This post is variation ${steer.n || 1} of ${steer.of || 3} of it: the same story and facts, a new cover line in the pattern named here. Never the words of ${was}.`;
-  if (steer.kind === 'new-cta') return `FROM THE RESULTS: ${was} reached more people than usual, but few acted on it. Keep a cover as strong, in the pattern named here; the call to action is a different one, and write the captions a new way${steer.cta ? ` (the last call to action was "${steer.cta}")` : ''}.`;
-  if (steer.kind === 'new-hooks') return `FROM THE RESULTS: ${was} reached fewer people than usual, but those it reached acted on it. Keep the call to action; the cover must be radically different from ${was}: another angle, another first word, and another kind of first-slide picture${steer.cover ? ` than its "${steer.cover}"` : ''}.`;
+  // The call to action is the closing slide now: CLOSING SLIDE says what its line keeps or changes (closingRequest).
+  if (steer.kind === 'new-cta') return `FROM THE RESULTS: ${was} reached more people than usual, but few acted on it. Keep a cover as strong, in the pattern named here; the call to action is a different one, and write the captions a new way${steer.cta ? ` (the last call to action was "${steer.cta}")` : ''}. The call to action is the closing slide's line: CLOSING SLIDE says how it changes.`;
+  if (steer.kind === 'new-hooks') return `FROM THE RESULTS: ${was} reached fewer people than usual, but those it reached acted on it. Keep the call to action; the cover must be radically different from ${was}: another angle, another first word, and another kind of first-slide picture${steer.cover ? ` than its "${steer.cover}"` : ''}. The call to action is the closing slide's line: CLOSING SLIDE says how it keeps its way.`;
   if (steer.kind === 'new-angle') return `FROM THE RESULTS: ${was}${steer.format ? ` (${steer.format})` : ''} did poorly on views and on action. This post takes a new angle${steer.topic ? `, far from "${steer.topic}"` : ''}.`;
   if (steer.kind === 'redo') return redoLine(steer, was);
   return '';
@@ -530,7 +531,7 @@ function redoLine(steer, was) {
   return `${head} and asked for it again with a change.${said} Keep the facts; change what they asked for, and nothing they did not.`;
 }
 
-export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, templates = [], cta = null, day = null, pack = null, steer = null, niche = '', style = null }) {
+export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, templates = [], cta = null, day = null, pack = null, steer = null, niche = '', style = null, lesson = null }) {
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
@@ -570,7 +571,8 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     'OUTLINE:',
     ...outline.items.map((it, i) => `${i + 1}. ${legacy ? '' : `${it.role || 'item'}: `}${it.point} (facts: ${(it.facts || []).join(', ') || 'none'})`),
     // The closing slide: this post's topic and what the account's slideshows send people to.
-    pack?.meta ? closingRequest(pack, { topic: outline.topic }) : '',
+    // The morning's lesson for the line, when its feedback planned this post (src/pipeline/closing.js closingLesson).
+    pack?.meta ? closingRequest(pack, { topic: outline.topic, lesson }) : '',
     edits.length ? `\nLines the account's owner rewrote by hand recently (write like the AFTER versions):\n${edits.map((e) => `- before: ${e.before}\n  after: ${e.after}`).join('\n')}` : '',
     problems.length ? `\nTHE LAST DRAFT WAS REFUSED BY THE CHECKS. Fix exactly these and keep everything else:\n${problems.map((p) => `- ${p}`).join('\n')}` : '',
     // The draft itself: without it, "keep everything else" was a new draft from scratch, with new mistakes.
@@ -610,7 +612,7 @@ export function repairPrompt(pack, { ttl = '5m' } = {}) {
  * The repair's user turn: the facts the post may cite, then each refused text with the checks' messages.
  * targets: [{ target, now: { text } | { title, body, a, b, facts }, problems: [msg], limits, last, refused }].
  */
-export function repairUser({ format, topic, facts, targets, pack = null, style = null }) {
+export function repairUser({ format, topic, facts, targets, pack = null, style = null, lesson = null }) {
   const lim = (l) => (l ? ` (at most ${l.maxChars} characters${l.sentences ? ` and ${l.sentences} sentences` : ''})` : '');
   return [
     formatHead(format),
@@ -618,7 +620,7 @@ export function repairUser({ format, topic, facts, targets, pack = null, style =
     linesRule(pack),
     styleRoomFor(pack, style),
     // The closing line is repaired knowing what it is for: the topic, the promo, the action under it and the rules.
-    pack?.meta && targets.some((t) => t.target === 'closing') ? closingRequest(pack, { topic }) : '',
+    pack?.meta && targets.some((t) => t.target === 'closing') ? closingRequest(pack, { topic, lesson }) : '',
     'FACTS THE POST MAY CITE (each with its id and the words of its source):',
     ...facts.map((f) => `- ${f.key}${f.who ? ` (ATTRIBUTED to ${f.whoHe || f.who}: name them and that they said it)` : ''}: ${f.claim}  [quote: "${f.quote}"]`),
     '',

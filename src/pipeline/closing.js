@@ -40,6 +40,16 @@ import { mechanicalFix, normHe, sentencesOf, tellsIn } from '../voice/tells.js';
 // link on Instagram and Facebook"). captionAction makes the caption's last line from the same action data, when the
 // caption goes out (src/publish/caption.js), so the slide and the caption never disagree and no copy of it is kept to
 // drift: what the slide was drawn with, signed by the gate and checked again before any send, is what the caption says.
+//
+// THE MORNING'S FEEDBACK STEERS THE LINE (item 6, the owner, 2026-11-04: "Feedback: the morning loop that changes the cta
+// keeps working, and now changes the text of the closing slide"). The closing slide is the post's only call to action,
+// so what the morning's boxes (src/metrics/feedback.js) learn about acting on a post they learn about its closing line.
+// High views and low action change the call to action: the next post's line is written another way, and a line equal to
+// the one that did not lead people on is a check the repair owns (closingProblems), never the promo's own words again
+// either (safeLines). Low views and high action keep it: the next post's line keeps that line's way, for its own topic,
+// and the promo's own words that line was, when it was, come first. The lesson is the directive's (closingNote), and
+// holds only while the slide sends people where it sent them then (closingLesson); the rules, the length, the names and
+// the action are the same for every line.
 
 /**
  * The line: one sentence, or a short question and its answer. 60 characters is what the engine gives any slide's title
@@ -219,7 +229,15 @@ export function closingLineProblems(line, { base, pack = null, others = [], fact
  * bio": the store's name and its promise, then the promise, then the name. No promo: more of the account's own topic
  * in the posts to come.
  */
-export function safeLines(base, pack = null) {
+export function safeLines(base, pack = null, lesson = null) {
+  const lines = ownLines(base, pack);
+  if (!lesson?.line) return lines;
+  // The morning's lesson (closingLesson): a line that did not lead people on is not used again; one that did comes first.
+  const same = (t) => sameLine(t, lesson.line);
+  return lesson.keep ? [...lines.filter(same), ...lines.filter((t) => !same(t))] : lines.filter((t) => !same(t));
+}
+
+function ownLines(base, pack) {
   if (base.kind === 'follow') {
     const topic = String(pack?.meta?.topics?.[0] || '').trim();
     return [...(topic ? [`עוד על ${topic} בפוסטים הבאים`] : []), 'עוד כאלה בפוסטים הבאים'];
@@ -229,6 +247,12 @@ export function safeLines(base, pack = null) {
   return [names(promise, name) ? promise : `${name}. ${promise}`, promise, name];
 }
 
+/** Two closing lines that say the same words, whatever their punctuation and spaces. */
+export const sameLine = (a, b) => {
+  const flat = (t) => normHe(String(t || '')).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return Boolean(flat(a)) && flat(a) === flat(b);
+};
+
 /** One line, as the slide sets it: its breaks and spaces made one, what code can fix fixed (a long dash, a "!"). */
 export const oneLineOf = (line) => mechanicalFix(String(line ?? '').replace(/\\n|\s+/g, ' ').trim()).text.replace(/\s+/g, ' ').trim();
 
@@ -237,14 +261,14 @@ export const oneLineOf = (line) => mechanicalFix(String(line ?? '').replace(/\\n
  * this file), its line the writer's when it passes closingLineProblems (by 'writer'), else the first of safeLines
  * that passes (by 'safe'), else none (by 'none', the action alone). `refused`: what the writer's line broke.
  */
-export function closingSlide(pack, { line = '', facts = [], others = [] } = {}) {
+export function closingSlide(pack, { line = '', facts = [], others = [], lesson = null } = {}) {
   const base = closingBase(pack);
   const given = oneLineOf(line);
   const refused = closingLineProblems(given, { base, pack, others, facts }).map((p) => p.msg);
   let chosen = !refused.length ? given : '';
   let by = chosen ? 'writer' : 'none';
   if (!chosen) {
-    chosen = safeLines(base, pack).map(oneLineOf).find((t) => t && !closingLineProblems(t, { base, pack, others, facts, writer: false }).length) || '';
+    chosen = safeLines(base, pack, lesson).map(oneLineOf).find((t) => t && !closingLineProblems(t, { base, pack, others, facts, writer: false }).length) || '';
     if (chosen) by = 'safe';
   }
   return { closing: { kind: base.kind, line: chosen, by, ...base, actions: closingActions(base) }, refused };
@@ -272,8 +296,9 @@ const said = (c) => (c?.kind === 'follow' ? `following @${c.handle}` : c?.kind =
  * destination that is not the account's promo now (a promo changed, added or taken away after the post was written);
  * no line; a line that breaks a rule (closingLineProblems, held to the promo it names: a line of the promo's own words,
  * by 'safe', need not be a sentence or name it again). `facts`: the post's, for the numbers a line may state.
+ * `lesson`: the morning's (closingLesson), while the post is written: a line equal to the one it asked to change fails.
  */
-export function closingProblems(closing, { pack, others = [], facts = [] } = {}) {
+export function closingProblems(closing, { pack, others = [], facts = [], lesson = null } = {}) {
   const out = [];
   const add = (msg) => out.push({ where: 'closing', code: 'closing', msg });
   if (!closing) {
@@ -288,7 +313,39 @@ export function closingProblems(closing, { pack, others = [], facts = [] } = {})
     return out;
   }
   for (const p of closingLineProblems(closing.line, { base: closing, pack, others, facts, writer: closing.by !== 'safe' })) add(p.msg);
+  if (lesson && !lesson.keep && sameLine(closing.line, lesson.line)) add(`the closing line is "${lesson.line}", the line the morning's results asked to change: many people saw the post it closed and few acted on it, so write another tie between this post's topic and ${said(closing)}`);
   return out;
+}
+
+// ---------------------------------------------------------------- the morning's lesson (item 6)
+
+/**
+ * What the morning's feedback keeps of a post's closing slide for the post it plans (src/metrics/feedback.js plansFor):
+ * the line, whose it was, whether to keep its way (`keep`) or change it, the cover line it closed, how action was
+ * measured, and where it sent people. null for a post with no closing line (one made before it).
+ */
+export function closingNote(closing, { keep, hook = '', measure = null } = {}) {
+  if (!String(closing?.line || '').trim()) return null;
+  return { line: closing.line, by: closing.by || null, keep: Boolean(keep), hook: String(hook || ''), measure, kind: closing.kind, name: closing.name || '', product: closing.product || '', url: closing.url || '', handle: closing.handle || '' };
+}
+
+/**
+ * The lesson a directive's note gives this post's closing line: { line, keep, hook, measure }, or null when there is
+ * none, or when the slide no longer sends people where that line did (a promo changed since: a lesson about another
+ * product or store is not this one's).
+ */
+export function closingLesson(note, pack) {
+  if (!note?.line || destination(note) !== destination(closingBase(pack))) return null;
+  return { line: oneLineOf(note.line), keep: Boolean(note.keep), hook: note.hook || '', measure: note.measure || null };
+}
+
+/** The writer's FROM THE RESULTS line for the closing slide: what the morning learned of a line, and what this one does. */
+function lessonRequest(lesson, base) {
+  const was = lesson.hook ? `"${lesson.hook}"` : 'a recent post';
+  const to = base.kind === 'product' ? `"${base.product}"` : base.kind === 'follow' ? `following @${base.handle}` : `"${base.name}"`;
+  const question = /\?/.test(lesson.line);
+  if (lesson.keep) return `FROM THE RESULTS: the closing line of ${was} was "${lesson.line}". Fewer people saw that post than usual, but more of those who did acted on it, so this closing line keeps its way: ${question ? 'a short question and its answer' : 'one sentence'} that ties this post's own topic to ${to} as that one did. Never that line's words.`;
+  return `FROM THE RESULTS: the closing line of ${was} was "${lesson.line}". More people saw that post than usual, but few of them acted on it, so this closing line is written another way: another tie between this post's topic and ${to}, ${question ? 'one sentence rather than a question' : 'a short question and its answer, for one'}. Never that line's words or its shape; the code refuses that line.`;
 }
 
 /** A stored post's closing slide checked again before it is sent: the problems' words, [] when it may go out. */
@@ -322,7 +379,7 @@ const RULES = `THE LINE: one sentence, or a short question and its answer, ${CLO
  * The CLOSING SLIDE section of the slides call's request: what this post's closing slide sends people to, the action
  * the code will write under the line on each platform, and the line's rules. `topic`: the post's own (outline.topic).
  */
-export function closingRequest(pack, { topic = '' } = {}) {
+export function closingRequest(pack, { topic = '', lesson = null } = {}) {
   const base = closingBase(pack);
   const a = closingActions(base);
   const about = topic ? `this post's topic (${topic})` : "this post's topic";
@@ -339,5 +396,5 @@ export function closingRequest(pack, { topic = '' } = {}) {
     bio: `It sends people to the link on the account's profile, ${base.name}'s (the store says of itself: "${base.promise}"). ${start} It lands on what the store has for it, as its promise says it, naming "${base.name}" as it is written. ${never}`,
     follow: `It asks them to follow @${base.handle}, an account about ${(pack?.meta?.topics || []).join(', ') || 'its niche'}. ${start} It says what more of it they get by following: more of what the account posts about, said for this post, never a promise of how often.`,
   }[base.kind];
-  return [head, what, example, RULES].join('\n');
+  return [head, what, example, ...(lesson ? [lessonRequest(lesson, base)] : []), RULES].join('\n');
 }

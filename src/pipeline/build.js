@@ -30,7 +30,7 @@ import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, everyPhoto, visualsNeeded } from './prompts.js';
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
-import { CLOSING_LINE, closingExtra, closingFrom, closingProblems, closingSlide, isClosingProblem } from './closing.js';
+import { CLOSING_LINE, closingExtra, closingFrom, closingLesson, closingProblems, closingSlide, isClosingProblem } from './closing.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
 import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
@@ -308,7 +308,8 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   for (const x of overlayProblems(draft, pack)) problems.push(x);
   // The closing slide (src/pipeline/closing.js): there, with an action on every platform, sending people where the
   // account does now, and a line that keeps the rules and names the promo. A post that fails it is repaired or blocked.
-  for (const x of closingProblems(draft.closing, { pack, others: ctx.packs || [], facts: facts.filter((f) => f.verified) })) problems.push(x);
+  // While the post is written, the morning's lesson too (ctx.closingLesson): never again a line it asked to change.
+  for (const x of closingProblems(draft.closing, { pack, others: ctx.packs || [], facts: facts.filter((f) => f.verified), lesson: ctx.closingLesson || null })) problems.push(x);
   // The account's slide style (src/render/styles): every text fits it at the style's smallest size, and every
   // highlight is a short phrase of its own headline.
   const style = draft.style || null;
@@ -631,7 +632,7 @@ export async function repairDraft(ctx, pack, { draft, checked, format, facts, it
     let res;
     try {
       res = await askJson(ctx, {
-        task: 'repair', role: 'rewrite', system: sp.system, user: repairUser({ format, topic: outline.topic, facts: verified, targets, pack, style: draft.style }), schema: sp.schema,
+        task: 'repair', role: 'rewrite', system: sp.system, user: repairUser({ format, topic: outline.topic, facts: verified, targets, pack, style: draft.style, lesson: ctx.closingLesson || null }), schema: sp.schema,
         effort: EFFORT.repair, maxTokens: MAX_TOKENS.repair, meta: { ...meta, attempt: attempt + round + 1 },
       });
     } catch (e) {
@@ -948,7 +949,10 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   const at = nowIso();
   db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, directive_id: dv.id || null, redo_of: redoOf, created_at: at, updated_at: at });
   // A redo for the photographs: the ones the customer turned down are not chosen again (findImage skips them).
-  const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null, ...(dv.avoidImages?.length ? { avoidImages: new Set(dv.avoidImages) } : {}) };
+  // What the morning's feedback learned of a closing line (src/pipeline/closing.js closingLesson): the writer is told it,
+  // the check holds to it, and the promo's own words follow it. None when the slide now sends people somewhere else.
+  const lesson = closingLesson(dv.closing, pack);
+  const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null, closingLesson: lesson, ...(dv.avoidImages?.length ? { avoidImages: new Set(dv.avoidImages) } : {}) };
   // The slide style this post is drawn in (src/render/styles): the account's locked one, or in a style test the two
   // it is trying, in turn. null for an account still on the older templates. Its texts are written and checked for it.
   const postStyle = styleForPost(db, pack, ctx.packs || []);
@@ -968,7 +972,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // The pack's prefix is cached for an hour in a batch, whose rounds can be more than five minutes apart.
     const ttl = ctx.llm.batch ? '1h' : '5m';
     step(db, postId, 'format', 'info', { format: format.id, name: format.name, kind: kindName(format), group: groupOf(format) });
-    if (directive) step(db, postId, 'feedback', 'info', { directive: dv.id || null, box: dv.box || null, steer: dv.steer || null });
+    if (directive) step(db, postId, 'feedback', 'info', { directive: dv.id || null, box: dv.box || null, steer: dv.steer || null, ...(lesson ? { closing: lesson } : {}) });
 
     const topicNotes = new Map();
     const noteTopic = (c, why) => c.topicId && topicNotes.set(c.topicId, String(why || '').slice(0, 300));
@@ -1147,7 +1151,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, templates, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals), style: postStyle }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, templates, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals), style: postStyle, lesson }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
@@ -1194,7 +1198,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // words, checked by the same rules (closingSlide: the product at the store, the store and its promise, more of the
     // account's topic). A post with no line that passes is blocked below, never sent without its closing slide.
     if (checked.problems.some(isClosingProblem)) {
-      const safe = closingSlide(pack, { line: '', facts, others: pctx.packs || [] }).closing;
+      const safe = closingSlide(pack, { line: '', facts, others: pctx.packs || [], lesson }).closing;
       if (safe.line) {
         const next = { ...structuredClone(draft), closing: safe };
         const after = checkDraft(pctx, pack, { draft: next, format, facts, items, attempt: 1, moment: outline?.momentKeys || null });
@@ -1209,7 +1213,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // writer's first line broke, and how many repairs it took; failed when it is what stops the post.
     const closingLeft = checked.problems.filter(isClosingProblem);
     step(db, postId, 'closing', closingLeft.length ? 'failed' : draft.closing.by === 'safe' ? 'info' : 'ok', {
-      kind: draft.closing.kind, by: draft.closing.by, line: draft.closing.line, broke: closed?.broke || [], repairs: closingRepairs, ...(closingLeft.length ? { problems: closingLeft.map((p) => p.msg) } : {}),
+      kind: draft.closing.kind, by: draft.closing.by, line: draft.closing.line, broke: closed?.broke || [], repairs: closingRepairs, ...(lesson ? { lesson: lesson.keep ? 'keep' : 'change' } : {}), ...(closingLeft.length ? { problems: closingLeft.map((p) => p.msg) } : {}),
     });
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
