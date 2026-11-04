@@ -2,8 +2,7 @@ import { now, nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { usage } from '../budget/quota.js';
 import { loadPost } from '../pipeline/build.js';
-import { captionOf, tiktokMode } from '../publish/index.js';
-import { imageCredit } from '../images/index.js';
+import { captionBody, captionOf, tiktokMode } from '../publish/index.js';
 import { oneLine } from '../rules/overlay.js';
 import { mediaLink } from './sign.js';
 import { connectLink, connectState } from '../publish/connect.js';
@@ -138,11 +137,11 @@ export function delivery(post, pack, db = null) {
 
 /** Everything a customer who posts by hand needs, per platform: the slides, the caption, the hashtags, and all of it as it goes out. */
 export function bundleOf(db, post, pack, link) {
-  const credit = imageCredit(db, post);
   const platforms = {};
   for (const platform of pack.meta.platforms) {
     if (!post.media?.[mediaOf(platform)]?.length) continue;
-    const caption = [(platform === 'instagram' || platform === 'facebook') && post.caption_ig ? post.caption_ig : post.caption, credit].filter(Boolean).join('\n\n');
+    // The caption without its tags, the closing slide's action at its end, as it goes out (src/publish/caption.js).
+    const caption = captionBody(db, post, platform);
     platforms[platform] = { images: slideLinks(post, mediaOf(platform), link), caption, hashtags: post.hashtags || [], text: captionOf(db, post, platform) };
   }
   return { id: post.id, account: accountOf(pack), status: post.status, coverLine: oneLine(post.hook || ''), slotAt: post.slot_at || null, aiLabel: Boolean(post.ai_label), platforms };

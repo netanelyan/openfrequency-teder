@@ -2591,3 +2591,53 @@ and an account without a logo; Settings adding, replacing and removing it, refus
 one, one over 2 MB and a body far over it, no CSRF, another site, another workspace and view-as, the operator allowed;
 and in a browser at 390 and 1280 pixels, a light logo on a dark tile, the buttons apart and nothing sideways.
 test/workspaces.test.js has the new routes.
+
+### The caption says the closing slide's action (2026-11-04, item 5 of the closing slide)
+
+The owner: "The caption: it repeats the same action, with the link on Instagram and Facebook." Every caption now ends on
+the closing slide's action, made in code from the slide's own action data (src/pipeline/closing.js captionAction): on
+TikTok the slide's words, "הלינק בביו" or "תעקבו אחרי @handle", never an address (nothing on TikTok is a link but the
+profile's); on Instagram and Facebook the same words with the full link where the slide shows the short address, "באתר
+https://shop.co.il/zz-plant" under a slide that says "באתר shop.co.il/zz-plant" (a site's bare root without its last
+"/": the same link, and a "/" at the end of a Hebrew line is drawn at its other end), or "הלינק בביו" and the follow
+line as the slide says them. The model never writes it.
+
+Where it is made: when the caption goes out, not when the post is written (src/publish/caption.js, which captionOf in
+src/publish/index.js now is). The words the writer wrote, the photographs' credits, the action, then the post's
+hashtags, which were always last: so the action is the caption's last line before them. Every path that sends or writes
+a caption takes it from there: the publishers (Zernio, our Meta app, the dry run's request files), the TikTok draft, the
+dry run's caption.txt and caption-instagram.txt (src/pipeline/export.js, which put them together on its own before), and
+the bundle a customer posts by hand (src/assistant/data.js). The post's page shows each caption with its action, the
+link or the handle kept left to right inside the Hebrew line, and the edit form says it is added.
+
+Why it cannot drift from the slide: no copy of the action is kept in the caption. It is read each time from the closing
+slide the post was drawn with (posts.data_json closing), which is inside what the fact gate signs, so a change to it
+after the gate fails the gate before any send; and when the promo changed after the post was written, the closing
+slide's check before any send (item 3) stops the post, caption and all. The writer's captions hold no link (the voice
+check refuses a web address in any text) and now no action either (the slides prompt says the code adds it); an owner's
+caption that already ends on the action is not given it twice.
+
+The limits. TikTok's photo description 4,000 (as the Zernio request has always cut it), Instagram's 2,200, a Facebook
+post's 63,206 (zernio.js CAPTION_MAX, now one table). Every publisher cuts at the limit, from the end, the AI line
+included, so the action before the hashtags is the last thing a cut would reach; before that, a caption that would not
+fit with room for the AI line sheds its hashtags from the last (captionOf), never the action. The longest address a
+promo may have, 300 characters, fits whole on every platform. A link's #fragment is no hashtag (hashtagsIn reads past
+links), so a promo's address cannot push a caption past the five tags the publisher allows. What could still pass 2,200 on
+Instagram is a post whose photographs' credits alone run past about 1,400 characters, which no post has come near; the
+cut would then take the credits' end as it always did.
+
+Instagram does not make a link in a caption clickable; Facebook does. The owner asked for the link on both, and the voice
+check's own note ("a link in a post is a demotion and is never tappable") is about the writer's text, which still never
+holds one. Whether a Facebook Page's photo post with a link in its text shows a link preview is UNVERIFIED (Zernio's
+Facebook example sets no option for it).
+
+test/closing-caption.test.js (new, 3, all failing on the code before, run on an export of main): every format of the
+demo pack (14), each with a product, a site, "link in bio" or no promo in turn, built through the pipeline with a stubbed
+writer, ends its caption on TikTok, Instagram and Facebook on the action, once, after the writer's words and before the
+hashtags: the slide's words on TikTok with no address, the slide's words with the promo's own address, whole, on
+Instagram and Facebook for a site or a product, "הלינק בביו" and the follow line as they are; the longest address (300
+characters, with a #fragment) whole within every platform's limit with room for the AI line, its fragment no hashtag, and
+the request each publisher would send carrying the action whole; an Instagram caption that would not fit with its
+hashtags shedding them from the last and keeping the action; and the caption made from the stored slide every time (a promo changed afterwards changes neither,
+and the post is stopped), an owner's caption ending on the action given it once, the dry run's files the same caption as
+the publishers', and the post's page showing each action with its link.

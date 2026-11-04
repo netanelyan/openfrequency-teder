@@ -386,6 +386,26 @@ with the closing question at its end (`src/rules/caption.js`), 200 characters an
 or short and catchy with the `writing` limits. No caption holds a hashtag: the engine
 adds the post's own, five at most, and the publisher refuses a caption with more.
 
+**The caption ends on the closing slide's action** (the owner, 2026-11-04: "The caption:
+it repeats the same action, with the link on Instagram and Facebook"). On TikTok it is
+the slide's own words ("הלינק בביו", or "תעקבו אחרי @handle"), never an address; on
+Instagram and Facebook the same words with the full link where the slide shows the short
+address ("באתר https://shop.co.il/zz-plant" under a slide that says "באתר
+shop.co.il/zz-plant"), or "הלינק בביו" and the follow line as they are. It is made in
+code from the slide's own action data each time a caption goes out
+(`src/publish/caption.js`, `src/pipeline/closing.js` captionAction), the last line
+before the hashtags, after the photographs' credits: every publisher, the TikTok draft
+and the dry run's files send or write the same caption, and the post's page shows each
+caption with its action, so the slide and the caption never disagree, and no copy is
+kept that could drift. The writer's captions hold
+no link and no action (the voice check refuses a link, and the writer is told the code
+adds it); an owner's caption that already ends on the action is not given it twice. A
+caption that would pass its platform's limit (TikTok's 4,000, Instagram's 2,200,
+Facebook's 63,206, with room for the AI line) sheds hashtags from the last, never the
+action; the longest address a promo may have (300 characters) fits whole. A link's
+#fragment is not counted as a hashtag. Instagram does not make a link in a caption
+clickable, and Facebook does: the owner asked for it on both.
+
 **The owner's story.** On the Sources page, "הסיפור שלכם" takes what happened in the
 business in the owner's own words (a topic in `facts/` marked `"owner": true`: no page,
 no expiry). Only a slide that cites one of those facts, and the cover and captions of an
@@ -864,7 +884,7 @@ src/rules       pack rules, cross-promotion, investment-advice compliance, the t
 src/images      licensed photographs and the image screen
 src/render      fonts, templates and their variants, the graphics, Chromium
 src/pipeline    one post from topic to queue, its closing slide (the writer's line, the code's action), the rivals typed in by hand; export to disk
-src/publish     dry, Zernio (TikTok), Instagram, takedowns
+src/publish     dry, Zernio (TikTok), Instagram, takedowns; the caption as it goes out, ending on the closing slide's action
 src/metrics     reading numbers, crediting formats, the morning's feedback
 src/formats     the kinds of post, rotation, the mix, cover patterns, the cover's hook templates
 src/trends      formats that work on YouTube Shorts

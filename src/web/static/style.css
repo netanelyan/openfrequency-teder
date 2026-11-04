@@ -581,6 +581,8 @@ meter::-moz-meter-bar { background: var(--accent-fill); border-radius: 3px; }
    its last line the 20px it has over its first, and the words sit in its middle instead of on its bottom edge. */
 .post.stopped { padding-bottom: 20px; }
 .caption .tags { color: var(--accent); }
+/* The closing slide's action, the caption's last line (src/publish/caption.js). */
+.caption .act { color: var(--ink); font-weight: 500; }
 .caption .chip { color: var(--ink); font-weight: 600; margin-inline-end: 6px; }
 
 /* What the checks found, in one quiet line above the buttons. */

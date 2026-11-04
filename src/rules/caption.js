@@ -51,8 +51,8 @@ export const beatsOf = (caption) => linesOf(caption);
 // A tag starts after a space or the start (never inside a word or a link's #fragment) and is letters, digits or "_".
 const HASHTAG = /(?<![\p{L}\p{N}_&/#])#[\p{L}\p{N}_]+/gu;
 
-/** The hashtags in a text, as written. */
-export const hashtagsIn = (text) => String(text || '').match(HASHTAG) || [];
+/** The hashtags in a text, as written. A link is no tag, whatever its #fragment follows (the closing slide's action carries the store's). */
+export const hashtagsIn = (text) => String(text || '').replace(/https?:\/\/\S+/g, ' ').match(HASHTAG) || [];
 
 const flat = (s) => normHe(String(s || '')).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 const words = (s) => String(s || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;

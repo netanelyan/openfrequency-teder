@@ -35,6 +35,11 @@ import { mechanicalFix, normHe, sentencesOf, tellsIn } from '../voice/tells.js';
 // (posts.data_json "closing"), inside what the fact gate signs (build.js extraOf): { kind, line, by, handle, name,
 // promise, product, url, actions: { tiktok, instagram, facebook } }, each action { where: 'bio'|'url'|'handle', lead,
 // chip, text, url?, display?, handle? }: the words, the address or handle beside them, and the two as one text.
+//
+// THE CAPTION SAYS THE SAME ACTION (item 5, the owner, 2026-11-04: "The caption: it repeats the same action, with the
+// link on Instagram and Facebook"). captionAction makes the caption's last line from the same action data, when the
+// caption goes out (src/publish/caption.js), so the slide and the caption never disagree and no copy of it is kept to
+// drift: what the slide was drawn with, signed by the gate and checked again before any send, is what the caption says.
 
 /**
  * The line: one sentence, or a short question and its answer. 60 characters is what the engine gives any slide's title
@@ -89,6 +94,20 @@ export function closingActions(base) {
   const display = displayUrl(base.url);
   // TikTok never shows an address on a slide (nothing on it is a link, and TikTok's link is the one on the profile).
   return each((p) => (p === 'tiktok' ? bio : { where: 'url', lead: 'באתר', chip: display, text: `באתר ${display}`, url: base.url, display }));
+}
+
+/**
+ * The closing slide's action as the caption's last line, from the slide's own action data: on TikTok the slide's
+ * words ("הלינק בביו", or "תעקבו אחרי @handle"), never an address; on Instagram and Facebook the same words with the
+ * full link where the slide shows the short address ("באתר https://shop.co.il/plants"). A site's bare root loses its
+ * last "/" (the same link, and a "/" at the end of a Hebrew line is drawn at its other end). "" for a post with no
+ * closing slide, one made before it, which the check before any send stops anyway.
+ */
+export function captionAction(closing, platform) {
+  const a = closing?.actions?.[platform];
+  if (!a?.text) return '';
+  if (platform !== 'tiktok' && a.where === 'url' && a.url) return `${a.lead} ${String(a.url).replace(/^(https:\/\/[^/?#]+)\/$/, '$1')}`;
+  return a.text;
 }
 
 // ---------------------------------------------------------------- the check

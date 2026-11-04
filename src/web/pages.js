@@ -20,6 +20,7 @@ import { designPanel } from './styles.js';
 import { promoPanel } from './promo.js';
 import { logoPanel } from './logo.js';
 import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
+import { captionAction } from '../pipeline/closing.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -243,12 +244,27 @@ ${f.error ? `<div class="muted">${esc(f.error)}</div>` : ''}</div></details>`
     .join('')}</ol></details>`;
 }
 
-function captionBlock(post) {
+/**
+ * The closing slide's action as a caption ends on it on this platform (src/publish/caption.js, src/pipeline/closing.js
+ * captionAction), on a line of its own: the link or the handle at its end kept left to right inside the Hebrew line.
+ */
+function captionActionHtml(post, platform) {
+  const a = captionAction(post.data?.closing, platform);
+  if (!a) return '';
+  const m = /^(.*) ((?:https:\/\/|@)\S+)$/.exec(a);
+  return `<br><span class="act">${m ? `${esc(m[1])} <bdi dir="ltr">${esc(m[2])}</bdi>` : esc(a)}</span>`;
+}
+
+function captionBlock(post, platforms = []) {
   const tags = `<span class="tags">${esc((post.hashtags || []).join(' '))}</span>`;
-  // TikTok's caption is a story, one beat a line (src/rules/caption.js).
-  const tiktok = esc(post.caption).replace(/\n+/g, '<br>');
-  if (!post.caption_ig) return `<p class="caption">${tiktok} ${tags}</p>`;
-  return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${tiktok} ${tags}</p><p class="caption"><span class="chip ghost">אינסטגרם</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}</p>`;
+  // TikTok's caption is a story, one beat a line (src/rules/caption.js), and each caption ends on the closing slide's action.
+  const act = captionActionHtml(post, 'tiktok');
+  // The tags under the action, as they go out: a paragraph of their own after it.
+  const tiktok = `${esc(post.caption).replace(/\n+/g, '<br>')}${act}${act ? '<br>' : ' '}`;
+  if (!post.caption_ig) return `<p class="caption">${tiktok}${tags}</p>`;
+  // A Facebook Page is sent Instagram's caption, with the same link.
+  const ig = platforms.includes('facebook') ? 'אינסטגרם ופייסבוק' : 'אינסטגרם';
+  return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${tiktok}${tags}</p><p class="caption"><span class="chip ghost">${ig}</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}${captionActionHtml(post, 'instagram')}</p>`;
 }
 
 /** What the checks found, in one quiet line: the facts and their sources, the bot score, an AI image. */
@@ -264,9 +280,9 @@ function trustLine(post) {
 }
 
 /** The captions, folded: they go out with the post, so they are one tap away, not in the way of the decision. */
-function captionDetails(post) {
+function captionDetails(post, platforms = []) {
   if (!post.caption && !post.caption_ig) return '';
-  return `<details class="facts"><summary>${icon('text')}הטקסט שעולה עם המצגת<span class="chev">${icon('chev')}</span></summary>${captionBlock(post)}</details>`;
+  return `<details class="facts"><summary>${icon('text')}הטקסט שעולה עם המצגת<span class="chev">${icon('chev')}</span></summary>${captionBlock(post, platforms)}</details>`;
 }
 
 /**
@@ -300,7 +316,7 @@ ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(p
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 </div>
 ${decide ? rejectForm(ctx, post, { ajax: 'remove' }) : ''}
-${captionDetails(post)}
+${captionDetails(post, pack?.meta?.platforms || [])}
 ${factsBlock(ctx, post)}
 </article>`;
 }
@@ -598,6 +614,7 @@ ${items
   .join('')}
 <label class="f">${post.caption_ig ? 'כיתוב לטיקטוק' : 'כיתוב'}<textarea name="caption" maxlength="${post.caption_ig ? 900 : 400}">${esc(v.caption)}</textarea></label>
 ${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכותרת נכנסת לפניו)<textarea name="caption_short" maxlength="260">${esc(values ? values.caption_short : post.data?.captionShort || '')}</textarea></label>` : ''}
+${post.data?.closing ? `<p class="muted small m0">בסוף הכיתוב אנחנו מוסיפים לבד לאן השקף האחרון שולח${post.caption_ig ? ', ובאינסטגרם ובפייסבוק גם את הקישור' : ''}. לא צריך לכתוב את זה כאן.</p>` : ''}
 <div><button class="btn primary" type="submit">${icon('check')}לשמור ולרנדר מחדש</button></div></form></details>`;
   const screen = d.image ? (() => {
     try {
@@ -632,7 +649,7 @@ ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${post.media?.tiktok?.length ? `<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}` : ''}
 ${post.media?.instagram?.length ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
 ${trustLine(post)}
-${post.caption || post.caption_ig ? `<div class="capwrap">${captionBlock(post)}</div>` : ''}
+${post.caption || post.caption_ig ? `<div class="capwrap">${captionBlock(post, pack?.meta?.platforms || [])}</div>` : ''}
 </section>
 ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
 ${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}

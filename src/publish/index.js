@@ -1,5 +1,6 @@
 import { oneLine } from '../rules/overlay.js';
 import { MAX_HASHTAGS, hashtagsIn } from '../rules/caption.js';
+import { captionOf } from './caption.js';
 import { chmodSync, copyFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -13,7 +14,7 @@ import { israelDate } from '../schedule/israel.js';
 import { verifyFact } from '../verify/claims.js';
 import { documentYears, formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
-import { imageCredit, waitingImages } from '../images/index.js';
+import { waitingImages } from '../images/index.js';
 import { approvedByPerson, canRun, isCustomerAccount, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
 import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured, zernioPostState } from './zernio.js';
 import { assignSound } from '../pipeline/sounds.js';
@@ -181,12 +182,13 @@ export function reminderNotice(pack, post, sound) {
 }
 
 /**
- * A platform's caption as it goes out: TikTok the long one, Instagram and a Facebook Page the short one, then the
- * credits and the tags. A Page takes Instagram's because its post is read the same way: the text above the photos,
- * shown to its first lines before "See more", so it opens on the cover line and ends on the question, which on
- * Facebook is what brings comments. TikTok's caption is written to sit under a slideshow that already said the hook.
+ * A platform's caption as it goes out (src/publish/caption.js): TikTok the long one, Instagram and a Facebook Page the
+ * short one, then the credits, the closing slide's action and the tags. A Page takes Instagram's because its post is
+ * read the same way: the text above the photos, shown to its first lines before "See more", so it opens on the cover
+ * line, and its action carries the same link. TikTok's caption is written to sit under a slideshow that already said
+ * the hook.
  */
-export const captionOf = (db, post, platform) => [(platform === 'instagram' || platform === 'facebook') && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+export { captionBody, captionOf } from './caption.js';
 
 /** The words of the notification that a TikTok draft is waiting: the account, the cover line, the sound. */
 export function draftNotice(pack, post, sound) {

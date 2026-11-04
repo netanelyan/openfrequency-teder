@@ -68,7 +68,7 @@ export function postBody({ platform, accountId, caption, imageUrls, privacy = 'S
         allow_comment: true,
         media_type: 'photo',
         photo_cover_index: 0,
-        description: String(caption).slice(0, 4000),
+        description: String(caption).slice(0, CAPTION_MAX.tiktok),
         auto_add_music: !track,
         ...(track ? { musicSoundInfo: { musicSoundId: String(sound.id) } } : {}),
         // TikTok's two consent flags say the account's owner saw this post and agreed to publish it. They are true
@@ -96,8 +96,12 @@ export function postBody({ platform, accountId, caption, imageUrls, privacy = 'S
   };
 }
 
-/** The longest caption each platform takes: Instagram's 2,200, a Facebook post's 63,206 (docs.zernio.com/platforms/facebook). */
-const CAPTION_MAX = { instagram: 2200, facebook: 63206 };
+/**
+ * The longest caption each platform takes: a TikTok photo post's description 4,000 (as this request has always cut it),
+ * Instagram's 2,200, a Facebook post's 63,206 (docs.zernio.com/platforms/facebook). src/publish/caption.js fits every
+ * caption inside it, so a cut never takes the closing slide's action.
+ */
+export const CAPTION_MAX = { tiktok: 4000, instagram: 2200, facebook: 63206 };
 
 function partOf(post, platform) {
   const p = (post?.platforms || []).find((x) => x.platform === platform) || {};

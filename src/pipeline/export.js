@@ -2,7 +2,7 @@ import { copyFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ensureDir } from '../core/paths.js';
 import { j } from '../db/index.js';
-import { imageCredit } from '../images/index.js';
+import { captionOf } from '../publish/caption.js';
 import { loadPost } from './build.js';
 
 // A post written out to a folder a person can open: the slides for each
@@ -17,11 +17,10 @@ export function exportPost(db, postId, dir) {
     const sub = ensureDir(path.join(dir, platform));
     for (const f of files) copyFileSync(f, path.join(sub, path.basename(f)));
   }
-  const tail = [imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean);
-  const caption = [post.caption, ...tail].filter(Boolean).join('\n\n');
-  writeFileSync(path.join(dir, 'caption.txt'), `${caption}\n`);
-  // Instagram's own caption: shorter, and it repeats the cover line.
-  if (post.caption_ig) writeFileSync(path.join(dir, 'caption-instagram.txt'), `${[post.caption_ig, ...tail].join('\n\n')}\n`);
+  // Each caption as it goes out (src/publish/caption.js): the words, the credits, the closing slide's action, the tags.
+  writeFileSync(path.join(dir, 'caption.txt'), `${captionOf(db, post, 'tiktok')}\n`);
+  // Instagram's own caption: shorter, it repeats the cover line, and its action carries the link.
+  if (post.caption_ig) writeFileSync(path.join(dir, 'caption-instagram.txt'), `${captionOf(db, post, 'instagram')}\n`);
 
   const lines = [`# ${post.hook || post.topic || post.id}`, '', `Status: ${post.status}${post.reason ? ` (${post.reason})` : ''}`, `Format: ${post.format_id}${post.kind ? ` (${post.kind})` : ''}`, ''];
   lines.push('## Sources', '');
