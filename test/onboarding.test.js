@@ -255,7 +255,10 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     assert.equal(around(samplesPage), null, 'the samples page has no developer text');
     assert.match(samplesPage, /במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן/, 'samples that could not be written are said plainly, with what helps');
     assert.match(samplesPage, /href="\/sources\?account=demo-green-kitchen">לבחור מקורות/, 'and a way to the sources');
-    assert.doesNotMatch(samplesPage, /כתבו לנו/);
+    // What helps there is the sources, not writing to us (the connect panel's own note may say "כתבו לנו" while this
+    // server has no Zernio key, src/web/connect.js CONNECT_CLOSED_HE).
+    const failed = samplesPage.indexOf('במקורות שבחרתם לא מצאנו');
+    assert.doesNotMatch(samplesPage.slice(failed, samplesPage.indexOf('</p>', failed)), /כתבו לנו/);
     assert.match(samplesPage, /id="schedule"/, 'the days and times are offered before going live');
     assert.match(samplesPage, /name="back" value="\/new\//, 'and the form comes back here');
     assert.ok(choiceOf(ctx.db, row.pack_id), 'the new account starts with the default days and times');
