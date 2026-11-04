@@ -117,6 +117,23 @@ function feedbackHe(det) {
   return out;
 }
 
+/** English in a trace's detail: the checks' words to the writer, or the engine's own, as src/web/ui.js reasonHe reads a reason. */
+const ENGLISH = /[A-Za-z]{4,}/;
+
+/**
+ * The one plain Hebrew line a customer reads for a step whose detail was in English (left out for them), or "" when
+ * the step says it already. The closing slide's check has its own words (CLOSING_HE): its step says them, and a
+ * draft, a repair or a block it stopped says what happened to the line.
+ */
+function traceHe(s, det, english) {
+  const closing = det.kind === 'closing' || english.every((t) => /^closing: /.test(String(t)));
+  if (s.step === 'closing') return '';
+  if (s.step === 'blocked') return closing ? CLOSING_HE.failed : 'הבדיקות שלנו עצרו את המצגת הזו בזמן הכתיבה, ולכן היא לא תעלה.';
+  if (s.step === 'slides' || s.step === 'redraft') return closing ? 'הבדיקה עצרה את השורה שנכתבה לשקף האחרון.' : 'הבדיקות שלנו מצאו בטיוטה דברים לתקן.';
+  if (s.step === 'repair' || s.step === 'visual') return closing ? 'השורה בשקף האחרון עוד לא עברה את הבדיקה.' : 'אחרי התיקון עוד נשארו דברים לתקן.';
+  return closing ? CLOSING_HE.failed : '';
+}
+
 /** What a customer did through the WhatsApp assistant (until 2026-11-02), in the post's trace. */
 const WHATSAPP_HE = { approve: 'אישור', reject: 'דחייה', edit: 'עריכה' };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
@@ -609,9 +626,18 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.verified != null) bits.push(`${det.verified} עובדות אומתו`);
       if (det.refused?.length) bits.push(`${det.refused.length} נפסלו`);
       if (det.reviewer) bits.push(`בודק: ${det.reviewer === 'claude' ? 'Claude' : 'אופליין'}, הכי גרוע ${det.worst}/10`);
-      if (det.problems?.length) bits.push(det.problems.slice(0, 3).join(' · '));
-      if (det.reason) bits.push(det.reason);
-      if (det.why) bits.push(det.why);
+      // The checks' and the engine's own English (what the writer and the operator are told) is the operator's: a
+      // customer reads one plain Hebrew line for what happened instead (traceHe).
+      const english = [];
+      const said = (texts) => {
+        const own = texts.filter((t) => ctx.operator || !ENGLISH.test(String(t)));
+        english.push(...texts.filter((t) => !own.includes(t)));
+        return own;
+      };
+      if (det.problems?.length) bits.push(...[said(det.problems).slice(0, 3).join(' · ')].filter(Boolean));
+      if (det.reason) bits.push(...said([det.reason]));
+      if (det.why) bits.push(...said([det.why]));
+      if (english.length && traceHe(s, det, english)) bits.push(traceHe(s, det, english));
       if (det.error && ctx.operator) bits.push(det.error);
       if (det.stuck) bits.push('נקטע באמצע השליחה');
       if (s.step === 'closing') bits.push(...[s.status === 'failed' ? CLOSING_HE.failed : det.by === 'safe' && !det.repairs ? CLOSING_HE.safeFirst : CLOSING_HE[det.by], det.line ? `"${det.line}"` : '', ctx.operator ? (det.broke || []).slice(0, 2).join(' · ') : ''].filter(Boolean));

@@ -327,7 +327,9 @@ in the repair call with the rule it broke, the post's topic and the promo, at mo
 only then does the slide take the first line made of the promo's own words that passes
 the same rules (the product at the store, the store's name and its promise, more of the
 account's topic), and with none the post is blocked. The trace's step "השקף האחרון" (as Settings calls the slide) says
-whose line it carries and what the first one broke. The line and the action are in what
+whose line it carries and, for the operator, what the first one broke: a customer's page
+shows none of the checks' English, on any step, only one plain Hebrew line for what
+happened ("הבדיקה עצרה את השורה שנכתבה לשקף האחרון."). The line and the action are in what
 the fact gate signs, and the same check runs on the stored post before anything is sent:
 an approval, the TikTok draft, the runner at the slot, publish now, publish again and the
 draft-fallback's direct send each refuse one that fails, and the post is blocked with a

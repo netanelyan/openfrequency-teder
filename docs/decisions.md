@@ -2695,3 +2695,27 @@ refuses and the repair replaces, the line within every rule and the check before
 on the post's page; when the writer cannot get it right the promo's own words skip the line to change and put the line to
 keep first; and a lesson about a promo that changed is dropped, the request says each way in its own words, the check
 refuses the line to change in any punctuation and nothing without a lesson. test/feedback.test.js passes unchanged.
+
+### A customer reads a post's trace in Hebrew, the closing checks' too (2026-11-04)
+
+Seen on a demo-pack post at 390 px: a customer's "איך הפוסט נוצר" showed the closing check's instruction to the writer,
+"closing: the closing slide has no line: write one short line that ties this post's topic to what the slide sends
+people to", on the red "כתיבת שקפים" step. The trace (src/web/pages.js postPage) printed every step's `problems`,
+`reason` and `why` as they were stored: the checks' messages and the engine's own words, written in English for the
+writer and the operator. Now a customer's page leaves out every one of them that is in English (four Latin letters in a
+row, as reasonHe already read a post's reason) and the step says one plain Hebrew line for what happened instead
+(traceHe): a draft whose closing line the check stopped, "הבדיקה עצרה את השורה שנכתבה לשקף האחרון."; a repair that left
+it failing, "השורה בשקף האחרון עוד לא עברה את הבדיקה."; a post blocked by it while written, or a TikTok step it stopped,
+the closing step's own "השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה"; the closing step itself, failed while written
+or at a send or an approval, keeps that line and no English. Any other check's English on a draft or a repair is "הבדיקות
+שלנו מצאו בטיוטה דברים לתקן." or "אחרי התיקון עוד נשארו דברים לתקן.", a block "הבדיקות שלנו עצרו את המצגת הזו בזמן הכתיבה,
+ולכן היא לא תעלה.", and elsewhere the English is only left out. The operator reads every step as it was stored. Checked
+with it, and already in Hebrew: the post's reason in its banner, on Home and on Posts (reasonHe), and the answers of
+approve, approve-all, publish now and publish again (CLOSING_HE). The draft-fallback's stop message still puts the
+check's first problem after its Hebrew, in the post's TikTok banner and the owner's notice: that path is our own
+accounts' only (a customer's is always draft-now), so it is the operator who reads it. test/closing-trace.test.js (new,
+2, both failing on the code before): a draft with no closing line and one with a banned line, repaired, show the
+customer no English on any step and the one line on the draft's step, while the operator's page keeps the check's words;
+a post a promo's own words blocked, and a queued one stopped at its approval after the promo changed, show the customer
+Hebrew on every step, the block, the repair and the closing step in the closing slide's words, the banner's reason in
+Hebrew and the approval's answer CLOSING_HE, and the operator what failed.
