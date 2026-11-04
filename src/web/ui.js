@@ -301,6 +301,8 @@ export const STATUS_HE = {
   publishing: ['עולה עכשיו', 'ok'],
   drafted: ['בטיוטות של טיקטוק', 'sig'],
   published: ['פורסם', 'ok'],
+  // Published, but only written to disk: nothing of it left the server (src/publish/live.js shownStatus).
+  written: ['לא נשלח', 'warn'],
   rejected: ['נדחה', 'ghost'],
   blocked: ['נעצר בבדיקות', 'bad'],
   failed: ['לא עלה', 'bad'],

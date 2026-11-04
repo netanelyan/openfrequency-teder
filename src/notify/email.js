@@ -7,6 +7,7 @@ import { israelDate, israelInstant, weekday } from '../schedule/israel.js';
 import { workspaceAllowed } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { connectLine, missingConnections } from '../publish/hold.js';
+import { diskOnly } from '../publish/live.js';
 
 // What the owner hears by email. Teder writes the words; openfrequency-accounts sends them to the workspace's owners
 // (and keeps their own opt-out):
@@ -24,6 +25,7 @@ import { connectLine, missingConnections } from '../publish/hold.js';
 //   posts_waiting   once a day, after the day's posts are written (a batch still running is waited for), when posts wait
 //                   for approval: how many, and that a post not approved by the end of its day does not go out
 //   weekly          Sunday at 09:00 Israel time: the week's posts out, what waits, what is scheduled for the week ahead
+//                   (out, here and in monthly: a post only written to disk is not, src/publish/live.js diskOnly)
 //   monthly         the 1st at 09:00: last month's results, as the Results page reads them (posts out, views and likes
 //                   where the platforms gave them, the most viewed post)
 //   connect_needed  posts held because nothing is connected (src/publish/hold.js), at most once a day
@@ -269,7 +271,7 @@ function due(ctx, ws, accounts, { t, link }) {
       kind: 'weekly',
       build: () => {
         const per = accounts.map(({ pack }) => {
-          const pub = db.all("SELECT id FROM posts WHERE account_id = ? AND sample = 0 AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, iso(weekAt - 7 * DAY), iso(weekAt)).map((r) => r.id);
+          const pub = db.all("SELECT id, publish_json FROM posts WHERE account_id = ? AND sample = 0 AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, iso(weekAt - 7 * DAY), iso(weekAt)).filter((r) => !diskOnly(r.publish_json)).map((r) => r.id);
           return {
             name: name(pack),
             published: pub.length,
@@ -290,7 +292,7 @@ function due(ctx, ws, accounts, { t, link }) {
     const from = iso(israelInstant(`${month}-01`, '00:00').getTime());
     const to = iso(israelInstant(today, '00:00').getTime());
     const per = accounts.map(({ pack }) => {
-      const posts = db.all("SELECT id, hook FROM posts WHERE account_id = ? AND sample = 0 AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, from, to);
+      const posts = db.all("SELECT id, hook, publish_json FROM posts WHERE account_id = ? AND sample = 0 AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, from, to).filter((p) => !diskOnly(p.publish_json));
       const m = numbersOf(db, posts.map((p) => p.id));
       const best = posts.map((p) => ({ hook: p.hook, views: m.per.get(p.id)?.views || 0 })).sort((a, b) => b.views - a.views)[0] || null;
       return { name: name(pack), published: posts.length, views: m.views, likes: m.likes, best };

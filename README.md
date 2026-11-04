@@ -638,6 +638,16 @@ Each pack names its publisher per platform in `pack.json`
 only when `PUBLISH_MODE=live` and that publisher has what it needs; anything less
 writes the post and the exact request to disk.
 
+Posts do not stay on disk silently ([src/publish/live.js](src/publish/live.js)). While
+`PUBLISH_MODE` is not `live` or `ZERNIO_API_KEY` is unset, the runner alerts the
+operator on its first beat after a start and once a day after it (key
+`publishing-off`, through the server's alert command and Toran to the owner's
+WhatsApp), and `/all` shows the operator the same words in red at the top. A post
+only written to disk is never called published: its chip says "לא נשלח", its page
+says why, and it is in no count of published posts (home's "פורסמו היום", Posts,
+`/all`, the account's week, Results, the day's summary, the weekly and monthly
+emails). Its stored status stays `published`, so it is never sent again.
+
 **TikTok** goes through Zernio as a photo post, with the AI flag. By default
 (`zernio.tiktokMode: "draft-now"`) it goes to the TikTok app's drafts the moment the
 post is approved, with a sound from the account's list named for it, and at the

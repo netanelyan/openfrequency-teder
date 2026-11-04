@@ -36,6 +36,7 @@ import { emailPrefsOf } from '../notify/email.js';
 import { missingConnections } from '../publish/hold.js';
 import { autonomyMode, isCustomerAccount, mayResume } from '../autonomy/rails.js';
 import { unfinishedPromo } from './promo.js';
+import { diskOnly } from '../publish/live.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -102,6 +103,8 @@ export function today(ctx, t = now()) {
   const groups = accountRows(ctx).filter((row) => row.acc?.status !== 'onboarding').map((row) => {
     const id = row.pack.id;
     const ids = (sql, ...a) => ctx.db.all(sql, ...a).map((r) => loadPost(ctx.db, r.id));
+    // Done today: what went out, and apart from it what was only written to disk (src/publish/live.js diskOnly).
+    const done = ctx.db.all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? ORDER BY published_at DESC", id, from);
     return {
       ...row,
       waiting: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'queued' AND sample = 0 ORDER BY slot_at IS NULL, slot_at, created_at", id),
@@ -112,11 +115,14 @@ export function today(ctx, t = now()) {
       failed: ctx.db.all("SELECT id, hook, topic, reason, slot_at, updated_at, publish_json FROM posts WHERE account_id = ? AND status = 'failed' AND sample = 0 AND updated_at >= ? ORDER BY updated_at DESC", id, new Date(t - FAILED_DAYS * DAY).toISOString()),
       unconnected: missingConnections(ctx.db, row.pack),
       blocked: ctx.db.all("SELECT id, hook, topic, reason, format_id, created_at FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC", id, from),
-      published: ctx.db.all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? ORDER BY published_at DESC", id, from),
+      published: done.filter((p) => !diskOnly(p.publish_json)),
+      written: done.filter((p) => diskOnly(p.publish_json)),
       // TikTok drafts of the last day and a half, each with where it stands (src/publish/draft.js); a duplicate stays
-      // on the page until it is a day old.
+      // on the page until it is a day old. A customer is never told to publish a draft that was only written to disk
+      // (src/publish/live.js): it is in no TikTok inbox. The operator sees those too, as the dry run's.
       drafts: ctx.db
         .all("SELECT id, hook, slot_at, published_at, publish_json FROM posts WHERE account_id = ? AND publish_json LIKE '%\"flow\"%' AND published_at >= ? ORDER BY published_at DESC", id, new Date(t - 36 * 3_600_000).toISOString())
+        .filter((p) => ctx.workspaceId == null || j(p.publish_json, {}).tiktok?.via !== 'dry')
         .map((p) => ({ id: p.id, hook: p.hook, slotAt: p.slot_at || p.published_at, flow: j(p.publish_json, {}).tiktok?.flow || {} })),
     };
   });
@@ -133,14 +139,14 @@ export function today(ctx, t = now()) {
   return { day, groups, summary, summaryRows, attention: attention(ctx) };
 }
 
-/** The last 7 Israel days for one account: posts published per day, and reach where it is known. */
+/** The last 7 Israel days for one account: posts published per day (none only written to disk), and reach where it is known. */
 export function week(ctx, accountId, t = now()) {
   const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = addDays(israelDate(t), -i);
     const from = israelInstant(d, '00:00').toISOString();
     const to = israelInstant(addDays(d, 1), '00:00').toISOString();
-    const n = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at < ?", accountId, from, to).n;
+    const n = ctx.db.all("SELECT publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at < ?", accountId, from, to).filter((p) => !diskOnly(p.publish_json)).length;
     days.push({ day: d, n, at: from });
   }
   const since = new Date(t - 7 * DAY).toISOString();
@@ -153,12 +159,13 @@ export function week(ctx, accountId, t = now()) {
   return { days, views, counts };
 }
 
-/** Results: per post (newest reading per platform) and per format, with what is being dropped. */
+/** Results: per post (newest reading per platform) and per format, with what is being dropped. A post only written to disk is none of them. */
 export function results(ctx, t = now()) {
   const since = new Date(t - 30 * DAY).toISOString();
   const [mine, ids] = inAccounts(ctx, 'p.account_id');
   const posts = ctx.db
-    .all(`SELECT p.id, p.account_id, p.hook, p.format_id, p.published_at FROM posts p WHERE p.status = 'published' AND p.published_at >= ? AND ${mine} ORDER BY p.published_at DESC`, since, ...ids)
+    .all(`SELECT p.id, p.account_id, p.hook, p.format_id, p.published_at, p.publish_json FROM posts p WHERE p.status = 'published' AND p.published_at >= ? AND ${mine} ORDER BY p.published_at DESC`, since, ...ids)
+    .filter((p) => !diskOnly(p.publish_json))
     .map((p) => {
       const m = ctx.db.all('SELECT * FROM metrics WHERE post_id = ? AND id IN (SELECT MAX(id) FROM metrics WHERE post_id = ? GROUP BY platform)', p.id, p.id);
       const per = Object.fromEntries(m.map((r) => [r.platform, { ...r, score: postScore(r.platform, r), demo: j(r.raw_json, {})?.source === 'demo-seed' }]));

@@ -39,6 +39,11 @@ checkSignupSwitch(ctx).catch((e) => ctx.log(`[signup] couldn't check the sign-up
 if (String(process.env.OF_INTERNAL_TOKEN || '').trim().length < 32) {
   console.log('OF_INTERNAL_TOKEN is not set (32+ characters, the same value as in openfrequency-accounts): nobody can sign in.');
 }
+// Posts that come due are only written to disk until both say so (src/publish/live.js): said at every start, and the
+// runner tells the operator, once a day, and /all shows it in red.
+const { notLive } = await import('../src/publish/live.js');
+const off = notLive();
+if (off.length) console.log(`publishing: off (${off.map((k) => (k === 'PUBLISH_MODE' ? 'PUBLISH_MODE is not live' : `${k} is not set`)).join(', ')}): every post is written to disk and nothing goes out.`);
 const loose = ctx.db.all('SELECT id FROM accounts WHERE workspace_id IS NULL').map((r) => r.id);
 if (loose.length) console.log(`In no workspace yet, seen only by the operator: ${loose.join(', ')}. npm run workspace:assign gives them one.`);
 if (process.argv.includes('--runner')) {

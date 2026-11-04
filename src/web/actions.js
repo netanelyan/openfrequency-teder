@@ -198,6 +198,12 @@ export function oldDraftsDeleted(ctx, user, { id }) {
   return { ok: true, message: 'סומן. הטיוטות הישנות נמחקו.' };
 }
 
+/**
+ * Said when a post was sent and every part of it went to disk (PUBLISH_MODE not live, or no Zernio key: src/publish/live.js):
+ * never "published". The operator reads why; the customer that it did not go out.
+ */
+const writtenHe = (user) => (user.operator ? 'נכתב לדיסק בפרסום יבש, ושום דבר לא נשלח לרשתות.' : 'המצגת לא נשלחה. הפרסום אצלנו כבוי כרגע, אז שמרנו אותה ולא שלחנו אותה לרשתות.');
+
 export async function publishNow(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   // Held for a connection (src/publish/hold.js): it goes out by itself once TikTok or Instagram is connected.
@@ -207,7 +213,7 @@ export async function publishNow(ctx, user, { id }) {
     audit(ctx.db, { actor: user.name, action: 'publish_now', accountId: post.account_id, postId: id, detail: { via: r.via, ok: r.ok } });
     if (r.held) return { ok: false, message: loadPost(ctx.db, id)?.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.' };
     const drafted = loadPost(ctx.db, id)?.status === 'drafted';
-    return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? 'פורסם בפרסום יבש: נכתב לדיסק.' : drafted ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט, ואפשר לנסות שוב משם.' };
+    return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? writtenHe(user) : drafted ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט, ואפשר לנסות שוב משם.' };
   } catch (e) {
     // The publisher's own words go to the log; the customer reads them in Hebrew (src/publish/errors.js).
     console.error(`[publish-now] ${id}: ${e?.message || e}`);
@@ -232,7 +238,7 @@ export async function retryPublish(ctx, user, { id }) {
     const after = loadPost(ctx.db, id);
     if (r.held) return { ok: false, message: after?.reason || 'המצגת מחכה לחיבור של טיקטוק או אינסטגרם.' };
     if (!r.ok) return { ok: false, message: after?.status === 'approved' ? 'הפלטפורמה ביקשה לחכות. ננסה שוב לבד בדקות הקרובות.' : 'גם הפעם זה לא עלה. הסיבה בדף המצגת.' };
-    return { ok: true, message: r.via === 'dry' ? 'נשלח בפרסום יבש: נכתב לדיסק.' : after?.status === 'drafted' ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'המצגת עלתה.' };
+    return { ok: true, message: r.via === 'dry' ? writtenHe(user) : after?.status === 'drafted' ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'המצגת עלתה.' };
   } catch (e) {
     // Refused before anything was sent: back where it was, with the reason in Hebrew. A failed fact check has blocked it.
     if (loadPost(ctx.db, id)?.status === 'approved') ctx.db.update('posts', id, { status: 'failed', reason: publishErrorHe(e), updated_at: nowIso() });

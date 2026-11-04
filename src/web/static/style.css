@@ -421,6 +421,8 @@ h3 { font-size: 14px; margin: 0; font-weight: 600; }
 .banner.info > svg.i { color: var(--accent); }
 .banner b { font-weight: 600; }
 .banner p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
+/* A path or a key isolated in a banner (the operator's "publishing is off" on /all) breaks rather than widen the page. */
+.banner bdi { overflow-wrap: anywhere; }
 .banner > div { flex: 1; min-width: 0; }
 .banner form, .banner > .btn { margin-inline-start: auto; flex: none; }
 /* The reminder to pay for the next month (ui.js payBanner) is the subscription's, not the page's: above the page's

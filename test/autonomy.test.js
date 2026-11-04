@@ -88,7 +88,8 @@ test('Auto mode publishes and writes a daily summary', async () => {
     assert.equal(ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = 'demo' AND status = 'published'").n, 2);
     await tick(ctx, { t: israelInstant('2026-10-14', '07:05').getTime() });
     const s = ctx.db.get("SELECT text FROM summaries WHERE day = '2026-10-13' AND account_id = 'demo'");
-    assert.match(s.text, /2 פורסמו/);
+    // PUBLISH_MODE is not live here: both were only written to disk, and the summary says so (src/publish/live.js).
+    assert.match(s.text, /: 0 פורסמו, 2 נכתבו לדיסק ולא נשלחו, \d+ נחסמו$/);
   } finally {
     cleanup();
   }

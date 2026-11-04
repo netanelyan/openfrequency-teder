@@ -27,6 +27,7 @@ import { emailTick } from '../notify/email.js';
 import { retentionPass } from '../billing/retention.js';
 import { STUCK_REASON } from '../publish/errors.js';
 import { alertOperator } from '../notify/operator.js';
+import { alertNotLive, diskOnly } from '../publish/live.js';
 
 // The engine running on its own: one tick a minute. Each tick publishes first (3 to 4a below), and only then starts
 // the day's slower work (0, 1, 2, then 4b on), so a long morning of drafting never makes a due post late.
@@ -79,6 +80,10 @@ import { alertOperator } from '../notify/operator.js';
 //   6. write yesterday's summary
 //   7. once a day, what the privacy policy says goes (src/billing/retention.js): demos past six months, the TikTok and
 //      Instagram of a workspace whose Teder stopped, the Zernio removals still to do, old public copies of slides
+//
+// Beside the ticks, on every beat of startRunner (the first one at the start): posts that come due are only written to
+// disk while PUBLISH_MODE is not live or ZERNIO_API_KEY is unset, and the operator hears it, the alert's own window
+// keeping it to once a day (src/publish/live.js). Not in tick(), so a test of a tick says nothing to anyone.
 //
 // The rails (kill switches, pauses, and a workspace that has not paid: src/billing/entitlement.js, asked at the start
 // of every tick and kept 5 minutes) are checked before every generation and every publish. A post approved where
@@ -521,25 +526,34 @@ export async function nothingDrafted(ctx, report, { t = now() } = {}) {
   return report;
 }
 
-/** One summary per account and one overall, for a past Israel date. */
+/**
+ * One summary per account and one overall, for a past Israel date. A post only written to disk (src/publish/live.js
+ * diskOnly) is not among the published: it is counted apart, as written.
+ */
 export function writeSummaries(ctx, day) {
   const { db } = ctx;
   const from = israelInstant(day, '00:00').toISOString();
   const to = israelInstant(addDays(day, 1), '00:00').toISOString();
   const lines = [];
   for (const pack of ctx.packs) {
-    const pub = db.all("SELECT id, hook, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, from, to);
+    const done = db.all("SELECT id, hook, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, from, to);
+    const pub = done.filter((p) => !diskOnly(p.publish_json));
+    const written = done.filter((p) => diskOnly(p.publish_json));
     const blocked = db.all("SELECT reason FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? AND created_at < ?", pack.id, from, to);
     const spend = db.get('SELECT COALESCE(SUM(usd),0) AS usd FROM spend WHERE account_id = ? AND at >= ? AND at < ?', pack.id, from, to).usd;
-    const text = `${pack.meta.displayName}: ${pub.length} פורסמו, ${blocked.length} נחסמו`;
-    db.run('INSERT OR REPLACE INTO summaries (day, account_id, text, data_json, at) VALUES (?, ?, ?, ?, ?)', day, pack.id, text, JSON.stringify({ published: pub.map((p) => ({ id: p.id, hook: p.hook, via: Object.values(j(p.publish_json, {}))[0]?.via })), blocked: blocked.map((b) => b.reason), spend }), nowIso());
+    const text = `${pack.meta.displayName}: ${pub.length} פורסמו, ${written.length ? `${written.length} נכתבו לדיסק ולא נשלחו, ` : ''}${blocked.length} נחסמו`;
+    db.run('INSERT OR REPLACE INTO summaries (day, account_id, text, data_json, at) VALUES (?, ?, ?, ?, ?)', day, pack.id, text, JSON.stringify({ published: pub.map((p) => ({ id: p.id, hook: p.hook, via: Object.values(j(p.publish_json, {}))[0]?.via })), written: written.map((p) => ({ id: p.id, hook: p.hook })), blocked: blocked.map((b) => b.reason), spend }), nowIso());
     lines.push(text);
   }
   db.run('INSERT OR REPLACE INTO summaries (day, account_id, text, data_json, at) VALUES (?, NULL, ?, NULL, ?)', day, lines.join('\n') || 'אין חשבונות פעילים', nowIso());
 }
 
-/** Run tick() every minute until stopped. One at a time: a slow tick delays the next, never overlaps it. */
-export function startRunner(ctx, { everyMs = 60_000 } = {}) {
+/**
+ * Run tick() every minute until stopped. One at a time: a slow tick delays the next, never overlaps it. Each beat,
+ * the first at the start, also tells the operator when posts are not going out (src/publish/live.js alertNotLive), in
+ * `env`; never waited for, so a slow Toran never makes a post late.
+ */
+export function startRunner(ctx, { everyMs = 60_000, env = process.env } = {}) {
   let busy = false;
   let stopped = false;
   // A post still "drafting" when the process starts lost its builder in a restart.
@@ -553,7 +567,9 @@ export function startRunner(ctx, { everyMs = 60_000 } = {}) {
   const state = (ctx.runnerState = { beatAt: Date.now(), startedAt: null, endedAt: null });
   const go = async () => {
     state.beatAt = Date.now();
-    if (busy || stopped) return;
+    if (stopped) return;
+    alertNotLive(ctx, { t: now(), env }).catch((e) => ctx.log?.(`runner: the publishing alert: ${e.message}`));
+    if (busy) return;
     busy = true;
     state.startedAt = Date.now();
     try {

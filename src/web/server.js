@@ -29,6 +29,7 @@ import { CHANGED_PATH, entitlementChangedRoute } from './entitlement-changed.js'
 import { entitlementClient, payReminder } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
+import { notLive } from '../publish/live.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
 import { setFormats } from './formats.js';
 import { setPromo } from './promo.js';
@@ -615,9 +616,12 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
       // The one page that is not one account's: every account of the workspace, and what waits in all of them.
       if (p === '/all') {
-        // The operator also sees every workspace's health (src/web/health.js): payment, failures, connections, drafts.
+        // The operator also sees every workspace's health (src/web/health.js): payment, failures, connections, drafts;
+        // and, in red at the top, that posts are only written to disk while PUBLISH_MODE or ZERNIO_API_KEY says so
+        // (src/publish/live.js), read from this process's environment.
         const health = healthFor(c, user);
-        return page(pages.allPage(pc, { ...data.today(c), healthHtml: health ? healthPanel(health.rows, health.alerts) : '' }));
+        const off = user.operator ? notLive(env) : [];
+        return page(pages.allPage(pc, { ...data.today(c), healthHtml: health ? healthPanel(health.rows, health.alerts) : '', notLiveHtml: off.length ? pages.notLiveBanner(off, env) : '' }));
       }
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {

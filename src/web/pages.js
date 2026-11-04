@@ -19,6 +19,7 @@ import { formatsPanel, picksFormats } from './formats.js';
 import { designPanel } from './styles.js';
 import { promoPanel } from './promo.js';
 import { logoPanel } from './logo.js';
+import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -177,10 +178,11 @@ const atHe = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t
 
 /**
  * When the post goes up, in a line that says so: "תעלה ב-12:30" on a slot, the next free hour without one, when it
- * went up once it did. A sample never goes up, and a post that was stopped or turned down has no time: both show nothing.
+ * went up once it did, and that it did not when it was only written to disk (src/publish/live.js). A sample never goes
+ * up, and a post that was stopped or turned down has no time: both show nothing.
  */
 export function whenHe(post) {
-  if (post.status === 'published' && post.published_at) return `עלתה ב-${atHe(post.published_at)}`;
+  if (post.status === 'published' && post.published_at) return shownStatus(post) === 'written' ? 'לא נשלחה לרשתות' : `עלתה ב-${atHe(post.published_at)}`;
   if (post.sample || !['queued', 'approved', 'held', 'publishing'].includes(post.status)) return '';
   if (post.slot_at) return `תעלה ב-${atHe(post.slot_at)}`;
   return post.status === 'queued' ? 'תעלה בשעה הפנויה הבאה אחרי שתאשרו' : 'תעלה בשעה הפנויה הבאה';
@@ -286,7 +288,7 @@ export function postCard(ctx, post, pack) {
   const kind = typeLabel(ctx, pack, post);
   const decide = post.status === 'queued';
   return `<article class="card acc acc-${esc(post.account_id)} post" id="post-${esc(post.id)}" data-post>
-<div class="meta">${when ? `<span class="when num">${esc(when)}</span>` : ''}${kind ? `<span class="fmt">${esc(kind)}</span>` : ''}<span class="end">${statusChip(post.status)}</span></div>
+<div class="meta">${when ? `<span class="when num">${esc(when)}</span>` : ''}${kind ? `<span class="fmt">${esc(kind)}</span>` : ''}<span class="end">${statusChip(shownStatus(post))}</span></div>
 <h3 class="hook">${esc(post.hook)}</h3>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${strip(post)}
@@ -394,6 +396,9 @@ function tiktokPanel(d) {
 <div class="list todo">${rows.map((x) => `<a href="/post/${esc(x.id)}">${accDot(x.g.pack.id)}<span class="tx"><b>${esc(x.hook)}</b><span class="muted small">${esc(extra(x))}</span></span>${chip(flowState(x.flow))}</a>`).join('')}</div></section>`;
 }
 
+/** How many of today's posts were only written to disk, in a line. */
+const writtenToday = (n) => (n === 1 ? 'מצגת אחת של היום לא נשלחה לרשתות' : `${n} מצגות של היום לא נשלחו לרשתות`);
+
 export function todayPage(ctx, d) {
   const count = (k) => d.groups.reduce((s, g) => s + g[k].length, 0);
   const todo = needsYou(d, 6, ctx);
@@ -402,13 +407,15 @@ export function todayPage(ctx, d) {
   // just ended, the block of work in progress (src/web/progress.js, drawn by server.js as d.progressHtml).
   const out = count('published');
   const last = d.groups.flatMap((g) => g.published).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))[0];
+  // Today's posts that were only written to disk are not among them (src/publish/live.js): the line under says so.
+  const written = d.groups.reduce((s, g) => s + (g.written?.length || 0), 0);
   const next = d.groups.flatMap((g) => g.scheduled).map((p) => p.slot_at).filter(Boolean).sort()[0];
   const when = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
   const side = (href, k, label) => `<a href="${href}"><span class="l">${label}</span>${n(count(k), TONE[k])}</a>`;
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${stopBanners(ctx, d)}
 <section class="kpis" aria-label="היום במספרים">
-<a class="kpi lead${out ? ' ok' : ''}" href="/posts#published"><span class="l">פורסמו היום</span><span class="v num">${out}</span><span class="s">${last ? `האחרון ב-${esc(timeHe(last.published_at))}: ${esc(last.hook)}` : next ? `הבא עולה ב-${esc(when(next))}` : 'אין פוסט מתוזמן'}</span></a>
+<a class="kpi lead${out ? ' ok' : ''}" href="/posts#${!out && written ? 'written' : 'published'}"><span class="l">פורסמו היום</span><span class="v num">${out}</span><span class="s">${last ? `האחרון ב-${esc(timeHe(last.published_at))}: ${esc(last.hook)}` : written ? esc(writtenToday(written)) : next ? `הבא עולה ב-${esc(when(next))}` : 'אין פוסט מתוזמן'}</span></a>
 <div class="kpi side">${side('/posts', 'waiting', 'מחכים לאישור')}${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}</div>
 </section>
 ${d.progressHtml || ''}
@@ -425,6 +432,16 @@ ${d.summary ? summaryPanel(ctx, d) : ''}`;
 // The one page that is not one account's: every account on a line, and what waits in all of them, to approve at
 // once. The owner opens it from the switcher. The approve-all button carries the posts the page listed, so a post
 // drafted after the page was opened is never approved unseen.
+
+/**
+ * The operator's red line at the top of /all while posts are only written to disk: what is off, that nothing goes out,
+ * and what to set, in the alert's words (src/publish/live.js notLiveWords). `off` is notLive()'s list; server.js draws
+ * it for the operator alone, as d.notLiveHtml.
+ */
+export function notLiveBanner(off, env = process.env) {
+  const w = notLiveWords(off, env, { mark: (x) => `<bdi>${esc(x)}</bdi>` });
+  return `<div class="banner bad" id="not-live">${icon('alert')}<div><b>${esc(w.head)}</b><p>${w.body}</p></div></div>`;
+}
 
 export function allPage(ctx, d) {
   const waiting = d.groups.flatMap((g) => g.waiting);
@@ -444,6 +461,7 @@ ${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}
     .map((g) => `<div class="qgroup"><header>${accDot(g.pack.id)}<h3>${esc(g.pack.meta.displayName)}</h3><span class="muted small num">${g.waiting.length}</span>${several && g.waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `לאשר את ${g.waiting.length}`, { cls: 'btn sm ghost', fields: { ids: ids(g.waiting) } })}</span>` : ''}</header>${g.waiting.map((p) => row(p, g)).join('')}</div>`)
     .join('');
   const body = `<div class="head"><h1>כל החשבונות</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
+${ctx.operator ? d.notLiveHtml || '' : ''}
 ${stopBanners(ctx, d)}
 <section class="panel home-panel">${accounts}</section>
 <section class="panel home-panel" id="waiting"><header><h2>מחכים לאישור</h2>${waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `${icon('check')}לאשר את כל ה-${waiting.length}`, { cls: 'btn primary', fields: { ids: ids(waiting) }, confirm: `לחצו שוב לאישור ${waiting.length} פוסטים` })}</span>` : ''}</header>
@@ -475,6 +493,8 @@ function failedList(ctx, g) {
 export function postsPage(ctx, d) {
   const sched = d.groups.flatMap((g) => g.scheduled.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true, kind: false }) })));
   const pub = d.groups.flatMap((g) => g.published.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}` })));
+  // Done today but only written to disk (src/publish/live.js): apart from what went out, saying so.
+  const written = d.groups.flatMap((g) => (g.written || []).map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}` })));
   const body = `<div class="head"><h1>פוסטים</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${stopBanners(ctx, d)}
 ${d.groups
@@ -488,7 +508,8 @@ ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמ�
   })
   .join('')}
 <section class="panel home-panel" id="scheduled"><header><h2>מתוזמנים</h2></header>${sched.length ? postLines(sched) : '<p class="muted">אין פוסט מאושר שמחכה לשעה שלו.</p>'}</section>
-<section class="panel home-panel" id="published"><header><h2>פורסמו היום</h2></header>${pub.length ? postLines(pub) : '<p class="muted">עוד לא פורסם היום.</p>'}</section>`;
+<section class="panel home-panel" id="published"><header><h2>פורסמו היום</h2></header>${pub.length ? postLines(pub) : '<p class="muted">עוד לא פורסם היום.</p>'}</section>
+${written.length ? `<section class="panel home-panel" id="written"><header><h2>לא נשלחו היום</h2></header><p class="muted small">${written.length === 1 ? 'הפרסום אצלנו כבוי כרגע, אז שמרנו את המצגת הזו ולא שלחנו אותה לרשתות.' : 'הפרסום אצלנו כבוי כרגע, אז שמרנו את המצגות האלה ולא שלחנו אותן לרשתות.'}</p>${postLines(written)}</section>` : ''}`;
   return layout({ ...ctx, title: 'פוסטים', active: 'posts' }, body);
 }
 
@@ -507,6 +528,24 @@ function tiktokDraftBanners(ctx, post) {
   const old = post.publish?.oldDrafts || [];
   if (old.length) out.push(`<div class="banner warn">${icon('alert')}<div><b>${old.length === 1 ? 'טיוטה ישנה של הפוסט הזה נמצאת' : `${old.length} טיוטות ישנות של הפוסט הזה נמצאות`} בתיבת הטיוטות של טיקטוק</b><p>מחקו ${old.length === 1 ? 'אותה' : 'אותן'} באפליקציה, כדי ש${old.length === 1 ? 'היא לא תפורסם' : 'הן לא יפורסמו'} בטעות.</p></div>${postButton(ctx, `/post/${post.id}/old-drafts-deleted`, 'מחקתי', { cls: 'btn sm' })}</div>`);
   return out.join('');
+}
+
+/**
+ * Where a publish step sent each platform's part ({ tiktok: 'zernio', instagram: 'dry' }), in the post's trace: a part
+ * the dry publisher wrote to disk is said as not sent (src/publish/live.js). How it went is the operator's to read.
+ */
+const viaLine = (ctx, via) => Object.entries(via).map(([pl, v]) => `${PLATFORM_HE[pl] || pl}: ${v === 'dry' ? (ctx.operator ? 'נכתב לדיסק בפרסום יבש' : 'לא נשלח, נשמר אצלנו') : ctx.operator ? `דרך ${v}` : 'נשלח'}`).join(' · ');
+
+/**
+ * A post that was only written to disk (src/publish/live.js), on its page, where its chip says "לא נשלח": that it did
+ * not go out, why, and where to write. Its TikTok draft was written to disk too, so no banner says one waits in the
+ * app. The operator also reads the folder it was written to.
+ */
+function writtenBanner(ctx, post) {
+  const names = sentPlatforms(post.publish).map((p) => PLATFORM_HE[p] || p);
+  const to = names.length > 1 ? `${names.slice(0, -1).map((x) => `ל${x}`).join(', ')} ול${names.at(-1)}` : `ל${names[0]}`;
+  const dirs = ctx.operator ? [...new Set(sentPlatforms(post.publish).map((p) => post.publish[p].path).filter(Boolean))] : [];
+  return `<div class="banner warn" id="written">${icon('alert')}<div><b>המצגת לא נשלחה לרשתות</b><p>${withSupport(`הפרסום אצלנו כבוי כרגע, אז שמרנו אותה ולא שלחנו אותה ${to}. אם היא צריכה לעלות, כתבו לנו.`)}</p>${dirs.length ? `<p>נכתבה לדיסק ב-${dirs.map((x) => `<bdi>${esc(x)}</bdi>`).join(', ')}</p>` : ''}</div></div>`;
 }
 
 export function postPage(ctx, d, { problems = [], values = null } = {}) {
@@ -539,6 +578,7 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.stuck) bits.push('נקטע באמצע השליחה');
       if (s.step === 'closing') bits.push(...[s.status === 'failed' ? CLOSING_HE.failed : det.by === 'safe' && !det.repairs ? CLOSING_HE.safeFirst : CLOSING_HE[det.by], det.line ? `"${det.line}"` : '', ctx.operator ? (det.broke || []).slice(0, 2).join(' · ') : ''].filter(Boolean));
       if (s.step === 'whatsapp') bits.push(...[WHATSAPP_HE[det.action] || det.action, det.by, det.slide ? `שקף ${det.slide}` : ''].filter(Boolean));
+      else if (det.via && typeof det.via === 'object') bits.push(viaLine(ctx, det.via));
       else if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : det.via === 'whatsapp' ? 'מוואטסאפ' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);
       return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${withSupport(bits.join(' · '))}</div>` : ''}</li>`;
@@ -568,7 +608,9 @@ ${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכ
   })() : null;
   const imageHold = d.image && d.image.safety && d.image.safety !== 'ok' && !d.image.reviewed_at;
   const tds = d.takedowns || [];
-  const takedownPanel = ['published', 'taken_down', 'publishing'].includes(post.status) || tds.length
+  // Only written to disk (src/publish/live.js): nothing of it is on a platform, so nothing to take down there.
+  const written = shownStatus(post) === 'written';
+  const takedownPanel = (['published', 'taken_down', 'publishing'].includes(post.status) && !written) || tds.length
     ? `<section class="panel"><header><h2>הודעות הסרה</h2></header>
 ${tds.map((t) => `<div class="banner bad">${icon('alert')}<div><b>${esc(stamp(t.received_at))}${t.claimant ? ` · ${esc(t.claimant)}` : ''}</b><p dir="auto">${esc(t.notice.slice(0, 300))}</p><ul class="factlist">${Object.entries(t.deleted).map(([pl, x]) => `<li>${esc(PLATFORM_HE[pl] || pl)}: <b>${esc(PLATFORM_DELETE[x.state] || x.state)}</b>${x.why ? `<div class="muted small">${esc(x.why)}</div>` : ''}${x.state === 'by_hand' ? postButton(ctx, `/takedowns/${t.id}/deleted`, 'מחקתי ידנית', { cls: 'btn sm', fields: { platform: pl } }) : ''}</li>`).join('')}</ul></div></div>`).join('')}
 ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert')}התקבלה הודעת הסרה על הפוסט הזה</summary><form method="post" action="/post/${esc(post.id)}/takedown" class="formgrid">${csrfField(ctx)}
@@ -579,10 +621,10 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 <div><button class="btn danger" type="submit">לרשום ולהוריד את הפוסט</button></div></form></details>` : ''}</section>`
     : '';
 
-  const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
+  const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(shownStatus(post))}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${withSupport(reasonHe(ctx, post.status, post.reason))}</b></div></div>` : ''}
 ${redoBanners(d)}
-${tiktokDraftBanners(ctx, post)}
+${written ? writtenBanner(ctx, post) : tiktokDraftBanners(ctx, post)}
 <div class="cols">
 <div>
 <section class="card acc acc-${esc(post.account_id)} post${slidesShown ? '' : ' stopped'}"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>

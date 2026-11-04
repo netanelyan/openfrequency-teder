@@ -54,6 +54,15 @@ const { writeSummaries } = await import('../src/autonomy/runner.js');
 
 const ctx = makeContext({ log: () => {} });
 const db = ctx.db;
+// The demo has nothing to publish to: the dry publisher writes its posts to disk, and a post only written to disk is
+// never shown as published (src/publish/live.js diskOnly). The demo's are, as its numbers are made up for it: each part
+// it wrote says demo.
+const { j } = await import('../src/db/index.js');
+const shownOut = (id) => {
+  const pub = j(db.get('SELECT publish_json FROM posts WHERE id = ?', id)?.publish_json, {}) || {};
+  for (const r of Object.values(pub)) if (r && typeof r === 'object' && r.via === 'dry') r.demo = true;
+  db.update('posts', id, { publish_json: pub });
+};
 const pack = ctx.pack('demo');
 // Every demo account is the fictional workspace's, the one the stand-in for accounts signs the browser in to.
 db.run('UPDATE accounts SET workspace_id = ?', DEMO_WORKSPACE.id);
@@ -85,6 +94,7 @@ for (const [daysAgo, views, likes, shares, saves] of [
   const at = new Date(now - daysAgo * 24 * HOUR).toISOString();
   db.update('posts', r.postId, { status: 'approved', approved_by: 'demo', approved_at: at, slot_at: at });
   await publishPost(ctx, r.postId, { t: weekday(at, '12:45') }).catch((e) => console.log(`demo publish: ${e.message}`));
+  shownOut(r.postId);
   db.update('posts', r.postId, { published_at: at, created_at: at });
   for (const [platform, v, l, s, sv] of [
     ['tiktok', views, likes, shares, null],
@@ -106,6 +116,7 @@ const later = slots.find((s) => s.getTime() > now) || new Date(now + 3 * HOUR);
 const r1 = await build();
 db.update('posts', r1.postId, { status: 'approved', approved_by: 'demo', approved_at: new Date(now - 2 * HOUR).toISOString(), slot_at: new Date(now - HOUR).toISOString() });
 await publishPost(ctx, r1.postId, { t: Date.parse(israelInstant(today, '12:41').toISOString()) }).catch((e) => console.log(`demo publish: ${e.message}`));
+shownOut(r1.postId);
 const r2 = await build({ slotAt: later.toISOString() });
 db.update('posts', r2.postId, { status: 'approved', approved_by: 'demo', approved_at: new Date(now - 30 * 60_000).toISOString() });
 await build({ slotAt: new Date(later.getTime() + 2 * HOUR).toISOString() });
@@ -118,6 +129,7 @@ for (const [id, views] of [['demo-coffee', 2600], ['demo-running', 5300]]) {
   const at = new Date(now - 6 * 24 * HOUR).toISOString();
   db.update('posts', a.postId, { status: 'approved', approved_by: 'demo', approved_at: at, slot_at: at });
   await publishPost(ctx, a.postId, { t: weekday(at, '19:00') }).catch((e) => console.log(`demo publish: ${e.message}`));
+  shownOut(a.postId);
   db.update('posts', a.postId, { published_at: at, created_at: at });
   for (const [platform, v, sv] of [['tiktok', views, null], ['instagram', Math.round(views * 0.3), Math.round(views * 0.02)]]) {
     db.insert('metrics', { post_id: a.postId, platform, collected_at: new Date(Date.parse(at) + 80 * HOUR).toISOString(), age_hours: 80, views: v, likes: Math.round(v * 0.06), comments: Math.round(v * 0.004), shares: Math.round(v * 0.012), saves: sv, raw_json: { source: 'demo-seed' } });

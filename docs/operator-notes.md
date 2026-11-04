@@ -229,6 +229,17 @@ says which keys are set without showing them.
   are connected.
 - **What to do.** `PUBLISH_MODE=live` and `ZERNIO_API_KEY` on the server once posts should really go out.
 
+### Publishing is off
+
+- **What it is.** `PUBLISH_MODE` is not `live`, or `ZERNIO_API_KEY` is unset: every post that comes due is written to
+  disk and nothing goes out (src/publish/live.js).
+- **Where it shows.** An alert, "Teder: הפרסום כבוי, ופוסטים לא יוצאים לרשתות", when the runner starts and once a day
+  (key `publishing-off`); the same words in red at the top of `/all`, operator only; "publishing: off (...)" in the
+  journal at every start. The customer reads "לא נשלח" on the post, "המצגת לא נשלחה לרשתות" on its page with why
+  ("הפרסום אצלנו כבוי כרגע"), and the post is in no count of published posts.
+- **What to do.** Set both in `/opt/open-frequency/private/.env` and `systemctl restart openfrequency`. A post already
+  written to disk is not sent again by itself.
+
 ### Other technical words taken off customer pages
 
 - The sources page: the catalog no longer explains robots.txt and Claude ("האתר מרשה לנו לקרוא אותו ולכתוב מחדש את
