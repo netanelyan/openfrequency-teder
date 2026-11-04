@@ -26,7 +26,7 @@ git clone -q /repos/private.git /opt/open-frequency/private
 cd /opt/open-frequency
 npx -y playwright install-deps chromium >/dev/null
 # This container has Node from NodeSource at /usr/bin; the units and deploy.sh name the VPS's /opt/node24.
-mkdir -p /opt/node24/bin && ln -sf "$(command -v node)" /opt/node24/bin/node && ln -sf "$(command -v npm)" /opt/node24/bin/npm
+mkdir -p /opt/node24/bin && ln -sf "$(command -v node)" /opt/node24/bin/node && ln -sf "$(command -v npm)" /opt/node24/bin/npm && ln -sf "$(command -v npx)" /opt/node24/bin/npx
 mkdir -p private/data
 chown -R openfrequency:openfrequency private
 

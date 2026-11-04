@@ -19,6 +19,21 @@ up before, switched to with one link, and checked again; a failed check puts the
 `deploy/openfrequency.service` runs from `/opt/open-frequency/current`. Its `OF_HOME`, `PLAYWRIGHT_BROWSERS_PATH` and
 `ReadWritePaths` are the same paths as before, so nothing under `private/` or `.browsers/` moves.
 
+## Chromium, on every deploy
+
+The service refuses to start without a Chromium that draws a test slide (src/render/check.js), and Playwright finds it
+only in `PLAYWRIGHT_BROWSERS_PATH`, `/opt/open-frequency/.browsers` in the unit: installed by another user, or without
+that variable, it looks in that user's own cache and finds nothing. `deploy/deploy.sh` installs it there as the
+service user on every deploy, before the switch. Until the one-time move below, the plain checkout's update needs the
+same step after `git pull` and `npm ci` and before the restart, as root:
+
+```bash
+cd /opt/open-frequency && runuser -u openfrequency -- env PATH=/opt/node24/bin:$PATH PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install chromium
+```
+
+UNVERIFIED on the VPS: that `/opt/node24/bin/npx` is there, and that `openfrequency` may write `.browsers` (`ls -ld
+/opt/open-frequency/.browsers`; if not, `chown -R openfrequency:openfrequency /opt/open-frequency/.browsers` first).
+
 ## Deploying (after the one-time move below)
 
 On the VPS, as root, a commit whose CI run is green (.github/workflows/test.yml):

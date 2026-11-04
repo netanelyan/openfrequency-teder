@@ -11,8 +11,10 @@
 #   /opt/open-frequency/.browsers       Playwright's Chromium: every release's
 #
 # In order, and nothing is switched until every step before the switch has passed:
-#   1. fetch, and build the release: git archive of the commit, REVISION, npm ci --omit=dev, Chromium for its
-#      Playwright (downloaded only when it is not there yet)
+#   1. fetch, and build the release: git archive of the commit, REVISION, npm ci --omit=dev; then, on every deploy,
+#      Chromium for its Playwright, `npx playwright install chromium` as the service user into the shared .browsers
+#      (downloaded only when it is not there yet): the release refuses to start without one that draws a test slide
+#      (src/render/check.js)
 #   2. scripts/schema-check.js from the new release: a build the database would refuse is never switched to
 #   3. a backup of the database (scripts/backup.js), before the new build migrates anything
 #   4. the switch (current -> the new release; the one it replaces is kept as .previous), and a restart
@@ -50,6 +52,9 @@ die() { printf 'deploy: %s\n' "$*" >&2; exit 1; }
 [ -x "$NODE" ] || die "$NODE is not there"
 NPM=$(dirname "$NODE")/npm
 [ -x "$NPM" ] || die "no npm beside $NODE (UNVERIFIED on the VPS: ls -l $NPM)"
+NPX=$(dirname "$NODE")/npx
+[ -x "$NPX" ] || die "no npx beside $NODE (UNVERIFIED on the VPS: ls -l $NPX)"
+BROWSERS=$APP/.browsers
 for c in git tar curl runuser systemctl; do command -v "$c" >/dev/null || die "$c is not installed"; done
 [ -d "$REPO" ] || die "no $REPO: the server still deploys from a plain checkout. The one-time move is in docs/deploy-releases.md"
 id "$USER_" >/dev/null 2>&1 || die "no user $USER_"
@@ -72,16 +77,22 @@ if [ ! -d "$DEST" ]; then
   git -C "$REPO" archive "$REV" | tar -x -C "$DEST.part"
   echo "$REV" > "$DEST.part/REVISION"
   (cd "$DEST.part" && PATH="$(dirname "$NODE"):$PATH" "$NPM" ci --omit=dev --no-audit --no-fund --loglevel=error)
-  # The Chromium this release's Playwright wants, into the shared folder (nothing is downloaded when it is there).
-  (cd "$DEST.part" && PLAYWRIGHT_BROWSERS_PATH=$APP/.browsers "$NODE" node_modules/playwright/cli.js install chromium >/dev/null)
   mv "$DEST.part" "$DEST"
 fi
+# The Chromium this release's Playwright wants, in the shared folder the service reads (PLAYWRIGHT_BROWSERS_PATH in
+# openfrequency.service), installed as the service user, the one that runs it, and on every deploy, a release built
+# before included: nothing is downloaded when it is there. Chromium installed by another user, or without the same
+# PLAYWRIGHT_BROWSERS_PATH, is not found, and the release would refuse to start (src/render/check.js).
+say "   Chromium for this release's Playwright, as $USER_, into $BROWSERS"
+[ -d "$BROWSERS" ] || install -d -o "$USER_" -g "$USER_" -m 755 "$BROWSERS"
+runuser -u "$USER_" -- test -w "$BROWSERS" || die "$USER_ cannot write $BROWSERS (Chromium was installed there as another user): chown -R $USER_:$USER_ $BROWSERS, then deploy again"
+(cd "$DEST" && runuser -u "$USER_" -- env PATH="$(dirname "$NODE"):$PATH" PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" "$NPX" playwright install chromium >/dev/null) || die "npx playwright install chromium failed as $USER_: nothing was switched"
 if [ "${RUN_TESTS:-0}" = 1 ]; then
   say "   the whole suite, in the release (RUN_TESTS=1)"
-  (cd "$DEST" && PATH="$(dirname "$NODE"):$PATH" PLAYWRIGHT_BROWSERS_PATH=$APP/.browsers "$NODE" scripts/release-check.js) || die "the tests failed: nothing was switched"
+  (cd "$DEST" && PATH="$(dirname "$NODE"):$PATH" PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" "$NODE" scripts/release-check.js) || die "the tests failed: nothing was switched"
 fi
 
-as_service() { runuser -u "$USER_" -- env OF_HOME="$APP/private" PLAYWRIGHT_BROWSERS_PATH="$APP/.browsers" "$NODE" "$@"; }
+as_service() { runuser -u "$USER_" -- env OF_HOME="$APP/private" PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" "$NODE" "$@"; }
 
 # ---- 2. would the database take it
 say "2. schema check"

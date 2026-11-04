@@ -3,7 +3,8 @@
 // npm start              the website and the runner (generation, publishing, metrics)
 //
 // Reads packs and data from $OF_HOME. With no private folder, says how to make
-// one, or to try `npm run demo`.
+// one, or to try `npm run demo`. Without a Chromium that draws a test slide, says
+// what is wrong and what fixes it, and does not start (src/render/check.js).
 
 import { requireHome } from '../src/core/paths.js';
 import { loadEnv } from '../src/core/env.js';
@@ -15,6 +16,15 @@ try {
   process.exit(1);
 }
 loadEnv();
+// The browser the slides are drawn in, before anything else and before the website listens (src/render/check.js):
+// Chromium missing or not working is one line and exit 1, never a site that answers and cannot draw a slide.
+const { checkBrowser } = await import('../src/render/check.js');
+const browser = await checkBrowser();
+if (!browser.ok) {
+  console.error(browser.line);
+  process.exit(1);
+}
+console.log(`browser: Chromium drew a test slide in ${browser.ms} ms`);
 const { makeContext } = await import('../src/engine.js');
 const { listen } = await import('../src/web/server.js');
 const { startRunner } = await import('../src/autonomy/runner.js');

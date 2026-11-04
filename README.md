@@ -832,10 +832,16 @@ tested end to end in a clean container by `deploy/test/run.sh`.
    slides from), validate, reload.
 6. **The nightly backup:** `deploy/openfrequency-backup.{service,timer}`.
 
-**Updating the engine:** `deploy/deploy.sh` as root, a commit CI marked green: a new release folder, a schema check,
-a backup, the switch, and `/readyz` within 60 seconds or the previous release back (`deploy/rollback.sh` by hand).
-[docs/deploy-releases.md](docs/deploy-releases.md) has the layout, the rollback, restoring a backup, and the one-time
-move of a server that runs from a plain checkout.
+**Updating the engine:** `deploy/deploy.sh` as root, a commit CI marked green: a new release folder, Chromium for its
+Playwright (`npx playwright install chromium` as the service user, into `/opt/open-frequency/.browsers`), a schema
+check, a backup, the switch, and `/readyz` within 60 seconds or the previous release back (`deploy/rollback.sh` by
+hand). [docs/deploy-releases.md](docs/deploy-releases.md) has the layout, the rollback, restoring a backup, and the
+one-time move of a server that runs from a plain checkout.
+
+**Chromium at every start.** Before the website listens, `scripts/web.js` has Chromium draw one test slide through
+the renderer the posts use ([src/render/check.js](src/render/check.js), 30 seconds at most). Without a Chromium that
+does, it prints one line, what failed and the fix (`npx playwright install chromium` as the user that runs Teder
+with the same `PLAYWRIGHT_BROWSERS_PATH`, or `--with-deps` as root when system libraries are missing), and exits 1.
 **Updating an account:** replace its folder under `private/packs/`, restart; the
 database follows the pack's files on start.
 
