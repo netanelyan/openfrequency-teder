@@ -793,6 +793,9 @@ meter + .mrow { margin-top: 20px; }
 /* In columns the grid's gap is the space: a panel that is a column of its own adds no margin over it (the second
    column of /new stood 20px lower than the first, and on a phone the two were 40px apart). */
 .cols > .panel + .panel { margin-top: 0; }
+/* A panel and a block of columns one after the other are apart as two panels are: on /new, while the sources are
+   searched, the progress panel touched the name panel under it on a phone (the owner, 2026-11-05). */
+.panel + .cols, .empty + .cols, .cols + .panel, .cols + .cols { margin-top: 20px; }
 /* An empty state with a panel under it, in one column (Rivals): apart, as two panels are, not touching. */
 .empty + .panel { margin-top: 20px; }
 @media (min-width: 1000px) { .cols { grid-template-columns: 1.15fr 0.85fr; align-items: start; } .cols.even { grid-template-columns: 1fr 1fr; } }

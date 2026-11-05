@@ -442,7 +442,7 @@ function handleOf(r) {
 function nameFields(pc, r) {
   return `<p class="muted m0">שם המשתמש מופיע על כל מצגת, כדי שמי שרואה אותה יידע איפה למצוא אתכם. השם של העסק מופיע כאן באתר, ובחלק מהעיצובים גם על המצגות.</p>
 <label class="f">השם של העסק <small>כמו שהלקוחות מכירים אתכם</small><input type="text" name="displayName" required maxlength="40" value="${esc(nameOf(pc, r))}"></label>
-<label class="f">שם המשתמש שלכם בטיקטוק ובאינסטגרם <small>באותיות באנגלית, למשל cafe.yafo</small><span class="atfield" dir="ltr"><span aria-hidden="true">@</span><input type="text" name="handle" required maxlength="31" dir="ltr" autocapitalize="off" spellcheck="false" pattern="@?[A-Za-z0-9._\\-]{2,30}" value="${esc(handleOf(r))}"></span></label>`;
+<label class="f">שם המשתמש שלכם בטיקטוק ובאינסטגרם <small>באותיות באנגלית, למשל cafe.yafo</small><span class="atfield" dir="ltr"><span aria-hidden="true">@</span><input type="text" name="handle" required maxlength="40" dir="ltr" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" pattern="\\s*@?[A-Za-z0-9][A-Za-z0-9._]{1,29}\\s*" value="${esc(handleOf(r))}"></span></label>`;
 }
 
 const NAME_TITLE = 'השם שלכם על המצגות';
@@ -732,7 +732,10 @@ const beforeAccount = (r) => {
 };
 
 /** The name and handle as typed, kept so a form that will not do comes back with them. */
-const typed = (f) => ({ displayName: String(f.displayName || '').trim().slice(0, 40), handle: String(f.handle || '').trim().replace(/^@+/, '').slice(0, 30) });
+// The handle as the browser's pattern lets it through: spaces around it (a phone's keyboard adds one after a word it
+// suggested; the owner's "getopenfrequency" was refused for it, 2026-11-05), an @ before it, capitals (TikTok and
+// Instagram handles are lowercase): all mended here, so packs/validate.js's HANDLE checks only the letters themselves.
+const typed = (f) => ({ displayName: String(f.displayName || '').trim().slice(0, 40), handle: String(f.handle || '').trim().replace(/^@+/, '').toLowerCase().slice(0, 30) });
 
 /**
  * The routes, each (ctx, user, match, form or query, page context) with the request's context. `links()` is
