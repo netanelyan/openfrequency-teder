@@ -92,6 +92,15 @@
     if (open) box.querySelector('select, input, textarea')?.focus();
   });
 
+  // A way to reach a store on /leads copies the message beside it as it opens (a call or a profile cannot be handed
+  // the text); the link goes on as a link. Without script the text box is there to copy from.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-copy]');
+    const box = a && document.querySelector(a.dataset.copy);
+    if (!box || !navigator.clipboard) return;
+    navigator.clipboard.writeText(box.value || box.textContent || '').then(() => say('ההודעה הועתקה'), () => {});
+  });
+
   // Forms marked data-ajax post in the background.
   document.addEventListener('submit', async (e) => {
     const form = e.target.closest('form[data-ajax]');

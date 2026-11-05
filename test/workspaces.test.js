@@ -106,6 +106,8 @@ before(async () => {
   B.onboarding = 'o-bravo-flow';
   db.insert('onboarding', { id: B.onboarding, seed_json: { niche: 'BravoNiche' }, status: 'review', workspace_id: 2, candidates_json: { candidates: [], formats: [] }, created_at: t, updated_at: t });
   B.demo = db.insert('demos', { slug: 'loose-shop-abcdef', url: 'https://loose-shop.example', domain: 'loose-shop.example', whatsapp: '972500000000', status: 'ready', store_json: { name: 'Loose Shop' }, topic_json: { niche: 'loose topic', angle: 'loose', articles: [], products: [] }, media_json: { tiktok: [], instagram: [] }, created_at: t, updated_at: t });
+  // A lead of the operator's (src/web/leads.js): no workspace's, so no customer sees or moves it.
+  B.lead = db.insert('leads', { domain: 'loose-lead.example', url: 'https://loose-lead.example', name: 'Loose Lead', stage: 'new', created_at: t, updated_at: t });
   db.insert('spend', { account_id: 'bravo', api: 'anthropic', usd: 5, tag: 'bravo-test', month: monthKey(), at: t });
   const day = '2026-10-21';
   db.run('INSERT INTO summaries (day, account_id, text, data_json, at) VALUES (?, NULL, ?, NULL, ?)', day, 'חשבון bravo: 3 פורסמו\nחשבון loose: 1 פורסמו', t);
@@ -144,6 +146,7 @@ function snapshotB() {
     push: db.all('SELECT * FROM push_subs WHERE workspace_id = 2 ORDER BY id'),
     onboarding: db.all('SELECT * FROM onboarding WHERE workspace_id = 2 ORDER BY id'),
     demos: db.all('SELECT * FROM demos ORDER BY id'),
+    leads: db.all('SELECT * FROM leads ORDER BY id'),
     assistant: db.all('SELECT * FROM assistant_prefs WHERE workspace_id = 2'),
     // A's own email choices are A's to change; what accounts said of each workspace's payment is kept as it is asked.
     settings: db.all("SELECT key, value_json FROM settings WHERE key != 'email:prefs:1' AND key NOT LIKE 'entitlement:%' ORDER BY key"),
@@ -163,6 +166,7 @@ const pagesFor = () => [
   `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`, `/new/${B.onboarding}/status`,
   '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`, '/accounts/bravo/logo',
   '/demos', `/demos/${B.demo}`, `/demos/${B.demo}/img/tiktok/0`,
+  '/leads', '/leads?tab=new', '/leads/status.json',
 ];
 
 test('workspace A sees nothing of workspace B, or of an account in no workspace: on every page, by every way in', async () => {
@@ -309,6 +313,16 @@ const casesFor = () => {
     [`/demos/${B.demo}/other`],
     [`/demos/${B.demo}/remove`],
     ['/demos/offer', { monthly: '1', setup: '1', vat: 'included' }],
+    // The leads are the operator's alone too: no customer builds a lead's demo, marks it, or asks Toran for more.
+    ['/leads/sync'],
+    [`/leads/${B.lead}/demo`],
+    [`/leads/${B.lead}/sent`, { via: 'whatsapp' }],
+    [`/leads/${B.lead}/reminded`, { via: 'whatsapp' }],
+    [`/leads/${B.lead}/replied`],
+    [`/leads/${B.lead}/joined`],
+    [`/leads/${B.lead}/irrelevant`],
+    [`/leads/${B.lead}/back`],
+    [`/leads/${B.lead}/notes`, { notes: 'A was here' }],
   ];
 };
 

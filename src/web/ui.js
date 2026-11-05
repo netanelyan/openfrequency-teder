@@ -143,15 +143,19 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 </defs></svg>`;
 
 // Six sections, the same on a phone (the tab bar) and on a desk (the side bar): no More tab. Home is the overview,
-// Posts the cards to approve. A new account starts from Accounts, and signing out lives in Settings.
+// Posts the cards to approve. A new account starts from Accounts, and signing out lives in Settings. The operator has
+// a seventh, the leads (src/web/leads.js), before Settings, where the stores' demos are; nobody else sees it.
 export const NAV = [
   ['/', 'היום', 'today', 'today'],
   ['/posts', 'פוסטים', 'posts', 'text'],
   ['/accounts', 'חשבון', 'accounts', 'accounts'],
   ['/results', 'תוצאות', 'results', 'results'],
   ['/sources', 'מקורות', 'sources', 'sources'],
+  ['/leads', 'לידים', 'leads', 'inbox', { operator: true }],
   ['/settings', 'הגדרות', 'settings', 'settings'],
 ];
+/** The sections a page shows: the operator's own only to the operator, never in view-as. */
+const navFor = (ctx) => NAV.filter(([, , , , o]) => !o?.operator || ctx.operator);
 const SECTION_OF = { new: 'accounts', more: 'settings', topics: 'sources' };
 
 /**
@@ -229,8 +233,8 @@ export function payBanner(ctx) {
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
-  const nav = NAV.map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
-  const tabs = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
+  const nav = navFor(ctx).map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
+  const tabs = navFor(ctx).map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   // The month's suggestions of the accounts shown (src/budget/quota.js): the ring fills as they are used, orange from
   // 75%, red from 90%, as an account's own meter does.
   const q = ctx.quota || { used: 0, limit: 0 };

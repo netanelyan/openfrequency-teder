@@ -703,4 +703,42 @@ export const MIGRATIONS = [
   DROP TABLE zernio_connections;
   ALTER TABLE zernio_connections_next RENAME TO zernio_connections;
   `,
+  `
+  -- The operator's leads (src/leads, /leads): stores Toran found and scored (openfrequency-toran GET /internal/stores),
+  -- copied here once an hour, to be offered Teder one at a time. A row is one store, by its domain (www. left out); a
+  -- contact Toran stops sending is kept, never overwritten with nothing. stage is where the operator is with it: new
+  -- (no demo page yet), demo_ready (its demo's page is up), sent (the first message went), opened (its page was opened
+  -- after that), replied, joined, irrelevant. A store Toran says asked not to be written to is hidden (opted_out_at)
+  -- and stays hidden. demo_id is its store demo (src/demos), built on the operator's click with no WhatsApp number
+  -- (origin 'outreach'), or the one the store asked for on the website; null again when that demo is deleted.
+  CREATE TABLE leads (
+    id                INTEGER PRIMARY KEY,
+    toran_id          TEXT,
+    domain            TEXT NOT NULL UNIQUE,
+    url               TEXT NOT NULL,
+    name              TEXT,
+    platform          TEXT,
+    score             REAL,
+    toran_status      TEXT,                      -- where Toran's own outreach is with the store (its stores.status)
+    email             TEXT,
+    whatsapp          TEXT,                      -- international digits, 972...
+    phone             TEXT,
+    instagram         TEXT,                      -- the profile's full address, https only
+    tiktok            TEXT,
+    facebook          TEXT,
+    stage             TEXT NOT NULL DEFAULT 'new' CHECK (stage IN ('new','demo_ready','sent','opened','replied','joined','irrelevant')),
+    demo_id           INTEGER REFERENCES demos(id) ON DELETE SET NULL,
+    sent_at           TEXT,
+    sent_via          TEXT CHECK (sent_via IN ('whatsapp','email','phone','instagram','tiktok','facebook','other')),
+    reminder_sent_at  TEXT,
+    skipped_at        TEXT,
+    opted_out_at      TEXT,
+    notes             TEXT,
+    toran_updated_at  TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+  );
+  CREATE INDEX leads_stage ON leads(stage);
+  CREATE INDEX leads_demo ON leads(demo_id);
+  `,
 ];

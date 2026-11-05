@@ -104,12 +104,14 @@ dashboard only, so nothing calls it and Teder sends the assistant no events.
 | Route | Who asks | |
 |---|---|---|
 | `POST /internal/lead` | the website's lead service | a store asked for a demo (`src/web/demos.js`) |
-| `GET /internal/demos` | Toran's dashboard | every demo and its opens |
+| `GET /internal/demos` | Toran's dashboard | every demo a store asked for, and its opens (not the ones built from /leads) |
 | `GET /internal/setup?workspace=<id>` | accounts' `/setup` page | the workspace's setup steps in Teder (`src/web/setup.js`) |
 | `POST /internal/workspaces/<id>/delete` | accounts, when a customer deletes their workspace | that workspace's accounts and their data go (`src/web/workspace-delete.js`) |
 | `POST /internal/entitlement/changed` | accounts, when a workspace's access changes (a payment recorded) | the answer Teder keeps about that workspace is asked again on the next page or tick (`src/web/entitlement-changed.js`) |
 
-Teder calls one route of Toran's the same way: each operator alert that is due goes to
+Teder calls two routes of Toran's the same way. Once an hour the runner copies the stores Toran found into the
+operator's leads (`GET http://127.0.0.1:4710/internal/stores?since=<cursor>&limit=500`, paged by `next`,
+`test/fixtures/toran-stores.json`; `src/leads/sync.js`, the page `/leads`). And each operator alert that is due goes to
 `POST http://127.0.0.1:4710/internal/ops/alert` (`OF_TORAN_INTERNAL`, `off` for none) with the bearer token, as
 `{"key":"nothing-drafted:demo","title":"Teder: ...","body":"...","everyMinutes":1200}`
 (`test/fixtures/ops-alert.json`, the same file in openfrequency-toran), and Toran sends it to the operator's own

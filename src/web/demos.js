@@ -142,20 +142,28 @@ export async function intake(ctx, req, env, opts = {}) {
 
 // ---------------------------------------------------------------- the dashboard on Toran
 
-/** Each demo with how often its page was opened: newest first, at most `limit`, or the one `id`. */
-export function demosWithOpens(db, { limit = 500, id = null } = {}) {
+/**
+ * Each demo with how often its page was opened: newest first, at most `limit`, or the one `id`. `asked`: only the ones
+ * a store asked for (any origin but 'outreach', the ones the operator built from /leads for a store that never asked).
+ */
+export function demosWithOpens(db, { limit = 500, id = null, asked = false } = {}) {
   return db.all(
-    `WITH d AS (SELECT * FROM demos ${id == null ? 'ORDER BY created_at DESC, id DESC LIMIT ?' : 'WHERE id = ?'})
+    `WITH d AS (SELECT * FROM demos ${id == null ? `${asked ? "WHERE origin <> 'outreach' " : ''}ORDER BY created_at DESC, id DESC LIMIT ?` : 'WHERE id = ?'})
      SELECT d.*, COUNT(o.id) AS opens, COUNT(DISTINCT o.visitor) AS visitors, MAX(o.at) AS last_open_at
      FROM d LEFT JOIN demo_opens o ON o.demo_id = d.id GROUP BY d.id ORDER BY d.created_at DESC, d.id DESC`,
     id == null ? limit : Number(id)
   );
 }
 
-/** GET /internal/demos. `origin` is where the store's pages are, https://<PUBLIC_HOST> on the VPS. Returns [status, body]. */
+/**
+ * GET /internal/demos. `origin` is where the store's pages are, https://<PUBLIC_HOST> on the VPS. Returns [status, body].
+ * Only the demos stores asked for: Toran's dashboard offers each one as "ביקשו דמו של תדר באתר" with the message for a
+ * store that asked (openfrequency-toran src/ops/queue.ts asked_teder), so a demo the operator built for a lead
+ * (origin 'outreach', src/web/leads.js) stays on /leads, where its own message is.
+ */
 export function demosFeed(ctx, req, env, { origin }) {
   if (!fromWebsite(req, env)) return [403, { ok: false, error: 'forbidden' }];
-  const demos = demosWithOpens(ctx.db, { limit: 500 }).map((row) => {
+  const demos = demosWithOpens(ctx.db, { limit: 500, asked: true }).map((row) => {
     const d = readDemo(row);
     return {
       id: d.id,
@@ -443,7 +451,7 @@ ${field('החלפות בחודש', 'small_redos', o.small.redos)}</fieldset>
   const list = rows.length
     ? `<section class="panel"><ul class="d-list">${rows
         .map(
-          (d) => `<li><a href="/demos/${d.id}"><b dir="ltr">${esc(d.domain)}</b></a><span class="chip">${esc(STATUS[d.status] || d.status)}</span>${d.whatsapp ? `<a class="muted small" dir="ltr" href="https://wa.me/${esc(d.whatsapp)}">${esc(d.whatsapp)}</a>` : ''}${d.status === 'approved' ? `<a class="small" href="/s/${esc(d.slug)}">העמוד</a>` : ''}${d.status === 'approved' || d.opens ? `<span class="muted small">${esc(opensLine(d))}</span>` : ''}${d.error ? `<span class="muted small">${esc(d.error)}</span>` : ''}</li>`
+          (d) => `<li><a href="/demos/${d.id}"><b dir="ltr">${esc(d.domain)}</b></a><span class="chip">${esc(STATUS[d.status] || d.status)}</span>${d.origin === 'outreach' ? '<a class="muted small" href="/leads">נבנה מהלידים</a>' : ''}${d.whatsapp ? `<a class="muted small" dir="ltr" href="https://wa.me/${esc(d.whatsapp)}">${esc(d.whatsapp)}</a>` : ''}${d.status === 'approved' ? `<a class="small" href="/s/${esc(d.slug)}">העמוד</a>` : ''}${d.status === 'approved' || d.opens ? `<span class="muted small">${esc(opensLine(d))}</span>` : ''}${d.error ? `<span class="muted small">${esc(d.error)}</span>` : ''}</li>`
         )
         .join('')}</ul></section>`
     : '<div class="empty mt30"><b>עוד אין דמואים</b><span class="muted">חנות שמבקשת דמו באתר מופיעה כאן.</span></div>';

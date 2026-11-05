@@ -22,6 +22,7 @@ import { latestNotification } from '../notify/index.js';
 import { assistantApi, isAssistantPath } from '../assistant/api.js';
 import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
 import { connectRoutes, goPage, publicConnect, publicOnboardingConnect, publicPick } from './connect.js';
+import { leadsRoutes } from './leads.js';
 import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
@@ -313,6 +314,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ...scheduleRoutes(),
     ...stylesRoutes(),
     ...demosRoutes(),
+    ...leadsRoutes({ env }),
     ...connectRoutes(connectLinks),
   ];
 
@@ -603,7 +605,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay };
+        // `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}` };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
@@ -656,7 +659,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         return page(pages.rivalsPage(pc, { ...data.rivalsFor(c, cur), packs: sc.packs }));
       }
       if (p === '/more') return page(pages.morePage(pc));
-      if (/^\/demos(\/|$)/.test(p) && !user.operator) return page(pages.notFoundPage(pc), 404);
+      // The operator's own pages (src/web/demos.js, src/web/leads.js): for anyone else there is no such page.
+      if (/^\/(demos|leads)(\/|$)/.test(p) && !user.operator) return page(pages.notFoundPage(pc), 404);
       for (const [method, re, fn] of ROUTES) {
         const m = method === 'GET' && re.exec(p);
         if (!m) continue;

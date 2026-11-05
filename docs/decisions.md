@@ -2719,3 +2719,67 @@ customer no English on any step and the one line on the draft's step, while the 
 a post a promo's own words blocked, and a queued one stopped at its approval after the promo changed, show the customer
 Hebrew on every step, the block, the repair and the closing step in the closing slide's words, the banner's reason in
 Hebrew and the approval's answer CLOSING_HE, and the operator what failed.
+
+### The operator's leads: Toran's stores on /leads, a demo on a click, sent by hand (2026-11-05)
+
+The owner wanted the stores Toran finds offered Teder from Teder's own dashboard: a demo for each, the message to send,
+and where each store stands. Toran finds and scores stores for its own outreach, and a store that already posts on
+TikTok or Instagram is a better Teder lead, so the same stores are Teder's leads.
+
+**A copy, not a live read.** Teder keeps its own table, `leads` (migration 19), filled from Toran's new
+`GET /internal/stores` once an hour (src/leads/sync.js, runner step 8) and at "לעדכן מתורן". The stages, the demo, the
+opens and the notes are Teder's, and the page has to work while Toran is down. The other way was to read Toran on every
+page and keep only Teder's columns here, which would make every page wait on another service. The read is paged by
+Toran's `next`, and the cursor is the latest `updatedAt` seen. Both are handed back exactly as Toran wrote them, since
+Toran's `since` means "changed after" and its moments are to the microsecond (a JavaScript Date would cut the last
+three digits and ask for the same rows again). The contract's example is test/fixtures/toran-stores.json, written from
+Toran's draft of the route; it is not yet copied into Toran.
+
+**What is kept.** A store is one lead, by its domain without `www.`. A contact Toran stops sending is kept rather than
+wiped: Toran's answer says what it knows now, and a number the operator may already have written to should not go. A
+store Toran says asked not to be written to is hidden for good, even if Toran's flag later changes (Toran also says so
+for one of its own customers). Everything is checked before it is kept: a profile is an https address on its own
+network, a WhatsApp number international digits, a mail one address. The page links to them, so a `javascript:`
+address must never reach it.
+
+**A store one of our customers has** is not added. Teder has no field for a workspace's store, so two places stand
+for it: the site a customer typed on /new (`onboarding.seed_json.site`, kept for every onboarding in a workspace) and
+the address the closing slide of an account in a workspace sends people to (`pack.json` `promo.target.url`, on the
+store's own domain). A workspace that gave neither is not recognized, and the operator marks the lead "הצטרפו".
+
+**The demo is built on a click, never by the sync.** Each one costs the writer's calls (the owner chose this). It is the
+website's own demo (src/demos), asked for with no WhatsApp number and origin `outreach`. `requestDemo` already took
+both; only the website's door (`/internal/lead`) requires a number, and it still does. A store that already asked on
+the website is linked to its demo. The demos built here stay out of `GET /internal/demos`: Toran's dashboard offers
+every demo there as "ביקשו דמו של תדר באתר" with the message for a store that asked (Toran's queue.ts asked_teder), and
+would offer these again, with the wrong message.
+
+**The first message is not Toran's tederFirst.** That one opens "ביקשתם באתר דמו של תדר" and is for a store that asked.
+None of these did, so the card's message is its own, `TEDER_COLD_FIRST` (src/leads/messages.js), written after Toran's
+cold `firstMessage` (outreach.ts: who is writing, one approach, how to stop; the Communications Law's section 30A). The
+owner is reviewing its wording. The reminder is Toran's `tederReminder`, word for word. Nothing is sent by Teder: the
+operator sends each message from their own phone or mail, and "שלחתי" records which way.
+
+**The reminder's time is Toran's rule** (`notOnShabbat`, `followupDue`, ported exactly): four days after the message,
+moved out of Friday 13:00 to the end of Saturday and to 09:00. Toran offers it from that moment on. Here it is also held
+back while the present moment is one the rule would move (a later Shabbat, a night), so the operator is never handed a
+message to send then. It is offered once.
+
+**`OF_TORAN_INTERNAL` keeps one meaning.** It is the setting the operator's alerts already use: empty is
+http://127.0.0.1:4710, and `off` is none. The leads read the same, rather than requiring it to be set, so one setting
+means one thing and a server with Toran in its place needs nothing new. Without `OF_INTERNAL_TOKEN`, or with `off`,
+nothing is asked and the page says why.
+
+**The menu.** "לידים" is a seventh section for the operator alone, before Settings, on a desk and on a phone (the tab
+bar takes as many columns as it has sections). It is also next to the demos on Settings and More.
+
+test/leads.test.js (new, 9) covers the sync against a stub Toran: two pages and the cursor; a customer's store left out;
+an opted-out store not kept, and a known one hidden; nothing Toran sent kept unchecked; a contact kept when Toran
+stops sending it; nothing asked without the token or with `off`, and the page saying so; Toran down is a log line; once
+an hour. It covers the page being the operator's (a customer's 404s, view-as refused, the menu); the tabs, their
+counts and the social-first order; "לבנות דמו" building once, on the click, through the stand-in builder, with no
+number, its state while building, a failure and "לנסות שוב", and the website's door unchanged and the feed without
+these demos; the cold message (never "ביקשתם"), the wa.me and mailto links, every way to reach, and "שלחתי"; the
+reminder's time, Shabbat included, and once; the move to "פתחו" on an open after the message only; and the moves,
+the note, the undo, and a store that became a customer. test/workspaces.test.js lists the new page and buttons, and
+no customer sees or changes a lead.

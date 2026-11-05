@@ -28,6 +28,7 @@ import { retentionPass } from '../billing/retention.js';
 import { STUCK_REASON } from '../publish/errors.js';
 import { alertOperator } from '../notify/operator.js';
 import { alertNotLive, diskOnly } from '../publish/live.js';
+import { leadsTick } from '../leads/sync.js';
 
 // The engine running on its own: one tick a minute. Each tick publishes first (3 to 4a below), and only then starts
 // the day's slower work (0, 1, 2, then 4b on), so a long morning of drafting never makes a due post late.
@@ -80,6 +81,8 @@ import { alertNotLive, diskOnly } from '../publish/live.js';
 //   6. write yesterday's summary
 //   7. once a day, what the privacy policy says goes (src/billing/retention.js): demos past six months, the TikTok and
 //      Instagram of a workspace whose Teder stopped, the Zernio removals still to do, old public copies of slides
+//   8. once an hour, the stores Toran found, copied into the operator's leads (src/leads/sync.js, /leads); nothing is
+//      built or sent for them here, a demo only on the operator's click
 //
 // Beside the ticks, on every beat of startRunner (the first one at the start): posts that come due are only written to
 // disk while PUBLISH_MODE is not live or ZERNIO_API_KEY is unset, and the operator hears it, the alert's own window
@@ -461,6 +464,14 @@ export async function tick(ctx, { t = now() } = {}) {
     if (kept) report.retention = kept;
   } catch (e) {
     report.errors.push({ step: 'retention', error: e.message });
+  }
+
+  // ---- 8. the operator's leads from Toran, once an hour (src/leads/sync.js): its own failure is a log line there
+  try {
+    const leads = await leadsTick(ctx, { t });
+    if (leads && !leads.why) report.leads = leads;
+  } catch (e) {
+    report.errors.push({ step: 'leads', error: e.message });
   }
   return report;
 }

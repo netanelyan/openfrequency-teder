@@ -1,0 +1,46 @@
+{
+  "name": "toran-stores",
+  "doc": "Teder's operator page of leads (Teder src/leads/sync.js, src/web/leads.js, docs/operator-notes.md) copies the stores Toran found, once an hour, from Toran on this machine (Toran src/ops/stores.ts). It is between Teder and Toran alone, so it is not one of openfrequency-accounts' contracts. since is \"changed after\" and optional; next is the last row's updatedAt when the page is full, else null, and the caller asks again with since=next exactly as it came (Toran's moments are to the microsecond). A page may run a little over limit, so that no moment is split between two pages.",
+  "servedBy": ["toran"],
+  "calledBy": ["teder"],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/internal/stores",
+      "auth": "Authorization: Bearer <OF_INTERNAL_TOKEN>, from this machine only, never through Caddy",
+      "request": {
+        "query": { "since": "2026-11-05T08:00:00.000Z", "limit": "500" }
+      },
+      "answers": [
+        {
+          "case": "the stores changed after since, the oldest first",
+          "status": 200,
+          "body": {
+            "stores": [
+              {
+                "id": 41,
+                "domain": "kettles.example.co.il",
+                "url": "https://kettles.example.co.il/",
+                "name": "חנות הקומקומים",
+                "platform": "shopify",
+                "score": 78,
+                "toranStatus": "page_ready",
+                "contact": { "email": "hello@kettles.example.co.il", "whatsapp": "972501234567", "phone": "035551234" },
+                "social": { "instagram": "https://www.instagram.com/kettles.example/", "tiktok": "https://www.tiktok.com/@kettles.example", "facebook": null },
+                "optedOut": false,
+                "updatedAt": "2026-11-05T09:12:44.123456Z"
+              }
+            ],
+            "next": null
+          },
+          "nullable": ["stores[].name", "stores[].platform", "stores[].score", "stores[].contact.email", "stores[].contact.whatsapp", "stores[].contact.phone", "stores[].social.instagram", "stores[].social.tiktok", "stores[].social.facebook", "next"]
+        },
+        { "case": "OF_INTERNAL_TOKEN is not set on Toran", "status": 503, "body": { "error": "not_configured" } },
+        { "case": "not from this machine, or through Caddy", "status": 403, "body": { "error": "forbidden" } },
+        { "case": "no token, or a wrong one", "status": 401, "body": { "error": "bad_token" } },
+        { "case": "since is not an ISO moment", "status": 400, "body": { "error": "bad_since" } },
+        { "case": "limit is not a whole number of 1 or more (more than 500 is taken as 500)", "status": 400, "body": { "error": "bad_limit" } }
+      ]
+    }
+  ]
+}

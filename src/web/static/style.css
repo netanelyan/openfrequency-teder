@@ -354,7 +354,9 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   z-index: 30;
   height: var(--tab);
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* six sections, or seven for the operator (ui.js NAV: the leads), each the same width */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 4px;
   border-radius: 31px;
@@ -1270,6 +1272,43 @@ details.more[open] > summary { background: var(--fill-2); }
 .d-factlist { display: grid; gap: 10px; margin: 0; padding-inline-start: 18px; }
 .d-factlist q { display: block; color: var(--ink-3); font-size: 14px; }
 .d-doc { white-space: pre-wrap; font: inherit; font-size: 14px; color: var(--ink-2); margin: 0; }
+
+/* ---- the operator's leads (src/web/leads.js): one glass card a store, in the post cards' grid (.posts), its one blue
+   button its next step; the moves every card has under a hairline, small and grey. */
+.tabs a .num { font-weight: 600; opacity: 0.7; }
+.lead > header { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 0; }
+.lead > header > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.lead > header h2 { font: 700 17px/1.25 var(--display); overflow-wrap: anywhere; }
+.lead > header .ltr { justify-self: start; overflow-wrap: anywhere; }
+.lead-social { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; flex: none; }
+.lead-social a { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--fill); color: var(--ink-2); }
+.lead-social a:hover { background: var(--fill-2); color: var(--ink); }
+.lead-social svg { width: 17px; height: 17px; fill: currentColor; }
+.lead > .meta { padding: 10px 20px 0; margin: 0; }
+.lead-note { margin: 10px 20px 0; padding: 10px 14px; border-radius: var(--r-m); background: var(--inset); font-size: 13px; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.lead-body { display: grid; gap: 12px; padding: 14px 20px 0; }
+.lead-body p { margin: 0; }
+.lead-body .err { color: var(--bad); }
+.lead-body textarea[readonly] { min-height: 0; resize: none; background: var(--inset); font-size: 15px; }
+/* the whole message in view, as tall as its lines, where the browser can size a box to its text */
+@supports (field-sizing: content) { .lead-body textarea[readonly] { field-sizing: content; } }
+.lead-state { display: flex; align-items: center; gap: 10px; }
+.lead-state .spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent-fill); animation: spin 0.9s linear infinite; }
+.lead-reach, .lead-do, .lead-more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lead-do { padding: 16px 20px 0; }
+.lead-do form, .lead-more > form { display: contents; }
+.lead-sent { display: flex; flex-wrap: wrap; gap: 10px; flex: 1 1 100%; }
+.lead-sent select { flex: 1 1 10em; width: auto; min-height: 44px; padding-block: 8px; }
+.lead-more { margin: 20px 20px 0; padding: 16px 0 20px; border-top: 1px solid var(--line); }
+.lead-notes { flex: 1 1 100%; }
+.lead-notes > summary { cursor: pointer; color: var(--accent-p); font-size: 13px; min-height: 36px; display: flex; align-items: center; width: max-content; }
+.lead-notes form { display: grid; gap: 10px; justify-items: start; margin-top: 8px; }
+.lead-notes textarea { min-height: 72px; }
+/* On a phone the card's blue button is the whole width, in thumb reach, and the ways to reach the store two a row. */
+@media (max-width: 699px) {
+  .lead-do .btn.primary, .lead-reach .btn.primary { flex: 1 1 100%; }
+  .lead-reach .btn:not(.primary) { flex: 1 1 calc(50% - 5px); }
+}
 
 /* A handle's field, with its @ before it (the new-account flow). */
 .atfield { display: flex; align-items: center; gap: 6px; }

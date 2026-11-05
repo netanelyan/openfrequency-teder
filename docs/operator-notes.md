@@ -421,6 +421,45 @@ says which keys are set without showing them.
   The line under the form says what the pages show. Change them here whenever the website's change.
 - **Needed now?** Yes: until the small plan is filled in, the stores' pages show only the full plan.
 
+### The leads page: the stores Toran found (/leads)
+
+- **What it is.** Your own page, `/leads` ("לידים" in the menu, before Settings, and next to the demos on Settings and
+  More). A customer, and you while viewing as one, get "no such page". Once an hour the runner copies the stores Toran
+  found and scored from Toran on this machine: `GET {OF_TORAN_INTERNAL}/internal/stores?since=<cursor>&limit=500` with
+  `Authorization: Bearer $OF_INTERNAL_TOKEN`, page by page until `next` is null (`test/fixtures/toran-stores.json`,
+  src/leads/sync.js). "לעדכן מתורן" asks right away. A store is one lead, by its domain without `www.`. A store that one
+  of our customers' workspaces already has is not added: its site typed on /new (`onboarding.seed_json.site`) or the
+  address an account's closing slide sends people to (`pack.json` `promo.target.url`); a lead that becomes one later
+  moves to "הצטרפו" by itself. A store Toran says asked not to be written to (`optedOut`) is hidden for good. A contact
+  or profile Toran stops sending is kept, never wiped.
+- **The tabs.** חדש, דמו מוכן, נשלח, פתחו, ענו והצטרפו, לא רלוונטי, each with its count. In a tab, a store already on
+  TikTok or Instagram comes first (a better Teder lead), then by Toran's score.
+- **Each card's one step.**
+  - חדש: "לבנות דמו". It builds the store's demo (src/demos, like a website demo) on that click only, since each one
+    costs the writer's calls. The demo has no WhatsApp number, and its origin is `outreach`. While it builds, the card
+    says so and the page refreshes when it is done. A failure says why, with "לנסות שוב". A store that already asked
+    on the website is linked to that demo instead.
+  - דמו מוכן: the first message, ready to copy (src/leads/messages.js `TEDER_COLD_FIRST`, written for a store that
+    never asked; the owner is reviewing the wording on 2026-11-05), and a button for every way to reach the store.
+    WhatsApp (`wa.me/<number>?text=`) and mail (`mailto:` with a subject and the body) open with the message written
+    in. A call and the Instagram, TikTok and Facebook profiles can't be handed the text, so their button copies it.
+    Then "שלחתי" with the way it went. Teder sends nothing itself.
+  - נשלח: the card moves to פתחו by itself once the demo page is opened after the message went (an open is a view by
+    someone not signed in to OpenFrequency). The one reminder (Toran's `tederReminder`, word for word) is offered from
+    4 days after the message, never from Friday 13:00 to the end of Saturday and never before 09:00 (Toran's rule,
+    outreach.ts), and only once. Until then the step is "ענו".
+  - Every card: "ענו", "הצטרפו", "לא רלוונטי" ("להחזיר לרשימה" undoes it), and a note.
+- **Where else it shows.** A demo built here is on /demos as "נבנה מהלידים". It is not in `GET /internal/demos`: Toran's
+  dashboard would offer it as a demo the store asked for on the website, with the message for one that asked. The
+  last sync is in `settings` (`leads:sync`, `leads:cursor`); a failure is a log line, `[leads] Toran's stores were not
+  read: <why>`, and a red line on the page.
+- **What to do.** Nothing to set while Teder and Toran share `OF_INTERNAL_TOKEN` and Toran is on 4710
+  (`OF_TORAN_INTERNAL` empty, as the alerts use it). Without the token, or with `off`, the page says the leads aren't
+  coming and why. A customer who gave no site on /new and has no closing slide address isn't recognized: mark the lead
+  "הצטרפו" by hand.
+- **Needed now?** Toran has to serve `/internal/stores` first (it is built beside this, in Toran's own branch). Until
+  then every hour's try is one log line and the page shows the error.
+
 ### OF_SUPPORT_WA: where "כתבו לנו" leads
 
 - **What it is.** A customer's pages say "כתבו לנו" where only we can help: the error page, a post that did not go
