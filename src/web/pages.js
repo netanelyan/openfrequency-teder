@@ -1,4 +1,4 @@
-import { a11yLink, accDot, csrfField, dayHe, esc, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
+import { a11yLink, accDot, csrfField, dayHe, esc, fold, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { STUCK_REASON } from '../publish/errors.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
@@ -9,16 +9,16 @@ import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_PLAN, MAX_PLAN, PLAN_HE, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
-import { connectPanel, tiktokModePanel } from './connect.js';
+import { TIKTOK_LINE, connectPanel, tiktokModePanel } from './connect.js';
 import { schedulePanel } from './schedule.js';
 import { connectLine } from '../publish/hold.js';
 import { PLATFORM_LIST } from '../core/platforms.js';
 import { EMAIL_HE } from '../notify/email.js';
 import { libraryFormat } from '../formats/library.js';
-import { formatsPanel, picksFormats } from './formats.js';
+import { FORMATS_TITLE, formatsPanel, picksFormats } from './formats.js';
 import { designPanel } from './styles.js';
-import { promoPanel } from './promo.js';
-import { logoPanel } from './logo.js';
+import { PROMO_TITLE, promoPanel } from './promo.js';
+import { LOGO_TITLE, logoPanel } from './logo.js';
 import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
 import { captionAction } from '../pipeline/closing.js';
 
@@ -407,7 +407,7 @@ export function needsYou(d, max = 6, ctx = {}) {
   }
   for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
   for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `צריך לבדוק את התמונה בעין${im.screen?.why ? `: ${im.screen.why}` : ''}` });
-  for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true }) });
+  for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true }), short: whenHe(p) });
   return { rows: rows.slice(0, max), more: Math.max(0, rows.length - max), total: rows.length };
 }
 
@@ -416,8 +416,12 @@ function postSub(ctx, pack, p, { name = false, kind = true } = {}) {
   return [name ? pack.meta.displayName : '', kind ? typeLabel(ctx, pack, p) : '', whenHe(p)].filter(Boolean).join(' · ');
 }
 
-/** A short list of posts, one line each, every line a link. */
-const postLines = (rows) => `<div class="list todo">${rows.map((r) => `<a href="${esc(r.href)}">${r.acc ? accDot(r.acc) : `<span class="ico${r.bad ? ' bad' : ''}">${icon(r.ic)}</span>`}<span class="tx"><b>${esc(r.title)}</b><span class="muted small">${esc(r.sub)}</span></span><span class="go">${icon('chev')}</span></a>`).join('')}</div>`;
+/**
+ * A short list of posts, one line each, every line a link. A row's `short` is its line on a phone, where one account is
+ * shown and its name, beside the switcher's, says nothing: when the post goes up, or went.
+ */
+const subLine = (r) => (r.short == null ? `<span class="muted small">${esc(r.sub)}</span>` : `<span class="muted small m-hide">${esc(r.sub)}</span>${r.short ? `<span class="muted small m-only">${esc(r.short)}</span>` : ''}`);
+const postLines = (rows) => `<div class="list todo">${rows.map((r) => `<a href="${esc(r.href)}">${r.acc ? accDot(r.acc) : `<span class="ico${r.bad ? ' bad' : ''}">${icon(r.ic)}</span>`}<span class="tx"><b>${esc(r.title)}</b>${subLine(r)}</span><span class="go">${icon('chev')}</span></a>`).join('')}</div>`;
 
 /** Yesterday in numbers, one row per account; folded, with one arrow (the panel's own). Its cost is the operator's. */
 function summaryPanel(ctx, d) {
@@ -546,10 +550,10 @@ function failedList(ctx, g) {
 
 /** Every post of the day, account by account, in full: the cards to approve and what was blocked, then what is scheduled and out. */
 export function postsPage(ctx, d) {
-  const sched = d.groups.flatMap((g) => g.scheduled.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true, kind: false }) })));
-  const pub = d.groups.flatMap((g) => g.published.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}` })));
+  const sched = d.groups.flatMap((g) => g.scheduled.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true, kind: false }), short: whenHe(p) })));
+  const pub = d.groups.flatMap((g) => g.published.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}`, short: timeHe(p.published_at) })));
   // Done today but only written to disk (src/publish/live.js): apart from what went out, saying so.
-  const written = d.groups.flatMap((g) => (g.written || []).map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}` })));
+  const written = d.groups.flatMap((g) => (g.written || []).map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}`, short: timeHe(p.published_at) })));
   const body = `<div class="head"><h1>פוסטים</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${stopBanners(ctx, d)}
 ${d.groups
@@ -697,19 +701,19 @@ ${written ? writtenBanner(ctx, post) : tiktokDraftBanners(ctx, post)}
 <section class="card acc acc-${esc(post.account_id)} post${slidesShown ? '' : ' stopped'}"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${post.media?.tiktok?.length ? `<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}` : ''}
-${post.media?.instagram?.length ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
+${post.media?.instagram?.length ? fold('instagram', 'איך זה נראה באינסטגרם', `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}`, { inCard: true, one: false }) : ''}
 ${trustLine(post)}
-${post.caption || post.caption_ig ? `<div class="capwrap">${captionBlock(post, pack?.meta?.platforms || [])}</div>` : ''}
+${post.caption || post.caption_ig ? fold('caption', 'הטקסט שעולה עם המצגת', `<div class="capwrap">${captionBlock(post, pack?.meta?.platforms || [])}</div>`, { inCard: true, one: false }) : ''}
 </section>
 ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
 ${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}
 ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
 ${post.status === 'failed' ? `<div class="actionbar">${retryButton(ctx, post, { cls: 'btn primary' })}</div><p class="muted small">שולחים רק לאן שהמצגת עוד לא עלתה. מה שכבר עלה לא נשלח שוב.</p>` : ''}
-${EDITABLE.includes(post.status) && d.photos ? lightPanel(ctx, d) : ''}
+${EDITABLE.includes(post.status) && d.photos ? fold('light', 'שינויים קטנים', lightPanel(ctx, d)) : ''}
 ${EDITABLE.includes(post.status) ? edit : ''}
 </div>
 <div>
-${topicPanel(d.topic)}
+${fold('details', 'העובדות והבדיקות', `${topicPanel(d.topic)}
 ${facts ? `<section class="panel">${facts}</section>` : ''}
 <section class="panel"><header><h2>בדיקות</h2></header>
 <dl class="kv"><dt>שער העובדות</dt><dd>${post.checks?.token ? '<span class="chip ok">עבר</span>' : '<span class="chip">לא הגיע</span>'}</dd>
@@ -727,7 +731,7 @@ ${d.image ? `<dt>תמונה</dt><dd>${esc(d.image.provider)} · ${esc(d.image.li
 ${d.metrics.length ? d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.platform] || m.platform)}</dt><dd class="num">${k(m.views)} צפיות · ${k(m.likes)} לייקים · ${k(m.shares)} שיתופים${m.saves != null ? ` · ${k(m.saves)} שמירות` : ''}</dd>`).join('') : ''}
 </dl></section>
 ${takedownPanel}
-<section class="panel"><header><h2>איך הפוסט נוצר</h2></header><ol class="trace">${trace}</ol></section>
+<section class="panel"><header><h2>איך הפוסט נוצר</h2></header><ol class="trace">${trace}</ol></section>`, { one: false })}
 </div></div>`;
   return layout({ ...ctx, title: post.hook || 'פוסט', active: 'posts' }, body);
 }
@@ -746,7 +750,8 @@ ${takedownPanel}
 // list), each is a section of its own, the same layout one under the other.
 
 export function accountsPage(ctx, rows) {
-  const body = `<div class="head"><h1>החשבון</h1><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
+  // A new account is also the switcher's last row: on a phone that is where it is.
+  const body = `<div class="head"><h1>החשבון</h1><span class="end m-hide"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 ${rows.map((r) => accountSection(ctx, r)).join('')}`;
   return layout({ ...ctx, title: 'חשבונות', active: 'accounts' }, body);
 }
@@ -756,7 +761,12 @@ function accountSection(ctx, { pack, acc, mode, customer, resumable, spend, publ
   const id = esc(pack.id);
   const paused = acc.status === 'paused';
   const head = `<header class="panel acct-head">${accDot(pack.id)}<div class="who"><h2 id="acct-name-${id}">${esc(pack.meta.displayName)}</h2><span class="muted ltr">@${esc(pack.meta.handle)}</span></div>${paused ? '<span class="chip warn">מושהה</span>' : '<span class="chip ok">פעיל</span>'}
-<div class="links"><a class="btn sm" href="/sources?account=${id}">מקורות</a><a class="btn sm" href="/rivals?account=${id}">מתחרים</a><a class="btn sm" href="/sounds?account=${id}">סאונדים</a></div></header>`;
+<div class="links m-hide"><a class="btn sm" href="/sources?account=${id}">מקורות</a><a class="btn sm" href="/rivals?account=${id}">מתחרים</a><a class="btn sm" href="/sounds?account=${id}">סאונדים</a></div></header>`;
+  // On a phone the account's other pages are rows at the grid's foot (the sources are a tab of their own), and what
+  // approval and TikTok mean for a customer, two lines that never change, one row to open.
+  const rows = `<nav class="list m-only" aria-label="עוד בחשבון">${navRow(`/rivals?account=${id}`, 'accounts', 'מתחרים')}${navRow(`/sounds?account=${id}`, 'wave', 'סאונדים')}</nav>`;
+  const tiktok = connect && pack.meta.platforms.includes('tiktok');
+  const about = !ctx.operator || customer ? `<details class="panel m-only acct-about"><summary><h3>איך זה עובד</h3></summary><p class="m0">${esc(APPROVAL_LINE)}</p>${tiktok ? `<p class="m6">${esc(TIKTOK_LINE)}</p>` : ''}</details>` : '';
   const kill = acc.paused_reason === 'kill';
   const pausedBanner = paused
     ? `<div class="banner ${kill ? 'bad' : 'warn'}">${icon(kill ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<p>${withSupport(acc.paused_detail)}</p>` : ''}${resumable ? '' : `<p>${withSupport('את החשבון הזה מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.')}</p>`}</div>${resumable ? postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעלה מחדש', { cls: 'btn sm' }) : ''}</div>`
@@ -779,6 +789,8 @@ ${networks}
 ${modePanel(ctx, pack, { mode, customer })}
 ${connect ? tiktokModePanel(ctx, connect) : ''}
 ${stylePanel(ctx, pack, style)}
+${about}
+${rows}
 </div>
 ${foot}
 </section>`;
@@ -827,12 +839,15 @@ function queuePanel(pack, counts) {
 function modePanel(ctx, pack, { mode, customer }) {
   const body =
     !ctx.operator || customer
-      ? `<p class="m0">כל פוסט מחכה לאישור שלכם לפני שהוא עולה.</p>${ctx.operator ? '<p class="muted small m6">חשבון של לקוח: תמיד במצב אישור.</p>' : ''}`
+      ? `<p class="m0">${esc(APPROVAL_LINE)}</p>${ctx.operator ? '<p class="muted small m6">חשבון של לקוח: תמיד במצב אישור.</p>' : ''}`
       : `<form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
           .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
           .join('')}</div><noscript><button class="btn sm" type="submit">שמירה</button></noscript></form>`;
-  return `<section class="panel acct-mode"><header><h3>אישור</h3></header>${body}</section>`;
+  return `<section class="panel acct-mode${!ctx.operator || customer ? ' about' : ''}"><header><h3>אישור</h3></header>${body}</section>`;
 }
+
+/** What approval means for a customer's account (src/autonomy/rails.js): every post waits for them. */
+const APPROVAL_LINE = 'כל פוסט מחכה לאישור שלכם לפני שהוא עולה.';
 
 /** The look the posts are drawn in, since when, the way to another, and a new one waiting to be taken. */
 function stylePanel(ctx, pack, style) {
@@ -842,7 +857,7 @@ function stylePanel(ctx, pack, style) {
     ? `<div class="notice">${icon('alert')}<div><b>${ctx.operator ? 'הסגנון בקובץ theme.json השתנה' : 'יש לחשבון סגנון חדש'}</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>`
     : '';
   return `<section class="panel acct-style"><header><h3>סגנון</h3></header>
-<p class="m0"><b>${name}</b> <span class="muted small">נעול מ-${esc(shortDate(style.at))}</span></p>
+<p class="m0"><b>${name}</b> <span class="muted small m-hide">נעול מ-${esc(shortDate(style.at))}</span></p>
 <div class="actions p0 m6"><a class="btn sm" href="/styles?account=${esc(pack.id)}">לראות את כל העיצובים</a></div>${pending}</section>`;
 }
 
@@ -1015,7 +1030,7 @@ export function resultsPage(ctx, d) {
   const rels = new Map(d.scored.map((p) => [p.id, p.rel]));
   const side = (label, v) => `<div><span class="l">${label}</span><b class="cnt num">${k(v)}</b></div>`;
   const kpis = `<div class="kpis">
-<div class="kpi lead"><span class="l">צפיות</span><span class="v num">${k(total('views'))}</span><span class="s">${measured.length ? `ב-${measured.length} פוסטים שנמדדו${top ? ` · הכי נצפה: ${esc(top.hook)}` : ''}` : 'עוד אין פוסט שנמדד'}</span></div>
+<div class="kpi lead"><span class="l">צפיות</span><span class="v num">${k(total('views'))}</span><span class="s">${measured.length ? `ב-${measured.length} פוסטים שנמדדו${top ? ` · הכי נצפה: ${esc(top.hook)}` : ''}` : 'עוד אין פוסט שנמדד'}</span>${measured.length ? `<span class="s num m-only">${[['likes', 'לייקים'], ['shares', 'שיתופים'], ['comments', 'תגובות'], ['saves', 'שמירות']].map(([f, he]) => `${k(total(f))} ${he}`).join(' · ')}</span>` : ''}</div>
 <div class="kpi side">${side('לייקים', total('likes'))}${side('שיתופים', total('shares'))}${side('תגובות', total('comments'))}${side('שמירות', total('saves'))}</div>
 </div>`;
   const postRow = (p) => {
@@ -1024,14 +1039,14 @@ export function resultsPage(ctx, d) {
     const r = rels.get(p.id);
     const per = PLATFORM_LIST.filter((pl) => p.metrics[pl]).map((pl) => `${PLATFORM_HE[pl]} ${k(p.metrics[pl].views)}`).join(' · ');
     const cell = (f) => (has ? k(sum(p, f)) : '–');
-    return `<tr><td class="title" data-k="">${accDot(p.account_id)} <a href="/post/${esc(p.id)}">${esc(p.hook)}</a><div class="muted small">${esc(shortDate(p.published_at))}${per ? ` · ${esc(per)}` : ''}</div></td>
-<td class="n views" data-k="צפיות">${has ? `<span class="vbar" aria-hidden="true"><i class="w${Math.max(1, Math.round((v / most) * 10))}"></i></span>${k(v)}` : '<span class="muted">עוד לא נמדד</span>'}</td><td class="n" data-k="לייקים">${cell('likes')}</td><td class="n" data-k="שיתופים">${cell('shares')}</td><td class="n" data-k="תגובות">${cell('comments')}</td><td class="n" data-k="מול החציון">${r != null ? `<span class="cnt${r >= 1 ? ' ok' : ''}">${r.toFixed(2)}×</span>` : '–'}</td></tr>`;
+    return `<tr><td class="title" data-k="">${accDot(p.account_id)} <a href="/post/${esc(p.id)}">${esc(p.hook)}</a><div class="muted small">${esc(shortDate(p.published_at))}${per ? `<span class="per"> · ${esc(per)}</span>` : ''}</div></td>
+<td class="n views" data-k="צפיות">${has ? `<span class="vbar" aria-hidden="true"><i class="w${Math.max(1, Math.round((v / most) * 10))}"></i></span>${k(v)}` : '<span class="muted">עוד לא נמדד</span>'}</td><td class="n x" data-k="לייקים">${cell('likes')}</td><td class="n x" data-k="שיתופים">${cell('shares')}</td><td class="n x" data-k="תגובות">${cell('comments')}</td><td class="n" data-k="מול החציון">${r != null ? `<span class="cnt${r >= 1 ? ' ok' : ''}">${r.toFixed(2)}×</span>` : '–'}</td></tr>`;
   };
   const posts = d.posts.length
-    ? `<section class="panel"><header><h2>הפוסטים שפורסמו</h2><span class="end muted small">${d.posts.length}</span></header>
+    ? `<section class="panel res-posts"><header><h2>הפוסטים שפורסמו</h2><span class="end muted small">${d.posts.length}</span></header>
 <table class="table stack resposts"><thead><tr><th>פוסט</th><th>צפיות</th><th>לייקים</th><th>שיתופים</th><th>תגובות</th><th>מול החציון</th></tr></thead><tbody>${d.posts.map(postRow).join('')}</tbody></table>
 <p class="muted small">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה, באינסטגרם שמירות לחשיפה.</p></section>`
-    : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>מספרים מגיעים רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
+    : `<div class="empty res-posts">${icon('results')}<b>אין עדיין מספרים</b>מספרים מגיעים רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const formats = `<p class="lede">70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
 ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)} · בידור מול מספרים</h2></header>
@@ -1054,15 +1069,17 @@ ${d.formats
   .join('')}
 <section class="panel"><header><h2>פורמטים שעובדים עכשיו</h2><span class="end muted small">שורטס ביוטיוב, עם המספרים של יוטיוב עצמו</span></header>${d.trends.length ? `<ul class="factlist">${d.trends.map((x) => `<li>${accDot(x.account_id)} ${x.status === 'kept' ? '<span class="chip ok">נכנס לניסיון</span>' : '<span class="chip ghost">נדחה</span>'} <a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${k(x.views)} צפיות ${icon('ext')}</a>${x.card?.hookShape ? ` <b>${esc(x.card.hookShape)}</b>` : ''}<div class="muted small">${esc(x.why || x.card?.why || '')}</div></li>`).join('')}</ul>` : '<p class="muted">עוד לא נבדק. עם YOUTUBE_API_KEY המנוע מחפש פעם בשבוע שורטס שעובדים בנישה של כל חשבון, לומד מהם את הפורמט בלבד, ומכניס אותו לניסיון.</p>'}</section>`;
   const blocks = blocksPanel(d.blocks);
-  const fold = (id, ic, label, inner) => `<details class="more" id="${id}"><summary class="btn sm">${icon(ic)}${label}</summary><div class="more-in">${inner}</div></details>`;
+  const more = (id, ic, label, inner) => `<details class="more" id="${id}"><summary class="btn sm">${icon(ic)}${label}</summary><div class="more-in">${inner}</div></details>`;
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
 ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים מהפלטפורמות, 72 שעות אחרי פרסום.</p></div></div>` : ''}
+<div class="resbody">
 ${kpis}
-${measured.length ? `<div class="cols even charts"><section class="panel"><header><h2>צפיות לפי יום הפרסום</h2></header>${viewsChart(measured)}</section><section class="panel"><header><h2>מול החציון</h2></header>${d.scored.length ? relChart(d.scored) : '<p class="muted">עוד אין פוסט עם ציון: הציון נקבע 72 שעות אחרי הפרסום.</p>'}</section></div>` : ''}
+${measured.length ? fold('charts', 'גרפים', `<div class="cols even charts"><section class="panel"><header><h2>צפיות לפי יום הפרסום</h2></header>${viewsChart(measured)}</section><section class="panel"><header><h2>מול החציון</h2></header>${d.scored.length ? relChart(d.scored) : '<p class="muted">עוד אין פוסט עם ציון: הציון נקבע 72 שעות אחרי הפרסום.</p>'}</section></div>`, { one: false, cls: 'res-charts' }) : ''}
 ${posts}
-${feedbackPanels(d.feedback || [])}
+${fold('feedback', 'המשוב של הבוקר', feedbackPanels(d.feedback || []), { one: false, cls: 'res-feedback' })}
 ${styleTestPanels(d.styleTests || [])}
-<div class="mores">${fold('formats', 'results', 'פורמטים', formats)}${blocks ? fold('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>`;
+<div class="mores">${more('formats', 'results', 'פורמטים', formats)}${blocks ? more('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>
+</div>`;
   return layout({ ...ctx, title: 'תוצאות', active: 'results' }, body);
 }
 
@@ -1136,25 +1153,28 @@ export function sourcesPage(ctx, { packs, current, sources, form = {}, problems 
       return `<article class="card acc acc-${esc(current.id)} srccard"><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span><span class="chip ghost">${esc(TYPE_HE[s.type] || s.type)}</span>${s.score ? `<span class="chip sig" title="${esc(s.score.reason || '')}">סמכות ${esc(s.score.authority)}/10</span>` : ''}<span class="end muted small">${s.docs} מסמכים</span></div>
 <h3 class="srcname" dir="auto">${esc(s.name)}</h3><a class="small ltr" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a>
 <p class="muted small m6" dir="auto">${esc(s.why || '')}</p>
-<p class="muted small m4">${s.approved_at ? `אושר ${esc(shortDate(s.approved_at))}` : ''}${s.last_ok_at ? ` · נקרא ${esc(stamp(s.last_ok_at))}` : ''}${s.last_error ? ` · <span class="chip bad">${ctx.operator ? esc(s.last_error.slice(0, 80)) : 'הקריאה האחרונה לא הצליחה'}</span>` : ''}</p>
+<p class="muted small m4 when">${s.approved_at ? `אושר ${esc(shortDate(s.approved_at))}` : ''}${s.last_ok_at ? ` · נקרא ${esc(stamp(s.last_ok_at))}` : ''}${s.last_error ? ` · <span class="chip bad">${ctx.operator ? esc(s.last_error.slice(0, 80)) : 'הקריאה האחרונה לא הצליחה'}</span>` : ''}</p>
 <div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אישור', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
     })
     .join('');
   // Before paying the page is open (src/web/server.js SETUP_OPEN), the topics and the hand-checked facts are not.
-  const more = ctx.unpaid ? '' : `<span class="end"><a class="btn sm" href="/topics">${icon('spark')}נושאים</a><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span>`;
+  const more = ctx.unpaid ? '' : `<span class="end m-hide"><a class="btn sm" href="/topics">${icon('spark')}נושאים</a><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span>`;
+  // On a phone the two are rows at the foot of the page, after the sources and the way to add one.
+  const moreRows = ctx.unpaid ? '' : `<nav class="list m-only mlinks" aria-label="עוד במקורות">${navRow('/topics', 'spark', 'נושאים')}${navRow(`/facts?account=${esc(current.id)}`, 'shield', 'עובדות שנבדקו ביד')}</nav>`;
   const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span>${more}</div>
 ${tabs}
-<p class="lede">עובדה בשקף חייבת ציטוט ממסמך של מקור מאושר של החשבון. מקור שמוסר כאן מפסיק לתמוך בכל פוסט שעוד לא פורסם, והפוסט ייחסם בבדיקה שלפני הפרסום.</p>
+<p class="lede m-hide">עובדה בשקף חייבת ציטוט ממסמך של מקור מאושר של החשבון. מקור שמוסר כאן מפסיק לתמוך בכל פוסט שעוד לא פורסם, והפוסט ייחסם בבדיקה שלפני הפרסום.</p>
 <div class="cols"><div class="grid12">${list || `<div class="empty"><b>אין מקורות</b></div>`}</div>
-<section class="panel"><header><h2>הוספת מקור</h2></header>
+${fold('add', 'הוספת מקור', `<section class="panel"><header><h2>הוספת מקור</h2></header>
 ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 <form method="post" action="/sources/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
 <label class="f">שם<input type="text" name="name" required value="${esc(form.name || '')}"></label>
 <label class="f">כתובת <small>https בלבד</small><input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
 <label class="f">סוג<select name="type"><option value="rss">פיד חדשות</option><option value="web">דף באתר</option><option value="api">מקור נתונים</option></select></label>
 <label class="f">למה סומכים עליו? <small>יופיע ליד כל עובדה ממנו</small><textarea name="why" required minlength="10">${esc(form.why || '')}</textarea></label>
-<button class="btn primary" type="submit">${icon('plus')}להוסיף כמקור מאושר</button></form></section></div>
-${catalogPanel(ctx, current, sources)}`;
+<button class="btn primary" type="submit">${icon('plus')}להוסיף כמקור מאושר</button></form></section>`)}</div>
+${catalogPanel(ctx, current, sources)}
+${moreRows}`;
   return layout({ ...ctx, title: 'מקורות', active: 'sources' }, body);
 }
 
@@ -1238,30 +1258,31 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
   // customer's panels stood one under the other on one side (the owner, 2026-10-31: "on settings, many blocks go on top
   // of each other on the right side, instead of also going to the left"). What the account posts like comes first.
   const acct = d.account;
+  // On a phone each part is a row of its own, opened with a tap (ui.js fold); from 700px they are the panels as before.
   const body = `<div class="head"><h1>הגדרות</h1></div>
 <div class="set-cols">
-${acct && picksFormats(acct.pack, acct.customer) ? formatsPanel(ctx, acct.pack, { heading: 'h2' }) : ''}
-${acct ? designPanel(acct.pack, acct.style, { back: '/settings' }) : ''}
-${acct ? promoPanel(ctx, acct.pack, { draft: acct.promoDraft }) : ''}
-${acct ? logoPanel(ctx, acct.pack) : ''}
-${d.schedule ? schedulePanel(ctx, d.schedule) : ''}
-${ctx.operator ? costsPanel(ctx, d, { dev }) : planPanel(d.plans)}
-${d.quotas ? quotasPanel(ctx, d.quotas) : ''}
-<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
+${acct && picksFormats(acct.pack, acct.customer) ? fold('formats', FORMATS_TITLE, formatsPanel(ctx, acct.pack, { heading: 'h2' })) : ''}
+${acct ? fold('design', 'עיצוב המצגות', designPanel(acct.pack, acct.style, { back: '/settings' })) : ''}
+${acct ? fold('promo', PROMO_TITLE, promoPanel(ctx, acct.pack, { draft: acct.promoDraft })) : ''}
+${acct ? fold('logo', LOGO_TITLE, logoPanel(ctx, acct.pack)) : ''}
+${d.schedule ? fold('schedule', 'מתי מפרסמים', schedulePanel(ctx, d.schedule)) : ''}
+${ctx.operator ? fold('costs', 'עלות החודש', costsPanel(ctx, d, { dev })) : fold('plan', 'החבילה החודשית', planPanel(d.plans))}
+${d.quotas ? fold('quotas', 'מכסות ועלות לפי לקוח', quotasPanel(ctx, d.quotas)) : ''}
+${fold('push', 'התראות', `<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
 <p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
 <p class="muted small">באייפון: פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
-</section>
-${d.email ? emailPanel(ctx, d.email) : ''}
-${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
-${ctx.operator ? `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>` : ''}
-${ctx.operator ? `<section class="panel"><header><h2>לידים</h2><a class="end" href="/leads">לרשימה</a></header><p class="muted m0">חנויות שתורן מצא, הדמו של כל אחת, ומה שלחתם לה.</p></section>` : ''}
-<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
-${ctx.operator ? `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
+</section>`)}
+${d.email ? fold('email', 'מיילים', emailPanel(ctx, d.email)) : ''}
+${ctx.operator ? fold('generate', 'מתי נכתבים הפוסטים', `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>`) : ''}
+${ctx.operator ? fold('demos', 'דמואים לחנויות', `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>`) : ''}
+${ctx.operator ? fold('leads', 'לידים', `<section class="panel"><header><h2>לידים</h2><a class="end" href="/leads">לרשימה</a></header><p class="muted m0">חנויות שתורן מצא, הדמו של כל אחת, ומה שלחתם לה.</p></section>`) : ''}
+${fold('me', 'החשבון שלך', `<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>`)}
+${ctx.operator ? fold('kill', 'עצירת חירום', `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
 <p class="muted">עוצר את כל החשבונות מיד. אף פוסט לא נכתב ולא מתפרסם עד שמפעילים מחדש.</p>
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}לעצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'לחצו שוב כדי לעצור הכל' })}
-</section>` : ''}
+</section>`) : ''}
 </div>
 ${devPanels}
 ${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.operator ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
@@ -1326,6 +1347,9 @@ ${ledgerTable(q.accounts, month)}
 ${before.length ? `<details class="mt12"><summary class="muted">החודשים הקודמים</summary>${before.map((m) => `<h3 class="lbl ltr">${esc(m)}</h3>${ledgerTable(q.accounts, m)}`).join('')}</details>` : ''}
 <details class="mt12"><summary class="muted">לשנות מכסה</summary><p class="muted small">מכסה משנים כאן רק לחשבונות שלנו, שאינם בסביבת עבודה של לקוח. שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} הצעות ו-${DEFAULT_PLAN.redos} החלפות בחודש. חשבון שניצל את ההצעות שלו לא נכתב עד תחילת החודש הבא, או עד שמעלים לו את המכסה.</p>${forms}</details></section>`;
 }
+
+/** A row of a list of links, as in iOS Settings: an icon, the words and the chevron. */
+const navRow = (href, ic, t) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b></span><span class="go">${icon('chev')}</span></a>`;
 
 export function morePage(ctx) {
   const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;

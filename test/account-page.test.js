@@ -208,9 +208,13 @@ test('in a real browser: no sideways scroll on a phone, and on a desk the panels
 
     const phone = await open(390, 844, 'dark');
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'no sideways scroll at 390');
-    // Every panel in one column, each within the screen.
-    const cols = await phone.$$eval('.acct-grid > .panel', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
-    assert.equal(cols.length, 7, 'month, week, queue, networks, approval, TikTok, look');
+    // Every panel in one column, each within the screen. On a phone the queue's counts are Posts', and approval and
+    // TikTok, two lines that never change for a customer, are one row to open (the owner, 2026-11-05: "too many things
+    // jump to the eyes at the same time").
+    const cols = await phone.$$eval('.acct-grid > .panel', (els) => els.filter((e) => e.checkVisibility()).map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
+    assert.equal(cols.length, 5, 'month, week, networks, look, how it works');
+    assert.deepEqual(await phone.$$eval('.acct-queue, .acct-mode, .acct-tiktok', (els) => els.map((e) => e.checkVisibility())), [false, false, false], 'the queue, approval and TikTok not on a phone');
+    assert.equal(await phone.isVisible('.acct-about > summary'), true, 'how it works, a row');
     for (const [l, r] of cols) assert.ok(l >= 0 && r <= 390, `${l}..${r} within the phone`);
     assert.equal(new Set(cols.map(([l]) => l)).size, 1, 'one column');
     // The two taps of the switch still work: the first arms it.

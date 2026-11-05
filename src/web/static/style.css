@@ -1396,10 +1396,13 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 /* ------------------------------------------------------------ the accessibility panel
    The website's (openfrequency.co.il, its style.css .a11y; ui.js a11yWidget, app.js): a round glass button at the
    bottom corner, the tab bar's sibling, and over it a panel of four switches, each a class on <html> that the rules
-   at the end of this block read. On a phone it stands above the tab bar, and on a post's page above its action bar
-   too, so it never covers either; on a desk, in the corner. Under the toast, which says something and goes. */
-.a11y-w { position: fixed; z-index: 45; bottom: calc(var(--tab) + 20px + env(safe-area-inset-bottom)); inset-inline-end: 16px; }
-@media (max-width: 899px) { body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 60px + 12px + env(safe-area-inset-bottom)); } }
+   at the end of this block read. On a phone it sits beside the tab bar, at its end, in the bar's own row (the tab bar
+   makes room for it, as iOS sets a round button beside its tab bar): it floated above the bar, over the page, and
+   stood on a field of /new on the owner's iPhone (2026-11-05). In that row nothing of the page stays under it, since
+   the page keeps the bar's height free at its foot, and a post's action bar is above it. On a desk, in the corner.
+   Under the toast, which says something and goes. */
+.a11y-w { position: fixed; z-index: 45; bottom: calc(8px + (var(--tab) - 48px) / 2 + env(safe-area-inset-bottom)); inset-inline-end: 12px; }
+@media (max-width: 899px) { body:has(.a11y-w:not([hidden])) .tabbar { inset-inline-end: calc(12px + 48px + 8px); } }
 @media (min-width: 900px) { .a11y-w { bottom: 24px; inset-inline-end: 24px; } }
 .a11y-w[hidden], .a11y-p[hidden] { display: none; }
 .a11y-btn { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -1434,15 +1437,122 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 
 /* The switches. Bigger text zooms the page, as the website does, so every size written in px grows with it. A phone
    is then 325px wide at 390: a post's action bar no longer holds its three buttons in a row, so its first takes a row
-   of its own and the others share the next, and the panel's button stands above the taller bar. */
+   of its own and the others share the next. The panel's button stays beside the tab bar, which grows with it. */
 html.a-big body { zoom: 1.2; }
 @media (max-width: 899px) {
   html.a-big .actionbar { flex-wrap: wrap; }
   html.a-big .actionbar .btn.primary { flex-basis: 100%; }
-  html.a-big body:has(.actionbar) .a11y-w { bottom: calc(var(--tab) + 16px + 112px + 12px + env(safe-area-inset-bottom)); }
 }
 html.a-links a { text-decoration: underline !important; text-decoration-thickness: 2px !important; text-underline-offset: 3px; }
 html.a-still *, html.a-still *::before, html.a-still *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 /* High contrast: the quiet text comes up to the ink, the hairlines darken, and the glass goes solid. */
 html.a-contrast { --ink-2: #1d1d1f; --ink-3: #424245; --ink-p: #1d1d1f; --line: #8e8e93; --line-2: #424245; --bar: #ffffff; --bar-float: #ffffff; --bar-edge: #424245; --surface: #ffffff; --surface-hi: #ffffff; --edge: #424245; --inset: #f5f5f7; --field: #ffffff; }
 html.a-contrast[data-theme="dark"] { --ink-2: #f5f5f7; --ink-3: #e5e5ea; --ink-p: #f5f5f7; --line: #8e8e93; --line-2: #d2d2d7; --bar: #000000; --bar-float: #000000; --bar-edge: #d2d2d7; --surface: #000000; --surface-hi: #000000; --edge: #d2d2d7; --inset: #1c1c1e; --field: #000000; }
+
+/* ------------------------------------------------------------ a phone: one thing at a time
+   The owner, 2026-11-05, on an iPhone: "The mobile pages (each) has too many information, too many things jump to the
+   eyes at the same time. Even the main page." Under 700px every page leads with one thing and one action; what explains,
+   what repeats a count shown elsewhere and what is a second panel waits a tap away (ui.js fold) or lower, and the page
+   keeps one colour beside its blue button. From 700px nothing here applies, and the pages are as they were. */
+
+/* A fold (ui.js fold): from 700px open, with no row of its own, and apart from what is around it as a panel is. */
+@media (min-width: 700px) {
+  details.mfold > summary { display: none; }
+  .m-only { display: none !important; }
+}
+.panel + details.mfold, details.mfold + .panel, details.mfold + details.mfold, details.mfold + details.panel, details.panel + details.mfold,
+.cols + details.mfold, details.mfold + .cols, .empty + details.mfold { margin-top: 20px; }
+/* As .cols > .panel + .panel and .set-cols > .panel + .panel: there the grid's gap or the column's margin is the space. */
+.cols.cols > .panel + details.mfold, .cols.cols > details.mfold + .panel, .cols.cols > details.mfold + details.mfold, .set-cols.set-cols > details.mfold, .set-cols.set-cols > .panel { margin-top: 0; }
+details.mfold > summary { list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+details.mfold > summary::-webkit-details-marker { display: none; }
+/* TikTok's view over the slides hides the counters of every strip of the card, the one folded with Instagram too. */
+.ttv:checked ~ details .strip a .n, .ttv:checked ~ details .strip a .has { display: none; }
+
+@media (max-width: 699px) {
+  /* A fold between panels: a glass row with its name and the chevron; open, its panels are the tile's body. */
+  details.mfold:not(.in) { border-radius: var(--r); background: linear-gradient(180deg, var(--surface-hi), var(--surface)); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px); box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--rim); }
+  details.mfold { scroll-margin-top: calc(var(--top) + 16px); }
+  details.mfold:not(.in) > summary { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 0 20px; font: 600 16px/1.25 var(--display); color: var(--ink); }
+  details.mfold > summary::after { content: ''; flex: none; margin-inline-start: auto; width: 9px; height: 9px; border-inline-end: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(45deg); transition: transform 0.2s ease; }
+  details.mfold[open] > summary::after { transform: rotate(-45deg); }
+  details.mfold.in > summary::after { margin-inline-end: 6px; transform: rotate(-45deg); }
+  details.mfold.in[open] > summary::after { transform: rotate(135deg); }
+  details.mfold:not(.in) .panel { margin: 0; padding: 4px 20px 20px; border-radius: 0; background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  details.mfold:not(.in) .panel + .panel, details.mfold:not(.in) .cols > .panel + .panel { margin-top: 0; padding-top: 20px; border-top: 1px solid var(--line); }
+  details.mfold:not(.in) > .cols { gap: 0; }
+  details.mfold:not(.in) > .cols + .panel, details.mfold:not(.in) > .panel + .cols { margin-top: 0; }
+  /* One panel: the row is its heading. */
+  details.mfold.one > .panel > header:first-child > :is(h2, h3) { display: none; }
+  details.mfold.one > .panel > header:first-child:not(:has(> :not(h2, h3))) { display: none; }
+  details.mfold.one > .panel > header:first-child > .end { margin-inline-start: 0; }
+  details.mfold.one > .panel > header:first-child > .end:has(> .dot) { display: none; }
+  /* Panels in a column of their own are 20px apart, as everywhere else on a phone, not the column's 12 and a panel's 20. */
+  .grid12:has(> .panel, > details.mfold) { gap: 20px; }
+  .grid12.grid12 > :is(.panel, details.mfold, details.panel) { margin-top: 0; }
+  /* Settings: its parts a list of rows, as iOS Settings is. */
+  .set-cols.set-cols > details.mfold { margin: 0 0 12px; }
+  /* A fold inside a post's card: a row like the card's own (its text, its facts), the slides inside it edge to edge. */
+  details.mfold.in { margin: 12px 20px 0; border-top: 1px solid var(--line); }
+  details.mfold.in > summary { display: flex; align-items: center; gap: 8px; min-height: 50px; font-size: 14px; font-weight: 500; }
+  details.mfold.in > .lbl, details.mfold.in > .capwrap { padding-inline: 0; }
+  details.mfold.in > .lbl { padding-top: 4px; }
+  details.mfold.in > .strip { margin-inline: -20px; }
+  details.mfold.in > .capwrap { padding-top: 0; }
+  details.mfold.in + .trust, details.mfold.in + details.mfold.in { margin-top: 0; }
+  details.mfold.in + details.mfold.in { border-top: 1px solid var(--line); }
+
+  /* What a wider screen shows and a phone leaves out, and the one button a phone makes blue. */
+  .m-hide { display: none !important; }
+  .btn.m-primary { background: var(--accent-fill); color: var(--accent-ink); }
+  .btn.m-primary:hover { background: var(--accent-fill-2); }
+
+  /* Home: what went out leads; what waits is the list under it, so the counts beside it go (Posts has them), and a
+     post ready for approval is not said twice (the list has it). */
+  .kpis > .kpi.side { display: none; }
+  .inprog-list > li.ready[data-item^='p:'] { display: none; }
+  .inprog:not(:has(.inprog-list > li:not(.ready[data-item^='p:']))) { display: none; }
+
+  /* Posts: one account a view, so its name is the switcher's; a card says when it goes up, and a check that passed is
+     said once, by the facts' own row. */
+  .group > header { display: none; }
+  .group { margin-bottom: 20px; }
+  /* An account's dot beside each row says nothing where one account is shown. */
+  .list.todo > a > .dot, .resposts td.title > .dot { display: none; }
+  .head .sub .chip.sig { color: var(--ink-p); }
+  .posts .post:not(.stopped) .meta .end, .post .meta .fmt { display: none; }
+  /* A post's page: of its chips the time alone (the one with the clock); TikTok's strip needs no label over it once
+     Instagram's is folded (that one's label is inside the fold). */
+  .post .meta > .chip:not(:has(> svg)), .post > h3.lbl { display: none; }
+  .post .meta > .chip:has(> svg)::before { content: none; }
+  .trust > span:not(.good, .warnc, .badc) { display: none; }
+  .posts .trust .good { display: none; }
+  .posts .trust:not(:has(.warnc, .badc)) { display: none; }
+  .group details.facts .chip.bad { color: var(--ink-3); }
+
+  /* The account page: its networks first when one waits to be connected; the counts Posts has, and the lines that say
+     how it works, under one row. */
+  .acct-head > .chip.ok { display: none; }
+  .acct-grid > .acct-queue, .acct-grid > .about { display: none; }
+  .acct-grid > .acct-net:has(.btn.primary) { order: -1; }
+  .acct-grid > .acct-about > summary h3 { margin: 0; font: 700 16px/1.24 var(--display); }
+
+  /* Sources: each one its name, its address and the way to remove it, in grey until it is armed. */
+  .srccard .meta .chip.ok, .srccard .meta .chip.ghost, .srccard .meta .chip.sig, .srccard .meta .end, .srccard .when { display: none; }
+  .srccard .btn.danger:not(.armed) { color: var(--ink-2); }
+  .mlinks { margin-top: 20px; }
+
+  /* Results: the posts' numbers right under the views; a post's views and its place against the median, the rest on
+     its own page; the charts and the morning's report folded under them. */
+  .resbody { display: flex; flex-direction: column; gap: 20px; }
+  .resbody > * { margin: 0 !important; order: 5; }
+  .resbody > .kpis { order: 1; }
+  .resbody > .res-posts { order: 2; }
+  .resbody > .res-charts { order: 3; }
+  .resbody > .res-feedback { order: 4; }
+  .resbody > .mores { order: 6; }
+  .resposts td.x, .resposts .per { display: none; }
+  .kpi.lead .s.m-only { white-space: normal; }
+  /* The sources step's form, then connecting and the days: apart, as two panels are. */
+  #sources + .cols { margin-top: 20px; }
+}

@@ -339,11 +339,17 @@
     slides.forEach((s) => io.observe(s));
   });
 
+  // Every fold around an element opens, the element's own too when it is one: a link into a folded part must land on
+  // something that shows.
+  const unfold = (el) => {
+    for (let d = el?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+  };
+
   // A link to a folded panel on the same page (Edit, to #edit) opens it.
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href^="#"]');
     const target = a && a.getAttribute('href').length > 1 ? document.querySelector(a.getAttribute('href')) : null;
-    if (target?.tagName === 'DETAILS') target.open = true;
+    unfold(target);
   });
 
   // Tapping a slide opens its facts.
@@ -351,11 +357,38 @@
     const a = e.target.closest('.strip a[href^="#s-"]');
     if (!a) return;
     const target = document.querySelector(a.getAttribute('href'));
-    const details = target?.closest('details');
-    if (details) details.open = true;
+    unfold(target);
     const first = target?.querySelector('details.fact');
     if (first) first.open = true;
   });
+
+  // The parts that fold away on a phone (ui.js fold): folded as a phone opens the page, except the one a link points
+  // into, one with a problem to fix in it, and one that was open before the page came back (each page keeps which, for
+  // this tab only); from 700px every one is open, and a phone turned wide opens them.
+  const folds = [...document.querySelectorAll('details[data-mfold]')];
+  if (folds.length) {
+    const phone = window.matchMedia('(max-width: 699px)');
+    const KEPT = `of-mfold:${location.pathname}`;
+    let kept = [];
+    try { kept = JSON.parse(sessionStorage.getItem(KEPT)) || []; } catch { kept = []; }
+    const target = () => (location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null);
+    if (phone.matches) {
+      for (const d of folds) d.open = (Array.isArray(kept) && kept.includes(d.dataset.mfold)) || Boolean(d.querySelector('.problems'));
+      // The browser went to the link's place before the folds closed: to the fold it is in, once the page is in.
+      const t = target();
+      const into = t?.closest('details[data-mfold]');
+      if (into) {
+        unfold(t);
+        const go = () => into.scrollIntoView({ block: 'start' });
+        requestAnimationFrame(go);
+        window.addEventListener('load', () => requestAnimationFrame(go), { once: true });
+      }
+    }
+    const keep = () => { try { sessionStorage.setItem(KEPT, JSON.stringify(folds.filter((d) => d.open).map((d) => d.dataset.mfold))); } catch { /* a browser that keeps nothing */ } };
+    for (const d of folds) d.addEventListener('toggle', () => { if (phone.matches) keep(); });
+    phone.addEventListener?.('change', () => { if (!phone.matches) for (const d of folds) d.open = true; });
+    window.addEventListener('hashchange', () => unfold(target()));
+  }
   // The account switcher closes when a tap or a key goes elsewhere, as a menu does.
   const closeSwitch = (e) => {
     const sw = document.querySelector('details.acctswitch[open]');

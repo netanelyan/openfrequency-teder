@@ -288,6 +288,18 @@ ${themeScript(ctx.v || 1)}
 
 export const csrfField = (ctx) => `<input type="hidden" name="_csrf" value="${esc(ctx.csrf)}">`;
 
+/**
+ * A part of a page that folds away on a phone (the owner, 2026-11-05, on an iPhone: "too many things jump to the eyes
+ * at the same time"): there it is one row with its name, opened with a tap; from 700px it is open and the row is not
+ * drawn, so a wider screen shows the page as it was. static/app.js folds it as a phone opens the page, except the one a
+ * link points into, one with a problem to fix in it and one that was open before the page came back (a save reloads
+ * it); without the script it stays open, its row still a way to fold it. `key` names it on its page. `one`: a single
+ * panel, whose own heading the row stands for on a phone; `inCard`: inside a post's card, a row like the card's own
+ * folds (the captions, the facts). `cls`, a class of its own. Nothing, for nothing inside.
+ */
+export const fold = (key, label, inner, { one = true, inCard = false, cls = '' } = {}) =>
+  inner ? `<details class="mfold${one ? ' one' : ''}${inCard ? ' in' : ''}${cls ? ` ${cls}` : ''}" data-mfold="${esc(key)}" open><summary>${esc(label)}</summary>${inner}</details>` : '';
+
 /** A small POST form: one button. opts: { cls, ajax, confirm, fields, label, title } */
 export function postButton(ctx, action, label, { cls = 'btn', ajax = null, confirm = null, fields = {}, title = null, iconName = null } = {}) {
   const hidden = Object.entries(fields)

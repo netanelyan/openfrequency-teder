@@ -123,13 +123,14 @@ ${d.configured ? requirements(d) : ''}<ul class="factlist nets">${rows}</ul><p c
  * drafts (src/publish/index.js tiktokMode): they read that in one line, with no choice to make. The operator chooses
  * for the company's own accounts, and sees a customer's as fixed. A panel of the account page's grid (pages.js).
  */
+/** How a customer's slideshows reach TikTok: always as drafts (src/publish/draft.js). */
+export const TIKTOK_LINE = 'המצגות מגיעות לטיוטות בטיקטוק. בוחרים שם סאונד פופולרי ומפרסמים מהאפליקציה, ותדר מזכיר לכם כשמגיעה השעה.';
+
 export function tiktokModePanel(ctx, d) {
   if (!d.pack.meta.platforms.includes('tiktok')) return '';
   const head = '<header><h3>איך פוסטים עולים לטיקטוק</h3></header>';
-  if (!ctx.operator || d.customer) {
-    const line = 'המצגות מגיעות לטיוטות בטיקטוק. בוחרים שם סאונד פופולרי ומפרסמים מהאפליקציה, ותדר מזכיר לכם כשמגיעה השעה.';
-    return `<section class="panel acct-tiktok">${head}<p class="m0">${esc(line)}${ctx.operator ? ' (חשבון של לקוח: תמיד לטיוטות.)' : ''}</p></section>`;
-  }
+  // A customer's is a line, not a choice: on a phone it is under the account page's one row for how it works.
+  if (!ctx.operator || d.customer) return `<section class="panel acct-tiktok about">${head}<p class="m0">${esc(TIKTOK_LINE)}${ctx.operator ? ' (חשבון של לקוח: תמיד לטיוטות.)' : ''}</p></section>`;
   const id = esc(d.pack.id);
   const modes = ['draft-now', 'direct', ...(d.mode === 'draft-fallback' ? ['draft-fallback'] : [])];
   const choice = modes.map((m) => `<input type="radio" name="mode" value="${m}" id="tt-${id}-${m}"${d.mode === m ? ' checked' : ''}><label for="tt-${id}-${m}">${esc(MODE_CHOICE[m][0])}<small>${esc(MODE_CHOICE[m][1])}</small></label>`).join('');

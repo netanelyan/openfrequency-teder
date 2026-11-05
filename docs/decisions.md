@@ -2783,3 +2783,31 @@ these demos; the cold message (never "ביקשתם"), the wa.me and mailto links
 reminder's time, Shabbat included, and once; the move to "פתחו" on an open after the message only; and the moves,
 the note, the undo, and a store that became a customer. test/workspaces.test.js lists the new page and buttons, and
 no customer sees or changes a lead.
+
+### A phone shows one thing at a time (2026-11-05)
+
+The owner, on an iPhone: "The mobile pages (each) has too many information, too many things jump to the eyes at the
+same time. Even the main page. Fix that." Under 700px every page leads with one thing and one action, and the rest is a
+row to open or lower down; from 700px the pages are as they were, byte for byte in a screenshot at 1280.
+
+**The fold.** `ui.js fold(key, label, html)` is a `details` open from the server, its row (`summary`) not drawn from
+700px. On a phone `static/app.js` folds it as the page opens, except the one a link points into (every fold around the
+target opens, and the page goes to it), one with `.problems` in it, and one that was open before the page came back
+(kept per page in `sessionStorage`, so a save that reloads leaves it open). A phone turned wide opens them all, and
+without the script they stay open. `.m-only` and `.m-hide` are what only a phone, or only a wider screen, shows.
+
+**What a phone leaves out or folds.** A count shown elsewhere (home's side tile, the account page's queue, a group's
+waiting chip), a line said twice (a post ready for approval in "בתהליך" and in "צריך אותך", a passed check beside the
+facts' own row), the account's name and dot where one account is shown, explanations under a heading that says it, and
+a second colour (the blocked count, a source's remove until armed, a status's blue). Folded: Settings' every part, a
+post's Instagram strip, captions, small changes and checks, Results' charts and morning report, Sources' form, and
+/new's closing slide, kinds, connecting, design and days. Never folded: the action of the page (approve, the name and
+"ליצור את החשבון", "עברתי על הדוגמאות", which a phone makes the blue button).
+
+**The accessibility button** sits beside the tab bar, in its row, and the bar makes room for it, as iOS sets a round
+button beside its tab bar: floating above the bar it stood on a field of /new on the owner's phone. The top bar is
+unchanged (the switch's place there was set on 2026-11-02).
+
+test/mobile-calm.test.js (new) covers the fold's markup and the pages' folds, and in a real browser a phone's folds,
+a row that stays open after a reload, a link and a slide that open theirs, a desk with every fold open and no row, and
+at 360 and 390 the button in the tab bar's row with nothing to tap under it or the bar.

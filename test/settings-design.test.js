@@ -100,7 +100,8 @@ test('in a browser, Settings\' panels sit in two columns on a desk and in one on
       const page = await context.newPage();
       await page.goto(`${base}/settings`);
       const got = await page.evaluate(() => {
-        const boxes = [...document.querySelectorAll('.set-cols > .panel')].map((p) => p.getBoundingClientRect());
+        // Each part is a fold around its panel (ui.js fold): open on a desk, a row on a phone.
+        const boxes = [...document.querySelectorAll('.set-cols > .panel, .set-cols > details.mfold')].map((p) => p.getBoundingClientRect());
         const lefts = [...new Set(boxes.map((b) => Math.round(b.left)))];
         // Where each column ends, and the tallest panel: two columns are even when they end within one panel of each other.
         const ends = lefts.map((l) => Math.max(...boxes.filter((b) => Math.round(b.left) === l).map((b) => b.bottom)));

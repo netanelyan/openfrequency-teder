@@ -11,17 +11,17 @@ import { carryOnboardingZernio, doneLink, onboardingDoneLink, onboardingStates, 
 import { zernioConfigured } from '../publish/zernio.js';
 import { defaultChoiceFor, readChoice, saveChoice } from '../schedule/choice.js';
 import { ActionError } from './actions.js';
-import { FORMATS_FEW, formatsSection } from './formats.js';
+import { FORMATS_FEW, FORMATS_TITLE, formatsSection } from './formats.js';
 import { designPanel } from './styles.js';
 import { lockedStyle } from '../render/style.js';
 import { DEFAULT_PICKED, MIN_PICKED, pickedFrom } from '../formats/library.js';
 import { READY_LINE, postCard } from './pages.js';
 import { CONNECT_CLOSED_HE, PLATFORM_NAME, connectData, connectPanel } from './connect.js';
 import { scheduleData, schedulePanel } from './schedule.js';
-import { accDot, csrfField, esc, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
+import { accDot, csrfField, esc, fold, icon, k, layout, postButton, stamp, withSupport } from './ui.js';
 import { storeOrigin } from '../demos/store.js';
 import { reading, startLogoFetch, startSiteRead } from '../onboarding/promo.js';
-import { draftFromForm, newPromoPanel, promoFromForm, promoLater, settlePromo } from './promo.js';
+import { PROMO_TITLE, draftFromForm, newPromoPanel, promoFromForm, promoLater, settlePromo } from './promo.js';
 
 // The new-account flow, on the website:
 //
@@ -440,7 +440,7 @@ function handleOf(r) {
 
 /** The name and handle fields, the same wherever they are asked. */
 function nameFields(pc, r) {
-  return `<p class="muted m0">שם המשתמש מופיע על כל מצגת, כדי שמי שרואה אותה יידע איפה למצוא אתכם. השם של העסק מופיע כאן באתר, ובחלק מהעיצובים גם על המצגות.</p>
+  return `<p class="muted m0 m-hide">שם המשתמש מופיע על כל מצגת, כדי שמי שרואה אותה יידע איפה למצוא אתכם. השם של העסק מופיע כאן באתר, ובחלק מהעיצובים גם על המצגות.</p>
 <label class="f">השם של העסק <small>כמו שהלקוחות מכירים אתכם</small><input type="text" name="displayName" required maxlength="40" value="${esc(nameOf(pc, r))}"></label>
 <label class="f">שם המשתמש שלכם בטיקטוק ובאינסטגרם <small>באותיות באנגלית, למשל cafe.yafo</small><span class="atfield" dir="ltr"><span aria-hidden="true">@</span><input type="text" name="handle" required maxlength="40" dir="ltr" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" pattern="\\s*@?[A-Za-z0-9][A-Za-z0-9._]{1,29}\\s*" value="${esc(handleOf(r))}"></span></label>`;
 }
@@ -450,7 +450,7 @@ const NAME_TITLE = 'השם שלכם על המצגות';
 function namePanel(pc, r) {
   return `<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header>
 <form method="post" action="/new/${esc(r.id)}/name" class="formgrid">${csrfField(pc)}${nameFields(pc, r)}
-<p class="muted small m0">אפשר לשנות את זה גם בשלב הבא, כשבוחרים מקורות.</p>
+<p class="muted small m0 m-hide">אפשר לשנות את זה גם בשלב הבא, כשבוחרים מקורות.</p>
 <div><button class="btn" type="submit">שמירה</button></div></form></section>`;
 }
 
@@ -465,13 +465,15 @@ const obConnectData = (ctx, r) => ({
   zernio: null,
 });
 
+const CONNECT_TITLE = 'חיבור לטיקטוק, לאינסטגרם ולפייסבוק';
+
 function connectSection(ctx, pc, r) {
   // Before paying, connecting is the paywall's (src/web/server.js SETUP_OPEN): said, with no button that leads to it.
-  if (pc.unpaid) return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header><p class="muted m0">${esc(CAP_HE.connect)}</p></section>`;
+  if (pc.unpaid) return fold('connect', CONNECT_TITLE, `<section class="panel" id="connect"><header><h2>${CONNECT_TITLE}</h2></header><p class="muted m0">${esc(CAP_HE.connect)}</p></section>`);
   // While this server has no Zernio key the panel says so (CONNECT_CLOSED_HE), and nothing here says to connect now.
-  return `<section class="panel" id="connect"><header><h2>חיבור לטיקטוק, לאינסטגרם ולפייסבוק</h2></header>
+  return fold('connect', CONNECT_TITLE, `<section class="panel" id="connect"><header><h2>${CONNECT_TITLE}</h2></header>
 ${zernioConfigured() ? '<p class="muted">אפשר לחבר כבר עכשיו, עוד לפני שהחשבון מוכן. כשהחשבון ייווצר החיבור יעבור אליו, ולא תצטרכו לחבר שוב.</p>' : ''}
-${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`;
+${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`);
 }
 
 /**
@@ -489,7 +491,7 @@ function activateBanner(pc, { good, capped }) {
 function scheduleSection(ctx, pc, r) {
   const pseudo = { id: r.id, meta: { displayName: r.setup.displayName || r.seed.niche, schedule: {} } };
   const d = scheduleData(ctx.db, pseudo, { choice: r.setup.choice?.byDay ? r.setup.choice : { byDay: defaultChoiceFor(r.id) } });
-  return schedulePanel(pc, d, { action: `/new/${r.id}/schedule`, back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${d.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` });
+  return fold('schedule', 'מתי מפרסמים', schedulePanel(pc, d, { action: `/new/${r.id}/schedule`, back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${d.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }));
 }
 
 /* ------------------------------------------------------------------ the pages */
@@ -507,7 +509,7 @@ function listPage(ctx, pc) {
 ${capped ? activateBanner(pc, { good: goodSamples(ctx.db, ctx.workspaceId), capped: true }) : ''}
 <div class="cols">${capped ? '' : one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
 <div class="actions p0"><a class="btn" href="/accounts">לחשבון שלכם</a></div></section>` : `<section class="panel"><header><h2>מתחילים מכאן</h2></header>
-<p class="muted">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
+<p class="muted m-hide">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
 <label class="f">במה החשבון יעסוק <small>כמו שהייתם מספרים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">למי הוא מיועד<input type="text" name="audience" maxlength="160" placeholder="למשל: סטודנטים שמבשלים בתקציב קטן"></label>
@@ -515,7 +517,7 @@ ${capped ? activateBanner(pc, { good: goodSamples(ctx.db, ctx.workspaceId), capp
 <label class="f">נושאים שחשובים לכם <small class="js-hide">מופרדים בפסיקים, לא חובה</small><small class="js-show">כותבים נושא ולוחצים Enter, לא חובה</small><input type="text" name="topics" maxlength="800" data-pills="commas" data-max="12"></label>
 <label class="f">אתרים או חשבונות שאתם אוהבים <small class="js-hide">כתובת אחת בכל שורה, לא חובה</small><small class="js-show">כותבים כתובת ולוחצים Enter, לא חובה</small><textarea name="examples" rows="4" dir="ltr" data-pills data-max="10"></textarea></label>
 <button class="btn primary" type="submit">${icon('spark')}לחפש מקורות</button></form></section>`}
-<section class="panel"><header><h2>בתהליך</h2></header>${rows.length ? `<ul class="factlist">${rows.map((r) => `<li><a href="/new/${esc(r.id)}"><b>${esc(r.seed.niche)}</b></a> <span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span> <span class="muted small">${esc(stamp(r.updated_at))}</span></li>`).join('')}</ul>` : '<p class="muted">אין עדיין.</p>'}</section></div>`
+<section class="panel${rows.length ? '' : ' m-hide'}"><header><h2>בתהליך</h2></header>${rows.length ? `<ul class="factlist">${rows.map((r) => `<li><a href="/new/${esc(r.id)}"><b>${esc(r.seed.niche)}</b></a> <span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span> <span class="muted small">${esc(stamp(r.updated_at))}</span></li>`).join('')}</ul>` : '<p class="muted">אין עדיין.</p>'}</section></div>`
   );
 }
 
@@ -541,10 +543,13 @@ function sourceRow(pc, c, { on = strong(c), why = null } = {}) {
   const chips = pc.operator
     ? `<span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${s.authority >= 7 ? 'ok' : s.authority >= 5 ? '' : 'warn'}">סמכות ${s.authority}/10</span><span class="chip">עדכניות ${s.freshness}/10</span>${s.relevance != null ? `<span class="chip ${s.relevance >= 6 ? '' : 'warn'}">רלוונטיות ${s.relevance}/10</span>` : ''}<span class="chip ${s.terms === 'ok' ? 'ok' : s.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[s.terms] || s.terms)}</span>`
     : `${c.origin === 'example' ? '<span class="chip">מהאתרים שלכם</span>' : ''}${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`;
+  // A customer's words for a source (a leading one, one of theirs, fresh) are a wider screen's: on a phone a row is its
+  // box, its name and its site.
+  const tags = pc.operator ? 'srctags' : 'srctags m-hide';
   const more = pc.operator
     ? `<details class="srcmore"><summary class="muted small" dir="auto">${esc(`${s.reason || ''}${s.relevanceReason ? ` · ${s.relevanceReason}` : ''}${s.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}`)}</summary><label class="f">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(why ?? (c.why || s.reason))}" maxlength="300"></label></details>`
     : '';
-  return `<li class="srcrow"><label><input type="checkbox" name="approve_${esc(c.id)}"${on ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}><span class="srcwho"><b dir="auto">${esc(c.name)}</b><span class="ltr">${esc(siteOf(c.url))}</span></span>${chips ? `<span class="srctags">${chips}</span>` : ''}</label><a class="srcopen" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`לפתוח את ${c.name}`)}" title="${esc(c.url)}">${icon('ext')}</a>${more}</li>`;
+  return `<li class="srcrow"><label><input type="checkbox" name="approve_${esc(c.id)}"${on ? ' checked' : ''}${s.terms === 'no' ? ' disabled' : ''}><span class="srcwho"><b dir="auto">${esc(c.name)}</b><span class="ltr">${esc(siteOf(c.url))}</span></span>${chips ? `<span class="${tags}">${chips}</span>` : ''}</label><a class="srcopen" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`לפתוח את ${c.name}`)}" title="${esc(c.url)}">${icon('ext')}</a>${more}</li>`;
 }
 
 /**
@@ -634,7 +639,7 @@ function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
 }
 
 function detailPage(ctx, pc, r) {
-  const head = `<div class="head"><div><a class="muted small back" href="/new">${icon('chev')}חשבון חדש</a><h1>${esc(r.seed.niche)}</h1></div><span class="end"><span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span></span></div>`;
+  const head = `<div class="head"><div><a class="muted small back" href="/new">${icon('chev')}חשבון חדש</a><h1>${esc(r.seed.niche)}</h1></div><span class="end m-hide"><span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span></span></div>`;
   const ops = operatorNotes(pc, r.notes);
   // Before paying, at the setup's cap (src/billing/setup-cap.js): a search or a new account would be refused.
   const capped = !pc.operator && !setupRoom(ctx.db, r.workspace_id ?? null).ok;
@@ -644,8 +649,8 @@ function detailPage(ctx, pc, r) {
       `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
 <p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
 ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
-<p class="muted mt12">${pc.unpaid || !zernioConfigured() ? 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
-<div class="cols"><div class="grid12">${namePanel(pc, r)}${newPromoPanel(pc, r, { action: `/new/${r.id}/promo`, busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
+<p class="muted mt12 m-hide">${pc.unpaid || !zernioConfigured() ? 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
+<div class="cols"><div class="grid12">${namePanel(pc, r)}${fold('promo', PROMO_TITLE, newPromoPanel(pc, r, { action: `/new/${r.id}/promo`, busy: reading.has(r.id), nameDefault: nameOf(pc, r) }))}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
     );
   }
   if (r.status === 'failed') {
@@ -674,9 +679,9 @@ ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
       `${head}${capped ? activateBanner(pc, { good: 0, capped }) : ''}${saidBanner(r.found.said)}${shown.length < FEW && !capped ? fewPanel(pc, r, shown.length) : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
 <div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden, chosen) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
-<div class="grid12">${formatsSection(picked)}${newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) })}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
+<div class="grid12">${fold('formats', FORMATS_TITLE, formatsSection(picked))}${fold('promo', PROMO_TITLE, newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) }))}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
 ${nameFields(pc, r)}
-<p class="muted small m0">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
+<p class="muted small m0 m-hide">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
 <button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button></div></section>
 ${formatsPanel}</div></div></form>
 <div class="cols"><div class="grid12">${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>${ops}`
@@ -702,16 +707,16 @@ ${formatsPanel}</div></div></form>
     `${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
 <section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
-${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
+${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn m-primary' }) : ''}
 ${reviewed && !locked ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
 ${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>` : ''}</section>
-${pack && good && !locked ? designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` }) : ''}
-<section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
+${pack && good && !locked ? fold('design', 'עיצוב המצגות', designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` })) : ''}
+${fold('account', 'החשבון והחיבור לרשתות', `<section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
-${pack && locked ? `<p class="muted mt12" id="connect">${esc(CAP_HE.connect)}</p>` : pack ? `<div id="connect"${zernioConfigured() ? '' : ' class="mt12"'}>${zernioConfigured() ? '<p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>' : ''}${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>
-${sched ? schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }) : ''}
+${pack && locked ? `<p class="muted mt12" id="connect">${esc(CAP_HE.connect)}</p>` : pack ? `<div id="connect"${zernioConfigured() ? '' : ' class="mt12"'}>${zernioConfigured() ? '<p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>' : ''}${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>`, { one: false })}
+${sched ? fold('schedule', 'מתי מפרסמים', schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` })) : ''}
 ${ops}`
   );
 }
