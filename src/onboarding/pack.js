@@ -174,7 +174,10 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
       url: c.url,
       name: c.name,
       lang: /[֐-׿]/.test(c.name) ? 'he' : 'en',
-      why: c.why || c.score?.reason || 'approved by the owner in onboarding',
+      // The first reason long enough for packs/validate.js (10 characters): a found site's own why was sometimes a
+      // word or blank, which passed here and made the whole pack invalid, so "ליצור את החשבון" created nothing
+      // (four sources on 2026-11-05).
+      why: [c.why, c.score?.reason].map((w) => String(w || '').trim()).find((w) => w.length >= 10) || 'approved by the owner in onboarding',
       approvedAt: new Date().toISOString().slice(0, 10),
       ...(c.api ? { api: c.api } : {}),
     })),

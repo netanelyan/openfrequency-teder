@@ -14,7 +14,7 @@ import { running } from '../src/web/demos.js';
 import { checkDraft } from '../src/demos/write.js';
 import { DemoError } from '../src/demos/store.js';
 import { leadsSource, leadsTick, refreshStages, syncLeads } from '../src/leads/sync.js';
-import { notOnShabbat, reminderDue, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER, topicOf } from '../src/leads/messages.js';
+import { le, notOnShabbat, reminderDue, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER, topicOf } from '../src/leads/messages.js';
 import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, operator, opened, serverFree, tempHome, viewingAs } from './helpers.js';
 
 // The operator's leads (src/leads, src/web/leads.js): the stores Toran found, copied once an hour from Toran's
@@ -543,4 +543,13 @@ test('the migration that adds about forgets the cursor, so the leads already kep
   assert.ok(migrated.get("SELECT value_json FROM settings WHERE key = 'leads:sync'"), 'the last sync is still said');
   const kept = migrated.get("SELECT * FROM leads WHERE domain = 'kept.example.co.il'");
   assert.deepEqual([kept.name, kept.stage, kept.notes, kept.about], ['נשמרה', 'sent', 'הערה', null]);
+});
+
+test('le: "ל" joined to a Hebrew name, "ל־" before any other, "בשביל" before one that opens with ה (never "להחנות")', () => {
+  assert.equal(le('כלי חרס של נורית'), 'לכלי חרס של נורית');
+  assert.equal(le('Nike'), 'ל־Nike');
+  assert.equal(le('החנות של דנה'), 'בשביל החנות של דנה');
+  assert.equal(le('הום סטייל'), 'בשביל הום סטייל');
+  assert.doesNotMatch(TEDER_COLD_FIRST({ storeName: 'החנות של דנה', url: 'https://x.test/s/a' }), /להחנות/);
+  assert.match(TEDER_REMINDER({ storeName: 'החנות של דנה', url: 'https://x.test/s/a' }), /שהכנו בשביל החנות של דנה\?/);
 });

@@ -1563,3 +1563,8 @@ details.mfold > summary::-webkit-details-marker { display: none; }
   /* The sources step's form, then connecting and the days: apart, as two panels are. */
   #sources + .cols { margin-top: 20px; }
 }
+
+/* On a phone a field is never under 16px: an iPhone zooms the page in on tapping a smaller one (the owner, 2026-11-05,
+   "make zooming in on mobile not available"). Pinch-zoom itself stays: blocking it fails WCAG 1.4.4 and the
+   accessibility statement, and Safari ignores user-scalable=no anyway. */
+@media (max-width: 699px) { input, select, textarea { font-size: max(16px, 1em) !important; } }
