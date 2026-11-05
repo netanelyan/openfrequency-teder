@@ -11,7 +11,7 @@ import { TORAN_INTERNAL } from '../notify/operator.js';
 // machine for every store changed since the last time:
 //
 //   GET {OF_TORAN_INTERNAL}/internal/stores?since=<ISO>&limit=500, Authorization: Bearer OF_INTERNAL_TOKEN
-//   { stores: [{ id, domain, url, name, platform, score, toranStatus, contact: { email, whatsapp, phone },
+//   { stores: [{ id, domain, url, name, platform, about, score, toranStatus, contact: { email, whatsapp, phone },
 //                social: { instagram, tiktok, facebook }, optedOut, updatedAt }], next: ISO | null }
 //
 // and asks again with since=next until next is null (test/fixtures/toran-stores.json is the contract's example).
@@ -24,8 +24,9 @@ import { TORAN_INTERNAL } from '../notify/operator.js';
 // Each store is a lead by its domain (www. left out):
 //   - a new one is added, unless one of our customers' workspaces already has that site (workspaceDomains below), or
 //     Toran says it asked not to be written to
-//   - a known one takes what Toran says now, except that a contact or a profile Toran no longer sends is kept: a
-//     value is replaced by another, never by nothing
+//   - a known one takes what Toran says now, except that a contact, a profile or the line about the store (about:
+//     its home page's description or title, in its own words) Toran no longer sends is kept: a value is replaced by
+//     another, never by nothing
 //   - optedOut sets opted_out_at, and the lead is hidden from then on, whatever Toran says later
 // Everything Toran sends is checked before it is kept: a profile is an https address on its own network, a WhatsApp
 // number international digits, a mail address one address. Anything else is left out.
@@ -127,6 +128,7 @@ export function storeToLead(s) {
     url,
     name: text(s.name, 200),
     platform: text(s.platform, 40),
+    about: text(s.about, 300),
     score: s.score != null && Number.isFinite(score) ? score : null,
     toran_status: text(s.toranStatus, 40),
     email: emailOf(c.email),
@@ -141,7 +143,7 @@ export function storeToLead(s) {
 }
 
 // What a known lead keeps when Toran's answer has nothing for it.
-const KEEP = ['name', 'platform', 'score', 'toran_status', 'email', 'whatsapp', 'phone', 'instagram', 'tiktok', 'facebook', 'toran_id'];
+const KEEP = ['name', 'platform', 'about', 'score', 'toran_status', 'email', 'whatsapp', 'phone', 'instagram', 'tiktok', 'facebook', 'toran_id'];
 
 /** Add or change one lead from Toran's store. Returns 'added', 'updated', 'hidden', 'customer' or 'skipped'. */
 export function upsertLead(db, s, { customers = new Set(), t = nowIso() } = {}) {

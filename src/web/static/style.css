@@ -1288,6 +1288,13 @@ details.more[open] > summary { background: var(--fill-2); }
 .lead-social a:hover { background: var(--fill-2); color: var(--ink); }
 .lead-social svg { width: 17px; height: 17px; fill: currentColor; }
 .lead > .meta { padding: 10px 20px 0; margin: 0; }
+/* Under the name, what the store says about itself (or its platform and domain): muted, two lines at most. */
+.lead-about { margin: 0; color: var(--ink-3); font-size: 14px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* The idea for their TikTok and Instagram, from the demo's topic: one line, which a phone may wrap rather than hide
+   the topic behind an ellipsis. */
+.lead-idea { margin: 10px 20px 0; font-size: 14px; color: var(--ink-2); overflow-wrap: anywhere; }
+/* What "לבנות דמו" does, once above the new stores. */
+.leads-lede { margin: 0 0 20px; color: var(--ink-3); font-size: 14px; }
 .lead-note { margin: 10px 20px 0; padding: 10px 14px; border-radius: var(--r-m); background: var(--inset); font-size: 13px; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .lead-body { display: grid; gap: 12px; padding: 14px 20px 0; }
 .lead-body p { margin: 0; }

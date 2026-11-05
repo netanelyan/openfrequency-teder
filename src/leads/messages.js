@@ -21,15 +21,33 @@ export const le = (name) => `${/^[א-ת]/.test(name) ? 'ל' : 'ל־'}${name}`;
  * says how to stop). Toran's tederFirst (src/ops/messages.ts) is for a store that asked on the website ("ביקשתם
  * באתר..."), so it is not used here. The owner's wording, 2026-11-05: it says what Teder does for a store and how
  * (it reads the site, writes and designs, nothing goes up unapproved) before the demo, and asks whether they want
- * to hear more, instead of a pitch line.
+ * to hear more, instead of a pitch line. o.topic, when the demo has one, is what its slideshow is about (topicOf), and
+ * the sample's line names it ("..., על הסיפור של התה, ..."): the idea the card shows the operator, told to the store.
  */
 export const TEDER_COLD_FIRST = (o) =>
   `היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין מצגות בעברית לטיקטוק ולאינסטגרם. הוא קורא את האתר של החנות, וכותב ומעצב מצגות על נושאים מהתחום שלה. כל מצגת מחכה לאישור שלכם לפני שהיא עולה.
 
-הכנו ${le(o.storeName)} מצגת אחת לדוגמה, כדי שתראו איך זה ייראה אצלכם:
+הכנו ${le(o.storeName)} מצגת אחת לדוגמה, ${o.topic ? `על ${o.topic}, ` : ''}כדי שתראו איך זה ייראה אצלכם:
 ${o.url}
 
 אם זה מעניין אתכם, אפשר לענות כאן ונספר עוד. אם לא, אפשר לענות "לא" ולא נכתוב שוב.`;
+
+/**
+ * What a store's demo slideshow is about, in Hebrew, as the build chose it (src/demos/write.js chooseTopic's niche, kept
+ * on the demo in topic_json): two to five words that read after "מצגת על". Null when the demo has none.
+ */
+export function topicOf(topicJson) {
+  let t = topicJson;
+  if (typeof t === 'string') {
+    try {
+      t = JSON.parse(t);
+    } catch {
+      return null;
+    }
+  }
+  const niche = typeof t?.niche === 'string' ? t.niche.replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?]+$/, '') : '';
+  return niche && niche.length <= 80 ? niche : null;
+}
 
 /** The one reminder, Toran's tederReminder word for word (openfrequency-toran src/ops/messages.ts). */
 export const TEDER_REMINDER = (o) =>

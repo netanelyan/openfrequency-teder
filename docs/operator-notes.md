@@ -431,7 +431,14 @@ says which keys are set without showing them.
   of our customers' workspaces already has is not added: its site typed on /new (`onboarding.seed_json.site`) or the
   address an account's closing slide sends people to (`pack.json` `promo.target.url`); a lead that becomes one later
   moves to "הצטרפו" by itself. A store Toran says asked not to be written to (`optedOut`) is hidden for good. A contact
-  or profile Toran stops sending is kept, never wiped.
+  or profile Toran stops sending is kept, never wiped, and so is the line about the store.
+- **The card.** Under the store's name, a muted line or two in the store's own words: Toran's `about`, its home
+  page's description or else its title, cleaned and cut to 160 characters (openfrequency-toran src/leads/about.ts).
+  A store that says nothing more than its name has its platform and domain there instead, in one short line. Once
+  the store has a demo, one line gives the topic its slideshow was written on (`demos.topic_json` `niche`, the build's
+  choice in src/demos/write.js): "רעיון לטיקטוק ולאינסטגרם שלהם: <the topic>". A store without a demo has no idea
+  line, since the demo is built, and paid for, only on "לבנות דמו". What that button builds is said once, above the
+  new stores: "הדמו נבנה רק כשלוחצים על "לבנות דמו": מצגת אחת על נושא מהתחום של החנות, ועמוד שאפשר לשלוח לה."
 - **The tabs.** חדש, דמו מוכן, נשלח, פתחו, ענו והצטרפו, לא רלוונטי, each with its count. In a tab, a store already on
   TikTok or Instagram comes first (a better Teder lead), then by Toran's score.
 - **Each card's one step.**
@@ -440,7 +447,9 @@ says which keys are set without showing them.
     says so and the page refreshes when it is done. A failure says why, with "לנסות שוב". A store that already asked
     on the website is linked to that demo instead.
   - דמו מוכן: the first message, ready to copy (src/leads/messages.js `TEDER_COLD_FIRST`, written for a store that
-    never asked; the owner is reviewing the wording on 2026-11-05), and a button for every way to reach the store.
+    never asked; the owner's wording of 2026-11-05). When the demo has a topic, the sample's line names it, the same
+    idea the card shows: "הכנו ל<store> מצגת אחת לדוגמה, על <the topic>, כדי שתראו איך זה ייראה אצלכם:". Then a button
+    for every way to reach the store.
     WhatsApp (`wa.me/<number>?text=`) and mail (`mailto:` with a subject and the body) open with the message written
     in. A call and the Instagram, TikTok and Facebook profiles can't be handed the text, so their button copies it.
     Then "שלחתי" with the way it went. Teder sends nothing itself.
@@ -458,7 +467,9 @@ says which keys are set without showing them.
   coming and why. A customer who gave no site on /new and has no closing slide address isn't recognized: mark the lead
   "הצטרפו" by hand.
 - **Needed now?** Toran has to serve `/internal/stores` first (it is built beside this, in Toran's own branch). Until
-  then every hour's try is one log line and the page shows the error.
+  then every hour's try is one log line and the page shows the error. The line about each store needs Toran's
+  `about` (its migration 047): deploy Toran first, then Teder, whose migration 20 forgets `leads:cursor` so the next
+  sync reads every store once more and the leads already here get their line.
 
 ### OF_SUPPORT_WA: where "כתבו לנו" leads
 

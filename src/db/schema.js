@@ -741,4 +741,12 @@ export const MIGRATIONS = [
   CREATE INDEX leads_stage ON leads(stage);
   CREATE INDEX leads_demo ON leads(demo_id);
   `,
+  `
+  -- A line about the store in its own words, under its name on /leads: Toran's about (its home page's description,
+  -- else its title, cleaned and cut to 160 characters, openfrequency-toran src/leads/about.ts). Kept like a contact: a
+  -- new one replaces it, a null never does. The sync reads every store once more from the start (leads:cursor
+  -- forgotten), so the leads already here get theirs; what it keeps of them is as it was.
+  ALTER TABLE leads ADD COLUMN about TEXT;
+  DELETE FROM settings WHERE key = 'leads:cursor';
+  `,
 ];

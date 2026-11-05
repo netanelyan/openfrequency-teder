@@ -2,7 +2,7 @@ import { nowIso, now } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { requestDemo } from '../demos/build.js';
 import { DemoError } from '../demos/store.js';
-import { CHANNELS, CHANNEL_HE, reachLinks, reminderFrom, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER } from '../leads/messages.js';
+import { CHANNELS, CHANNEL_HE, reachLinks, reminderFrom, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER, topicOf } from '../leads/messages.js';
 import { lastSync, leadsSource, refreshStages, syncLeads } from '../leads/sync.js';
 import { ActionError } from './actions.js';
 import { running, startBuild } from './demos.js';
@@ -11,7 +11,10 @@ import { csrfField, esc, icon, layout, postButton, stamp } from './ui.js';
 
 // The operator's leads: stores Toran found (src/leads/sync.js), each offered Teder by hand, one step at a time.
 //
-//   GET  /leads                    the stores of one stage (?tab=), each a card with its one next step
+//   GET  /leads                    the stores of one stage (?tab=), each a card with its one next step: under the
+//                                  name what the store says about itself (Toran's about) or its platform and
+//                                  domain, and once it has a demo, the idea for their TikTok and Instagram (the
+//                                  demo's topic), which the first message names too
 //   GET  /leads/status.json        while a demo is being built: whether it still is, for the page's script
 //   POST /leads/sync               ask Toran now, without waiting for the hour
 //   POST /leads/<id>/demo          build the store's demo: on this click only, since each one costs the writer's
@@ -45,13 +48,17 @@ const operatorOnly = (user) => {
 // The lead's own words for what Toran is doing with the same store (openfrequency-toran src/web/ui.ts STATUS_HE).
 const TORAN_HE = { sent: 'תורן כבר כתב להם', opened: 'פתחו את הדמו של תורן', demo_started: 'ניסו את הדמו של תורן', pilot: 'בהקמה של תורן', paid: 'לקוחות של תורן', skipped: 'תורן דילג עליהם' };
 
+// The platforms by their own names (openfrequency-toran src/web/ui.ts PLATFORM_HE); "other" says nothing on a card.
+const PLATFORM_NAME = { shopify: 'Shopify', woocommerce: 'WooCommerce', wix: 'Wix', konimbo: 'Konimbo', cashcow: 'Cashcow', magento: 'Magento', bigcommerce: 'BigCommerce', wordpress: 'WordPress' };
+const platformName = (p) => (p && p !== 'other' ? PLATFORM_NAME[p] || p : null);
+
 const SOCIAL = Object.fromEntries(LOGOS.filter((l) => ['instagram', 'tiktok', 'facebook'].includes(l.key)).map((l) => [l.key, l]));
 const socialIcon = (key) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${SOCIAL[key].path}"/></svg>`;
 
 /** The leads that are shown (not opted out), with their demo's state and its opens since the message went. */
 function leadRows(db, stages) {
   return db.all(
-    `SELECT l.*, d.status AS demo_status, d.slug AS demo_slug, d.error AS demo_error,
+    `SELECT l.*, d.status AS demo_status, d.slug AS demo_slug, d.error AS demo_error, d.topic_json AS demo_topic,
             (SELECT COUNT(*) FROM demo_opens o WHERE o.demo_id = l.demo_id AND l.sent_at IS NOT NULL AND o.at >= l.sent_at) AS opens,
             (SELECT MAX(o.at) FROM demo_opens o WHERE o.demo_id = l.demo_id AND l.sent_at IS NOT NULL AND o.at >= l.sent_at) AS last_open_at
        FROM leads l LEFT JOIN demos d ON d.id = l.demo_id
@@ -110,12 +117,12 @@ function stagePart(ctx, lead, { origin, t }) {
     if (st === 'new' || st === 'building') return { body: '<p class="lead-state"><span class="spin" aria-hidden="true"></span>בונים את הדמו. זה לוקח כמה דקות, והכרטיס יתעדכן לבד.</p>', main: '' };
     if (st === 'failed') return { body: `<p class="err">הדמו לא נבנה: ${esc(lead.demo_error || 'לא ידוע למה')}</p>`, main: btn('demo', 'לנסות שוב', 'btn primary') };
     if (st === 'ready') return { body: '<p>הדמו מוכן ומחכה לבדיקה שלכם לפני שהעמוד שלו עולה.</p>', main: `<a class="btn primary" href="/demos/${esc(lead.demo_id)}">לבדוק את הדמו</a>` };
-    return { body: '<p class="muted">הדמו נבנה רק כשלוחצים: מצגת אחת על נושא מהתחום של החנות, ועמוד שאפשר לשלוח לה.</p>', main: btn('demo', 'לבנות דמו', 'btn primary') };
+    return { body: '', main: btn('demo', 'לבנות דמו', 'btn primary') };
   }
   const url = pageUrl(origin, lead);
   if (lead.stage === 'demo_ready') {
     if (!url) return { body: '<p class="muted">העמוד של הדמו לא באוויר.</p>', main: '' };
-    return { body: `${reachBox(lead, TEDER_COLD_FIRST({ storeName: name, url }), `msg-${id}`)}<p class="small"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">לראות את העמוד של החנות</a></p>`, main: sentForm(ctx, lead, 'sent', 'שלחתי') };
+    return { body: `${reachBox(lead, TEDER_COLD_FIRST({ storeName: name, url, topic: topicOf(lead.demo_topic) }), `msg-${id}`)}<p class="small"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">לראות את העמוד של החנות</a></p>`, main: sentForm(ctx, lead, 'sent', 'שלחתי') };
   }
   if (lead.stage === 'sent' || lead.stage === 'opened') {
     const opened = lead.opens ? `<p>העמוד נפתח ${esc(times(lead.opens))} מאז, לאחרונה ${esc(stamp(lead.last_open_at))}.</p>` : '';
@@ -132,12 +139,32 @@ function stagePart(ctx, lead, { origin, t }) {
   return { body: `<p class="muted">סימנתם${lead.skipped_at ? ` ב־${esc(stamp(lead.skipped_at))}` : ''} שזה לא רלוונטי.</p>`, main: btn('back', 'להחזיר לרשימה') };
 }
 
+/**
+ * The line under the store's name: what it says about itself (Toran's about, its home page's description or title),
+ * else its platform and its domain. Muted, two lines at most.
+ */
+function aboutLine(lead) {
+  if (lead.about) return `<p class="lead-about" dir="auto">${esc(lead.about)}</p>`;
+  const parts = [platformName(lead.platform), lead.name ? lead.domain : null].filter(Boolean);
+  return parts.length ? `<p class="lead-about">${parts.map((p) => `<span class="ltr">${esc(p)}</span>`).join(' · ')}</p>` : '';
+}
+
+/**
+ * The idea for their TikTok and Instagram: the topic the store's demo slideshow was written on (topicOf), once the
+ * lead has a demo that has one. None before: the demo is built, and paid for, on the operator's click.
+ */
+function ideaLine(lead) {
+  const topic = lead.demo_id && lead.demo_status !== 'removed' ? topicOf(lead.demo_topic) : null;
+  return topic ? `<p class="lead-idea">רעיון לטיקטוק ולאינסטגרם שלהם: <bdi>${esc(topic)}</bdi></p>` : '';
+}
+
 /** One store: who it is and where, its step, and the moves every card has. */
 function leadCard(ctx, lead, opts) {
   const { body, main } = stagePart(ctx, lead, opts);
   const name = lead.name || lead.domain;
   const meta = [
-    lead.platform ? `<span class="chip">${esc(lead.platform)}</span>` : '',
+    // The platform is in the line under the name when the store says nothing about itself.
+    lead.about && platformName(lead.platform) ? `<span class="chip">${esc(platformName(lead.platform))}</span>` : '',
     lead.score != null ? `<span class="chip">ציון <span class="num">${esc(Math.round(lead.score))}</span></span>` : '',
     onNets(lead),
     TORAN_HE[lead.toran_status] ? `<span class="chip warn">${esc(TORAN_HE[lead.toran_status])}</span>` : '',
@@ -154,10 +181,11 @@ function leadCard(ctx, lead, opts) {
     .join('');
   const notes = `<details class="lead-notes"><summary>${lead.notes ? 'לערוך את ההערה' : 'להוסיף הערה'}</summary><form method="post" action="/leads/${lead.id}/notes">${csrfField(ctx)}<label class="sr" for="notes-${lead.id}">הערה</label><textarea id="notes-${lead.id}" name="notes" rows="3" maxlength="2000">${esc(lead.notes || '')}</textarea><button class="btn sm" type="submit">לשמור</button></form></details>`;
   return `<article class="card lead" id="lead-${lead.id}">
-<header><div><h2><a href="${esc(lead.url)}" target="_blank" rel="noopener noreferrer"><bdi>${esc(name)}</bdi></a></h2>${lead.name ? `<span class="muted small ltr">${esc(lead.domain)}</span>` : ''}</div>${socialLinks(lead)}</header>
+<header><div><h2><a href="${esc(lead.url)}" target="_blank" rel="noopener noreferrer"><bdi>${esc(name)}</bdi></a></h2>${aboutLine(lead)}</div>${socialLinks(lead)}</header>
 ${meta ? `<p class="meta">${meta}</p>` : ''}
+${ideaLine(lead)}
 ${lead.notes ? `<p class="lead-note">${esc(lead.notes)}</p>` : ''}
-<div class="lead-body">${body}</div>
+${body ? `<div class="lead-body">${body}</div>` : ''}
 ${main ? `<div class="lead-do">${main}</div>` : ''}
 <div class="lead-more">${moves}${notes}</div>
 </article>`;
@@ -201,8 +229,10 @@ function leadsPage(ctx, pc, q, env) {
     replied: ['עוד אין תשובות', 'חנות שענתה או הצטרפה מסומנת מהכרטיס שלה.'],
     irrelevant: ['אין כאן כלום', 'חנות שסימנתם שהיא לא רלוונטית עוברת לכאן, ואפשר להחזיר אותה.'],
   }[tab[0]];
+  // What "לבנות דמו" does, said once above the new stores, not on each card.
+  const lede = tab[0] === 'new' && cards.length ? '<p class="leads-lede">הדמו נבנה רק כשלוחצים על "לבנות דמו": מצגת אחת על נושא מהתחום של החנות, ועמוד שאפשר לשלוח לה.</p>' : '';
   const list = cards.length
-    ? `<div class="posts leads">${cards.join('\n')}</div>${total > SHOWN ? `<p class="muted small mt12">מוצגות ${SHOWN} הראשונות מתוך ${total}.</p>` : ''}`
+    ? `${lede}<div class="posts leads">${cards.join('\n')}</div>${total > SHOWN ? `<p class="muted small mt12">מוצגות ${SHOWN} הראשונות מתוך ${total}.</p>` : ''}`
     : `<div class="empty">${icon('inbox')}<b>${esc(empty[0])}</b><span>${esc(empty[1])}</span></div>`;
   const poll = building ? `<div data-poll="/leads/status.json" data-key="${esc(buildKey(db))}" data-href="/leads?tab=${tab[0]}" hidden></div>` : '';
   const body = `<div class="head"><div><h1>לידים</h1></div><div class="end">${leadsSource(env).url ? postButton(pc, '/leads/sync', 'לעדכן מתורן', { cls: 'btn sm' }) : ''}</div>

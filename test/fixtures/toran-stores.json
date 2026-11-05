@@ -1,6 +1,6 @@
 {
   "name": "toran-stores",
-  "doc": "Teder's operator page of leads (Teder src/leads/sync.js, src/web/leads.js, docs/operator-notes.md) copies the stores Toran found, once an hour, from Toran on this machine (Toran src/ops/stores.ts). It is between Teder and Toran alone, so it is not one of openfrequency-accounts' contracts. since is \"changed after\" and optional; next is the last row's updatedAt when the page is full, else null, and the caller asks again with since=next exactly as it came (Toran's moments are to the microsecond). A page may run a little over limit, so that no moment is split between two pages.",
+  "doc": "Teder's operator page of leads (Teder src/leads/sync.js, src/web/leads.js, docs/operator-notes.md) copies the stores Toran found, once an hour, from Toran on this machine (Toran src/ops/stores.ts). It is between Teder and Toran alone, so it is not one of openfrequency-accounts' contracts. since is \"changed after\" and optional; next is the last row's updatedAt when the page is full, else null, and the caller asks again with since=next exactly as it came (Toran's moments are to the microsecond). A page may run a little over limit, so that no moment is split between two pages. about (added 2026-11-05) is a line about the store in its own words, its home page's description or else its title, cleaned and cut to 160 characters at a word (Toran src/leads/about.ts), or null when it says nothing the name does not.",
   "servedBy": ["toran"],
   "calledBy": ["teder"],
   "routes": [
@@ -23,6 +23,7 @@
                 "url": "https://kettles.example.co.il/",
                 "name": "חנות הקומקומים",
                 "platform": "shopify",
+                "about": "קומקומים, קנקנים וכלי תה מכל העולם, עם משלוח לכל הארץ.",
                 "score": 78,
                 "toranStatus": "page_ready",
                 "contact": { "email": "hello@kettles.example.co.il", "whatsapp": "972501234567", "phone": "035551234" },
@@ -33,7 +34,7 @@
             ],
             "next": null
           },
-          "nullable": ["stores[].name", "stores[].platform", "stores[].score", "stores[].contact.email", "stores[].contact.whatsapp", "stores[].contact.phone", "stores[].social.instagram", "stores[].social.tiktok", "stores[].social.facebook", "next"]
+          "nullable": ["stores[].name", "stores[].platform", "stores[].about", "stores[].score", "stores[].contact.email", "stores[].contact.whatsapp", "stores[].contact.phone", "stores[].social.instagram", "stores[].social.tiktok", "stores[].social.facebook", "next"]
         },
         { "case": "OF_INTERNAL_TOKEN is not set on Toran", "status": 503, "body": { "error": "not_configured" } },
         { "case": "not from this machine, or through Caddy", "status": 403, "body": { "error": "forbidden" } },

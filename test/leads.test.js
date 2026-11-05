@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Db } from '../src/db/index.js';
+import { MIGRATIONS } from '../src/db/schema.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { setNow } from '../src/core/clock.js';
@@ -12,7 +14,7 @@ import { running } from '../src/web/demos.js';
 import { checkDraft } from '../src/demos/write.js';
 import { DemoError } from '../src/demos/store.js';
 import { leadsSource, leadsTick, refreshStages, syncLeads } from '../src/leads/sync.js';
-import { notOnShabbat, reminderDue, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER } from '../src/leads/messages.js';
+import { notOnShabbat, reminderDue, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER, topicOf } from '../src/leads/messages.js';
 import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, operator, opened, serverFree, tempHome, viewingAs } from './helpers.js';
 
 // The operator's leads (src/leads, src/web/leads.js): the stores Toran found, copied once an hour from Toran's
@@ -21,7 +23,9 @@ import { INTERNAL_TOKEN, customer, fakeAccounts, listenFree, operator, opened, s
 // written to hidden, a store one of our customers already has left out, nothing asked without the token; the page the
 // operator's alone; the demo built on a click only, through the stand-in builder (ctx.demoIo: no model is ever
 // called), with no WhatsApp number; the first message and every way to send it; the one reminder four days later and
-// never on Shabbat; and the move to "פתחו" when the store opens its page.
+// never on Shabbat; and the move to "פתחו" when the store opens its page. Each card says what the store says about
+// itself (Toran's about) or its platform and domain, and, once its demo has a topic, the idea for their TikTok and
+// Instagram, which the first message names.
 
 const EXAMPLE = JSON.parse(readFileSync(path.join(ROOT, 'test', 'fixtures', 'toran-stores.json'), 'utf8'));
 const KETTLES = EXAMPLE.routes[0].answers[0].body.stores[0];
@@ -195,10 +199,12 @@ test('the sync: two pages from the cursor, a customer\'s store and one that aske
 
   const k = lead('kettles.example.co.il');
   assert.deepEqual(
-    { name: k.name, platform: k.platform, score: k.score, toran: k.toran_status, email: k.email, whatsapp: k.whatsapp, phone: k.phone, ig: k.instagram, tt: k.tiktok, fb: k.facebook, stage: k.stage, demo: k.demo_id, toranId: k.toran_id },
-    { name: 'חנות הקומקומים', platform: 'shopify', score: 78, toran: 'page_ready', email: 'hello@kettles.example.co.il', whatsapp: '972501234567', phone: '035551234', ig: 'https://www.instagram.com/kettles.example/', tt: 'https://www.tiktok.com/@kettles.example', fb: null, stage: 'demo_ready', demo: asked.id, toranId: '41' }
+    { name: k.name, platform: k.platform, about: k.about, score: k.score, toran: k.toran_status, email: k.email, whatsapp: k.whatsapp, phone: k.phone, ig: k.instagram, tt: k.tiktok, fb: k.facebook, stage: k.stage, demo: k.demo_id, toranId: k.toran_id },
+    { name: 'חנות הקומקומים', platform: 'shopify', about: KETTLES.about, score: 78, toran: 'page_ready', email: 'hello@kettles.example.co.il', whatsapp: '972501234567', phone: '035551234', ig: 'https://www.instagram.com/kettles.example/', tt: 'https://www.tiktok.com/@kettles.example', fb: null, stage: 'demo_ready', demo: asked.id, toranId: '41' }
   );
+  assert.ok(KETTLES.about, "the contract's example has a line about the store");
   assert.equal(lead('plain.example.co.il').stage, 'new');
+  assert.equal(lead('plain.example.co.il').about, null, 'a store Toran sent no about for has none');
   assert.equal(lead('customer-shop.example.co.il'), null, "a customer's store is not a lead, with or without www.");
   assert.equal(lead('asked-not.example.co.il'), null, 'a store that asked not to be written to is not kept');
   const b = lead('broken.example.co.il');
@@ -206,13 +212,17 @@ test('the sync: two pages from the cursor, a customer\'s store and one that aske
 
   // The next hour: Toran has the kettles store's email no more and a new number, and the broken one asked to stop.
   toran.state.asked.length = 0;
-  toran.state.pages = () => ({ stores: [{ ...KETTLES, contact: { email: null, whatsapp: '972509999999', phone: null }, social: { instagram: null, tiktok: null, facebook: null }, updatedAt: '2026-11-05T10:00:00.000002Z' }, { ...BAD, optedOut: true, updatedAt: '2026-11-05T10:00:00.000003Z' }], next: null });
+  toran.state.pages = () => ({ stores: [{ ...KETTLES, about: null, contact: { email: null, whatsapp: '972509999999', phone: null }, social: { instagram: null, tiktok: null, facebook: null }, updatedAt: '2026-11-05T10:00:00.000002Z' }, { ...BAD, optedOut: true, updatedAt: '2026-11-05T10:00:00.000003Z' }], next: null });
   const r2 = await syncLeads(ctx, { env: env() });
   assert.equal(r2.updated, 1);
   assert.equal(r2.hidden, 1);
   assert.deepEqual(toran.state.asked.map((a) => a.since), [GONE.updatedAt], 'from where the last one ended');
   const k2 = lead('kettles.example.co.il');
-  assert.deepEqual([k2.email, k2.whatsapp, k2.phone, k2.instagram, k2.tiktok], ['hello@kettles.example.co.il', '972509999999', '035551234', KETTLES.social.instagram, KETTLES.social.tiktok], 'a value is replaced by another, never by nothing');
+  assert.deepEqual([k2.email, k2.whatsapp, k2.phone, k2.instagram, k2.tiktok, k2.about], ['hello@kettles.example.co.il', '972509999999', '035551234', KETTLES.social.instagram, KETTLES.social.tiktok, KETTLES.about], 'a value is replaced by another, never by nothing, the line about the store too');
+  // Toran's about changes: the new line replaces the old one, whitespace collapsed.
+  toran.state.pages = () => ({ stores: [{ ...KETTLES, about: '  קומקומים חשמליים,\n קנקנים וכלי תה מכל העולם. ', contact: { email: null, whatsapp: '972509999999', phone: null }, social: { instagram: null, tiktok: null, facebook: null }, updatedAt: '2026-11-05T10:00:00.000004Z' }], next: null });
+  assert.equal((await syncLeads(ctx, { env: env() })).updated, 1);
+  assert.equal(lead('kettles.example.co.il').about, 'קומקומים חשמליים, קנקנים וכלי תה מכל העולם.');
   assert.ok(lead('broken.example.co.il').opted_out_at, 'opted out');
   const page = await (await get('/leads?tab=new', op)).text();
   assert.doesNotMatch(page, /broken\.example/, 'and hidden from the page');
@@ -292,7 +302,24 @@ test('the tabs count each stage, and a store on TikTok or Instagram comes first 
     const card = cardOf(html, id);
     assert.equal((card.match(/btn primary/g) || []).length, 1, 'one blue button a card');
     assert.match(card, /לבנות דמו/);
+    // Toran sent nothing about these two: the line under the name is the platform and the domain, and the platform
+    // is not said again in a chip.
+    const domain = lead(id === social ? 'social.example.co.il' : 'plain.example.co.il').domain;
+    assert.match(card, new RegExp(`</h2><p class="lead-about"><span class="ltr">Shopify</span> · <span class="ltr">${domain.replace(/\./g, '\\.')}</span></p></div>`));
+    assert.doesNotMatch(card, /<span class="chip">Shopify<\/span>/);
+    assert.doesNotMatch(card, /הדמו נבנה רק כשלוחצים/, 'not on each card');
+    assert.doesNotMatch(card, /רעיון לטיקטוק/, 'no idea before there is a demo: building it is the step the operator pays for');
+    assert.doesNotMatch(card, /class="lead-body"/, 'and no empty box where the sentence was');
   }
+  assert.equal((html.match(/הדמו נבנה רק כשלוחצים על "לבנות דמו": מצגת אחת על נושא מהתחום של החנות, ועמוד שאפשר לשלוח לה\./g) || []).length, 1, 'said once, above the new stores');
+  assert.ok(html.indexOf('class="leads-lede"') < html.indexOf('class="posts leads"'));
+  // The kettles store said something about itself: that is the line under its name, muted, and its platform is a chip.
+  const ready = await (await get('/leads?tab=ready', op)).text();
+  const kettles = cardOf(ready, lead('kettles.example.co.il').id);
+  assert.match(kettles, /<\/h2><p class="lead-about" dir="auto">קומקומים חשמליים, קנקנים וכלי תה מכל העולם\.<\/p><\/div>/);
+  assert.doesNotMatch(kettles, /<span class="ltr">kettles\.example\.co\.il<\/span>/, 'the line about it instead of its domain');
+  assert.match(kettles, /<span class="chip">Shopify<\/span>/);
+  assert.doesNotMatch(ready, /הדמו נבנה רק כשלוחצים/, 'the sentence is about the new stores only');
 });
 
 test('"לבנות דמו" builds on the click only, with no WhatsApp number, through the stand-in builder; the website still needs a number', async () => {
@@ -321,6 +348,11 @@ test('"לבנות דמו" builds on the click only, with no WhatsApp number, thr
   assert.equal(db.get('SELECT status FROM demos WHERE id = ?', d.id).status, 'approved');
   assert.equal((await (await get('/leads/status.json', op)).json()).busy, false);
   assert.equal(lead('plain.example.co.il').stage, 'demo_ready', 'its page is up, so it is ready to send');
+  // The topic the build chose for its slideshow is kept on the demo, and is the card's idea for their accounts.
+  assert.equal(topicOf(db.get('SELECT topic_json FROM demos WHERE id = ?', d.id).topic_json), 'הסיפור של התה');
+  const ready = cardOf(await (await get('/leads?tab=ready', op)).text(), id);
+  assert.match(ready, /<p class="lead-idea">רעיון לטיקטוק ולאינסטגרם שלהם: <bdi>הסיפור של התה<\/bdi><\/p>/);
+  assert.equal((ready.match(/רעיון לטיקטוק ולאינסטגרם שלהם/g) || []).length, 1, 'one line');
 
   // A build that fails says why on the card, and the one step is to try again.
   const broken = lead('broken.example.co.il');
@@ -363,7 +395,13 @@ test('"דמו מוכן": the cold first message, never "ביקשתם", and a but
   assert.match(card, /<select id="via-\d+" name="via"><option value="whatsapp">וואטסאפ<\/option><option value="email">מייל<\/option><option value="phone">טלפון<\/option><option value="instagram">אינסטגרם<\/option><option value="tiktok">טיקטוק<\/option><option value="other">דרך אחרת<\/option><\/select>/);
 
   // The plain store has no way to reach it: the page says so, and the message is still there to copy.
+  assert.doesNotMatch(card, /רעיון לטיקטוק/, 'a demo with no topic (asked for on the website before topics were kept) has no idea');
   const plain = cardOf(await (await get('/leads?tab=ready', op)).text(), lead('plain.example.co.il').id);
+  // Its demo has a topic: the message tells them the idea the card shows.
+  const plainSlug = db.get('SELECT slug FROM demos WHERE id = ?', lead('plain.example.co.il').demo_id).slug;
+  const told = TEDER_COLD_FIRST({ storeName: 'החנות הפשוטה', url: `${base}/s/${plainSlug}`, topic: 'הסיפור של התה' });
+  assert.equal(unesc(/<textarea id="msg-\d+" rows="9" readonly dir="rtl">([\s\S]*?)<\/textarea>/.exec(plain)[1]), told);
+  assert.match(told, /\nהכנו .+ מצגת אחת לדוגמה, על הסיפור של התה, כדי שתראו איך זה ייראה אצלכם:\n/);
   assert.match(plain, /לא מצאנו לחנות וואטסאפ, מייל, טלפון או פרופיל ברשתות/);
   assert.match(plain, /<button class="btn primary" type="submit">שלחתי<\/button>/, 'then "שלחתי" is its one blue button');
   assert.equal((plain.match(/btn primary/g) || []).length, 1);
@@ -466,4 +504,43 @@ test('every card has "ענו", "הצטרפו" and "לא רלוונטי" and a no
     pack.meta.promo = was;
     db.run('UPDATE accounts SET workspace_id = NULL WHERE id = ?', pack.id);
   }
+});
+
+test('the first message names the demo\'s topic when it has one, and is word for word as it was without one', () => {
+  const url = 'https://teder.example/s/kettles-a1b2c3';
+  const opening = 'היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין מצגות בעברית לטיקטוק ולאינסטגרם. הוא קורא את האתר של החנות, וכותב ומעצב מצגות על נושאים מהתחום שלה. כל מצגת מחכה לאישור שלכם לפני שהיא עולה.';
+  const ending = 'אם זה מעניין אתכם, אפשר לענות כאן ונספר עוד. אם לא, אפשר לענות "לא" ולא נכתוב שוב.';
+  assert.equal(
+    TEDER_COLD_FIRST({ storeName: 'חנות הקומקומים', url }),
+    `${opening}\n\nהכנו לחנות הקומקומים מצגת אחת לדוגמה, כדי שתראו איך זה ייראה אצלכם:\n${url}\n\n${ending}`
+  );
+  assert.equal(
+    TEDER_COLD_FIRST({ storeName: 'חנות הקומקומים', url, topic: 'הסיפור של התה' }),
+    `${opening}\n\nהכנו לחנות הקומקומים מצגת אחת לדוגמה, על הסיפור של התה, כדי שתראו איך זה ייראה אצלכם:\n${url}\n\n${ending}`
+  );
+  assert.equal(TEDER_COLD_FIRST({ storeName: 'Kettles', url, topic: null }), TEDER_COLD_FIRST({ storeName: 'Kettles', url }), 'no topic: as it was');
+  assert.match(TEDER_COLD_FIRST({ storeName: 'Kettles', url, topic: 'קפה טורקי' }), /הכנו ל־Kettles מצגת אחת לדוגמה, על קפה טורקי, כדי/);
+  for (const m of [TEDER_COLD_FIRST({ storeName: 'x', url }), TEDER_COLD_FIRST({ storeName: 'x', url, topic: 'קפה טורקי' })]) assert.doesNotMatch(m, /[—–!]/, 'no dashes, no exclamation marks');
+
+  // The topic as the build kept it on the demo: its niche, in Hebrew; none when there is none.
+  assert.equal(topicOf(JSON.stringify({ niche: ' הסיפור  של התה. ', angle: 'how tea was discovered', articles: [] })), 'הסיפור של התה');
+  assert.equal(topicOf({ niche: 'קפה טורקי' }), 'קפה טורקי');
+  for (const none of [null, undefined, '', '{', '{}', JSON.stringify({ niche: '' }), JSON.stringify({ niche: 7 }), JSON.stringify({ niche: 'א'.repeat(81) })]) assert.equal(topicOf(none), null, String(none));
+});
+
+test('the migration that adds about forgets the cursor, so the leads already kept get theirs on the next sync, and keeps the rest', () => {
+  const file = path.join(home.home, 'leads-before-about.db');
+  const raw = new DatabaseSync(file);
+  for (let v = 0; v < MIGRATIONS.length - 1; v++) raw.exec(MIGRATIONS[v]);
+  raw.exec(`PRAGMA user_version = ${MIGRATIONS.length - 1}`);
+  raw.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)').run('leads:cursor', JSON.stringify('2026-11-05T09:41:00.000001Z'), '2026-11-05T10:00:00.000Z');
+  raw.prepare('INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)').run('leads:sync', JSON.stringify({ ok: true }), '2026-11-05T10:00:00.000Z');
+  raw.prepare("INSERT INTO leads (domain, url, name, stage, notes, created_at, updated_at) VALUES ('kept.example.co.il', 'https://kept.example.co.il', 'נשמרה', 'sent', 'הערה', ?, ?)").run('2026-11-05T10:00:00.000Z', '2026-11-05T10:00:00.000Z');
+  raw.close();
+  const migrated = new Db(file);
+  opened.push(migrated);
+  assert.equal(migrated.get("SELECT value_json FROM settings WHERE key = 'leads:cursor'"), null, 'the next sync reads from the start');
+  assert.ok(migrated.get("SELECT value_json FROM settings WHERE key = 'leads:sync'"), 'the last sync is still said');
+  const kept = migrated.get("SELECT * FROM leads WHERE domain = 'kept.example.co.il'");
+  assert.deepEqual([kept.name, kept.stage, kept.notes, kept.about], ['נשמרה', 'sent', 'הערה', null]);
 });
