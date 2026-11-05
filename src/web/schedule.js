@@ -61,7 +61,9 @@ function restLine(m) {
  * The panel: a row a weekday, a box and up to two times. `back` is the page the form returns to; `action` where it
  * posts (an account's, or a new account's onboarding before the account exists).
  */
-export function schedulePanel(ctx, d, { back = '/settings#schedule', title = 'מתי מפרסמים', lede = null, action = null } = {}) {
+// `formId` names the form, and `save: false` leaves its button out: /new's setup step has its own, beside the step's
+// others (src/web/onboarding.js steps), with form="<formId>".
+export function schedulePanel(ctx, d, { back = '/settings#schedule', title = 'מתי מפרסמים', lede = null, action = null, formId = null, save = true } = {}) {
   if (!d) return '';
   const id = d.pack.id;
   const rules = d.rules || d.month.rules || { shabbat: false, holidays: false };
@@ -75,11 +77,11 @@ export function schedulePanel(ctx, d, { back = '/settings#schedule', title = 'מ
   const box = (name, on, label) => `<label class="check"><input type="checkbox" name="${name}"${on ? ' checked' : ''}> ${esc(label)}</label>`;
   return `<section class="panel" id="schedule"><header><h2>${esc(title)}</h2><span class="end muted small">${accDot(id)} ${esc(d.pack.meta?.displayName || id)}</span></header>
 <p class="muted">${lede || 'בוחרים באילו ימים יוצאים הפוסטים ובאיזו שעה, עד שתי שעות ביום.'}</p>
-<form method="post" action="${esc(action || `/accounts/${id}/schedule`)}" class="prefs">${csrfField(ctx)}<input type="hidden" name="back" value="${esc(back)}">
+<form method="post" action="${esc(action || `/accounts/${id}/schedule`)}" class="prefs"${formId ? ` id="${esc(formId)}"` : ''}>${csrfField(ctx)}<input type="hidden" name="back" value="${esc(back)}">
 <fieldset><legend>ימים ושעות</legend>${rows}</fieldset>
 <fieldset><legend>שבת וחגים</legend>${box('shabbat', rules.shabbat, 'לפרסם גם בשבת')}${box('holidays', rules.holidays, 'לפרסם גם בחגים')}<p class="muted small m0">${esc(rulesLine(rules))}</p></fieldset>
 <p class="muted small m0">${esc(monthLine(d.month))}${rest ? ` ${esc(rest)}` : ''} כל פוסט נכתב יום לפני השעה שלו. פוסטים שכבר נכתבו שומרים על השעה שלהם.</p>
-<button class="btn" type="submit">שמירה</button></form></section>`;
+${save ? '<button class="btn" type="submit">שמירה</button>' : ''}</form></section>`;
 }
 
 /** Where the form may send the browser back to: Settings, or this account's new-account page. */

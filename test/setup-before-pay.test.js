@@ -128,10 +128,10 @@ test('before paying: the customer goes through /new end to end and sees the samp
 
   price = 0.1;
   const { id, pack, review } = await setUp(b, 3);
-  // The sources step, before the account: the sources and the name, and connecting said to come after paying.
+  // The sources step, before the account: the sources and the name. Connecting is not a step of making the account
+  // (the samples page has it, said to come after paying).
   assert.match(review, new RegExp(`action="/new/${id}/create"`));
-  assert.ok(review.includes(CAP_HE.connect));
-  assert.doesNotMatch(review, /\/connect\/|אפשר לחבר כבר עכשיו/);
+  assert.doesNotMatch(review, /\/connect\/|אפשר לחבר כבר עכשיו|id="connect"/);
   three = { id, pack };
   assert.equal(db.get('SELECT status FROM accounts WHERE id = ?', pack).status, 'onboarding');
   assert.equal(db.get('SELECT workspace_id FROM accounts WHERE id = ?', pack).workspace_id, 3);
@@ -304,7 +304,8 @@ test('a comp and a paid workspace: exactly as before, never counted against the 
   price = 0.1;
   const { id, pack, review } = await setUp(b, 4);
   // The connect panel itself: no Zernio key here, so it says connecting is not open yet (src/web/connect.js CONNECT_CLOSED_HE).
-  assert.match(review, /<section class="panel" id="connect">[^]*?<div class="connect" id="connect-/, 'connecting offered on the sources page');
+  // Connecting is not a step of making the account: the next page has it, once the account exists.
+  assert.doesNotMatch(review, /id="connect"/, 'no connecting on the sources step');
   assert.ok(!review.includes(CAP_HE.connect));
   await b.post(`/new/${id}/samples`);
   await settle();

@@ -46,6 +46,10 @@ before(async () => {
   db.run('UPDATE accounts SET workspace_id = 1');
   paidWorkspaces(db, [1]);
   db.insert('onboarding', { id: 'o-closed', seed_json: { niche: 'קרמיקה' }, status: 'review', candidates_json: { candidates: [] }, workspace_id: 1, created_at: AT, updated_at: AT });
+  // While the sources are searched the page offers connecting, after its steps (the sources step does not: connecting
+  // is not a step of making the account).
+  db.insert('onboarding', { id: 'o-search', seed_json: { niche: 'קרמיקה' }, status: 'discovering', workspace_id: 1, created_at: AT, updated_at: AT });
+  __onboarding.running.set('o-search', new Promise(() => {}));
   fake = await fakeAccounts();
   const s = await listenFree(ctx, { env: { ...process.env, SESSION_SECRET: 's'.repeat(40), ...fake.env } });
   server = s.server;
@@ -58,6 +62,7 @@ afterEach(() => {
 });
 
 after(async () => {
+  __onboarding.running.delete('o-search');
   server?.close();
   await fake?.close();
   home?.cleanup();
@@ -69,7 +74,7 @@ const post = async (p, { ajax = true } = {}) =>
   fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded', ...(ajax ? { 'x-of-ajax': '1' } : {}) }, body: new URLSearchParams({ _csrf: await csrfOf() }).toString() });
 
 test('the connect panel, on the account page and the new account page: what happened and "כתבו לנו", a link to our WhatsApp when there is one', async () => {
-  const pages = { account: '/accounts?account=demo', onboarding: '/new/o-closed' };
+  const pages = { account: '/accounts?account=demo', onboarding: '/new/o-search' };
   for (const [what, p] of Object.entries(pages)) {
     const html = await read(p);
     assert.ok(html.includes(`<p class="muted small m0">${CLOSED}</p>`), `${what}: the words`);
@@ -86,13 +91,18 @@ test('the connect panel, on the account page and the new account page: what happ
 });
 
 test('the new account page says nothing of connecting now while it cannot be done, at any stage, and says it again once it can', async () => {
-  const at = { review: '/new/o-closed', discovering: '/new/o-search', samples: '/new/o-samples' };
+  const at = { discovering: '/new/o-search', samples: '/new/o-samples' };
   // What each stage says to connect now, beside the panel.
-  const now = { review: /אפשר לחבר כבר עכשיו/, discovering: /ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק/, samples: /מחברים כאן את החשבונות/ };
-  db.insert('onboarding', { id: 'o-search', seed_json: { niche: 'קרמיקה' }, status: 'discovering', workspace_id: 1, created_at: AT, updated_at: AT });
+  const now = { discovering: /ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק/, samples: /מחברים כאן את החשבונות/ };
   db.insert('onboarding', { id: 'o-samples', seed_json: { niche: 'קרמיקה' }, status: 'samples', pack_id: 'demo', workspace_id: 1, created_at: AT, updated_at: AT });
-  __onboarding.running.set('o-search', new Promise(() => {}));
   try {
+    // The sources step has no connecting at all, open or closed.
+    for (const open of [false, true]) {
+      if (open) process.env.ZERNIO_API_KEY = 'zk_test_key';
+      const html = await read('/new/o-closed');
+      assert.doesNotMatch(html, /id="connect"|אפשר לחבר כבר עכשיו/, `review, ${open ? 'open' : 'closed'}: no connecting`);
+      delete process.env.ZERNIO_API_KEY;
+    }
     for (const [stage, p] of Object.entries(at)) {
       const html = await read(p);
       assert.doesNotMatch(html, now[stage], `${stage}: closed`);
@@ -106,8 +116,7 @@ test('the new account page says nothing of connecting now while it cannot be don
     }
   } finally {
     delete process.env.ZERNIO_API_KEY;
-    __onboarding.running.delete('o-search');
-    db.run("DELETE FROM onboarding WHERE id IN ('o-search', 'o-samples')");
+    db.run("DELETE FROM onboarding WHERE id = 'o-samples'");
   }
 });
 

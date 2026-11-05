@@ -2811,3 +2811,37 @@ unchanged (the switch's place there was set on 2026-11-02).
 test/mobile-calm.test.js (new) covers the fold's markup and the pages' folds, and in a real browser a phone's folds,
 a row that stays open after a reload, a link and a slide that open theirs, a desk with every fold open and no row, and
 at 360 and 390 the button in the tab bar's row with nothing to tap under it or the bar.
+
+### Setting up is steps, one column (2026-11-05)
+
+The owner, on /new's sources step on a desk: "the page is very strange when setting up. i think setting up should be
+step by step, not 2 blocks near each other. if 2 blocks are near each other, why do some have an empty space near
+them..?" Every state of /new is one column in the middle of the page (style.css .setup, 720px), desk and phone alike,
+and nothing on it stands beside anything else; the samples too are one under the other.
+
+**The sources step** is four steps inside the one create form (#sources), so "ליצור את החשבון" still sends every field:
+המקורות, סוגי המצגות, השקף האחרון, השם שלכם על המצגות. Each step is a quiet line ("שלב 2 מתוך 4" and a bar), its
+panel, and its buttons: "הקודם" at the start and one blue button at the end, "הבא" until the last step, whose button
+makes the account. static/app.js shows one step at a time, keeps it in the address (#step-2: a reload and Back land on
+it, and a link to something inside a step, #sources or #promo, opens that step), does not move on while a required
+field of the step is not valid (the browser's own message, on the field), takes the create button to the step of a
+field that is not valid, and makes Enter in an earlier step move on rather than send the form. Without the script
+every step shows, numbered, in order, with the create button at the end, and "הקודם" and "הבא" are not drawn. The
+search with more sites sits in the first step with its fields in a form of its own (form="more-form").
+
+**What is not part of making the account is not a step.** Connecting TikTok, Instagram and Facebook and the days and
+times are on the samples page once the account exists (what was set while the sources were searched is kept, as
+before); the operator's "פורמטים שעובדים בנישה" is folded at the page's foot.
+
+**While the sources are searched**, the progress comes first and the name, the closing slide and the days are three
+steps under it, each step's blue button sending that step's own form ("הבא" saves and opens the next step, #step-2 and
+#step-3; the days' is "שמירה"); connecting follows the steps, a row on a phone.
+
+**A refused create** (the owner pressed "ליצור את החשבון" and saw the same page, the button looking stuck) comes back
+to the step whose field it is, else the last one (#step-4), and the words are said right above that step's button in
+role="alert" (setup.refused, for an hour, until the next try), as well as in the toast.
+
+test/setup-steps.test.js (new) covers the markup and the order of both states, no two columns on /new, the refusals'
+step and words, and in a real browser at 1280 and 390: one step at a time, "הבא", "הקודם", a reload and Back, a field
+that holds "הבא" and the create button, Enter, every field sent by create, a refusal on its step beside a button that
+is not busy, the waiting page's steps, and without the script every step in order.

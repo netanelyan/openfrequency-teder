@@ -129,7 +129,8 @@ test('in a real browser: a stopped sample keeps its words off the card\'s edge, 
     };
     const sideways = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
-    // A: the stopped samples, side by side on a desk and one under the other on a phone.
+    // A: the stopped samples, one under the other on a desk as on a phone (/new is one column, the owner, 2026-11-05:
+    // "if 2 blocks are near each other, why do some have an empty space near them").
     for (const [width, height, scheme] of [[1440, 900, 'light'], [390, 844, 'dark'], [360, 780, 'light']]) {
       const page = await open('/new/o-lay', width, height, scheme);
       // The cards with no slides, found by what they are (no strip), not by the class the fix gave them.
@@ -149,7 +150,7 @@ test('in a real browser: a stopped sample keeps its words off the card\'s edge, 
       }
       if (width === 1440) {
         const tops = await page.$$eval(stopped, (els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
-        assert.equal(tops[0], tops[1], 'two side by side on a desk');
+        assert.ok(tops[1] > tops[0], 'one under the other on a desk too');
       }
       assert.equal(await sideways(page), 0, `${width}: no sideways scroll`);
       await page.context().close();

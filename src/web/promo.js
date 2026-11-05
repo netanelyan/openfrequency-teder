@@ -124,14 +124,15 @@ export function readNote(setup, { busy = false } = {}) {
  * The step on /new: its own form while the sources are searched (`action`, with a save), or, on the sources step,
  * fields of the create form (no `action`): the account is made with them as they are shown.
  */
-export function newPromoPanel(pc, r, { action = null, busy = false, nameDefault = '' } = {}) {
+// `formId` names the waiting page's form and `save: false` leaves its button out, for the setup step's own (onboarding.js steps).
+export function newPromoPanel(pc, r, { action = null, busy = false, nameDefault = '', formId = null, save = true } = {}) {
   const note = readNote(r.setup, { busy });
   const fields = promoFields(r.setup.promo, { key: r.id, nameDefault, siteDefault: r.seed.site || '' });
   const head = `<section class="panel" id="promo"><header><h2>${PROMO_TITLE}</h2></header><p class="muted m0">${LEDE}</p>${note ? `<p class="small m6">${esc(note)}</p>` : ''}`;
   if (!action) return `${head}<div class="formgrid promo mt12">${fields}<p class="muted small m0">אפשר לשנות את זה גם אחר כך, בהגדרות.</p></div></section>`;
-  return `${head}<form method="post" action="${esc(action)}" class="formgrid promo mt12">${csrfField(pc)}${fields}
+  return `${head}<form method="post" action="${esc(action)}" class="formgrid promo mt12"${formId ? ` id="${esc(formId)}"` : ''}>${csrfField(pc)}${fields}
 <p class="muted small m0">אפשר לשנות את זה גם בשלב הבא, ואחר כך בהגדרות.</p>
-<div><button class="btn" type="submit">שמירה</button></div></form></section>`;
+${save ? '<div><button class="btn" type="submit">שמירה</button></div>' : ''}</form></section>`;
 }
 
 /**

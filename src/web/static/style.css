@@ -1560,8 +1560,41 @@ details.mfold > summary::-webkit-details-marker { display: none; }
   .resbody > .mores { order: 6; }
   .resposts td.x, .resposts .per { display: none; }
   .kpi.lead .s.m-only { white-space: normal; }
-  /* The sources step's form, then connecting and the days: apart, as two panels are. */
-  #sources + .cols { margin-top: 20px; }
+}
+
+/* ------------------------------------------------------------ /new: one column, a step at a time
+   The owner, 2026-11-05, on the sources step's two uneven columns: "setting up should be step by step, not 2 blocks near
+   each other. if 2 blocks are near each other, why do some have an empty space near them..?" Every state of /new is one
+   column in the middle of the page, desk and phone alike, and the setup is steps (src/web/onboarding.js steps): a quiet
+   line with where you are, the step's panel, its buttons ("הקודם" at the start, the one blue button at the end).
+   static/app.js shows one step at a time; without it every step shows, numbered, in order. */
+.setup { max-width: 720px; margin-inline: auto; }
+.setup .posts { grid-template-columns: minmax(0, 1fr); }
+.setup > .panel + .steps, .setup > .banner + .steps, .setup > .panel + form, .setup > .head + .steps { margin-top: 0; }
+.setup > #progress { margin-bottom: 32px; }
+.setup > form + *, .setup > .steps + *, .setup > .samples + *, .setup > details.panel + * { margin-top: 32px; }
+.setup > .panel + .panel { margin-top: 20px; }
+.steps > .step + .step { margin-top: 40px; }
+.step { scroll-margin-top: calc(var(--top, 0px) + 16px); }
+.steps.on > .step + .step { margin-top: 0; }
+[data-step][hidden] { display: none !important; }
+.stepline { display: flex; align-items: center; gap: 12px; margin: 0 4px 12px; font-size: 13px; font-weight: 500; color: var(--ink-3); outline: none; }
+.stepbar { display: inline-flex; gap: 4px; }
+.stepbar > i { width: 18px; height: 4px; border-radius: 2px; background: var(--line); }
+.stepbar > i.on { background: var(--ink-3); }
+.step > .panel + .panel, .step > .empty + .panel { margin-top: 20px; }
+.steperr { margin: 16px 0 0; }
+.stepnav { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+.stepnav > .btn.primary { margin-inline-start: auto; min-width: 160px; }
+[data-step-go] { display: none; }
+.js [data-step-go] { display: inline-flex; }
+html:not(.js) .stepnav:not(:has(> :not([data-step-go]))) { display: none; }
+/* The operator's line on what works in the niche, folded at the page's foot. */
+details.opsfold > summary h2 { font-size: 15px; }
+@media (max-width: 699px) {
+  .stepnav > .btn.primary { flex: 1 1 auto; min-width: 0; }
+  .steps > .step + .step { margin-top: 32px; }
+  .steps.on > .step + .step { margin-top: 0; }
 }
 
 /* On a phone a field is never under 16px: an iPhone zooms the page in on tapping a smaller one (the owner, 2026-11-05,

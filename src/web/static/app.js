@@ -259,6 +259,9 @@
       typed.setAttribute('autocapitalize', 'off');
       typed.spellcheck = false;
     }
+    // A field of another form than the one around it (form=, /new's search with more sites inside the create form):
+    // what stands in for it is that form's too.
+    if (field.hasAttribute('form')) for (const el of [sent, typed]) el.setAttribute('form', field.getAttribute('form'));
     field.removeAttribute('name');
     field.required = false;
     field.hidden = true;
@@ -389,6 +392,83 @@
     phone.addEventListener?.('change', () => { if (!phone.matches) for (const d of folds) d.open = true; });
     window.addEventListener('hashchange', () => unfold(target()));
   }
+  // /new's setup, a step at a time (onboarding.js steps): one step shows, the address keeps which (#step-2, so Back and a
+  // reload land on it; a link to something inside a step, #sources or #promo, opens that step), and "הבא" does not move
+  // on while a required field of the step is not valid: the browser says why, on that field. The create button checks
+  // every step first, since the browser cannot point at a field in a step that is not shown. Without this script every
+  // step shows, in order.
+  const stepsBox = document.querySelector('[data-steps]');
+  if (stepsBox) {
+    const list = [...stepsBox.querySelectorAll('[data-step]')];
+    const form = stepsBox.closest('form');
+    let cur = -1;
+    const stepFor = () => {
+      const m = /^#step-(\d+)$/.exec(location.hash);
+      if (m) return Math.min(Math.max(Number(m[1]), 1), list.length) - 1;
+      const t = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+      const inside = t?.closest('[data-step]');
+      if (inside) return list.indexOf(inside);
+      const said = list.findIndex((s) => s.querySelector('.steperr'));
+      return said >= 0 ? said : 0;
+    };
+    const show = (i, { moved = false } = {}) => {
+      cur = i;
+      list.forEach((s, k) => { s.hidden = k !== i; });
+      if (!moved) return;
+      const top = list[i].getBoundingClientRect().top;
+      if (top < 0 || top > window.innerHeight * 0.6) list[i].scrollIntoView({ block: 'start' });
+      list[i].querySelector('.stepline')?.focus({ preventScroll: true });
+    };
+    const go = (i) => {
+      if (i === cur || i < 0 || i >= list.length) return;
+      history.pushState(null, '', `#step-${i + 1}`);
+      show(i, { moved: true });
+    };
+    // The fields of this step that are the steps' form's own (a field of another form, by form=, is not this one's).
+    const invalid = (scope) => [...scope.querySelectorAll('input, select, textarea')].find((el) => (!form || el.form === form) && el.willValidate && !el.checkValidity());
+    stepsBox.classList.add('on');
+    show(stepFor());
+    // Opened on a step (#step-2: a reload, Back, a refusal), the browser went to it: every step stands in the same place,
+    // so the page opens at its top, the heading in view.
+    if (/^#step-\d+$/.test(location.hash)) {
+      const top = () => window.scrollTo(0, 0);
+      requestAnimationFrame(top);
+      window.addEventListener('load', () => requestAnimationFrame(top), { once: true });
+    }
+    stepsBox.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-step-go]');
+      if (b) {
+        if (b.dataset.stepGo === 'prev') return go(cur - 1);
+        const bad = invalid(list[cur]);
+        if (bad) return bad.reportValidity();
+        return go(cur + 1);
+      }
+      // The create button: a field not valid in another step shows that step, and the browser says why there.
+      const send = e.target.closest('button[type=submit], button:not([type])');
+      if (!send || !form || send.form !== form) return;
+      const bad = invalid(form);
+      if (!bad) return;
+      e.preventDefault();
+      const at = list.findIndex((s) => s.contains(bad));
+      if (at >= 0 && at !== cur) go(at);
+      bad.reportValidity();
+    });
+    // Enter in a field moves to the next step rather than sending the whole form from the first one.
+    if (form) {
+      form.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing || cur >= list.length - 1) return;
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement) || el.form !== form || !list[cur].contains(el)) return;
+        e.preventDefault();
+        const bad = invalid(list[cur]);
+        if (bad) return bad.reportValidity();
+        go(cur + 1);
+      });
+    }
+    window.addEventListener('popstate', () => show(stepFor()));
+    window.addEventListener('hashchange', () => show(stepFor()));
+  }
+
   // The account switcher closes when a tap or a key goes elsewhere, as a menu does.
   const closeSwitch = (e) => {
     const sw = document.querySelector('details.acctswitch[open]');

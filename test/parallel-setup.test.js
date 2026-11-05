@@ -181,7 +181,7 @@ test('the name and handle, saved while waiting, are checked as at create and off
   assert.match((await named.json()).message, /כבר יש חשבון בשם הזה/, "the demo account's name, said plainly instead of a failure at create");
   const ok = await post('/new/o-name/name', cookie, { displayName: 'קפה הספסל', handle: '@Cafe.Bench' });
   assert.equal(ok.status, 303);
-  assert.equal(ok.headers.get('location'), '/new/o-name#name');
+  assert.equal(ok.headers.get('location'), '/new/o-name#step-2', 'on to the next step, the closing slide');
   assert.deepEqual([setupOf(db, 'o-name').displayName, setupOf(db, 'o-name').handle], ['קפה הספסל', 'Cafe.Bench']);
   assert.match(await (await get('/new/o-name', cookie)).text(), /value="Cafe\.Bench"/, 'kept on the waiting page');
   // The search ends: the sources step has them, and the customer may still change them.

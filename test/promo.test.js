@@ -301,7 +301,8 @@ test('/new asks for the business\'s site, once and optional, and fills the closi
   const waiting = await (await get(`/new/${id}`, cookie)).text();
   assert.match(waiting, /id="progress"/, 'the sources are still being searched');
   assert.match(waiting, /<section class="panel" id="promo"><header><h2>השקף האחרון<\/h2>/);
-  assert.match(waiting, /<form method="post" action="\/new\/[\w-]+\/promo" class="formgrid promo mt12">/);
+  assert.match(waiting, /<form method="post" action="\/new\/[\w-]+\/promo" class="formgrid promo mt12" id="promo-form">/);
+  assert.match(waiting, /<button class="btn primary" type="submit" form="promo-form">הבא<\/button>/, "the step's own button sends it");
   assert.equal(value(waiting, 'promo_name'), 'שתיל ועלה');
   assert.equal(value(waiting, 'promo_promise'), 'צמחי בית ועציצים מקרמיקה, עם הוראות טיפול לכל צמח');
   assert.equal(checked(waiting), 'site');
@@ -311,7 +312,7 @@ test('/new asks for the business\'s site, once and optional, and fills the closi
   // Accepted as it is.
   const okd = await post(`/new/${id}/promo`, cookie, { promo_shown: '1', promo_name: 'שתיל ועלה', promo_promise: 'צמחי בית ועציצים מקרמיקה, עם הוראות טיפול לכל צמח', promo_target: 'site', promo_site: 'https://shatil-vaale.example/' });
   assert.equal(okd.status, 303);
-  assert.match(okd.headers.get('location'), /#promo$/);
+  assert.match(okd.headers.get('location'), /#step-3$/, 'on to the next step, the days and times');
   assert.equal(setupOf(db, id).promoBy, 'customer');
   assert.doesNotMatch(await (await get(`/new/${id}`, cookie)).text(), /מילאנו את זה/, 'their own now: nothing said about the site');
   // Changed: one product.

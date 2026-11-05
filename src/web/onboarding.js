@@ -447,12 +447,53 @@ function nameFields(pc, r) {
 
 const NAME_TITLE = 'השם שלכם על המצגות';
 
+/** The waiting page's name step: its own form (name-form), sent by the step's "הבא" (steps). */
 function namePanel(pc, r) {
   return `<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header>
-<form method="post" action="/new/${esc(r.id)}/name" class="formgrid">${csrfField(pc)}${nameFields(pc, r)}
-<p class="muted small m0 m-hide">אפשר לשנות את זה גם בשלב הבא, כשבוחרים מקורות.</p>
-<div><button class="btn" type="submit">שמירה</button></div></form></section>`;
+<form method="post" action="/new/${esc(r.id)}/name" class="formgrid" id="name-form">${csrfField(pc)}${nameFields(pc, r)}
+<p class="muted small m0 m-hide">אפשר לשנות את זה גם בשלב הבא, כשבוחרים מקורות.</p></form></section>`;
 }
+
+/*
+ * /new's setup, a step at a time (the owner, 2026-11-05, on the sources step's two uneven columns: "i think setting up
+ * should be step by step, not 2 blocks near each other"). One column; each step a section (data-step) with a quiet line,
+ * "שלב 2 מתוך 4", its panel(s), and its buttons: "הקודם" and the step's one main button, "הבא" or the last step's own.
+ * static/app.js shows one step at a time, keeps it in the address (#step-2, so Back and a reload land on it) and does
+ * not move on while a required field of the step is not valid (the field's own message, from the browser). Without the
+ * script every step shows, numbered, in order, with the last one's button at the end; "הקודם" and a "הבא" that only
+ * moves (data-step-go) are the script's and are not drawn.
+ *
+ * A step is { key, title, body, main, problem }: `main` the step's own button (a submit, the create form's or, while
+ * the sources are searched, the step's own form's by form=), else "הבא"; `problem` what the server refused when that
+ * step was last sent (setup.refused), said right above its buttons in role="alert".
+ */
+const STEP_PREV = 'הקודם';
+const STEP_NEXT = 'הבא';
+const stepGo = (to, label, cls) => `<button class="${cls}" type="button" data-step-go="${to}">${label}</button>`;
+function steps(list) {
+  const n = list.length;
+  return `<div class="steps" data-steps>${list
+    .map((st, i) => {
+      const bar = list.map((_, k) => `<i${k <= i ? ' class="on"' : ''}></i>`).join('');
+      const main = st.main || (i < n - 1 ? stepGo('next', STEP_NEXT, 'btn primary') : '');
+      return `<section class="step" id="step-${i + 1}" data-step="${i + 1}" data-step-key="${esc(st.key)}" aria-label="${esc(st.title)}">
+<p class="stepline" tabindex="-1"><span>שלב ${i + 1} מתוך ${n}</span><span class="stepbar" aria-hidden="true">${bar}</span></p>
+${st.body}
+${st.problem ? `<p class="problems steperr" role="alert"><b>${esc(st.problem)}</b></p>` : ''}
+<div class="stepnav">${i ? stepGo('prev', STEP_PREV, 'btn ghost') : ''}${main}</div></section>`;
+    })
+    .join('')}</div>`;
+}
+
+/** How long a create the server refused is said on its step (setup.refused): a day later the words would mislead. */
+const REFUSED_MS = 60 * 60_000;
+/** The refusal kept for a step of this setup, if it is that step's and recent. */
+const refusedOn = (r, key) => {
+  const x = r.setup.refused;
+  return x && x.step === key && Date.now() - Date.parse(x.at || 0) < REFUSED_MS ? x.message : null;
+};
+/** The steps of the sources step's create form, in order (the step a refusal returns to is found here). */
+const REVIEW_STEPS = ['sources', 'formats', 'promo', 'name'];
 
 /** What the connect panel reads for an onboarding with no account yet. */
 const obConnectData = (ctx, r) => ({
@@ -488,10 +529,11 @@ function activateBanner(pc, { good, capped }) {
 }
 
 /** The days and times, before the account exists: the onboarding's choice, else the one a new account starts with. */
+// A step of the waiting page: its form is schedule-form, with no button of its own (the step's is).
 function scheduleSection(ctx, pc, r) {
   const pseudo = { id: r.id, meta: { displayName: r.setup.displayName || r.seed.niche, schedule: {} } };
   const d = scheduleData(ctx.db, pseudo, { choice: r.setup.choice?.byDay ? r.setup.choice : { byDay: defaultChoiceFor(r.id) } });
-  return fold('schedule', 'מתי מפרסמים', schedulePanel(pc, d, { action: `/new/${r.id}/schedule`, back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${d.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` }));
+  return schedulePanel(pc, d, { action: `/new/${r.id}/schedule`, back: `/new/${r.id}`, formId: 'schedule-form', save: false, lede: `בחרנו ימים ושעות שמספיקים ל-${d.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` });
 }
 
 /* ------------------------------------------------------------------ the pages */
@@ -505,9 +547,9 @@ function listPage(ctx, pc) {
   const capped = !one && !pc.operator && !setupRoom(ctx.db, ctx.workspaceId ?? null).ok;
   return layout(
     { ...pc, title: 'חשבון חדש', active: 'new' },
-    `<div class="head"><h1>חשבון חדש</h1>${one || capped ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים פוסטים לדוגמה.</span>'}</div>
+    `<div class="setup"><div class="head"><h1>חשבון חדש</h1>${one || capped ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים פוסטים לדוגמה.</span>'}</div>
 ${capped ? activateBanner(pc, { good: goodSamples(ctx.db, ctx.workspaceId), capped: true }) : ''}
-<div class="cols">${capped ? '' : one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
+${capped ? '' : one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
 <div class="actions p0"><a class="btn" href="/accounts">לחשבון שלכם</a></div></section>` : `<section class="panel"><header><h2>מתחילים מכאן</h2></header>
 <p class="muted m-hide">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
@@ -605,13 +647,16 @@ ${rest.length ? `<details class="srcrest"><summary>${esc(more)}</summary>${rows(
 ${pc.operator && hidden.length ? `<details class="srcrest"><summary class="muted small">מקורות שלא הוצגו ללקוח (${hidden.length})</summary>${rows(hidden)}</details>` : ''}</section>`;
 }
 
-/** Too few good sources: said plainly, with a search again with more of the owner's own sites. */
+/**
+ * Too few good sources: said plainly, with a search again with more of the owner's own sites. It sits in the sources
+ * step, inside the create form, so its fields are more-form's (form=), a form of its own outside that one.
+ */
 function fewPanel(pc, r, n) {
   return `<section class="panel" id="more"><header><h2>מצאנו מעט מקורות טובים לנושא הזה</h2></header>
 <p class="muted">${n ? `יש כאן ${n === 1 ? 'מקור אחד' : `${n} מקורות`} שאפשר לעבוד איתם.` : 'לא מצאנו מקור שבאמת עוסק בנושא.'} עדיף להוסיף אתרים שאתם סומכים עליהם ולחפש שוב, במקום למלא את החשבון במקורות חלשים.</p>
-<form method="post" action="/new/${esc(r.id)}/more" class="formgrid">${csrfField(pc)}
-<label class="f">אתרים שאתם סומכים עליהם <small class="js-hide">כתובת אחת בכל שורה</small><small class="js-show">כותבים כתובת ולוחצים Enter</small><textarea name="examples" rows="3" dir="ltr" required data-pills data-max="10"></textarea></label>
-<div><button class="btn" type="submit">${icon('spark')}לחפש שוב</button></div></form></section>`;
+<div class="formgrid">
+<label class="f">אתרים שאתם סומכים עליהם <small class="js-hide">כתובת אחת בכל שורה</small><small class="js-show">כותבים כתובת ולוחצים Enter</small><textarea name="examples" rows="3" dir="ltr" required data-pills data-max="10" form="more-form"></textarea></label>
+<div><button class="btn" type="submit" form="more-form">${icon('spark')}לחפש שוב</button></div></div></section>`;
 }
 
 const SAMPLES_HE = {
@@ -646,45 +691,66 @@ function detailPage(ctx, pc, r) {
   if (r.status === 'discovering') {
     return layout(
       { ...pc, title: 'מחפשים מקורות', active: 'new' },
-      `${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
+      `<div class="setup">${head}<section class="panel" id="progress"><header>${icon('spark')}<h2>מחפשים מקורות</h2></header>
 <p class="muted">זה לוקח בדרך כלל כמה דקות, ואפשר גם לסגור את הדף ולחזור אחר כך.</p>
 ${pollBox(ctx, r, { href: `/new/${r.id}#sources` })}
 <p class="muted mt12 m-hide">${pc.unpaid || !zernioConfigured() ? 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון ואת הימים והשעות.' : 'בינתיים אפשר לסדר כאן את השם, את השקף האחרון, את הימים והשעות ואת החיבור לטיקטוק, לאינסטגרם ולפייסבוק.'} מה ששומרים נשאר, ונכנס לחשבון כשהוא נוצר.</p></section>
-<div class="cols"><div class="grid12">${namePanel(pc, r)}${fold('promo', PROMO_TITLE, newPromoPanel(pc, r, { action: `/new/${r.id}/promo`, busy: reading.has(r.id), nameDefault: nameOf(pc, r) }))}${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>`
+${steps([
+  { key: 'name', title: NAME_TITLE, body: namePanel(pc, r), main: `<button class="btn primary" type="submit" form="name-form">${STEP_NEXT}</button>` },
+  { key: 'promo', title: PROMO_TITLE, body: newPromoPanel(pc, r, { action: `/new/${r.id}/promo`, busy: reading.has(r.id), nameDefault: nameOf(pc, r), formId: 'promo-form', save: false }), main: `<button class="btn primary" type="submit" form="promo-form">${STEP_NEXT}</button>` },
+  { key: 'schedule', title: 'מתי מפרסמים', body: scheduleSection(ctx, pc, r), main: '<button class="btn primary" type="submit" form="schedule-form">שמירה</button>' },
+])}
+${connectSection(ctx, pc, r)}</div>`
     );
   }
   if (r.status === 'failed') {
     return layout(
       { ...pc, title: 'החיפוש נעצר', active: 'new' },
-      `${head}${capped ? activateBanner(pc, { good: 0, capped }) : `<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>${withSupport('אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.')}</div>
-<div class="actions">${postButton(pc, `/new/${r.id}/retry`, `${icon('spark')}לנסות שוב`, { cls: 'btn primary' })}<a class="btn" href="/new">להתחיל מחדש</a></div>`}${ops}`
+      `<div class="setup">${head}${capped ? activateBanner(pc, { good: 0, capped }) : `<div class="empty">${icon('alert')}<b>${esc(FAILURE_HE[r.found.failure] || FAILURE_HE.error)}</b>${withSupport('אפשר לנסות שוב עם אותם פרטים. מה שכבר שמרתם נשאר. אם זה חוזר, כתבו לנו ונבדוק.')}</div>
+<div class="actions">${postButton(pc, `/new/${r.id}/retry`, `${icon('spark')}לנסות שוב`, { cls: 'btn primary' })}<a class="btn" href="/new">להתחיל מחדש</a></div>`}${ops}</div>`
     );
   }
   const cands = r.found.candidates || [];
   if (r.status === 'review') {
     const formats = r.found.formats || [];
+    // The operator's, not a step of making the account: at the page's foot, folded.
+    const opsFormats = (inner) => `<details class="panel opsfold"><summary><h2>פורמטים שעובדים בנישה</h2></summary>${inner}</details>`;
     const formatsPanel = formats.length
-      ? `<section class="panel"><header><h2>פורמטים שעובדים בנישה</h2></header><ul class="factlist">${formats.map((f) => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${k(f.views)} צפיות ${icon('ext')}</a> <span class="muted small" dir="auto">${esc(f.title)}</span></li>`).join('')}</ul></section>`
+      ? opsFormats(`<ul class="factlist">${formats.map((f) => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${k(f.views)} צפיות ${icon('ext')}</a> <span class="muted small" dir="auto">${esc(f.title)}</span></li>`).join('')}</ul>`)
       : pc.operator
-        ? '<section class="panel"><header><h2>פורמטים שעובדים בנישה</h2></header><p class="muted small">לא נבדק (בלי YOUTUBE_API_KEY). למפעיל בלבד.</p></section>'
+        ? opsFormats('<p class="muted small m0">לא נבדק (בלי YOUTUBE_API_KEY). למפעיל בלבד.</p>')
         : '';
     // The customer is offered the good ones only; the operator sees the rest too, folded away.
     const shown = cands.filter(offered);
     const hidden = cands.filter((c) => !offered(c));
+    const few = shown.length < FEW && !capped;
     // Back after a refusal: the ticks, the kinds of slideshow, the name and the closing slide as the customer left them.
     const chosen = chosenOf(r);
     const picked = chosen?.formats ? Object.fromEntries(chosen.formats.map((id) => [`fmt_${id}`, 'on'])) : null;
     return layout(
       { ...pc, title: 'בחירת מקורות', active: 'new' },
-      `${head}${capped ? activateBanner(pc, { good: 0, capped }) : ''}${saidBanner(r.found.said)}${shown.length < FEW && !capped ? fewPanel(pc, r, shown.length) : ''}
+      // One form, the steps inside it (steps): the create button sends every step's fields. The search with more sites is
+      // a form of its own outside it, its fields in the sources step by form="more-form". Connecting and the days and
+      // times are not steps of making the account: the next page has them, once it exists (and what was set while the
+      // sources were searched is kept, setup_json).
+      `<div class="setup">${head}${capped ? activateBanner(pc, { good: 0, capped }) : ''}${saidBanner(r.found.said)}
+${few ? `<form method="post" action="/new/${esc(r.id)}/more" id="more-form">${csrfField(pc)}</form>` : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
-<div class="cols"><div class="grid12">${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden, chosen) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>אפשר להוסיף כאן למעלה אתרים שאתם סומכים עליהם, או <a href="/new">להתחיל שוב</a>.</div>`}</div>
-<div class="grid12">${fold('formats', FORMATS_TITLE, formatsSection(picked))}${fold('promo', PROMO_TITLE, newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) }))}<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
+${steps([
+  { key: 'sources', title: 'המקורות', problem: refusedOn(r, 'sources'), body: `${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden, chosen) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>${few ? 'אפשר להוסיף כאן למטה אתרים שאתם סומכים עליהם' : 'אפשר'}, או <a href="/new">להתחיל שוב</a>.</div>`}${few ? fewPanel(pc, r, shown.length) : ''}` },
+  { key: 'formats', title: FORMATS_TITLE, problem: refusedOn(r, 'formats'), body: formatsSection(picked) },
+  { key: 'promo', title: PROMO_TITLE, problem: refusedOn(r, 'promo'), body: newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) }) },
+  {
+    key: 'name',
+    title: NAME_TITLE,
+    problem: refusedOn(r, 'name'),
+    body: `<section class="panel" id="name"><header><h2>${NAME_TITLE}</h2></header><div class="formgrid">
 ${nameFields(pc, r)}
-<p class="muted small m0 m-hide">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p>
-<button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button></div></section>
-${formatsPanel}</div></div></form>
-<div class="cols"><div class="grid12">${connectSection(ctx, pc, r)}</div><div class="grid12">${scheduleSection(ctx, pc, r)}</div></div>${ops}`
+<p class="muted small m0 m-hide">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p></div></section>`,
+    main: `<button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button>`,
+  },
+])}</form>
+${formatsPanel}${ops}</div>`
     );
   }
   const pack = ctx.pack(r.pack_id);
@@ -704,7 +770,7 @@ ${formatsPanel}</div></div></form>
   // account, its networks and its days and times.
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
+    `<div class="setup">${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
 <section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn m-primary' }) : ''}
@@ -717,7 +783,7 @@ ${fold('account', 'החשבון והחיבור לרשתות', `<section class="p
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}
 ${pack && locked ? `<p class="muted mt12" id="connect">${esc(CAP_HE.connect)}</p>` : pack ? `<div id="connect"${zernioConfigured() ? '' : ' class="mt12"'}>${zernioConfigured() ? '<p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק, לאינסטגרם ולפייסבוק, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>' : ''}${connectPanel(pc, connectData(ctx, pack))}</div>` : ''}</section>`, { one: false })}
 ${sched ? fold('schedule', 'מתי מפרסמים', schedulePanel(pc, sched, { back: `/new/${r.id}`, lede: `בחרנו ימים ושעות שמספיקים ל-${sched.month.plan} הפוסטים שבחבילה. אפשר לשנות אותם עכשיו, או אחר כך בהגדרות.` })) : ''}
-${ops}`
+${ops}</div>`
   );
 }
 
@@ -726,7 +792,7 @@ function createError(ctx, e) {
   // Pack ids are the server's, so a handle another workspace has is refused without naming whose it is.
   if (/already exists/.test(e.message)) return new ActionError(NAME_HE.taken);
   if (/handle must be latin/.test(e.message)) return new ActionError(NAME_HE.badHandle);
-  if (/approve at least one source/.test(e.message)) return new ActionError('צריך לאשר לפחות מקור אחד.');
+  if (/approve at least one source/.test(e.message)) return new ActionError('צריך לאשר לפחות מקור אחד.', 400, { step: 'sources' });
   ctx.log?.(`[onboarding] the pack was not written: ${[e.message, ...(e.problems || [])].join(' · ')}`);
   return new ActionError('לא הצלחנו ליצור את החשבון הפעם. נסו שוב בעוד כמה דקות, ואם זה חוזר כתבו לנו.', 500);
 }
@@ -741,6 +807,61 @@ const beforeAccount = (r) => {
 // suggested; the owner's "getopenfrequency" was refused for it, 2026-11-05), an @ before it, capitals (TikTok and
 // Instagram handles are lowercase): all mended here, so packs/validate.js's HANDLE checks only the letters themselves.
 const typed = (f) => ({ displayName: String(f.displayName || '').trim().slice(0, 40), handle: String(f.handle || '').trim().replace(/^@+/, '').toLowerCase().slice(0, 30) });
+
+/**
+ * POST /new/<id>/create's work: the account made from the sources step's form. Each refusal names the step whose field
+ * it is (`step`, REVIEW_STEPS), for the route to send the browser back to it.
+ */
+async function createAccount(ctx, user, r, f) {
+  if (r.status !== 'review') throw new ActionError('החשבון הזה כבר נוצר, או שהחיפוש עוד לא הסתיים.', 409);
+  // An older setup finished after the workspace's account was made: still one account.
+  if (hasAccount(ctx.db, r.workspace_id ?? null)) throw new ActionError(ONE_ACCOUNT, 409);
+  // A source the customer was not offered is not theirs to approve (the operator may); one whose terms forbid
+  // reuse is nobody's.
+  const may = (c) => c.score?.terms !== 'no' && (offered(c) || user.operator);
+  const candidates = (r.found.candidates || []).map((c) => ({ ...c, approved: f[`approve_${c.id}`] === 'on' && may(c), why: String(f[`why_${c.id}`] || c.why || c.score?.reason || '').trim() }));
+  // Everything chosen here is kept before anything is checked, so a refusal brings the step back as it was left:
+  // the name and handle, the ticks and kinds of slideshow (chosenFrom), and the closing slide as typed.
+  // A refusal from the last time is done with (setup.refused): this one answers for itself.
+  saveSetup(ctx.db, r.id, { ...typed(f), chosen: chosenFrom(r, f), ...(f.promo_shown ? { promo: draftFromForm(f), promoBy: 'customer' } : {}), refused: null });
+  const n = checkName(f, { packs: engine(ctx).packs });
+  if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems, step: 'name' });
+  // The kinds of slideshow picked on this step (src/web/formats.js), at least three; a form that did not show the
+  // choice (an older page) gets the defaults.
+  const formatIds = f.formats_shown ? pickedFrom(f) : DEFAULT_PICKED;
+  if (formatIds.length < MIN_PICKED) throw new ActionError(FORMATS_FEW, 422, { step: 'formats' });
+  // What the last slide sends people to, as this step showed it (src/web/promo.js; an older page's form, the
+  // setup's draft). It never stops the account (the follow-up on item 1, 2026-11-02: "A half-filled promo must never block
+  // creating the account or lose what the customer chose"): one that is not finished makes an account without one,
+  // the draft stays on the onboarding for Settings to offer, and the next page says it can be finished there.
+  const { promo, unfinished } = settlePromo(f.promo_shown ? draftFromForm(f) : r.setup.promo);
+  // The account's voice and scenes are paid calls: before paying, under the setup's cap and counted against it.
+  capCheck(ctx, user, r.workspace_id);
+  let made;
+  try {
+    made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds, promo }), !user.operator);
+  } catch (e) {
+    throw createError(ctx, e);
+  }
+  // The account starts in onboarding: the runner leaves it alone until it goes live.
+  ctx.db.insert('accounts', { id: made.id, display_name: made.pack.meta.displayName, handle: made.pack.meta.handle, mode: 'approve', status: 'onboarding', workspace_id: r.workspace_id ?? null, created_at: nowIso(), updated_at: nowIso() });
+  // Its days and times: what the owner chose while the sources were searched, else the default the page showed
+  // (moved a few minutes by this onboarding, so customers do not all post on the same minute), which reaches the
+  // month's plan. The owner may change them before it goes live.
+  const choice = setupOf(ctx.db, r.id).choice;
+  if (choice?.byDay) saveChoice(ctx.db, made.id, choice.byDay, { actor: user.name, shabbat: Boolean(choice.shabbat), holidays: Boolean(choice.holidays) });
+  else saveChoice(ctx.db, made.id, defaultChoiceFor(r.id), { actor: user.name });
+  // TikTok and Instagram connected before the account existed: the account takes the profile over.
+  carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
+  ctx.reloadPacks();
+  // The logo the site read found, fetched into the account in the background: the account is made whether or not
+  // it comes (src/onboarding/promo.js startLogoFetch).
+  if (r.seed.site) startLogoFetch(engine(ctx), r.id, made.id, { opts: engine(ctx).siteOpts || {}, log: ctx.log });
+  saveSetup(ctx.db, r.id, { promoUnfinished: unfinished });
+  ctx.db.update('onboarding', r.id, { status: 'samples', pack_id: made.id, candidates_json: { ...r.found, candidates }, updated_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: made.id, detail: { sources: candidates.filter((c) => c.approved).length } });
+  return { ok: true, message: 'החשבון נוצר.', redirect: `/new/${r.id}` };
+}
 
 /**
  * The routes, each (ctx, user, match, form or query, page context) with the request's context. `links()` is
@@ -818,10 +939,11 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         beforeAccount(r);
         saveSetup(ctx.db, r.id, typed(f));
         const n = checkName(f, { packs: engine(ctx).packs });
-        if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
+        if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems, back: `/new/${r.id}#name` });
         saveSetup(ctx.db, r.id, { displayName: n.displayName, handle: n.handle });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, name: true } });
-        return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#name` };
+        // The waiting page's next step (steps): the closing slide.
+        return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#step-2` };
       },
     ],
     [
@@ -836,7 +958,8 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         saveSetup(ctx.db, r.id, { promo: got.draft, promoBy: 'customer' });
         if (got.problems) throw new ActionError(got.problems.join(' '), 422, { problems: got.problems, back: `/new/${r.id}#promo` });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, promo: Boolean(got.promo) } });
-        return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#promo` };
+        // The waiting page's next step (steps): the days and times.
+        return { ok: true, message: 'נשמר. אפשר לשנות גם בשלב הבא.', redirect: `/new/${r.id}#step-3` };
       },
     ],
     [
@@ -894,53 +1017,18 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       /^\/new\/([\w-]+)\/create$/,
       async (ctx, user, m, f) => {
         const r = row(ctx, m[1]);
-        if (r.status !== 'review') throw new ActionError('החשבון הזה כבר נוצר, או שהחיפוש עוד לא הסתיים.', 409);
-        // An older setup finished after the workspace's account was made: still one account.
-        if (hasAccount(ctx.db, r.workspace_id ?? null)) throw new ActionError(ONE_ACCOUNT, 409);
-        // A source the customer was not offered is not theirs to approve (the operator may); one whose terms forbid
-        // reuse is nobody's.
-        const may = (c) => c.score?.terms !== 'no' && (offered(c) || user.operator);
-        const candidates = (r.found.candidates || []).map((c) => ({ ...c, approved: f[`approve_${c.id}`] === 'on' && may(c), why: String(f[`why_${c.id}`] || c.why || c.score?.reason || '').trim() }));
-        // Everything chosen here is kept before anything is checked, so a refusal brings the step back as it was left:
-        // the name and handle, the ticks and kinds of slideshow (chosenFrom), and the closing slide as typed.
-        saveSetup(ctx.db, r.id, { ...typed(f), chosen: chosenFrom(r, f), ...(f.promo_shown ? { promo: draftFromForm(f), promoBy: 'customer' } : {}) });
-        const n = checkName(f, { packs: engine(ctx).packs });
-        if (n.problems) throw new ActionError(n.problems.join(' '), 422, { problems: n.problems });
-        // The kinds of slideshow picked on this step (src/web/formats.js), at least three; a form that did not show the
-        // choice (an older page) gets the defaults.
-        const formatIds = f.formats_shown ? pickedFrom(f) : DEFAULT_PICKED;
-        if (formatIds.length < MIN_PICKED) throw new ActionError(FORMATS_FEW, 422);
-        // What the last slide sends people to, as this step showed it (src/web/promo.js; an older page's form, the
-        // setup's draft). It never stops the account (the follow-up on item 1, 2026-11-02: "A half-filled promo must never block
-        // creating the account or lose what the customer chose"): one that is not finished makes an account without one,
-        // the draft stays on the onboarding for Settings to offer, and the next page says it can be finished there.
-        const { promo, unfinished } = settlePromo(f.promo_shown ? draftFromForm(f) : r.setup.promo);
-        // The account's voice and scenes are paid calls: before paying, under the setup's cap and counted against it.
-        capCheck(ctx, user, r.workspace_id);
-        let made;
         try {
-          made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds, promo }), !user.operator);
+          return await createAccount(ctx, user, r, f);
         } catch (e) {
-          throw createError(ctx, e);
+          // Refused: back to the step whose field it is, else the last one, its words right above that step's button
+          // (setup.refused, in role="alert") as well as in the toast, and nothing busy (the owner, 2026-11-05, pressed
+          // "ליצור את החשבון" and saw the same page with a button that looked stuck).
+          if (!(e instanceof ActionError) || r.status !== 'review') throw e;
+          const step = REVIEW_STEPS.includes(e.step) ? e.step : 'name';
+          saveSetup(ctx.db, r.id, { refused: { step, message: e.message, at: nowIso() } });
+          e.back = `/new/${r.id}#step-${REVIEW_STEPS.indexOf(step) + 1}`;
+          throw e;
         }
-        // The account starts in onboarding: the runner leaves it alone until it goes live.
-        ctx.db.insert('accounts', { id: made.id, display_name: made.pack.meta.displayName, handle: made.pack.meta.handle, mode: 'approve', status: 'onboarding', workspace_id: r.workspace_id ?? null, created_at: nowIso(), updated_at: nowIso() });
-        // Its days and times: what the owner chose while the sources were searched, else the default the page showed
-        // (moved a few minutes by this onboarding, so customers do not all post on the same minute), which reaches the
-        // month's plan. The owner may change them before it goes live.
-        const choice = setupOf(ctx.db, r.id).choice;
-        if (choice?.byDay) saveChoice(ctx.db, made.id, choice.byDay, { actor: user.name, shabbat: Boolean(choice.shabbat), holidays: Boolean(choice.holidays) });
-        else saveChoice(ctx.db, made.id, defaultChoiceFor(r.id), { actor: user.name });
-        // TikTok and Instagram connected before the account existed: the account takes the profile over.
-        carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
-        ctx.reloadPacks();
-        // The logo the site read found, fetched into the account in the background: the account is made whether or not
-        // it comes (src/onboarding/promo.js startLogoFetch).
-        if (r.seed.site) startLogoFetch(engine(ctx), r.id, made.id, { opts: engine(ctx).siteOpts || {}, log: ctx.log });
-        saveSetup(ctx.db, r.id, { promoUnfinished: unfinished });
-        ctx.db.update('onboarding', r.id, { status: 'samples', pack_id: made.id, candidates_json: { ...r.found, candidates }, updated_at: nowIso() });
-        audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: made.id, detail: { sources: candidates.filter((c) => c.approved).length } });
-        return { ok: true, message: 'החשבון נוצר.', redirect: `/new/${r.id}` };
       },
     ],
     [

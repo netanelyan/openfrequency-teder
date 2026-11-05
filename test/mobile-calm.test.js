@@ -60,7 +60,7 @@ test('a fold is a details open by default, its row the name, its key on it; noth
   assert.equal(fold('x', 'y', ''), '');
 });
 
-test('the pages carry their folds: Settings each part, a post its slides for Instagram, its captions, its small changes and its checks, Sources its form, /new its secondary steps', async () => {
+test('the pages carry their folds: Settings each part, a post its slides for Instagram, its captions, its small changes and its checks, Sources its form; /new is steps instead', async () => {
   const settings = await get('/settings');
   for (const key of ['design', 'promo', 'logo', 'schedule', 'plan', 'push', 'email', 'me']) assert.match(settings, new RegExp(`<details class="mfold one" data-mfold="${key}" open><summary>`), `Settings: ${key}`);
   // The panel inside each is the panel it was, so its links (#plan, #schedule) still land on it.
@@ -72,9 +72,11 @@ test('the pages carry their folds: Settings each part, a post its slides for Ins
   const sources = await get('/sources');
   assert.match(sources, /data-mfold="add" open><summary>הוספת מקור<\/summary><section class="panel"><header><h2>הוספת מקור<\/h2>/);
   assert.match(sources, /<nav class="list m-only mlinks" aria-label="עוד במקורות"><a href="\/topics">/, 'the topics and the hand-checked facts, rows on a phone');
+  // /new's sources step is steps, a step at a time (test/setup-steps.test.js): nothing in a step folds, and connecting
+  // and the days and times are not on it.
   const review = await get('/new/o-calm');
-  for (const key of ['formats', 'promo', 'connect', 'schedule']) assert.match(review, new RegExp(`data-mfold="${key}" open>`), `/new's sources step: ${key}`);
-  assert.doesNotMatch(review, /data-mfold="name"/, 'the name and the button that makes the account are never folded');
+  assert.doesNotMatch(review, /data-mfold=/, "/new's sources step: no folds");
+  assert.match(review, /data-step="1"/);
   const account = await get('/accounts');
   assert.match(account, /<details class="panel m-only acct-about"><summary><h3>איך זה עובד<\/h3><\/summary><p class="m0">כל פוסט מחכה לאישור שלכם לפני שהוא עולה\.<\/p><p class="m6">המצגות מגיעות לטיוטות בטיקטוק\./);
   assert.match(account, /<section class="panel acct-mode about">/);
