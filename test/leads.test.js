@@ -350,7 +350,9 @@ test('"דמו מוכן": the cold first message, never "ביקשתם", and a but
   const msg = TEDER_COLD_FIRST({ storeName: 'חנות הקומקומים', url: `${base}/s/${slug}` });
   assert.equal(unesc(/<textarea id="msg-\d+" rows="9" readonly dir="rtl">([\s\S]*?)<\/textarea>/.exec(card)[1]), msg);
   assert.doesNotMatch(card, /ביקשתם/);
-  assert.ok(msg.startsWith('היי, כאן OpenFrequency. הכנו לחנות הקומקומים מצגת לדוגמה'));
+  assert.ok(msg.startsWith('היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין'));
+  assert.match(msg, /הכנו לחנות הקומקומים מצגת אחת לדוגמה, כדי שתראו איך זה ייראה אצלכם:\n/);
+  assert.match(msg, /אפשר לענות "לא" ולא נכתוב שוב\.$/);
   const links = hrefs(card);
   assert.ok(links.includes(`https://wa.me/972509999999?text=${encodeURIComponent(msg)}`), 'WhatsApp with the message written in');
   assert.ok(links.includes(`mailto:hello@kettles.example.co.il?subject=${encodeURIComponent('מצגת לדוגמה לחנות הקומקומים')}&body=${encodeURIComponent(msg.replace(/\n/g, '\r\n'))}`), 'mail with its subject and body');

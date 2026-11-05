@@ -19,13 +19,17 @@ export const le = (name) => `${/^[א-ת]/.test(name) ? 'ל' : 'ל־'}${name}`;
  * The first message to a lead Toran found (every lead on /leads: none of them asked for a demo). It follows Toran's
  * firstMessage (openfrequency-toran src/outreach.ts; section 30A: it says who writes, it is the one approach, and it
  * says how to stop). Toran's tederFirst (src/ops/messages.ts) is for a store that asked on the website ("ביקשתם
- * באתר..."), so it is not used here. The owner is reviewing this wording, 2026-11-05.
+ * באתר..."), so it is not used here. The owner's wording, 2026-11-05: it says what Teder does for a store and how
+ * (it reads the site, writes and designs, nothing goes up unapproved) before the demo, and asks whether they want
+ * to hear more, instead of a pitch line.
  */
 export const TEDER_COLD_FIRST = (o) =>
-  `היי, כאן OpenFrequency. הכנו ${le(o.storeName)} מצגת לדוגמה לטיקטוק ולאינסטגרם, על נושא מהתחום של החנות. ככה תדר מכין לחנות מצגות, ואתם רק מאשרים מה עולה.
+  `היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין מצגות בעברית לטיקטוק ולאינסטגרם. הוא קורא את האתר של החנות, וכותב ומעצב מצגות על נושאים מהתחום שלה. כל מצגת מחכה לאישור שלכם לפני שהיא עולה.
+
+הכנו ${le(o.storeName)} מצגת אחת לדוגמה, כדי שתראו איך זה ייראה אצלכם:
 ${o.url}
 
-אם זה לא רלוונטי, אפשר לענות "לא" ולא נכתוב שוב.`;
+אם זה מעניין אתכם, אפשר לענות כאן ונספר עוד. אם לא, אפשר לענות "לא" ולא נכתוב שוב.`;
 
 /** The one reminder, Toran's tederReminder word for word (openfrequency-toran src/ops/messages.ts). */
 export const TEDER_REMINDER = (o) =>
