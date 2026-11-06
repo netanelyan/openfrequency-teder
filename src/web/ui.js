@@ -12,6 +12,14 @@ import { now } from '../core/clock.js';
 import { assetsDir } from '../core/paths.js';
 import { THEME_COLOR, THEME_COOKIE } from './static/theme.js';
 
+// What a link to Teder shows when it is sent on WhatsApp or Facebook: Teder's picture and line from the website,
+// openfrequency-web's og/teder.png.
+const SHARE_META = `<meta name="description" content="תדר כותב ומעצב מצגות בעברית לטיקטוק, לאינסטגרם ולפייסבוק, וכל מצגת עולה רק אחרי שמישהו אישר אותה.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="תדר · OpenFrequency"><meta property="og:locale" content="he_IL">
+<meta property="og:title" content="תדר, מצגות בעברית לטיקטוק, לאינסטגרם ולפייסבוק">
+<meta property="og:description" content="תדר כותב ומעצב את המצגות, וכל מצגת עולה רק אחרי שמישהו אישר אותה.">
+<meta property="og:image" content="https://openfrequency.co.il/og/teder.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">`;
+
 export const esc = (s) =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -252,6 +260,7 @@ ${htmlOpen(ctx.theme, ctx.side === 'mini' ? 'side-mini' : '')}
 ${themeMeta(ctx.theme)}
 <meta name="apple-mobile-web-app-title" content="תדר">
 <title>${esc(ctx.title)} · תדר</title>
+${SHARE_META}
 <link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
 <link rel="stylesheet" href="/static/accounts.css?v=${ctx.v || 1}">
 <link rel="icon" href="/static/icon.svg?v=${ctx.v || 1}" type="image/svg+xml">

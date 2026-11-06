@@ -284,6 +284,14 @@ test("a view of the store's page by someone not signed in is an open; a cookie c
   assert.equal(opens(d.id).opens, 3, 'its pictures, its colour and a HEAD are no opens');
   for (const who of [op, cust]) assert.equal((await get(`/s/${d.slug}`, `${who}; ${v}`)).status, 200);
   assert.equal(opens(d.id).opens, 3, 'a signed-in session, the operator or a customer, never counts');
+  // A link sent on WhatsApp is fetched by its preview first: that is no open, and the page gives it the store's
+  // name, a line and the slideshow's cover at an absolute address.
+  const preview = await fetch(`${base}/s/${d.slug}`, { headers: { 'user-agent': 'WhatsApp/2.23.20.0 A' } });
+  assert.equal(opens(d.id).opens, 3, 'a link preview is no open');
+  const head = await preview.text();
+  assert.match(head, /<meta property="og:title" content="מצגת לדוגמה ל/);
+  assert.match(head, new RegExp(`<meta property="og:image" content="https?://[^/"]+/s/${d.slug}/instagram-0\.jpg">`));
+  assert.match(head, /<meta name="description" content="הכנו מצגת לדוגמה מהאתר של /);
   await get(`/s/${d.slug}`, 'of_session=not-a-session-anyone-has-000000');
   assert.equal(opens(d.id).opens, 4, 'a session cookie accounts does not know is a visitor');
   await get(`/s/${d.slug.slice(0, -1)}x`);

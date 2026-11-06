@@ -16,7 +16,7 @@ import * as act from './actions.js';
 import { beforePaying, onboardingRoutes } from './onboarding.js';
 import { deeperPanel, deeperRoutes } from './deeper.js';
 import { previewFile, stylesRoutes } from './styles.js';
-import { demoPage, demosFeed, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicDemo, recordOpen, sendPreview, sendSlide, visitorOf } from './demos.js';
+import { demoPage, demosFeed, demosRoutes, demoThemeCss, goneHtml, intake, isPreviewBot, offerOf, publicDemo, recordOpen, sendPreview, sendSlide, visitorOf } from './demos.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
@@ -398,8 +398,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
           if (!demo) return send(req, res, 404, goneHtml(theme), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex' });
           // The page itself, opened by someone not signed in, is an open; its pictures and its colour are not.
           const { visitor, cookie } = visitorOf(jar, { https: secure });
-          if (req.method === 'GET' && !(await signedIn(jar, secure))) recordOpen(ctx.db, demo.id, visitor);
-          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db), theme }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', ...(cookie ? { 'set-cookie': cookie } : {}) });
+          if (req.method === 'GET' && !isPreviewBot(req.headers['user-agent']) && !(await signedIn(jar, secure))) recordOpen(ctx.db, demo.id, visitor);
+          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db), theme, origin: publicHost ? `https://${publicHost}` : `http://${host}` }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', ...(cookie ? { 'set-cookie': cookie } : {}) });
         }
       }
       // A store asked for a demo on openfrequency.co.il: the website's lead service, on this machine, with its token.

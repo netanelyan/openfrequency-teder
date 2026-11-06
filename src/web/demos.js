@@ -243,6 +243,22 @@ const strip = (demo, platform, base) =>
     .map((_, i) => `<img src="${base}/${platform}-${i}.jpg" alt="${esc(i === 0 ? demo.post?.hook || '' : [demo.post?.slides?.[i]?.title, demo.post?.slides?.[i]?.body].filter(Boolean).join('. '))}" width="1080" height="${platform === 'tiktok' ? 1920 : 1350}" loading="${i < 2 ? 'eager' : 'lazy'}">`)
     .join('')}</div>`;
 
+// What a link to the page shows when it is sent on WhatsApp, Facebook or Telegram: the store's name, a line, and the
+// slideshow's own cover (its Instagram size, 4:5, else TikTok's), at an absolute address as previews need.
+function shareMeta(demo, name, base, origin) {
+  const title = `מצגת לדוגמה ${le(name)}${name}`;
+  const text = `הכנו מצגת לדוגמה מהאתר של ${name}, בגודל של טיקטוק ושל אינסטגרם. כאן אפשר לראות אותה.`;
+  const platform = demo.media?.instagram?.length ? 'instagram' : demo.media?.tiktok?.length ? 'tiktok' : null;
+  const image = origin && platform ? `${origin}${base}/${platform}-0.jpg` : '';
+  return `<meta name="description" content="${esc(text)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="תדר · OpenFrequency"><meta property="og:locale" content="he_IL">
+<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(text)}">${origin ? `<meta property="og:url" content="${esc(origin + base)}">` : ''}
+${image ? `<meta property="og:image" content="${esc(image)}"><meta property="og:image:width" content="1080"><meta property="og:image:height" content="${platform === 'tiktok' ? 1920 : 1350}"><meta property="og:image:alt" content="${esc(demo.post?.hook || title)}">` : ''}`;
+}
+
+// A link preview's fetch (WhatsApp, Facebook, Telegram, Slack, X, a search engine) is not the store opening its page.
+export const isPreviewBot = (ua) => /WhatsApp|facebookexternalhit|Facebot|meta-externalagent|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|Googlebot|bingbot|Applebot|redditbot|Pinterest/i.test(String(ua || ''));
+
 // The store's products, moving past beside the title: two rows, each list twice so the loop has no seam.
 const shelf = (demo, base) => {
   const items = (demo.store?.shelf || []).map((p, i) => ({ ...p, i }));
@@ -364,7 +380,7 @@ const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h"
  * or dark as the browser chose on any of the sites (ui.js themeOf), with the switch at the end of the top line; its
  * script (static/theme.js) is the page's only one: the two sizes are two radio buttons and CSS.
  */
-export function demoPage(demo, { offer, join = joinUrl(), theme = 'light' }) {
+export function demoPage(demo, { offer, join = joinUrl(), theme = 'light', origin = '' }) {
   const name = demo.store?.name || demo.domain;
   const subject = demo.topic?.niche || '';
   const base = `/s/${demo.slug}`;
@@ -386,6 +402,7 @@ export function demoPage(demo, { offer, join = joinUrl(), theme = 'light' }) {
   return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">${themeMeta(theme)}
 <title>מצגת לדוגמה ${esc(le(name))}${esc(name)} | תדר</title>
+${shareMeta(demo, name, base, origin)}
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/demo.css"><link rel="stylesheet" href="${base}/theme.css"></head>
 <body class="d-page">
 <div class="wrap"><header class="top"><span class="for">עמוד שהכנו בשביל <bdi>${esc(name)}</bdi></span><span class="by">${ofMark()}OpenFrequency</span>${themeButton(theme)}</header></div>
