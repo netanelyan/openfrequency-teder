@@ -463,12 +463,17 @@ function namePanel(pc, r) {
  * script every step shows, numbered, in order, with the last one's button at the end; "הקודם" and a "הבא" that only
  * moves (data-step-go) are the script's and are not drawn.
  *
- * A step is { key, title, body, main, problem }: `main` the step's own button (a submit, the create form's or, while
- * the sources are searched, the step's own form's by form=), else "הבא"; `problem` what the server refused when that
- * step was last sent (setup.refused), said right above its buttons in role="alert".
+ * A step is { key, title, body, main, problem, wait }: `main` the step's own button (a submit, the create form's or,
+ * while the sources are searched, the step's own form's by form=), else "הבא"; `problem` what the server refused when
+ * that step was last sent (setup.refused), said right above its buttons in role="alert"; `wait` the lines said under its
+ * buttons, in turn, while its form is sent (app.js, data-wait; empty and taking no room until then, and without the
+ * script).
  */
 const STEP_PREV = 'הקודם';
 const STEP_NEXT = 'הבא';
+/** What the create button's line says in turn while the account is made (the owner, 2026-11-05: "add a text of current
+ * creating status"), a new one every few seconds. */
+const CREATING_HE = ['אוסף מקורות', 'מאגד נתונים'];
 const stepGo = (to, label, cls) => `<button class="${cls}" type="button" data-step-go="${to}">${label}</button>`;
 function steps(list) {
   const n = list.length;
@@ -480,7 +485,7 @@ function steps(list) {
 <p class="stepline" tabindex="-1"><span>שלב ${i + 1} מתוך ${n}</span><span class="stepbar" aria-hidden="true">${bar}</span></p>
 ${st.body}
 ${st.problem ? `<p class="problems steperr" role="alert"><b>${esc(st.problem)}</b></p>` : ''}
-<div class="stepnav">${i ? stepGo('prev', STEP_PREV, 'btn ghost') : ''}${main}</div></section>`;
+<div class="stepnav">${i ? stepGo('prev', STEP_PREV, 'btn ghost') : ''}${main}</div>${st.wait ? `<p class="stepwait muted small" role="status" aria-live="polite" data-wait="${esc(st.wait.join('|'))}"></p>` : ''}</section>`;
     })
     .join('')}</div>`;
 }
@@ -748,6 +753,7 @@ ${steps([
 ${nameFields(pc, r)}
 <p class="muted small m0 m-hide">את העיצוב של המצגות אפשר להחליף אחר כך בדף החשבון.</p></div></section>`,
     main: `<button class="btn primary" type="submit">${icon('check')}ליצור את החשבון</button>`,
+    wait: CREATING_HE,
   },
 ])}</form>
 ${formatsPanel}${ops}</div>`

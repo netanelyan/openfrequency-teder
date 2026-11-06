@@ -59,16 +59,24 @@ const MODE_CHOICE = {
 /* ------------------------------------------------------------------ the panel */
 
 /**
- * What each platform needs, said before its button, for the platforms still to connect: Instagram connects only as a
- * professional account (business or creator), as Zernio requires; TikTok any account the customer logs into, and in
- * draft-now its posts land in TikTok's drafts on purpose, for the owner to add a popular sound and post; Facebook a Page
- * they manage, never a personal profile, and it is optional while the account posts elsewhere.
+ * What Instagram needs, on its own row beside "לחבר את אינסטגרם" while it is not connected (the owner, 2026-11-05: "make
+ * sure it is stated that a business instagram account is needed"; in the list above the rows it was easy to miss): a
+ * professional account, business or creator. Zernio's words (docs.zernio.com/platforms/instagram, read 2026-11-05):
+ * "Instagram requires a Business or Creator account. Personal accounts cannot post through the API." With Instagram
+ * Login, the way Teder connects it (src/publish/zernio.js connectUrl), no Facebook Page is involved, so none is asked for.
+ */
+export const INSTAGRAM_NEEDS_HE = 'אינסטגרם מתחבר רק כחשבון מקצועי, עסקי או יוצר. חשבון פרטי מעבירים לחשבון מקצועי בהגדרות של אינסטגרם, בלי תשלום, ואז מחברים כאן.';
+
+/**
+ * What each platform needs, said before its button, for the platforms still to connect (Instagram's is on its own row,
+ * INSTAGRAM_NEEDS_HE): TikTok any account the customer logs into, and in draft-now its posts land in TikTok's drafts on
+ * purpose, for the owner to add a popular sound and post; Facebook a Page they manage, never a personal profile, and it
+ * is optional while the account posts elsewhere.
  */
 export function requirements(d) {
   const open = d.platforms.filter((s) => s.state !== 'meta' && s.state !== 'connected').map((s) => s.platform);
   const lines = [];
   if (open.length) lines.push('בחיבור מאשרים את Zernio, השירות שמפרסם בשבילנו.');
-  if (open.includes('instagram')) lines.push('אינסטגרם מתחבר רק כחשבון מקצועי, עסקי או יוצר. חשבון פרטי מעבירים לחשבון מקצועי בהגדרות של אינסטגרם, בלי תשלום, ואז מחברים כאן.');
   if (open.includes('tiktok')) {
     lines.push('בטיקטוק נכנסים עם החשבון שאליו המצגות יעלו, ומאשרים את ההרשאות במסך של טיקטוק.');
     if (d.mode === 'draft-now') lines.push('המצגות מגיעות לטיוטות בטיקטוק בכוונה, כדי שתבחרו סאונד פופולרי ותפרסמו משם. כשמגיעה השעה, תדר מזכיר לכם.');
@@ -103,7 +111,7 @@ export function connectPanel(ctx, d, { base = null, heading = null } = {}) {
             : s.state === 'reconnect'
               ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary' })
               : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost' });
-      return `<li class="net"><span class="who"><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? (s.platform === 'facebook' ? ` <bdi class="muted" dir="auto">${esc(s.username)}</bdi>` : ` <span class="ltr muted">@${esc(s.username)}</span>`) : ''}</span>${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${button ? `<span class="act">${button}</span>` : ''}</li>`;
+      return `<li class="net"><span class="who"><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? (s.platform === 'facebook' ? ` <bdi class="muted" dir="auto">${esc(s.username)}</bdi>` : ` <span class="ltr muted">@${esc(s.username)}</span>`) : ''}</span>${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${s.platform === 'instagram' && s.state === 'none' && d.configured ? `<div class="muted small">${esc(INSTAGRAM_NEEDS_HE)}</div>` : ''}${button ?`<span class="act">${button}</span>` : ''}</li>`;
     })
     .join('');
   const note = d.configured
@@ -264,14 +272,31 @@ const EXPIRED = { title: 'הלינק הזה כבר לא בתוקף', text: 'לי
 // only the workspace's own.
 const expired = (account, theme) => resultPage({ theme, ...EXPIRED, actions: `<a class="btn primary" href="/accounts?account=${esc(encodeURIComponent(account))}">לדף החשבון</a>` });
 
-/** The page that lists the Instagram accounts (or Facebook Pages) to pick from, each a link that connects it. */
-function pickerPage(pages, id, { who = '', platform = 'instagram', theme = 'light' } = {}) {
+/**
+ * Back to the account's setup (/new/<onboarding>), on each page here that a connect started during the setup ends on
+ * (the owner, 2026-11-05: "when connecting an instagram and tiktok page, make a button of 'לחזור להגדרת החשבון'"): the
+ * page's blue button when it is its one way on, a grey one beside "לנסות שוב", a quiet one under a list to pick from
+ * (where a grey one would read as one more choice). An account past its setup (live) gets none: its connect came from
+ * the account page or the assistant's link, not from a setup.
+ */
+export const SETUP_BACK_HE = 'לחזור להגדרת החשבון';
+const setupBack = (onboardingId, cls = 'btn primary') => (onboardingId ? `<a class="${cls}" href="/new/${esc(encodeURIComponent(onboardingId))}#connect">${SETUP_BACK_HE}</a>` : '');
+/** The setup an account is still in: its onboarding, not live or given up (null when there is none). */
+const setupFor = (db, accountId) => db.get("SELECT id FROM onboarding WHERE pack_id = ? AND status NOT IN ('live', 'abandoned') ORDER BY updated_at DESC LIMIT 1", accountId)?.id || null;
+/** The setup a connect's target belongs to: the onboarding itself, or the setup its account is still in. */
+const setupOfTarget = (db, target) => (target.kind === 'onboarding' ? target.id : setupFor(db, target.id));
+
+/**
+ * The page that lists the Instagram accounts (or Facebook Pages) to pick from, each a link that connects it; under them,
+ * a setup's way back (`back`, setupBack's).
+ */
+function pickerPage(pages, id, { who = '', platform = 'instagram', theme = 'light', back = '' } = {}) {
   const fb = platform === 'facebook';
   // A Page is known by its name (its @username is optional); an Instagram account by its @username.
   const label = (p) => (fb ? `<bdi dir="auto">${esc(p.name || p.username)}</bdi>${p.name && p.username ? ` <small dir="ltr">@${esc(p.username)}</small>` : ''}` : `<bdi dir="ltr">@${esc(p.username || p.name)}</bdi>${p.name && p.username ? ` <small>${esc(p.name)}</small>` : ''}`);
   const links = pages.map((p) => `<a class="btn" href="/connect/pick/${esc(id)}?page=${esc(encodeURIComponent(p.pageId))}">${label(p)}</a>`).join('');
   const text = fb ? 'מצאנו כמה עמודים שאתם מנהלים. בוחרים את העמוד שאליו המצגות יעלו.' : 'מצאנו כמה חשבונות אינסטגרם מקצועיים. בוחרים את החשבון שאליו המצגות יעלו.';
-  return resultPage({ theme, title: fb ? 'איזה עמוד פייסבוק לחבר?' : 'איזה חשבון אינסטגרם לחבר?', text: `${who ? `${who}, ` : ''}${text}`, actions: links });
+  return resultPage({ theme, title: fb ? 'איזה עמוד פייסבוק לחבר?' : 'איזה חשבון אינסטגרם לחבר?', text: `${who ? `${who}, ` : ''}${text}`, actions: `${links}${back}` });
 }
 
 /** A signed link opened, or a return from Zernio, while this server has no Zernio key. */
@@ -310,7 +335,7 @@ async function selection(ctx, { target, platform, query, actions, t, theme }) {
     return { prefer: { [platform]: got.accountId } };
   }
   const id = holdPick(ctx.db, { target, platform, tempToken: sel.tempToken, connectToken: sel.connectToken, userProfile: sel.userProfile, pages }, { t });
-  return { page: [200, pickerPage(pages, id, { platform, theme, who: String(sel.userProfile?.name || sel.userProfile?.displayName || '').slice(0, 60) })] };
+  return { page: [200, pickerPage(pages, id, { platform, theme, who: String(sel.userProfile?.name || sel.userProfile?.displayName || '').slice(0, 60), back: setupBack(setupOfTarget(ctx.db, target), 'btn ghost') })] };
 }
 
 /**
@@ -320,10 +345,11 @@ async function selection(ctx, { target, platform, query, actions, t, theme }) {
 export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }) {
   const pick = takePick(ctx.db, id, { t });
   if (!pick) return [404, resultPage({ theme, title: 'הבחירה הזו כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף באתר.' })];
+  const back = setupBack(setupOfTarget(ctx.db, pick.target));
   const page = pick.pages.find((p) => p.pageId === String(pageId || ''));
   if (!page) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id}: a pick of a page that was not on offer`);
-    return [400, resultPage({ theme, title: 'החשבון הזה לא ברשימה', text: 'אפשר לחבר שוב מהדף באתר ולבחור מהרשימה.' })];
+    return [400, resultPage({ theme, title: 'החשבון הזה לא ברשימה', text: 'אפשר לחבר שוב מהדף באתר ולבחור מהרשימה.', actions: back })];
   }
   const platform = PICKS[pick.platform] ? pick.platform : 'instagram';
   const name = PLATFORM_NAME[platform];
@@ -343,10 +369,10 @@ export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }
       if (pack) await refreshConnections(ctx.db, pack, { t, prefer });
     }
     const who = platform === 'facebook' ? page.name || got.username || 'העמוד בפייסבוק' : got.username || page.username ? handleHe(got.username || page.username) : 'החשבון באינסטגרם';
-    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו. אפשר לסגור את הדף.` })];
+    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו. אפשר לסגור את הדף.`, actions: back })];
   } catch (e) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id} ${platform} pick: ${e.message}`);
-    return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: 'לא הצלחנו לחבר את החשבון שבחרתם. אפשר לחבר שוב מהדף באתר.' })];
+    return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: 'לא הצלחנו לחבר את החשבון שבחרתם. אפשר לחבר שוב מהדף באתר.', actions: back })];
   }
 }
 
@@ -360,7 +386,7 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
   if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ theme, title: 'הלינק הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
   const name = PLATFORM_NAME[platform];
   if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED })];
-  const back = `<a class="btn primary" href="/new/${esc(encodeURIComponent(ob.id))}#connect">חזרה להקמת החשבון</a>`;
+  const back = setupBack(ob.id);
   const error = query.get('error');
   if (error) {
     audit(ctx.db, { actor: 'zernio', action: 'zernio_connect_failed', detail: { onboarding: ob.id, platform, error, reason: query.get('error_message') || null, request: query.get('request_id') || null } });
@@ -404,15 +430,18 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   // nothing, from this link either. Coming back from Zernio (done) finishes a connect started while it could.
   if (!done && !accountAllowed(ctx.db, pack.id, t)) return [402, resultPage({ theme, title: 'החיבור נפתח אחרי ההפעלה', text: 'אפשר לחבר את טיקטוק, אינסטגרם ופייסבוק אחרי שתדר מופעל בחשבון שלכם.' })];
   const name = PLATFORM_NAME[platform];
-  if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED })];
-  const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>`;
+  // An account still in its setup: each page from here on has the way back to it (setupBack), grey beside "לנסות שוב".
+  const setup = setupFor(ctx.db, pack.id);
+  const back = setupBack(setup);
+  if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED, actions: back })];
+  const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>${setupBack(setup, 'btn')}`;
 
   if (!done) {
     try {
       const url = await startConnect(ctx.db, pack, platform, { doneUrl: doneLink(secret, { base, accountId: pack.id, platform, t }), actor: 'whatsapp link' });
       return [302, '', url];
     } catch (e) {
-      if (e.code === 'not_connectable') return [200, resultPage({ theme, title: `${name} כבר מחובר`, text: `${name} של ${pack.meta.displayName} מחובר דרך Meta, ואין פה מה לחבר.` })];
+      if (e.code === 'not_connectable') return [200, resultPage({ theme, title: `${name} כבר מחובר`, text: `${name} של ${pack.meta.displayName} מחובר דרך Meta, ואין פה מה לחבר.`, actions: back })];
       ctx.log?.(`[connect] ${pack.id} ${platform}: ${e.message}`);
       return [502, resultPage({ theme, title: 'אי אפשר לחבר כרגע', text: 'מסך החיבור לא נפתח הפעם. נסו שוב בעוד כמה דקות.', actions: again() })];
     }
@@ -434,11 +463,11 @@ export async function publicConnect(ctx, { account, platform, done, query, links
     await refreshConnections(ctx.db, pack, { t, prefer });
   } catch (e) {
     ctx.log?.(`[connect] ${pack.id} ${platform} done: ${e.message}`);
-    return [200, resultPage({ theme, title: 'עוד רגע', text: 'החיבור נשלח, ועוד לא קיבלנו אישור מה חובר. תוך שעה זה יופיע בדף החשבון.' })];
+    return [200, resultPage({ theme, title: 'עוד רגע', text: 'החיבור נשלח, ועוד לא קיבלנו אישור מה חובר. תוך שעה זה יופיע בדף החשבון.', actions: back })];
   }
   const s = connectState(ctx.db, pack, platform);
   if (s.state !== 'connected') return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
   ctx.db.update('accounts', pack.id, { updated_at: nowIso() });
-  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.` })];
+  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.`, actions: back })];
 }
 

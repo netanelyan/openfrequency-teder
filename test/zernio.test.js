@@ -438,6 +438,28 @@ test("the account page: each platform's state and its button, which goes on to Z
   assert.equal(Z.calls.filter((c) => c.path === '/connect/tiktok').length, 1);
 });
 
+test('an account still in its setup: the connect pages have the way back to it, grey beside "לנסות שוב"; once it is live, none', async () => {
+  const back = new URL(doneLink(SECRET, { base, accountId: 'alpha', platform: 'tiktok' }));
+  const done = async (extra) => (await get(`${back.pathname}${back.search}${extra}`)).text();
+  const setupBack = (cls) => `<a class="${cls}" href="/new/o-alpha#connect">לחזור להגדרת החשבון</a>`;
+  const T = new Date().toISOString();
+  db.insert('onboarding', { id: 'o-alpha', seed_json: { niche: 'קפה' }, status: 'samples', pack_id: 'alpha', workspace_id: 1, created_at: T, updated_at: T });
+  try {
+    const prof = await ensureProfile(db, pack('alpha'));
+    connected(prof, 'tiktok', 'tk1', 'alpha.tt');
+    let html = await done('&connected=tiktok&accountId=tk1');
+    assert.match(html, /טיקטוק מחובר/);
+    assert.ok(html.includes(`<div class="links">${setupBack('btn primary')}</div>`), 'connected: back to the setup, its one button');
+    html = await done('&error=oauth_denied&platform=tiktok&is_user_fixable=true');
+    assert.match(html, /<div class="links"><a class="btn primary" href="[^"]+">לנסות שוב<\/a><a class="btn" href="\/new\/o-alpha#connect">לחזור להגדרת החשבון<\/a><\/div>/, 'refused: "לנסות שוב" first, the way back grey');
+    db.run("UPDATE onboarding SET status = 'live' WHERE id = 'o-alpha'");
+    html = await done('&connected=tiktok&accountId=tk1');
+    assert.doesNotMatch(html, /לחזור להגדרת החשבון/, 'live: no setup to go back to');
+  } finally {
+    db.run("DELETE FROM onboarding WHERE id = 'o-alpha'");
+  }
+});
+
 test('an expired connect link sends the customer to the account page, whose button opens a fresh connect, and not to WhatsApp', async () => {
   const old = new URL(connectLink(SECRET, { base, accountId: 'alpha', platform: 'tiktok', t: Date.now() - 73 * 3_600_000 }));
   const res = await get(`${old.pathname}${old.search}`);

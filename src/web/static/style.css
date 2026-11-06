@@ -1377,13 +1377,17 @@ html.sk-on #main > :not(.sk-page) { display: none; }
 .sk-page .acct-head > .sk-lines { flex: 1; }
 .sk-page .cards > .panel { margin-top: 0; }
 
-/* A button whose form was sent: it spins until the answer comes (the ajax forms set the same aria-busy). */
+/* A button whose form was sent: it spins until the answer comes (the ajax forms set the same aria-busy). With reduced
+   motion, the device's or the accessibility panel's (a-still), it spins too, slower: the rules that turn every animation
+   off had stopped it, and a ring standing still reads as stuck (the owner, 2026-11-05, on "ליצור את החשבון": "the circle
+   isnt spinning, which makes it look stuck"). */
 .btn[aria-busy='true'] { position: relative; color: transparent !important; opacity: 0.85; }
 .btn[aria-busy='true'] > * { visibility: hidden; }
 .btn[aria-busy='true']::after { content: ''; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-color: var(--ink-3) var(--ink-3) var(--ink-3) transparent; animation: spin 0.7s linear infinite; }
 .btn.primary[aria-busy='true']::after { border-color: var(--accent-ink) var(--accent-ink) var(--accent-ink) transparent; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .btn[aria-busy='true']::after { border-color: var(--ink-3); opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .btn[aria-busy='true']::after { animation: spin 2.4s linear infinite !important; } }
+html.a-still .btn[aria-busy='true']::after { animation: spin 2.4s linear infinite !important; }
 
 /* A slide on its way: its box (which keeps its place, .strip a) shimmers until the image is in (app.js marks .ok). */
 .js .strip a:has(img:not(.ok))::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--sk-hi), transparent); transform: translateX(100%); animation: sk-shine 1.4s linear infinite; }
@@ -1586,6 +1590,10 @@ details.mfold > summary::-webkit-details-marker { display: none; }
 .steperr { margin: 16px 0 0; }
 .stepnav { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
 .stepnav > .btn.primary { margin-inline-start: auto; min-width: 160px; }
+/* What is being done while a step's form is sent, under its buttons at the main one's end (onboarding.js steps, `wait`).
+   Empty, it takes no room: nothing moves until it speaks, and then only below the buttons. */
+.stepwait { margin: 0; text-align: end; }
+.stepwait:not(:empty) { margin-top: 10px; }
 [data-step-go] { display: none; }
 .js [data-step-go] { display: inline-flex; }
 html:not(.js) .stepnav:not(:has(> :not([data-step-go]))) { display: none; }

@@ -603,6 +603,11 @@
     return page;
   };
 
+  // A form with a line for it (data-wait, onboarding.js steps: the create button's) says what is being done while it is
+  // sent, a new line every few seconds, in role="status"; whatever stops the wait empties it.
+  const WAIT_MS = 3000;
+  let waitLine = null;
+  let waitTimer = 0;
   let bar = null;
   let timer = 0;
   let busy = null;
@@ -610,6 +615,9 @@
   let scrolled = null;
   const stop = () => {
     clearTimeout(timer);
+    clearInterval(waitTimer);
+    if (waitLine) waitLine.textContent = '';
+    waitLine = null;
     root.classList.remove('is-loading', 'sk-on');
     main?.querySelector(':scope > .sk-page')?.remove();
     main?.removeAttribute('aria-busy');
@@ -624,6 +632,14 @@
     stop();
     if (button) setTimeout(() => button.setAttribute('aria-busy', 'true')); // after the submit, so its name still goes
     busy = button;
+    const line = button?.form?.querySelector('[data-wait]');
+    if (line) {
+      const says = line.dataset.wait.split('|');
+      let i = 0;
+      line.textContent = says[0];
+      waitLine = line;
+      waitTimer = setInterval(() => { i = (i + 1) % says.length; line.textContent = says[i]; }, WAIT_MS);
+    }
     timer = setTimeout(() => {
       bar ??= document.body.appendChild(div('loadbar'));
       root.classList.add('is-loading');
@@ -657,6 +673,8 @@
   document.addEventListener('submit', (e) => {
     const form = e.target;
     if (e.defaultPrevented || (form.target && form.target !== '_self') || form.hasAttribute('data-no-wait')) return;
+    // Sent already: a second tap, or Enter, while the answer is on its way would send it again (an account made twice).
+    if (e.submitter?.getAttribute('aria-busy') === 'true') return e.preventDefault();
     const url = new URL(form.getAttribute('action') || location.href, location.href);
     if (url.origin !== location.origin || DOWNLOAD.test(url.pathname)) return;
     if ((form.getAttribute('method') || 'get').toLowerCase() === 'get') start(shapeOf(url.pathname));

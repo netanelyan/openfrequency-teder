@@ -40,8 +40,8 @@ before(async () => {
   ctx.mediaDir = path.join(home.home, 'media');
   // The demo account is another workspace's: workspace 1 has none yet, and may make its one.
   db.run("UPDATE accounts SET workspace_id = 9 WHERE id = 'demo'");
-  paidWorkspaces(db, [1, 2, 3]);
-  for (const [id, ws] of [['o-steps', 1], ['o-refused', 2], ['o-nojs', 3]]) review(id, ws);
+  paidWorkspaces(db, [1, 2, 3, 4]);
+  for (const [id, ws] of [['o-steps', 1], ['o-refused', 2], ['o-nojs', 3], ['o-busy', 4]]) review(id, ws);
   db.insert('onboarding', { id: 'o-wait', seed_json: { niche: 'צמחי בית' }, status: 'discovering', workspace_id: 1, created_at: T, updated_at: T });
   __onboarding.running.set('o-wait', new Promise(() => {}));
   fake = await fakeAccounts();
@@ -75,11 +75,15 @@ test('the sources step is four steps in one form, in order, numbered, one column
     assert.match(html, new RegExp(`data-step="${n}"[^>]*aria-label="${label}">\\n<p class="stepline" tabindex="-1"><span>שלב ${n} מתוך 4</span>`), `step ${n}: ${label}, numbered`);
   }
   // Each step's buttons: "הקודם" from the second, "הבא" until the last, whose one main button makes the account.
-  const navs = [...html.matchAll(/<div class="stepnav">(.*?)<\/div><\/section>/g)].map((m) => m[1]);
+  const ends = [...html.matchAll(/<div class="stepnav">(.*?)<\/div>(<p class="stepwait[^>]*><\/p>)?<\/section>/g)];
+  const navs = ends.map((m) => m[1]);
+  const waits = ends.map((m) => m[2] || '');
   assert.equal(navs.length, 4);
   assert.equal(navs[0], '<button class="btn primary" type="button" data-step-go="next">הבא</button>');
   for (const nav of navs.slice(1, 3)) assert.equal(nav, '<button class="btn ghost" type="button" data-step-go="prev">הקודם</button><button class="btn primary" type="button" data-step-go="next">הבא</button>');
   assert.match(navs[3], /^<button class="btn ghost" type="button" data-step-go="prev">הקודם<\/button><button class="btn primary" type="submit"><svg[^]*<\/svg>ליצור את החשבון<\/button>$/);
+  // Under the create button, the line that says what is being done while the account is made: empty until it is sent.
+  assert.deepEqual(waits, ['', '', '', '<p class="stepwait muted small" role="status" aria-live="polite" data-wait="אוסף מקורות|מאגד נתונים"></p>']);
   assert.equal((html.match(/class="btn primary"/g) || []).length, 4, 'one main button a step');
   assert.doesNotMatch(html, /id="connect"|id="schedule"|data-mfold=/, 'connecting and the days come after the account exists; nothing folds in a step');
   const words = html.slice(html.indexOf('<main'), html.indexOf('</main>')).replace(/<[^>]+>/g, ' ');
@@ -296,6 +300,94 @@ test('in a real browser: one step at a time, "הבא" and "הקודם", the step
       assert.ok(m.ordered && m.oneColumn, 'one under the other, in one column');
       assert.equal(m.goes, 0, 'no button that needs the script');
       assert.equal(m.create, true, 'the create button at the end');
+      await context.close();
+    }
+  } finally {
+    await browser?.close();
+  }
+});
+
+// The owner, 2026-11-05: "when pressing ליצור את החשבון when signing up for teder, the circle isnt spinning, which makes it
+// look stuck. make it spin and add a text of current creating status: אוסף מקורות, מאגד נתונים, which will be switched
+// every few seconds". The ring had stood still under reduced motion (the device's, or the panel's a-still): every
+// animation was turned off. The create is held here, so the page that sent it can be watched while it waits: the page
+// reports what it shows to /probe (fetch, which the CSP lets go to the page's own server) every 250ms.
+test('in a real browser: while the account is made the create button spins, with reduced motion too, the line under it says "אוסף מקורות" then "מאגד נתונים", a second press sends nothing, and nothing stays busy when the page comes back', async () => {
+  let browser;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    browser = await chromium.launch();
+    // The desk with the panel's "still" switch, its create sent back to the step as a refusal would be; then a phone with
+    // the device's reduced motion, whose create goes through.
+    for (const [width, height, still, through] of [[1280, 900, true, false], [390, 844, false, true]]) {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: still ? 'no-preference' : 'reduce', ...(width < 700 ? { isMobile: true, hasTouch: true } : {}) });
+      await context.addCookies([{ name: 'of_session', value: fake.session(customer(4)).sid, url: base }]);
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      if (still) await page.addInitScript(() => localStorage.setItem('of-a11y', JSON.stringify({ still: true })));
+      // What the page shows, from the moment it sends; and, a second after, the button pressed again (as Enter would).
+      await page.addInitScript(() => {
+        document.addEventListener('submit', () => {
+          window.sent = true;
+          const b =document.querySelector('[data-step="4"] button[type=submit]');
+          const w = document.querySelector('[data-wait]');
+          const read = () => {
+            const s = getComputedStyle(b, '::after');
+            const [bb, ww] = [b.getBoundingClientRect(), w.getBoundingClientRect()];
+            fetch('/probe', { method: 'POST', body: JSON.stringify({ busy: b.getAttribute('aria-busy'), anim: s.animationName, dur: s.animationDuration, turn: s.transform, line: w.textContent, top: bb.top, start: bb.left, bottom: bb.bottom, under: ww.top, sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth }) });
+          };
+          read();
+          setInterval(read, 250);
+          setTimeout(() => b.click(), 1000);
+        }, { once: true });
+      });
+      const seen = [];
+      await page.route('**/probe', (r) => {
+        seen.push(JSON.parse(r.request().postData()));
+        return r.fulfill({ status: 204 });
+      });
+      let creates = 0;
+      let release;
+      const held = new Promise((r) => { release = r; });
+      await page.route('**/new/o-busy/create', async (r) => {
+        creates += 1;
+        await held;
+        return through ? r.continue() : r.fulfill({ status: 303, headers: { location: '/new/o-busy#step-4' } });
+      });
+      await page.goto(`${base}/new/o-busy#step-4`, { waitUntil: 'load' });
+      // (A name of its own: the account made above has משתלת הכפר.)
+      await page.fill('[name=displayName]', 'משתלת הגליל');
+      await page.fill('[name=handle]', 'mishtala.busy');
+      assert.equal(await page.textContent('[data-wait]'), '', `${width}: the line is empty before`);
+      // Sent from a task of its own: the page is watched while it waits, not waited for.
+      await page.evaluate(() => setTimeout(() => document.querySelector('[data-step="4"] button[type=submit]').click()));
+      for (let t = 0; t < 60 && !seen.some((x) => x.line === 'מאגד נתונים'); t++) await sleep(100);
+      await sleep(600);
+      const busy = seen.filter((x) => x.busy === 'true');
+      assert.ok(busy.length >= 8, `${width}: busy the whole wait (${busy.length} of ${seen.length})`);
+      assert.ok(busy.every((x) => x.anim === 'spin' && x.dur === '2.4s'), `${width}: it spins, slower with reduced motion:${[...new Set(busy.map((x) => `${x.anim} ${x.dur}`))]}`);
+      assert.ok(new Set(busy.map((x) => x.turn)).size > 3, `${width}: and turns`);
+      const lines = seen.map((x) => x.line).filter((x, i, a) => x && x !== a[i - 1]);
+      assert.deepEqual(lines.slice(0, 2), ['אוסף מקורות', 'מאגד נתונים'], `${width}: the line, in turn`);
+      assert.ok(seen.every((x) => x.top === seen[0].top && x.start === seen[0].start), `${width}: the button does not move`);
+      assert.ok(busy.every((x) => x.under >= x.bottom && x.under - x.bottom < 40), `${width}: the line right under it`);
+      assert.ok(seen.every((x) => x.sideways === 0), `${width}: nothing sideways`);
+      assert.equal(creates, 1, `${width}: pressed again, nothing more is sent`);
+      const back = page.waitForResponse((r) => r.request().method() === 'GET' && new URL(r.url()).pathname === '/new/o-busy');
+      release();
+      await back;
+      if (through) {
+        await page.waitForURL(/\/new\/o-busy$/);
+        assert.ok(db.get("SELECT id FROM accounts WHERE workspace_id = 4"), 'the account is made, once');
+      } else {
+        // The same address as before it was sent: the page that came back is the one that did not send (window.sent).
+        await page.waitForFunction(() => !window.sent && document.readyState === 'complete');
+        assert.equal(await page.evaluate(() => location.hash), '#step-4');
+        assert.equal(await page.getAttribute('[data-step="4"] button[type=submit]', 'aria-busy'), null, 'back: the button is not busy');
+        assert.equal(await page.textContent('[data-wait]'), '', 'back: the line is empty');
+      }
+      assert.deepEqual(errors, [], 'no error, no CSP refusal');
       await context.close();
     }
   } finally {

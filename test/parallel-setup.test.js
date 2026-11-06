@@ -239,12 +239,17 @@ test('TikTok connected while waiting: a profile for the onboarding, the handle o
   Z.accounts.push({ _id: 'tk-1', platform: 'tiktok', username: 'cafe.yafo', profileId: prof._id });
   const done = await get(`${back.pathname}${back.search}&connected=tiktok&accountId=tk-1&username=cafe.yafo`);
   assert.equal(done.status, 200);
-  assert.match(await done.text(), /טיקטוק מחובר[\s\S]*כשהחשבון ייווצר, החיבור יעבור אליו לבד/);
+  const doneHtml = await done.text();
+  assert.match(doneHtml, /טיקטוק מחובר[\s\S]*כשהחשבון ייווצר, החיבור יעבור אליו לבד/);
+  // The way back to the setup it came from (the owner, 2026-11-05: "make a button of 'לחזור להגדרת החשבון'").
+  const backToSetup = '<a class="btn primary" href="/new/o-conn#connect">לחזור להגדרת החשבון</a>';
+  assert.ok(doneHtml.includes(`<div class="links">${backToSetup}</div>`), 'back to the setup, its one button');
   assert.equal(setupOf(db, 'o-conn').zernio.connections.tiktok.username, 'cafe.yafo');
   assert.equal((await get(`${back.pathname}?e=${back.searchParams.get('e')}&s=${'0'.repeat(64)}`)).status, 404, 'a forged return');
   const err = await (await get(`${back.pathname}${back.search}&error=oauth_denied&platform=tiktok&is_user_fixable=true`)).text();
   assert.match(err, /החיבור לא הצליח/);
   assert.doesNotMatch(err, /oauth_denied/, 'Zernio\'s code is the operator\'s');
+  assert.ok(err.includes(backToSetup), 'a refusal too');
 
   const waiting = await (await get('/new/o-conn', cookie)).text();
   assert.match(waiting, /<b>טיקטוק<\/b> <span class="chip ok">מחובר<\/span> <span class="ltr muted">@cafe\.yafo<\/span>/);
@@ -319,6 +324,8 @@ test('Instagram back through Facebook Login: one account is picked by itself, se
   assert.doesNotMatch(html, /בלי אינסטגרם/, 'a Page with no Instagram is not on offer');
   const links = [...html.matchAll(/href="(\/connect\/pick\/[0-9a-f]{32}\?page=(pg\d))"/g)];
   assert.deepEqual(links.map((m) => m[2]), ['pg1', 'pg2']);
+  // Under the choices, the way back to the setup: quiet, so it does not read as one more account to pick.
+  assert.match(html, /\?page=pg2">[^]*?<\/a><a class="btn ghost" href="\/new\/o-ig#connect">לחזור להגדרת החשבון<\/a><\/div>/);
   const id = /\/connect\/pick\/([0-9a-f]{32})/.exec(links[0][1])[1];
   assert.equal((await get(`/connect/pick/${id}?page=pg3`)).status, 400, 'a Page that was not on offer');
   assert.equal((await get(links[1][1])).status, 404, 'the pick was used up by the refused try');
@@ -328,7 +335,9 @@ test('Instagram back through Facebook Login: one account is picked by itself, se
   const link = /href="(\/connect\/pick\/[0-9a-f]{32}\?page=pg2)"/.exec(again)[1];
   const picked = await get(link);
   assert.equal(picked.status, 200);
-  assert.match(await picked.text(), /אינסטגרם מחובר[\s\S]*@bench\.two/);
+  const pickedHtml = await picked.text();
+  assert.match(pickedHtml, /אינסטגרם מחובר[\s\S]*@bench\.two/);
+  assert.ok(pickedHtml.includes('<div class="links"><a class="btn primary" href="/new/o-ig#connect">לחזור להגדרת החשבון</a></div>'), 'and from the pick, back to the setup');
   assert.equal(setupOf(db, 'o-ig').zernio.connections.instagram.id, 'ig-pg2');
   assert.equal((await get(link)).status, 404, 'good once');
 
