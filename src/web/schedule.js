@@ -63,6 +63,21 @@ function restLine(m) {
  */
 // `formId` names the form, and `save: false` leaves its button out: /new's setup step has its own, beside the step's
 // others (src/web/onboarding.js steps), with form="<formId>".
+/**
+ * A time as a list of 24-hour times (07:00, 07:15 ... ), never <input type="time">: a browser draws that one in the
+ * device's language, so a phone set to English shows AM and PM, which people here don't read (the owner, 2026-11-06).
+ * Every 15 minutes from `from` to `to`; a saved time between them stays on the list. `empty` is the blank choice's label.
+ */
+export function timeSelect(name, value, { from = '00:00', to = '23:45', step = 15, empty = '', label = '', id = '' } = {}) {
+  const mins = (t) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const list = [];
+  for (let m = mins(from); m <= mins(to); m += step) list.push(hhmm(m));
+  if (/^([01]\d|2[0-3]):[0-5]\d$/.test(value) && !list.includes(value)) list.push(value), list.sort();
+  const opt = (v, text) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(text)}</option>`;
+  return `<select name="${esc(name)}"${id ? ` id="${esc(id)}"` : ''} dir="ltr"${label ? ` aria-label="${esc(label)}"` : ''}>${empty || !value ? opt('', empty) : ''}${list.map((t) => opt(t, t)).join('')}</select>`;
+}
+
 export function schedulePanel(ctx, d, { back = '/settings#schedule', title = 'מתי מפרסמים', lede = null, action = null, formId = null, save = true } = {}) {
   if (!d) return '';
   const id = d.pack.id;
@@ -70,7 +85,7 @@ export function schedulePanel(ctx, d, { back = '/settings#schedule', title = 'מ
   const rows = DAY_HE.map((name, day) => {
     const times = d.byDay[day] || [];
     const on = times.length > 0;
-    const time = (n) => `<input type="time" name="t${n}_${day}" value="${esc(times[n - 1] || '')}" min="${EARLIEST}" max="${LATEST}" step="300" dir="ltr" aria-label="${esc(`${name}, ${n === 1 ? 'שעה ראשונה' : 'שעה שנייה, לא חובה'}`)}">`;
+    const time = (n) => timeSelect(`t${n}_${day}`, times[n - 1] || '', { from: EARLIEST, to: LATEST, empty: n === 1 ? 'שעה' : 'בלי', label: `${name}, ${n === 1 ? 'שעה ראשונה' : 'שעה שנייה, לא חובה'}` });
     return `<div class="schedrow"><label class="check"><input type="checkbox" name="day_${day}"${on ? ' checked' : ''}> ${esc(name)}${DAY_NOTE[day] && !rules.shabbat ? ` <small class="muted">${DAY_NOTE[day]}</small>` : ''}</label><span class="times">${time(1)}${time(2)}</span></div>`;
   }).join('');
   const rest = restLine(d.month);

@@ -207,8 +207,11 @@ export function feedGuesses(pageUrl) {
  * not read (its sources could never be read either). A page that declares no feed has the usual addresses tried, all
  * at once, the first in feedGuesses' order that holds items taken: most sites have a feed and only some say so.
  */
-async function feedsOf(url, notes, { robots = robotsAllows } = {}) {
+async function feedsOf(url, notes, { robots = robotsAllows, depth = 0 } = {}) {
   const out = [];
+  // A deeper search (src/onboarding/deeper.js) reads more of each source: more of a feed's items, and a page's own
+  // articles, followed from it, instead of the one page of headlines (sourceHints).
+  const hinted = (c) => (depth ? { ...c, hints: sourceHints(c, depth) } : c);
   try {
     const allowed = await robots(url);
     if (!allowed.ok) return notes.push(`${url}: ${allowed.why}`), out;
@@ -232,7 +235,7 @@ async function feedsOf(url, notes, { robots = robotsAllows } = {}) {
         })
     );
     // The same items twice (a site's RSS and its Atom, as BBC Good Food declares) is one source.
-    for (const c of feeds.filter(Boolean)) if (!out.some((o) => o.sample.length && o.sample.join('\n') === c.sample.join('\n'))) out.push(c);
+    for (const c of feeds.filter(Boolean)) if (!out.some((o) => o.sample.length && o.sample.join('\n') === c.sample.join('\n'))) out.push(hinted(c));
     if (!out.length) {
       const guessed = await Promise.all(
         feedGuesses(page.finalUrl).map(async (u) => {
@@ -245,13 +248,31 @@ async function feedsOf(url, notes, { robots = robotsAllows } = {}) {
         })
       );
       const hit = guessed.find(Boolean);
-      if (hit) out.push(hit);
+      if (hit) out.push(hinted(hit));
     }
-    if (!out.length) out.push({ type: 'web', url: page.finalUrl, name: name(null), newest: null, about });
+    if (!out.length) out.push(hinted({ type: 'web', url: page.finalUrl, name: name(null), newest: null, about }));
   } catch (e) {
     notes.push(`${url}: ${e.message}`);
   }
   return out;
+}
+
+/**
+ * What a source found by a deeper search reads each time (src/sources/index.js hints), `depth` pages: a feed's newest
+ * `depth` items; a page's own articles, the links on it to the same site whose last part is a long name (a slug, as
+ * articles have; never the site's sections), `depth` of them. Pure.
+ */
+export function sourceHints(c, depth) {
+  if (c.type === 'rss') return { max: depth };
+  if (c.type !== 'web') return {};
+  let host = '';
+  try {
+    host = new URL(c.url).hostname.replace(/^www\./, '');
+  } catch {
+    return {};
+  }
+  const h = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return { follow: { pattern: `^https?://(?:www\\.)?${h}/(?:[^/?#]+/)*[^/?#]{16,}/?$`, max: depth } };
 }
 
 /** How many sites (and Brave queries) are read at once. Each fetch has its own timeout (12 seconds, feedsOf). */
@@ -342,10 +363,10 @@ export async function nicheSites(ctx, seed) {
 }
 
 /** The searches run on Brave: the model's, else the niche's own words; then the customer's first two topics. Pure. */
-export function searchesFor(seed, { nicheEn = null, named = [] } = {}) {
+export function searchesFor(seed, { nicheEn = null, named = [], max = SEARCHES } = {}) {
   const en = nicheEn || seed.niche;
   const base = named.length ? named : [seed.niche, `${seed.niche} מגזין`, `${en} blog`, `${en} news`];
-  return [...new Set([...base, ...(seed.topics || []).slice(0, 2)].map((q) => String(q || '').trim()).filter(Boolean))].slice(0, SEARCHES);
+  return [...new Set([...base, ...(seed.topics || []).slice(0, 2)].map((q) => String(q || '').trim()).filter(Boolean))].slice(0, max);
 }
 
 /**
@@ -355,14 +376,19 @@ export function searchesFor(seed, { nicheEn = null, named = [] } = {}) {
  * seed: { niche, language, audience, examples: [urls or @handles], topics }
  * onProgress({ step, done, total }): 'search', 'sites' (with counts), 'formats', 'score'.
  */
-export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() ? youtubeClient() : null, onProgress = () => {}, signal = null, parallel = PARALLEL, readSite = feedsOf, robots = readSite === feedsOf ? robotsAllows : allowAll } = {}) {
+export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() ? youtubeClient() : null, onProgress = () => {}, signal = null, parallel = PARALLEL, readSite = feedsOf, robots = readSite === feedsOf ? robotsAllows : allowAll, plan = null, probed = PROBED, searches = SEARCHES, skip = new Set(), depth = 0, apis = true } = {}) {
+  // A deeper search (src/onboarding/deeper.js) gives its own sites and searches (`plan`: nicheSites is not asked), reads
+  // more sites (`probed`) and more of each (`depth`), runs more searches (`searches`), and never reads or offers a site
+  // an earlier round found or the customer dropped (`skip`, hosts without "www."); `apis` false leaves the catalog out.
   const notes = [];
   const said = [];
   const byUrl = new Map();
+  const hostOf = (u) => new URL(u).hostname.replace(/^www\./, '');
   const add = (c) => {
     if (!c?.url || byUrl.has(c.url)) return;
     try {
       if (isSocial(new URL(c.url).hostname)) return notes.push(`${c.url}: רשת חברתית, לא מקור`);
+      if (c.origin !== 'api' && skip.has(hostOf(c.url))) return;
     } catch {
       return;
     }
@@ -374,21 +400,20 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   onProgress({ step: 'search' });
   const [nicheEn, named] = await Promise.all([
     seed.nicheEn || nicheInEnglish(ctx, seed.niche).catch((e) => (notes.push(`תרגום הנישה לאנגלית נכשל: ${e.message}`), null)),
-    nicheSites(ctx, seed).catch((e) => (notes.push(`Claude לא הציע אתרים לנישה: ${e.message}`), { sites: [], queries: [] })),
+    plan || nicheSites(ctx, seed).catch((e) => (notes.push(`Claude לא הציע אתרים לנישה: ${e.message}`), { sites: [], queries: [] })),
   ]);
-  const hostOf = (u) => new URL(u).hostname.replace(/^www\./, '');
   if (named.sites.length) notes.push(`Claude הציע ${named.sites.length} אתרים לנישה: ${named.sites.map((s) => hostOf(s.url)).join(', ')}`);
 
   // 1. sites through Brave, the searches at once, their results taken in the searches' order
   const hosts = new Set();
   if (isSet('BRAVE_API_KEY')) {
-    const qs = searchesFor(seed, { nicheEn, named: named.queries });
+    const qs = searchesFor(seed, { nicheEn, named: named.queries, max: searches });
     const results = await mapLimit(qs, parallel, (q) => brave(ctx, q, notes).catch((e) => (notes.push(`Brave "${q}": ${e.message}`), [])), signal);
     for (const list of results) {
       for (const r of list || []) {
         try {
           const h = new URL(r.url).hostname;
-          if (isSocial(h) || hosts.has(h)) continue;
+          if (isSocial(h) || hosts.has(h) || skip.has(h.replace(/^www\./, ''))) continue;
           hosts.add(h);
           add({ type: 'web', url: r.url, name: r.title, snippet: r.description, origin: 'brave' });
         } catch {
@@ -408,7 +433,7 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   for (const h of social) notes.push(`${h}: חשבון ברשת חברתית, נשמר כדוגמה לסגנון בלבד ולא נקרא`);
   if (social.length) said.push('את החשבונות ברשתות החברתיות שנתתם שמרנו כדוגמה לסגנון. עובדות לוקחים רק מאתרים.');
   const namedHosts = new Set(named.sites.map((s) => hostOf(s.url)));
-  const others = [...named.sites.map((s) => s.url), ...[...hosts].filter((h) => !namedHosts.has(h.replace(/^www\./, ''))).map((h) => `https://${h}/`)].slice(0, PROBED);
+  const others = [...named.sites.map((s) => s.url).filter((u) => !skip.has(hostOf(u))), ...[...hosts].filter((h) => !namedHosts.has(h.replace(/^www\./, ''))).map((h) => `https://${h}/`)].slice(0, probed);
   const probe = [...new Set([...examples, ...others])];
   let done = 0;
   onProgress({ step: 'sites', done, total: probe.length });
@@ -417,7 +442,7 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
     parallel,
     async (url) => {
       const before = notes.length;
-      const found = await readSite(url, notes, { robots });
+      const found = await readSite(url, notes, { robots, depth });
       done += 1;
       onProgress({ step: 'sites', done, total: probe.length });
       return { url, found, failed: !found.length && notes.length > before };
@@ -436,7 +461,7 @@ export async function discover(ctx, seed, { t = now(), yt = youtubeConfigured() 
   if (unread.length) said.push(`לא הצלחנו לקרוא את ${unread.join(', ')}. אפשר לבחור מהמקורות האחרים, או לנסות שוב מאוחר יותר.`);
 
   // 3. structured APIs from the catalog
-  for (const api of suggestApis({ ...seed, nicheEn })) add({ ...api, origin: 'api' });
+  if (apis) for (const api of suggestApis({ ...seed, nicheEn })) add({ ...api, origin: 'api' });
 
   // 4. formats that work now in the niche, searched in English in the niche's English words
   onProgress({ step: 'formats' });

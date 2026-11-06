@@ -331,7 +331,7 @@ test('in a real browser: while the account is made the create button spins, with
         document.addEventListener('submit', () => {
           window.sent = true;
           const b =document.querySelector('[data-step="4"] button[type=submit]');
-          const w = document.querySelector('[data-wait]');
+          const w = document.querySelector('[data-step="4"] [data-wait]');
           const read = () => {
             const s = getComputedStyle(b, '::after');
             const [bb, ww] = [b.getBoundingClientRect(), w.getBoundingClientRect()];
@@ -359,7 +359,7 @@ test('in a real browser: while the account is made the create button spins, with
       // (A name of its own: the account made above has משתלת הכפר.)
       await page.fill('[name=displayName]', 'משתלת הגליל');
       await page.fill('[name=handle]', 'mishtala.busy');
-      assert.equal(await page.textContent('[data-wait]'), '', `${width}: the line is empty before`);
+      assert.equal(await page.textContent('[data-step="4"] [data-wait]'), '', `${width}: the line is empty before`);
       // Sent from a task of its own: the page is watched while it waits, not waited for.
       await page.evaluate(() => setTimeout(() => document.querySelector('[data-step="4"] button[type=submit]').click()));
       for (let t = 0; t < 60 && !seen.some((x) => x.line === 'מאגד נתונים'); t++) await sleep(100);
@@ -385,7 +385,7 @@ test('in a real browser: while the account is made the create button spins, with
         await page.waitForFunction(() => !window.sent && document.readyState === 'complete');
         assert.equal(await page.evaluate(() => location.hash), '#step-4');
         assert.equal(await page.getAttribute('[data-step="4"] button[type=submit]', 'aria-busy'), null, 'back: the button is not busy');
-        assert.equal(await page.textContent('[data-wait]'), '', 'back: the line is empty');
+        assert.equal(await page.textContent('[data-step="4"] [data-wait]'), '', 'back: the line is empty');
       }
       assert.deepEqual(errors, [], 'no error, no CSP refusal');
       await context.close();

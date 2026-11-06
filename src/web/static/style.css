@@ -868,8 +868,8 @@ ol.trace li .d { color: var(--ink-3); font-size: 12px; }
 .schedrow .times { display: flex; gap: 8px; }
 /* Wide enough for "06:30 PM" and the clock a browser in English draws (7.5em cut it to "06:30 PI"); on a narrow phone
    the two share the row's width. */
-.schedrow input[type='time'] { width: 8.75em; padding-inline: 12px; }
-@media (max-width: 400px) { .schedrow .times { flex: 1 1 100%; min-width: 0; } .schedrow input[type='time'] { flex: 1 1 0; width: 0; min-width: 0; } }
+.schedrow .times select { width: 8.75em; padding-inline: 12px; }
+@media (max-width: 400px) { .schedrow .times { flex: 1 1 100%; min-width: 0; } .schedrow .times select { flex: 1 1 0; width: 0; min-width: 0; } }
 .problems { background: var(--bad-bg); border-radius: var(--r-m); padding: 12px 16px; margin: 0 0 16px; }
 .problems b, .problems li { color: var(--bad); }
 .problems ul { margin: 6px 0 0; padding-inline-start: 18px; }

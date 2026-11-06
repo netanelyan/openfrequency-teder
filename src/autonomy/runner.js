@@ -19,6 +19,7 @@ import { wantedPublisher } from '../publish/index.js';
 import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
 import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/events.js';
 import { refreshSource } from '../sources/index.js';
+import { hasModelFacts } from '../sources/model.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 import { zernioTick } from '../publish/connect.js';
 import { accountAllowed, refreshEntitlements } from '../billing/entitlement.js';
@@ -62,7 +63,9 @@ import { leadsTick } from '../leads/sync.js';
 //        auto     it is approved by the engine and goes out; a daily summary
 //                 says what happened
 //      In digest and auto, a post the reviewer scored as sounding a little like
-//      a bot (4 or 5) waits for the owner instead. Digest and auto are the
+//      a bot (4 or 5) waits for the owner instead, and so does a post that stands
+//      on a fact from the model's general knowledge, which no source holds
+//      (src/sources/model.js): a person approves it or it expires. Digest and auto are the
 //      operator's, for the company's own accounts: a customer's account (in a
 //      workspace) is in approve mode whatever is stored (rails.js autonomyMode),
 //      and the engine approves nothing for an account that cannot run.
@@ -246,9 +249,10 @@ export async function tick(ctx, { t = now() } = {}) {
     const mode = autonomyMode(db, pack.id);
     const due = db.all("SELECT * FROM posts WHERE account_id = ? AND status = 'queued' AND slot_at IS NOT NULL AND slot_at <= ?", pack.id, new Date(t).toISOString());
     for (const p of due) {
-      if (mode === 'approve' || !run.ok || (p.review_score ?? 0) >= REWRITE_AT) {
+      const unsourced = mode !== 'approve' && hasModelFacts(db, p.id);
+      if (mode === 'approve' || !run.ok || (p.review_score ?? 0) >= REWRITE_AT || unsourced) {
         if (israelDate(Date.parse(p.slot_at)) < today) {
-          db.update('posts', p.id, { status: 'expired', reason: mode === 'approve' || !run.ok ? 'לא אושר עד סוף היום' : 'נשמע קצת כמו בוט וחיכה לאישור', updated_at: nowIso() });
+          db.update('posts', p.id, { status: 'expired', reason: mode === 'approve' || !run.ok ? 'לא אושר עד סוף היום' : unsourced ? 'עובדות שלא ממקור חיכו לאישור' : 'נשמע קצת כמו בוט וחיכה לאישור', updated_at: nowIso() });
           report.expired.push(p.id);
         }
         continue;

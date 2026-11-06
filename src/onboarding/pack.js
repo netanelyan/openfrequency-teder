@@ -180,6 +180,8 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
       why: [c.why, c.score?.reason].map((w) => String(w || '').trim()).find((w) => w.length >= 10) || 'approved by the owner in onboarding',
       approvedAt: new Date().toISOString().slice(0, 10),
       ...(c.api ? { api: c.api } : {}),
+      // How much of it is read: a source a deeper search found reads more of its pages (src/onboarding/discover.js sourceHints).
+      ...(c.hints && Object.keys(c.hints).length ? { hints: c.hints } : {}),
     })),
   };
   const formats = {

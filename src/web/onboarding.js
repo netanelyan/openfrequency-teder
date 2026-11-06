@@ -22,6 +22,8 @@ import { accDot, csrfField, esc, fold, icon, k, layout, postButton, stamp, withS
 import { storeOrigin } from '../demos/store.js';
 import { reading, startLogoFetch, startSiteRead } from '../onboarding/promo.js';
 import { PROMO_TITLE, draftFromForm, newPromoPanel, promoFromForm, promoLater, settlePromo } from './promo.js';
+import { carryMemory, deeperBusy, deeperLine, deeperProgress, lastRound, startDeeper } from '../onboarding/deeper.js';
+import { DEEPER_HE, deeperForm, deeperPanel, keepForAccount } from './deeper.js';
 
 // The new-account flow, on the website:
 //
@@ -51,7 +53,9 @@ import { PROMO_TITLE, draftFromForm, newPromoPanel, promoFromForm, promoLater, s
 //             'discovering' with no job in this process is one
 //   error     anything else
 // Each is retryable: POST /new/<id>/retry runs the discovery again on the same seed. Too few good sources found, and
-// POST /new/<id>/more searches again with more example sites.
+// POST /new/<id>/more searches again with more example sites. Any time on the sources step, "לחפש מקורות חדשים" (POST
+// /new/<id>/deeper) runs one round of the deeper search (src/onboarding/deeper.js) while the row stays 'review': what
+// it finds joins the list, marked "חדש", and the rounds are the account's once it is made (carryMemory).
 //
 // THE SAMPLES. The approved sources are read first ("קוראים את המקורות שבחרתם"), then the samples are written one by
 // one, each shown as it is ready; a refused one is followed by another (on another document) up to SAMPLE_ATTEMPTS,
@@ -331,6 +335,24 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
   running.set(id, job);
 }
 
+/**
+ * What a round of the deeper search found, kept on the setup: the new sources join the list after the others (fresh ids,
+ * so a page sent before them still names its own), with their round. Made into an account in the meantime: they are its
+ * pending sources instead (src/web/deeper.js keepForAccount).
+ */
+const keepForSetup = (ctx, id) => (res) => {
+  const now = row(ctx, id, { recover: false });
+  if (now.status !== 'review') {
+    if (now.pack_id) keepForAccount(ctx.db, now.pack_id, res.candidates);
+    return;
+  }
+  const have = now.found.candidates || [];
+  let k = have.reduce((m, c) => Math.max(m, Number(String(c.id).replace(/^c/, '')) || 0), 0);
+  const urls = new Set(have.map((c) => c.url));
+  const fresh = res.candidates.filter((c) => !urls.has(c.url)).map((c) => ({ ...c, id: `c${++k}` }));
+  ctx.db.update('onboarding', id, { candidates_json: { ...now.found, candidates: [...have, ...fresh] }, notes_json: [...now.notes, ...res.notes.slice(0, 20)], updated_at: nowIso() });
+};
+
 /** The operator's notes, folded away: what was skipped and why, in the discovery's own words. */
 const operatorNotes = (pc, notes) =>
   pc.operator && notes.length ? `<details class="mt12"><summary class="muted small">הערות למפעיל (${notes.length})</summary><ul class="factlist">${notes.slice(0, 30).map((n) => `<li class="muted small" dir="auto">${esc(n)}</li>`).join('')}</ul><p class="muted small">מה כל הערה אומרת ומה עושים: docs/operator-notes.md</p></details>` : '';
@@ -350,6 +372,9 @@ function progressLine(p) {
 
 /* ------------------------------------------------------------------ the status the page polls */
 
+/** Where a setup's rounds of the deeper search are kept until its account exists (src/onboarding/deeper.js searchMemory). */
+const scopeOf = (r) => `o:${r.id}`;
+
 const sampleCount = (db, packId) => (packId ? db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND sample = 1 AND status = 'sample'", packId).n : 0);
 
 /**
@@ -358,11 +383,13 @@ const sampleCount = (db, packId) => (packId ? db.get("SELECT COUNT(*) AS n FROM 
  * page waits for the customer to finish typing.
  */
 export function statusOf(ctx, r) {
-  const busy = running.has(r.id);
+  // A round of the deeper search on the sources step (src/onboarding/deeper.js) is the setup's work too.
+  const deep = deeperBusy(scopeOf(r));
+  const busy = running.has(r.id) || deep;
   const n = sampleCount(ctx.db, r.pack_id);
-  const key = `${r.status}:${busy ? 'busy' : 'idle'}:${n}`;
-  const line = busy ? progressLine(progress.get(r.id)) : '';
-  const ready = r.status === 'review' || r.status === 'discovering' ? 'המקורות מוכנים, אפשר לבחור.' : r.status === 'failed' ? 'החיפוש נעצר.' : busy ? 'פוסט לדוגמה חדש מוכן.' : 'הפוסטים לדוגמה מוכנים.';
+  const key = `${r.status}:${busy ? 'busy' : 'idle'}:${n}:${lastRound(ctx.db, scopeOf(r))?.n || 0}`;
+  const line = busy ? (deep ? deeperLine(deeperProgress(scopeOf(r))) : progressLine(progress.get(r.id))) : '';
+  const ready = deep || lastRound(ctx.db, scopeOf(r))?.recent ? DEEPER_HE.ready : r.status === 'review' || r.status === 'discovering' ? 'המקורות מוכנים, אפשר לבחור.' : r.status === 'failed' ? 'החיפוש נעצר.' : busy ? 'פוסט לדוגמה חדש מוכן.' : 'הפוסטים לדוגמה מוכנים.';
   const go = r.status === 'review' || r.status === 'discovering' ? 'לבחור מקורות' : 'להמשיך';
   return { status: r.status, busy, key, line, ready, go };
 }
@@ -392,6 +419,7 @@ export function onboardingWork(ctx, { t = now(), within = DAY_MS } = {}) {
     if (['discovering', 'review', 'failed'].includes(r.status)) {
       const base = { id: `o:${r.id}:sources`, subject: niche, at: r.updated_at };
       if (r.status === 'discovering' && job) out.push({ ...base, state: 'running', title: STATUS_HE.discovering, line: progressLine(progress.get(r.id)) });
+      else if (r.status === 'review' && deeperBusy(scopeOf(r))) out.push({ ...base, state: 'running', title: DEEPER_HE.title, line: deeperLine(deeperProgress(scopeOf(r))) });
       else if (r.status === 'review' && recent()) out.push({ ...base, state: 'ready', title: 'המקורות מוכנים, אפשר לבחור', line: '', href: `${page}#sources`, go: 'לבחור מקורות' });
       else if (r.status !== 'review' && recent()) out.push({ ...base, state: 'stopped', title: STATUS_HE.failed, line: 'אפשר לנסות שוב עם אותם פרטים.', href: page, go: 'להמשיך' });
       continue;
@@ -584,12 +612,12 @@ const siteOf = (url) => {
  * line with its site under it, a plain word where one helps, and the site to open. The operator also sees every score
  * and the reasons, with why it is trusted to edit, folded under the row; the customer's is the reason found, as it is.
  */
-function sourceRow(pc, c, { on = strong(c), why = null } = {}) {
+function sourceRow(pc, c, { on = strong(c), why = null, isNew = false } = {}) {
   const s = c.score || {};
   const fresh = c.newest && Date.now() - Date.parse(c.newest) < 2 * DAY_MS;
-  const chips = pc.operator
+  const chips = (isNew ? '<span class="chip sig">חדש</span>' : '') + (pc.operator
     ? `<span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${s.authority >= 7 ? 'ok' : s.authority >= 5 ? '' : 'warn'}">סמכות ${s.authority}/10</span><span class="chip">עדכניות ${s.freshness}/10</span>${s.relevance != null ? `<span class="chip ${s.relevance >= 6 ? '' : 'warn'}">רלוונטיות ${s.relevance}/10</span>` : ''}<span class="chip ${s.terms === 'ok' ? 'ok' : s.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[s.terms] || s.terms)}</span>`
-    : `${c.origin === 'example' ? '<span class="chip">מהאתרים שלכם</span>' : ''}${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`;
+    : `${c.origin === 'example' ? '<span class="chip">מהאתרים שלכם</span>' : ''}${s.authority >= 8 ? '<span class="chip ok">מקור מוביל</span>' : ''}${fresh ? '<span class="chip">מתעדכן כל יום</span>' : ''}`);
   // A customer's words for a source (a leading one, one of theirs, fresh) are a wider screen's: on a phone a row is its
   // box, its name and its site.
   const tags = pc.operator ? 'srctags' : 'srctags m-hide';
@@ -637,14 +665,18 @@ const SOURCES_SHOWN = 8;
  * `chosen` is what the customer ticked when this step last came back (chosenOf): those ticks, in the same order.
  */
 function sourcesPanel(pc, shown, hidden, chosen = null) {
-  const ticked = shown.filter(strong);
-  const ordered = [...ticked, ...shown.filter((c) => !strong(c))];
+  // What the last "לחפש מקורות חדשים" found comes first, marked "חדש" (src/onboarding/deeper.js), for the owner to tick or leave.
+  const last = Math.max(0, ...shown.map((c) => c.round || 0));
+  const isNew = (c) => Boolean(last) && c.round === last;
+  const ticked = shown.filter((c) => strong(c) && !isNew(c));
+  const ordered = [...shown.filter(isNew), ...ticked, ...shown.filter((c) => !strong(c) && !isNew(c))];
   const first = ordered.slice(0, SOURCES_SHOWN);
   const rest = ordered.slice(SOURCES_SHOWN);
   const on = (c) => (chosen ? chosen.on(c) : strong(c));
   const restTicked = rest.filter(on).length;
-  const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c, { on: on(c), why: chosen?.why(c) ?? null })).join('')}</ul>`;
-  const said = `${ticked.length ? `סימנו ${ticked.length === 1 ? 'מקור חזק אחד' : `${ticked.length} מקורות חזקים`}. ` : ''}תדר כותב רק ממקורות מסומנים.`;
+  const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c, { on: on(c), why: chosen?.why(c) ?? null, isNew: isNew(c) })).join('')}</ul>`;
+  const strongCount = shown.filter(strong).length;
+  const said = `${strongCount ? `סימנו ${strongCount === 1 ? 'מקור חזק אחד' : `${strongCount} מקורות חזקים`}. ` : ''}תדר כותב רק ממקורות מסומנים.`;
   const more = `${rest.length === 1 ? 'עוד מקור אחד' : `עוד ${rest.length} מקורות`}${restTicked ? `, ${restTicked === rest.length ? (rest.length === 1 ? 'מסומן' : 'כולם מסומנים') : restTicked === 1 ? 'אחד מהם מסומן' : `${restTicked} מהם מסומנים`}` : ''}`;
   return `<section class="panel" id="found"><header><h2>המקורות שמצאנו</h2></header><p class="muted small m0">${esc(said)}</p>
 ${rows(first)}
@@ -742,7 +774,7 @@ ${connectSection(ctx, pc, r)}</div>`
 ${few ? `<form method="post" action="/new/${esc(r.id)}/more" id="more-form">${csrfField(pc)}</form>` : ''}
 <form method="post" action="/new/${esc(r.id)}/create" id="sources">${csrfField(pc)}
 ${steps([
-  { key: 'sources', title: 'המקורות', problem: refusedOn(r, 'sources'), body: `${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden, chosen) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>${few ? 'אפשר להוסיף כאן למטה אתרים שאתם סומכים עליהם' : 'אפשר'}, או <a href="/new">להתחיל שוב</a>.</div>`}${few ? fewPanel(pc, r, shown.length) : ''}` },
+  { key: 'sources', title: 'המקורות', problem: refusedOn(r, 'sources'), body: `${shown.length || (pc.operator && hidden.length) ? sourcesPanel(pc, shown, hidden, chosen) : `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>${few ? 'אפשר להוסיף כאן למטה אתרים שאתם סומכים עליהם' : 'אפשר'}, או <a href="/new">להתחיל שוב</a>.</div>`}${few ? fewPanel(pc, r, shown.length) : ''}${capped ? '' : deeperPanel(pc, ctx.db, scopeOf(r), { action: `/new/${r.id}/deeper`, poll: `/new/${r.id}/status`, href: `/new/${r.id}#deeper`, formId: 'deeper-form' })}` },
   { key: 'formats', title: FORMATS_TITLE, problem: refusedOn(r, 'formats'), body: formatsSection(picked) },
   { key: 'promo', title: PROMO_TITLE, problem: refusedOn(r, 'promo'), body: newPromoPanel(pc, r, { busy: reading.has(r.id), nameDefault: nameOf(pc, r) }) },
   {
@@ -756,6 +788,7 @@ ${nameFields(pc, r)}
     wait: CREATING_HE,
   },
 ])}</form>
+${capped ? '' : deeperForm(pc, 'deeper-form', `/new/${r.id}/deeper`)}
 ${formatsPanel}${ops}</div>`
     );
   }
@@ -859,6 +892,8 @@ async function createAccount(ctx, user, r, f) {
   else saveChoice(ctx.db, made.id, defaultChoiceFor(r.id), { actor: user.name });
   // TikTok and Instagram connected before the account existed: the account takes the profile over.
   carryOnboardingZernio(ctx.db, r.id, made.id, { actor: user.name });
+  // So do the rounds of "לחפש מקורות חדשים": the Sources page goes on from them, never repeating one.
+  carryMemory(ctx.db, scopeOf(r), made.id);
   ctx.reloadPacks();
   // The logo the site read found, fetched into the account in the background: the account is made whether or not
   // it comes (src/onboarding/promo.js startLogoFetch).
@@ -929,12 +964,34 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         if (r.status !== 'review') throw new ActionError('אפשר לחפש שוב רק לפני שהחשבון נוצר.', 409);
         const added = listField(f.examples);
         if (!added.length) throw new ActionError('צריך לכתוב לפחות כתובת אחת של אתר.');
+        if (deeperBusy(scopeOf(r))) throw new ActionError(DEEPER_HE.running, 409);
         capCheck(ctx, user, r.workspace_id);
         const seed = { ...r.seed, examples: [...new Set([...(r.seed.examples || []), ...added])].slice(0, 10) };
         ctx.db.update('onboarding', r.id, { status: 'discovering', seed_json: seed, candidates_json: {}, notes_json: [], updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, more: added.length } });
         startDiscovery(ctx, r.id, { counted: !user.operator });
         return { ok: true, message: 'מחפשים שוב, עם האתרים שהוספתם.', redirect: `/new/${r.id}` };
+      },
+    ],
+    [
+      'POST',
+      /^\/new\/([\w-]+)\/deeper$/,
+      (ctx, user, m) => {
+        // One round of the deeper search (src/onboarding/deeper.js), in the background, while the sources are chosen.
+        const r = row(ctx, m[1]);
+        if (r.status !== 'review') throw new ActionError('אפשר לחפש כאן מקורות חדשים רק לפני שהחשבון נוצר. אחרי זה, בדף המקורות.', 409);
+        if (deeperBusy(scopeOf(r))) return { ok: true, message: DEEPER_HE.running, redirect: `/new/${r.id}#deeper` };
+        capCheck(ctx, user, r.workspace_id);
+        const e = engine(ctx);
+        const cands = r.found.candidates || [];
+        // Dropped: what was not offered, and what the owner saw and left unticked the last time they sent the step.
+        const seen = new Set(r.setup.chosen?.shown || []);
+        const kept = new Set(r.setup.chosen?.approve || []);
+        const dropped = cands.filter((c) => !offered(c) || (seen.has(c.url) && !kept.has(c.url))).map((c) => siteOf(c.url));
+        const started = startDeeper(e, scopeOf(r), { seed: r.seed, known: cands.map((c) => c.url), dropped, workspaceId: r.workspace_id ?? null, counts: !user.operator, log: e.log, keep: keepForSetup(e, r.id) });
+        if (!started) throw new ActionError(DEEPER_HE.cap, 409);
+        audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche: r.seed.niche, deeper: true } });
+        return { ok: true, message: 'מחפשים מקורות חדשים.', redirect: `/new/${r.id}#deeper` };
       },
     ],
     [

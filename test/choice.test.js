@@ -159,7 +159,7 @@ test('the owner chooses the days and times on Settings; the form keeps to the ac
   assert.deepEqual(choiceOf(db, 'demo')[4], ['12:00']);
   const after2 = await (await fetch(`${base}/settings`, { headers: { cookie } })).text();
   assert.match(after2, /name="day_1" checked/);
-  assert.match(after2, /name="t2_1" value="18:00"/);
+  assert.match(after2, /name="t2_1"[^>]*>(?:(?!<\/select>).)*<option value="18:00" selected>/);
   assert.match(after2, /name="day_0">/, 'Sunday is off now');
   const elsewhere = await send({ day_1: 'on', t1_1: '10:00', back: 'https://evil.example/' }, false);
   assert.equal(elsewhere.headers.get('location'), '/settings#schedule', 'the form returns only to our own pages');

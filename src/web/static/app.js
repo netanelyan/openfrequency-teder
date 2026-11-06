@@ -632,7 +632,9 @@
     stop();
     if (button) setTimeout(() => button.setAttribute('aria-busy', 'true')); // after the submit, so its name still goes
     busy = button;
-    const line = button?.form?.querySelector('[data-wait]');
+    // A button tied by form= to a form outside its own (the setup's "לחפש מקורות חדשים") has its line in its box; a
+    // form's own line is never one of those boxes' (the create form holds that box in its first step).
+    const line = button?.closest('[data-wait-box]')?.querySelector('[data-wait]') || [...(button?.form?.querySelectorAll('[data-wait]') || [])].find((l) => !l.closest('[data-wait-box]'));
     if (line) {
       const says = line.dataset.wait.split('|');
       let i = 0;

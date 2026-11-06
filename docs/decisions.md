@@ -2845,3 +2845,48 @@ test/setup-steps.test.js (new) covers the markup and the order of both states, n
 step and words, and in a real browser at 1280 and 390: one step at a time, "הבא", "הקודם", a reload and Back, a field
 that holds "הבא" and the create button, Enter, every field sent by create, a refusal on its step beside a button that
 is not busy, the waiting page's steps, and without the script every step in order.
+
+### Thin sources: a search that goes deeper, and facts from the model when the sources give nothing (2026-11-06)
+
+The owner: "the engine cant write examples for openfrequency tiktok and instagram. i ask myself if any other niche
+would work? the problem is searching for sources. there should be a button that searches for new sources, and every
+search should be better ... even if you cant verify a fact or a source, we should use it. maybe add an AI that tells
+facts and stuff like this, when a source is thin or sources are thin".
+
+**What happened** (the live log and the steps of 2026-11-05 and 06, read only). OpenFrequency's account ("יזמות ועסקים
+לכולם") approved 8 sources: three home pages, a news site's tag page, Kol Zchut (403), Wikidata, a WordPress feed of
+generic business articles and the US SBA's feed. Each sample try sent 42 outlines (7 formats by 6 documents), every one
+`usable: false` ("a tag page of headlines", "a landing page", "names the audience would have to look up"), and blocked
+"אף מסמך חדש לא הספיק לפוסט באחד הפורמטים"; the second try sent the same 42 again, and the round stopped at two
+no_source refusals. The undated home and tag pages sorted as the newest, so they took four of the six places of every
+format and the feed's real articles were never asked about. A niche fails the same way when its sources are pages of
+headlines rather than articles, and when its documents hold no name the audience knows (the outline's "a name most of
+the audience knows at once" rule, 2026-10-31): business tools, B2B services, professional how-to, local services.
+Niches of famous people, teams, products and places (sport, food, travel, tech, celebrities, history) mostly do not.
+
+**What changed.**
+- *The outline is offered articles* (src/pipeline/build.js candidateDocs): a web page under 400 characters never reaches
+  it (THIN_DOC), and a site's home page or a tag, category or section page sorts after every article (indexPage). *An
+  outline refused for a format and its documents in the last 30 days is not asked again* (refusedOutlines), so the
+  next try reaches the next documents instead of paying for the same refusals.
+- *"לחפש מקורות חדשים"* (src/onboarding/deeper.js, src/web/deeper.js) on the setup's sources step and on the Sources
+  page. One round a press, in the background, with the setup's poll and the create button's rotating line. Each round
+  remembers the earlier ones (their searches, every site they read, what they offered) and the sites the owner dropped,
+  never repeats any of them, widens (the niche's own publications missed, then the subjects next to it, then what the
+  audience cares about beyond the product, then reference pages) and goes deeper: 6 to 12 searches, 8 to 14 sites named,
+  12 to 24 sites read, 6 to 12 pages of each source (a feed's items, a page's own articles followed from it), 6 to 12
+  minutes. At most 4 rounds an account, the setup's included: under about $0.40 for all four (Brave and two small judge
+  calls a round), metered against an unpaid workspace's setup cap. On the setup the new sources join the list marked
+  "חדש"; on an account they are pending, approved or removed on the Sources page.
+- *Facts from the model's general knowledge* (src/sources/model.js). When nothing the sources hold carries a post,
+  buildPost asks the model once for a page of what it knows about one subject the audience knows by name, stores it
+  as a document of the account's "ידע כללי של המודל" source, and plans from it like any document: every quote checked
+  against that page, every number on a slide in the quotes. The prompt asks for well-known, stable facts and none of
+  statistics, percentages, prices, sums, exact dates, quotations or the last two years; the code drops a fact with any
+  figure but a year, a currency, a percentage or a quotation mark. It is never presented as sourced: the slide draws no
+  "מקור:" line for it, the card says "לא ממקור, כדאי לבדוק" beside each such fact and on its folded line, and the slide's
+  corner says "לא ממקור". A customer's post waits for approval anyway; the company's own accounts (OF_OWN_WORKSPACES,
+  workspace 1) act on their stored mode, so in digest or auto a post on such a fact waits for a person too
+  (src/autonomy/runner.js), and expires unapproved. Removing the source on the Sources page turns the fallback off.
+
+test/thin-sources.test.js covers the three.

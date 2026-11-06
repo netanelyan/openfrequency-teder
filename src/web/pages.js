@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_PLAN, MAX_PLAN, PLAN_HE, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { TIKTOK_LINE, connectPanel, tiktokModePanel } from './connect.js';
-import { schedulePanel } from './schedule.js';
+import { schedulePanel, timeSelect } from './schedule.js';
 import { connectLine } from '../publish/hold.js';
 import { PLATFORM_LIST } from '../core/platforms.js';
 import { EMAIL_HE } from '../notify/email.js';
@@ -21,6 +21,7 @@ import { PROMO_TITLE, promoPanel } from './promo.js';
 import { LOGO_TITLE, logoPanel } from './logo.js';
 import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
 import { captionAction } from '../pipeline/closing.js';
+import { MODEL_KEY, MODEL_NAME, UNSOURCED_HE } from '../sources/model.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -240,6 +241,13 @@ const buildingCard = (post) => `<article class="card acc acc-${esc(post.account_
  */
 const tiktokMock = (handle, caption) => `<span class="tt" aria-hidden="true"><span class="tt-safe"></span><span class="tt-tabs"><i>עוקבים</i><b>בשבילך</b></span><span class="tt-col"><i class="av"></i><i></i><i></i><i></i><i></i><i class="disc"></i></span><span class="tt-dots"><i class="on"></i><i></i><i></i><i></i></span><span class="tt-cap"><b>${esc(handle ? `@${handle}` : '')}</b><span>${esc(String(caption || '').split('\n')[0].slice(0, 90))}</span></span><span class="tt-bar"></span></span>`;
 
+/** The corner of a slide with facts: how many sources it cites, or that its facts are not from one (src/sources/model.js). */
+function hasLine(post, s) {
+  const sourced = s.factKeys.filter((key) => !post.facts?.find((f) => f.key === key)?.unsourced).length;
+  if (!sourced) return '<span class="has">לא ממקור</span>';
+  return `<span class="has">${sourced === 1 ? 'מקור אחד' : `${sourced} מקורות`}</span>`;
+}
+
 function strip(post, platform = 'tiktok', { mock = null } = {}) {
   const files = post.media?.[platform] || [];
   if (!files.length) return '';
@@ -251,7 +259,7 @@ function strip(post, platform = 'tiktok', { mock = null } = {}) {
       const target = n ? `#s-${post.id}-${n}` : '#';
       // The image after the stored slides is the post's closing slide (src/pipeline/closing.js): its line.
       const alt = s?.kind === 'cover' ? post.hook : s ? s.title || '' : post.data?.closing?.line || '';
-      return `<a href="${target}" aria-label="שקף ${i + 1}${n ? `, העובדות שלו` : ''}">${mock || ''}<img src="${media(post, platform, i)}" alt="${esc(alt)}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async" width="270" height="${platform === 'tiktok' ? 480 : 338}"><span class="n">${i + 1}/${files.length}</span>${n && s.factKeys.length ? `<span class="has">${s.factKeys.length === 1 ? 'מקור אחד' : `${s.factKeys.length} מקורות`}</span>` : ''}</a>`;
+      return `<a href="${target}" aria-label="שקף ${i + 1}${n ? `, העובדות שלו` : ''}">${mock || ''}<img src="${media(post, platform, i)}" alt="${esc(alt)}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async" width="270" height="${platform === 'tiktok' ? 480 : 338}"><span class="n">${i + 1}/${files.length}</span>${n && s.factKeys.length ? hasLine(post, s) : ''}</a>`;
     })
     .join('')}</div><div class="dots" aria-hidden="true">${files.map((_, i) => `<i${i === 0 ? ' class="on"' : ''}></i>`).join('')}</div>`;
 }
@@ -262,12 +270,24 @@ const factCount = (post) => {
   return post.facts.filter((f) => items.some((s) => s.factKeys.includes(f.key))).length;
 };
 
+/**
+ * Where a fact comes from, under its quote: the page it was saved from and whether its source is approved. A fact from
+ * the model's general knowledge (src/sources/model.js) has no page: it says so, "לא ממקור, כדאי לבדוק", and is never
+ * shown as an approved source's.
+ */
+const factWhere = (f) =>
+  f.unsourced
+    ? `<div class="where"><span class="muted">${esc(MODEL_NAME)}</span><span class="chip warn">${esc(UNSOURCED_HE)}</span></div>`
+    : `<div class="where"><a href="${esc(f.doc_url)}" target="_blank" rel="noopener noreferrer">${esc(f.source_name)} ${icon('ext')}</a><span class="muted">נשמר ${esc(stamp(f.doc_fetched_at))}</span>${f.source_status === 'approved' ? '<span class="chip ok">מקור מאושר</span>' : `<span class="chip bad">מקור ${esc(f.source_status)}</span>`}</div>`;
+
 /** Where the facts come from, slide by slide. A customer sees it only when there is a fact to show. */
 function factsBlock(ctx, post, { open = false } = {}) {
   const items = post.slides.filter((s) => s.kind === 'item');
   const n = factCount(post);
   if (!n && !ctx.operator) return '';
-  return `<details class="facts"${open ? ' open' : ''}><summary>${icon('shield')}מאיפה העובדות (${n})<span class="chev">${icon('chev')}</span></summary>
+  // Said on the folded line too, so a post that stands on the model's own facts is checked before it is approved.
+  const unsourced = post.facts.some((f) => f.unsourced && items.some((s) => s.factKeys.includes(f.key)));
+  return `<details class="facts"${open ? ' open' : ''}><summary>${icon('shield')}מאיפה העובדות (${n})${unsourced ? ` <span class="chip warn">${esc(UNSOURCED_HE)}</span>` : ''}<span class="chev">${icon('chev')}</span></summary>
 <ol class="factlist">${items
     .map((s, i) => {
       const facts = s.factKeys.map((key) => post.facts.find((f) => f.key === key)).filter(Boolean);
@@ -275,7 +295,7 @@ function factsBlock(ctx, post, { open = false } = {}) {
         .map(
           (f) => `<details class="fact"><summary>${f.verified ? `<span class="ok">${icon('check')}</span>` : `<span class="no">${icon('x')}</span>`}<span>${esc(f.claim)}</span></summary>
 <div class="src"><blockquote class="q" dir="auto">${esc(f.quote)}</blockquote>
-<div class="where"><a href="${esc(f.doc_url)}" target="_blank" rel="noopener noreferrer">${esc(f.source_name)} ${icon('ext')}</a><span class="muted">נשמר ${esc(stamp(f.doc_fetched_at))}</span>${f.source_status === 'approved' ? '<span class="chip ok">מקור מאושר</span>' : `<span class="chip bad">מקור ${esc(f.source_status)}</span>`}</div>
+${factWhere(f)}
 ${f.error ? `<div class="muted">${esc(f.error)}</div>` : ''}</div></details>`
         )
         .join('')}</li>`;
@@ -1144,14 +1164,14 @@ export function topicPanel(t) {
 const SOURCE_STATUS = { approved: ['מאושר', 'ok'], pending: ['ממתין לאישור', 'warn'], removed: ['הוסר', 'ghost'] };
 const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'נתונים' };
 
-export function sourcesPage(ctx, { packs, current, sources, form = {}, problems = [] }) {
+export function sourcesPage(ctx, { packs, current, sources, deeper = '', form = {}, problems = [] }) {
   // The switcher at the top picks the account; tabs only when a page is given more than one.
   const tabs = packs.length < 2 ? '' : `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sources?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
   const list = sources
     .map((s) => {
       const [he, cls] = SOURCE_STATUS[s.status] || [s.status, ''];
       return `<article class="card acc acc-${esc(current.id)} srccard"><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span><span class="chip ghost">${esc(TYPE_HE[s.type] || s.type)}</span>${s.score ? `<span class="chip sig" title="${esc(s.score.reason || '')}">סמכות ${esc(s.score.authority)}/10</span>` : ''}<span class="end muted small">${s.docs} מסמכים</span></div>
-<h3 class="srcname" dir="auto">${esc(s.name)}</h3><a class="small ltr" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a>
+<h3 class="srcname" dir="auto">${esc(s.name)}</h3>${s.key === MODEL_KEY ? `<span class="chip warn">${esc(UNSOURCED_HE)}</span>` : `<a class="small ltr" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a>`}
 <p class="muted small m6" dir="auto">${esc(s.why || '')}</p>
 <p class="muted small m4 when">${s.approved_at ? `אושר ${esc(shortDate(s.approved_at))}` : ''}${s.last_ok_at ? ` · נקרא ${esc(stamp(s.last_ok_at))}` : ''}${s.last_error ? ` · <span class="chip bad">${ctx.operator ? esc(s.last_error.slice(0, 80)) : 'הקריאה האחרונה לא הצליחה'}</span>` : ''}</p>
 <div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אישור', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
@@ -1164,6 +1184,7 @@ export function sourcesPage(ctx, { packs, current, sources, form = {}, problems 
   const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span>${more}</div>
 ${tabs}
 <p class="lede m-hide">עובדה בשקף חייבת ציטוט ממסמך של מקור מאושר של החשבון. מקור שמוסר כאן מפסיק לתמוך בכל פוסט שעוד לא פורסם, והפוסט ייחסם בבדיקה שלפני הפרסום.</p>
+${deeper}
 <div class="cols"><div class="grid12">${list || `<div class="empty"><b>אין מקורות</b></div>`}</div>
 ${fold('add', 'הוספת מקור', `<section class="panel"><header><h2>הוספת מקור</h2></header>
 ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
@@ -1275,7 +1296,7 @@ ${fold('push', 'התראות', `<section class="panel" id="push"><header><h2>ה�
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>`)}
 ${d.email ? fold('email', 'מיילים', emailPanel(ctx, d.email)) : ''}
-${ctx.operator ? fold('generate', 'מתי נכתבים הפוסטים', `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>`) : ''}
+${ctx.operator ? fold('generate', 'מתי נכתבים הפוסטים', `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה${timeSelect('at', s.generateAt)}</label><button class="btn" type="submit">שמירה</button></form></section>`) : ''}
 ${ctx.operator ? fold('demos', 'דמואים לחנויות', `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>`) : ''}
 ${ctx.operator ? fold('leads', 'לידים', `<section class="panel"><header><h2>לידים</h2><a class="end" href="/leads">לרשימה</a></header><p class="muted m0">חנויות שתורן מצא, הדמו של כל אחת, ומה שלחתם לה.</p></section>`) : ''}
 ${fold('me', 'החשבון שלך', `<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>`)}

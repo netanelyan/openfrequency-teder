@@ -169,6 +169,18 @@ says which keys are set without showing them.
   most, and to write to us. The operator's presses are not limited and not counted: to give a customer another round,
   press "עוד פוסטים לדוגמה" as the operator on their `/new/<id>` page.
 
+### Thin sources: "לחפש מקורות חדשים" and the model's own facts
+
+- **What it is.** A button on the setup's sources step and on the Sources page runs one more, wider search for sources
+  in the background (src/onboarding/deeper.js), at most 4 rounds an account. When the sources still give nothing to
+  write from, a post is written from facts the model knows itself, stored under the account's "ידע כללי של המודל"
+  source (src/sources/model.js).
+- **Where it shows.** The new sources are marked "חדש" on the setup, pending on the Sources page. A post on the model's
+  facts says "לא ממקור, כדאי לבדוק" on its card. The service's log has a line per round ("[sources] <scope>: round N:
+  ..."); a post's trace has a `model_facts` step.
+- **What to do.** Read each such post before approving it: nothing checked those facts. To turn the fallback off for an
+  account, remove its "ידע כללי של המודל" source on the Sources page.
+
 ### Connecting TikTok, Instagram and a Facebook Page: headless, and before the account exists
 
 - **What it is.** The connect is Zernio's headless mode: the customer goes straight to TikTok's or Instagram's own

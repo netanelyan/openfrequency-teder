@@ -167,6 +167,8 @@ const pagesFor = () => [
   '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`, '/accounts/bravo/logo',
   '/demos', `/demos/${B.demo}`, `/demos/${B.demo}/img/tiktok/0`,
   '/leads', '/leads?tab=new', '/leads/status.json',
+  // "לחפש מקורות חדשים": how B's search goes is B's (src/web/deeper.js).
+  '/sources/search/status?account=bravo',
 ];
 
 test('workspace A sees nothing of workspace B, or of an account in no workspace: on every page, by every way in', async () => {
@@ -307,6 +309,9 @@ const casesFor = () => {
     [`/new/${B.onboarding}/connect/tiktok`],
     [`/new/${B.onboarding}/connections`],
     [`/new/${B.onboarding}/more`, { examples: 'https://a.example.org/' }],
+    // "לחפש מקורות חדשים" for B, on its setup or its Sources page: B's alone (src/web/deeper.js).
+    [`/new/${B.onboarding}/deeper`],
+    ['/sources/search', { account: 'bravo' }],
     // A store's demo is the operator's alone: no customer approves, rewrites or takes one down, or sets its price.
     [`/demos/${B.demo}/approve`],
     [`/demos/${B.demo}/redo`],

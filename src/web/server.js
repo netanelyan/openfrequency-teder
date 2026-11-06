@@ -14,6 +14,7 @@ import * as data from './data.js';
 import * as pages from './pages.js';
 import * as act from './actions.js';
 import { beforePaying, onboardingRoutes } from './onboarding.js';
+import { deeperPanel, deeperRoutes } from './deeper.js';
 import { previewFile, stylesRoutes } from './styles.js';
 import { demoPage, demosFeed, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicDemo, recordOpen, sendPreview, sendSlide, visitorOf } from './demos.js';
 import { loadPost } from '../pipeline/build.js';
@@ -174,7 +175,7 @@ const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.'
  * its samples (the search, searching again, the name, the closing slide's promo, the days and times, choosing the
  * sources and creating the account, the samples, "עברתי על הדוגמאות"), its own slides, the accounts' colours, and the
  * sources page with what it does (approving, removing and adding a source; the owner, 2026-11-02: "open it", none of
- * them a paid call). Everything
+ * them a paid call), and "לחפש מקורות חדשים" on both (src/web/deeper.js; a paid step, counted against the cap). Everything
  * else is the paywall, by default: going live (/new/<id>/live, approving, publishing, the account's mode and days and
  * times), connecting (/new/<id>/connect/..., /new/<id>/connections, /accounts/<id>/connect/...) and every other page and
  * button, the topics and the hand-checked facts among them. What the setup may spend before paying is capped
@@ -182,13 +183,19 @@ const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.'
  */
 const SETUP_OPEN = [
   ['GET', /^\/new(\/[\w-]+(\/status)?)?$/],
-  ['POST', /^\/new(\/[\w-]+\/(retry|more|name|promo|schedule|create|samples|reviewed))?$/],
-  ['GET', /^\/sources$/],
-  ['POST', /^\/sources\/(\d+\/(approve|remove)|add)$/],
+  ['POST', /^\/new(\/[\w-]+\/(retry|more|deeper|name|promo|schedule|create|samples|reviewed))?$/],
+  ['GET', /^\/sources(\/search\/status)?$/],
+  ['POST', /^\/sources\/(\d+\/(approve|remove)|add|search)$/],
   ['GET', /^\/media\/[\w-]+\/(tiktok|instagram)\/\d+$/],
   ['GET', /^\/static\/accounts\.css$/],
 ];
 export const setupOpen = (method, p) => SETUP_OPEN.some(([m, re]) => (m === method || (m === 'GET' && method === 'HEAD')) && re.test(p));
+
+/** The Sources page's "לחפש מקורות חדשים" for one account (src/web/deeper.js). */
+const sourcesDeeper = (pc, c, pack) => {
+  const q = encodeURIComponent(pack.id);
+  return deeperPanel(pc, c.db, pack.id, { action: '/sources/search', fields: { account: pack.id }, poll: `/sources/search/status?account=${q}`, href: `/sources?account=${q}#deeper`, account: true });
+};
 
 /** How often "בדקו שוב" on the paywall may ask accounts for one workspace: a finger held on it asks once in 30 seconds. */
 export const RECHECK_MS = 30_000;
@@ -311,6 +318,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
     ...onboardingRoutes(connectLinks),
+    ...deeperRoutes(),
     ...scheduleRoutes(),
     ...stylesRoutes(),
     ...demosRoutes(),
@@ -540,7 +548,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
               const d = data.postFull(c, m[1]);
               if (d) return again(pages.postPage({ ...pageCtx(), csrf }, d, { problems: e.problems || [e.message], values: e.values }));
             }
-            if (cur && p === '/sources/add') return again(pages.sourcesPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, sources: data.sourcesFor(c, cur.id), form, problems: e.problems || [e.message] }));
+            if (cur && p === '/sources/add') return again(pages.sourcesPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, sources: data.sourcesFor(c, cur.id), deeper: sourcesDeeper({ ...pageCtx(), csrf }, c, cur), form, problems: e.problems || [e.message] }));
             if (cur && p === '/facts/add') return again(pages.factsPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, topics: data.factsFor(c, cur), ...factDates(), form, problems: e.problems || [e.message] }));
             if (cur && p === '/sounds/save') return again(pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
             if (cur && p === '/topics/add') return again(pages.topicsPage({ ...pageCtx(), csrf }, { ...data.topicsFor(c, cur), form, problems: e.problems || [e.message] }));
@@ -637,7 +645,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const cur = current;
       if (p === '/sources') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.sourcesPage(pc, { packs: sc.packs, current: cur, sources: data.sourcesFor(c, cur.id) }));
+        return page(pages.sourcesPage(pc, { packs: sc.packs, current: cur, sources: data.sourcesFor(c, cur.id), deeper: sourcesDeeper(pc, c, cur) }));
       }
       if (p === '/settings') return page(pages.settingsPage(pc, data.settingsData(sc)));
       if (p === '/facts') {

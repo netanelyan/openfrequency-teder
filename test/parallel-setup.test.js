@@ -209,14 +209,14 @@ test('the days and times chosen while waiting are written to the account at crea
   assert.deepEqual(setupOf(db, 'o-sched').choice.byDay[3], ['09:00', '20:00']);
   assert.equal(db.get("SELECT COUNT(*) AS n FROM settings WHERE key = 'schedule:o-sched'").n, 0, 'no account yet, nothing in its place');
   const page = await (await get('/new/o-sched', cookie)).text();
-  assert.match(page, /name="t1_1" value="10:00"/, 'the form comes back with the choice');
+  assert.match(page, /name="t1_1"[^>]*>(?:(?!<\/select>).)*<option value="10:00" selected>/, 'the form comes back with the choice');
   assert.doesNotMatch(page, /name="day_0" checked/);
   __onboarding.running.delete('o-sched');
   db.run("UPDATE onboarding SET status = 'review', candidates_json = ? WHERE id = 'o-sched'", JSON.stringify({ candidates: [cand('c1'), cand('c2'), cand('c3')] }));
   await post('/new/o-sched/create', cookie, { approve_c1: 'on', displayName: 'לוח', handle: 'sched.acct' });
   assert.deepEqual(choiceOf(db, 'sched-acct'), { 0: [], 1: ['10:00'], 2: [], 3: ['09:00', '20:00'], 4: [], 5: [], 6: [] });
   const samples = await (await get('/new/o-sched', cookie)).text();
-  assert.match(samples, /action="\/accounts\/sched-acct\/schedule"[\s\S]*name="t1_1" value="10:00"/);
+  assert.match(samples, /action="\/accounts\/sched-acct\/schedule"[\s\S]*name="t1_1"[^>]*>(?:(?!<\/select>).)*<option value="10:00" selected>/);
   assert.equal((await post('/new/o-sched/schedule', cookie, { day_1: 'on', t1_1: '11:00' }, { ajax: true })).status, 409, 'after create, the account\'s own form');
 });
 

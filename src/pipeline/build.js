@@ -33,6 +33,7 @@ import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { CLOSING_LINE, closingExtra, closingFrom, closingLesson, closingProblems, closingSlide, isClosingProblem } from './closing.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
+import { MODEL_KEY, modelFactsDoc, modelFallback } from '../sources/model.js';
 import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 
 // One post, from topic to a rendered, queued slideshow:
@@ -134,8 +135,33 @@ export function hashtagsFor(pack, format, seed, text = null) {
 /** How long a source's last read stands before it is read again. */
 export const SOURCE_TTL_MS = 6 * 3600_000;
 
+/**
+ * A page too short to carry a post: a web page that is a site's name and a headline (a magazine's home page read as
+ * 89 characters, 2026-11-06) never reaches the outline, which can only refuse it. A feed's item and a data source's
+ * table are not pages: a month of climate data is dense in 357 characters.
+ */
+export const THIN_DOC = 400;
+
+/**
+ * A site's home page, or a tag, category or section index: headlines and the openings of articles, never the
+ * articles. Pure. OpenFrequency's search (2026-11-06) approved three home pages and a news site's tag page; being
+ * undated they always sorted as the newest, took four of the six places a format offers the outline, were refused by
+ * every format, and the articles of the one feed it had were never tried.
+ */
+export function indexPage(url) {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return false;
+    const p = decodeURIComponent(u.pathname).replace(/\/+$/, '');
+    return !p || /\/(tags?|category|categories|topics?|section|archive)(\/|$)|\.tag$/i.test(p);
+  } catch {
+    return false;
+  }
+}
+
 export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null, keepBlocked = false } = {}) {
-  const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' ORDER BY id", pack.id);
+  // The model's general knowledge (src/sources/model.js) is not read: its pages are made when the sources are thin.
+  const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' AND key <> ? ORDER BY id", pack.id, MODEL_KEY);
   // The pages of the events around this day, for a source that reads them (a fight week).
   const events = pack.meta.events ? upcoming(ctx.db, pack.id, day || israelDate(now()), 8).map((e) => decodeURIComponent(String(e.url || '').split('/wiki/')[1] || '').replace(/_/g, ' ')).filter(Boolean) : [];
   const docs = [];
@@ -152,7 +178,7 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null
     const fresh = !edited && ctx.sources?.kind === 'live' && last?.day === forDay && src.last_ok_at && now() - Date.parse(src.last_ok_at) < SOURCE_TTL_MS;
     const rows = fresh ? (last.ids.length ? ctx.db.all(`SELECT * FROM documents WHERE id IN (${last.ids.map(() => '?').join(',')})`, ...last.ids) : []) : await refreshSource(ctx.db, ctx.sources, src, { day, events });
     if (!fresh && ctx.sources?.kind === 'live') ctx.db.update('sources', src.id, { last_docs_json: { day: forDay, ids: rows.map((r) => r.id) } });
-    for (const d of rows) docs.push({ ...d, sourceName: src.name, sourceKey: src.key });
+    for (const d of rows) docs.push({ ...d, sourceName: src.name, sourceKey: src.key, sourceType: src.type });
   }
   const since = new Date(now() - usedWithinDays * DAY).toISOString();
   const used = new Set(
@@ -162,8 +188,9 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null
       .all(`SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.created_at >= ?${keepBlocked ? " AND p.status != 'blocked'" : ''}`, pack.id, since)
       .map((r) => r.document_id)
   );
-  const fresh = docs.filter((d) => !used.has(d.id));
-  fresh.sort((a, b) => String(b.published_at || b.fetched_at).localeCompare(String(a.published_at || a.fetched_at)));
+  const fresh = docs.filter((d) => !used.has(d.id) && !(d.sourceType === 'web' && String(d.text || '').length < THIN_DOC));
+  // The newest first, and a home page or a tag page after every article (indexPage).
+  fresh.sort((a, b) => indexPage(a.url) - indexPage(b.url) || String(b.published_at || b.fetched_at).localeCompare(String(a.published_at || a.fetched_at)));
   return fresh;
 }
 
@@ -703,6 +730,9 @@ export function sourceLabel(db, fact, { article = true } = {}) {
   const kind = j(row.config_json, {})?.api?.kind;
   const wiki = () => (article && row.title ? `ויקיפדיה: ${String(row.title).replace(/\s*\(Wikipedia[^)]*\)\s*$/, '')}` : 'ויקיפדיה');
   if (kind === 'wikipedia') return wiki();
+  // The model's general knowledge is no source to name on a slide (src/sources/model.js): the slide says none, and the
+  // post's card says the fact is not from one.
+  if (kind === 'model') return null;
   // A topic bank's page is named by where it is from, never by the bank: "מקור: מאגר הנושאים" told a reader nothing.
   if (kind === 'bank') return bankLabel(row.url, row.title, wiki);
   return row.name;
@@ -898,6 +928,27 @@ export function postDraft(post) {
   return d;
 }
 
+/** The key an outline's refusal is remembered by: the format and the documents it was asked about. Pure. */
+export const outlineKey = (formatId, docs) => `${formatId}|${docs.map((d) => d.id ?? d).sort((a, b) => a - b).join(',')}`;
+
+/** How long an outline's refusal stands: a document's snapshot does not change, but a month later the news around it may. */
+export const REFUSED_DAYS = 30;
+
+/**
+ * The outlines refused for this account lately, by outlineKey: a format and documents the model said hold no post
+ * (not a head-to-head refused for a face, which the week's faceless list keeps, and a face may be found later).
+ */
+export function refusedOutlines(db, accountId, t = now()) {
+  const rows = db.all("SELECT s.detail_json FROM steps s JOIN posts p ON p.id = s.post_id WHERE p.account_id = ? AND s.step = 'outline' AND s.status = 'skipped' AND s.at > ?", accountId, new Date(t - REFUSED_DAYS * DAY).toISOString());
+  const out = new Set();
+  for (const r of rows) {
+    const d = j(r.detail_json, {});
+    if (!d.format || !Array.isArray(d.documents) || !d.documents.length || /no licensed photograph/.test(d.why || '')) continue;
+    out.add(outlineKey(d.format, d.documents));
+  }
+  return out;
+}
+
 /** The format a stored post was made in, or the phase 1 list. */
 export const formatOfPost = (db, pack, post) => resolveFormat(db, pack, post.format_id) || { id: post.format_id, kind: post.kind || 'list' };
 
@@ -998,7 +1049,10 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       }
     }
     step(db, postId, 'topic', docs.length || viral ? 'ok' : 'failed', { candidates: docs.length, mode: pctx.sources.kind, viral: viral?.topic.id || null });
-    if (!docs.length && !viral) return block('no_source', 'אין מסמכים חדשים מהמקורות המאושרים');
+    // When nothing the sources hold carries a post, the model's general knowledge is asked for one page (src/sources/model.js):
+    // a post about a fixed subject or document is about that, and has no such page.
+    const fallback = !docKey && !dv.docKey && !subject && modelFallback(pctx, pack);
+    if (!docs.length && !viral && !fallback) return block('no_source', 'אין מסמכים חדשים מהמקורות המאושרים');
     // The chosen topic is tried first, in every format; the day's documents stay behind it, for a topic no format takes.
     let candidates = [...(viral ? [viral.cand] : []), ...candidatesOf(docs)];
     // One named document (or group): the launch set, and a test, ask for a post from exactly that.
@@ -1035,72 +1089,87 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       .map((r) => j(r.detail_json, {}))
       .map((d) => d.who || (/(([^)]+))$/.exec(d.why || '') || [])[1])
       .filter(Boolean);
-    tries: for (const f of formatsToTry) {
-      // On this day: only documents that mention this day of the year.
-      const pool = poolFor(f, candidates, postDay, { maxAgeDays: pack.meta.research?.maxAgeDays || null });
-      // At most maxDocs documents per format reach the model. A document with no
-      // recording for this format (offline) never did, so it does not use up a turn.
-      let tried = 0;
-      for (const c of pool) {
-        if (tried >= maxDocs) break;
-        const refs = c.docs.map((d, i) => ({ ...d, ref: `D${i + 1}` }));
-        const p = outlinePrompt(pack, { ttl });
-        try {
-          const res = await askJson(pctx, {
-            // A variation, and a redo of the same topic, are about the post they come from: its topic is not "recent".
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' || (dv.steer?.kind === 'redo' && dv.docKey) ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: c.subject || subject?.text, why: c.why || null, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
-            meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
-          });
-          tried++;
-          if (!res.data.usable) {
-            step(db, postId, 'outline', 'skipped', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, why: res.data.why }, res.usd);
-            noteTopic(c, res.data.why);
-            continue;
-          }
-          step(db, postId, 'outline', 'ok', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, topic: res.data.topic, items: res.data.items.length, facts: res.data.facts.length, research: res.data.research || [] }, res.usd);
-          // A head-to-head of two people is two faces side by side, or it is another matchup: a cover of drawn boxes, or
-          // of one fighter alone, was passed over by every reader, and the owner asked for person against person on
-          // every account. Checked here, before a word of the post is written.
-          if (needsSides(pack, f, res.data) && !(pctx.mode === 'recorded' && !pctx.imagesLive)) {
-            const sides = await sidePhotos(pctx, { pack, outline: res.data, postId });
-            if (!sides) {
-              const who = [res.data.subject?.a || res.data.imageQuery, res.data.subject?.b || res.data.imageQueryB].join(' / ');
-              step(db, postId, 'outline', 'skipped', { format: f.id, topic: res.data.topic, who, why: `no licensed photograph of both sides (${who})` });
-              faceless.push(who);
-              noteTopic(c, `no licensed photograph of both sides (${who})`);
-              lastWhy = `אין תמונה מורשית של שני הצדדים (${who})`;
-              lastKind = 'no_photo';
+    // An outline refused lately for this format and these documents is not asked again: the same page gives the same
+    // answer. OpenFrequency's second sample try (2026-11-06) sent the first try's 42 refused outlines again, word for
+    // word, and the articles behind them were never reached. A post asked for a fixed document asks for it.
+    const refusedBefore = docKey || dv.docKey ? new Set() : refusedOutlines(db, pack.id);
+    // Two passes: the sources' documents, then, when none carried a post, one page of the model's general knowledge.
+    for (let pass = 0; pass < 2 && !outline; pass++) {
+      if (pass === 1) {
+        if (!fallback) break;
+        const m = await modelFactsDoc(pctx, pack, { avoid: recent });
+        step(db, postId, 'model_facts', m.doc ? 'ok' : 'failed', { subject: m.subject || null, why: m.why || null, document: m.doc?.id || null, facts: m.doc ? m.doc.text.split(/\n/).length : 0 }, m.usd);
+        if (!m.doc) break;
+        candidates = candidatesOf([m.doc]);
+      }
+      tries: for (const f of formatsToTry) {
+        // On this day: only documents that mention this day of the year.
+        const pool = poolFor(f, candidates, postDay, { maxAgeDays: pack.meta.research?.maxAgeDays || null });
+        // At most maxDocs documents per format reach the model. A document with no
+        // recording for this format (offline) never did, so it does not use up a turn.
+        let tried = 0;
+        for (const c of pool) {
+          if (tried >= maxDocs) break;
+          if (refusedBefore.has(outlineKey(f.id, c.docs))) continue;
+          const refs = c.docs.map((d, i) => ({ ...d, ref: `D${i + 1}` }));
+          const p = outlinePrompt(pack, { ttl });
+          try {
+            const res = await askJson(pctx, {
+              // A variation, and a redo of the same topic, are about the post they come from: its topic is not "recent".
+              task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' || (dv.steer?.kind === 'redo' && dv.docKey) ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: c.subject || subject?.text, why: c.why || null, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+              meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
+            });
+            tried++;
+            if (!res.data.usable) {
+              step(db, postId, 'outline', 'skipped', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, why: res.data.why }, res.usd);
+              noteTopic(c, res.data.why);
               continue;
             }
-            res.data.sides = sides;
+            step(db, postId, 'outline', 'ok', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, topic: res.data.topic, items: res.data.items.length, facts: res.data.facts.length, research: res.data.research || [] }, res.usd);
+            // A head-to-head of two people is two faces side by side, or it is another matchup: a cover of drawn boxes, or
+            // of one fighter alone, was passed over by every reader, and the owner asked for person against person on
+            // every account. Checked here, before a word of the post is written.
+            if (needsSides(pack, f, res.data) && !(pctx.mode === 'recorded' && !pctx.imagesLive)) {
+              const sides = await sidePhotos(pctx, { pack, outline: res.data, postId });
+              if (!sides) {
+                const who = [res.data.subject?.a || res.data.imageQuery, res.data.subject?.b || res.data.imageQueryB].join(' / ');
+                step(db, postId, 'outline', 'skipped', { format: f.id, topic: res.data.topic, who, why: `no licensed photograph of both sides (${who})` });
+                faceless.push(who);
+                noteTopic(c, `no licensed photograph of both sides (${who})`);
+                lastWhy = `אין תמונה מורשית של שני הצדדים (${who})`;
+                lastKind = 'no_photo';
+                continue;
+              }
+              res.data.sides = sides;
+            }
+            // ---- research: more about this topic, and the details a fan would want, before any slide
+            const det = await gatherDetails(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, ttl });
+            if (det.ran) step(db, postId, 'details', det.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
+            // Fewer details than the minimum: not this topic. General wording never fills the gap.
+            if (det.short) {
+              noteTopic(c, `the sources hold ${det.found} of the ${det.need} details a post needs`);
+              continue;
+            }
+            // The facts verified and the plan kept to the kind's shape; a plan that cannot keep it leaves the topic for the next.
+            const made = planFrom(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, details: det.facts });
+            if (made.why) {
+              step(db, postId, 'plan', 'failed', { topic: res.data.topic, why: made.why, refused: made.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) });
+              noteTopic(c, made.why);
+              lastWhy = made.why;
+              // A plan lost to facts its quotes do not hold is a fact-check failure (the rails pause an account on those), not a missing source.
+              if (made.facts.some((x) => !x.verified)) lastKind = 'fact_check';
+              continue;
+            }
+            outline = res.data;
+            cand = { ...c, refs };
+            format = f;
+            details = det.facts;
+            plan = made;
+            break tries;
+          } catch (e) {
+            if (e instanceof NoRecording) continue;
+            throw e;
           }
-          // ---- research: more about this topic, and the details a fan would want, before any slide
-          const det = await gatherDetails(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, ttl });
-          if (det.ran) step(db, postId, 'details', det.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
-          // Fewer details than the minimum: not this topic. General wording never fills the gap.
-          if (det.short) {
-            noteTopic(c, `the sources hold ${det.found} of the ${det.need} details a post needs`);
-            continue;
-          }
-          // The facts verified and the plan kept to the kind's shape; a plan that cannot keep it leaves the topic for the next.
-          const made = planFrom(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, details: det.facts });
-          if (made.why) {
-            step(db, postId, 'plan', 'failed', { topic: res.data.topic, why: made.why, refused: made.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) });
-            noteTopic(c, made.why);
-            lastWhy = made.why;
-            // A plan lost to facts its quotes do not hold is a fact-check failure (the rails pause an account on those), not a missing source.
-            if (made.facts.some((x) => !x.verified)) lastKind = 'fact_check';
-            continue;
-          }
-          outline = res.data;
-          cand = { ...c, refs };
-          format = f;
-          details = det.facts;
-          plan = made;
-          break tries;
-        } catch (e) {
-          if (e instanceof NoRecording) continue;
-          throw e;
         }
       }
     }
@@ -1688,8 +1757,8 @@ export function loadPost(db, postId) {
   if (!post) return null;
   const slides = db.all('SELECT * FROM slides WHERE post_id = ? ORDER BY idx', postId).map((s) => ({ ...s, factKeys: j(s.fact_ids_json, []), files: j(s.files_json, {}), data: j(s.data_json, null) }));
   const facts = db
-    .all('SELECT f.*, d.url AS doc_url, d.title AS doc_title, d.fetched_at AS doc_fetched_at, s.name AS source_name, s.url AS source_url, s.status AS source_status FROM facts f LEFT JOIN documents d ON d.id = f.document_id LEFT JOIN sources s ON s.id = f.source_id WHERE f.post_id = ? ORDER BY f.id', postId)
-    .map((f) => ({ ...f, verified: Boolean(f.verified), whoHe: f.who_he || null }));
+    .all('SELECT f.*, d.url AS doc_url, d.title AS doc_title, d.fetched_at AS doc_fetched_at, s.name AS source_name, s.url AS source_url, s.status AS source_status, s.key AS source_key FROM facts f LEFT JOIN documents d ON d.id = f.document_id LEFT JOIN sources s ON s.id = f.source_id WHERE f.post_id = ? ORDER BY f.id', postId)
+    .map((f) => ({ ...f, verified: Boolean(f.verified), whoHe: f.who_he || null, unsourced: f.source_key === MODEL_KEY }));
   return { ...post, hashtags: j(post.hashtags_json, []), checks: j(post.checks_json, {}), media: j(post.media_json, {}), publish: j(post.publish_json, {}), data: j(post.data_json, {}), reject: j(post.reject_json, null), slides, facts };
 }
 
