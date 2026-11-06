@@ -87,9 +87,9 @@ test("an Openverse photograph must be big enough for where it goes, a photograph
   assert.equal(openverseUsable(openverseCandidate(result({ tags: [{ name: 'fbl', accuracy: null }, { name: 'topix', accuracy: null }] }))), false);
   assert.equal(openverseUsable(openverseCandidate(result({ title: 'Dana Example (AFP)' }))), false);
   assert.equal(openverseUsable(openverseCandidate(result({ creator: 'Reuters' }))), false);
-  // A Commons original found through Openverse is downloaded as Commons' own 1280-pixel copy.
+  // A Commons original found through Openverse is downloaded as Commons' own 1920-pixel copy (1280 could not fill a 9:16 slide from a landscape photograph).
   const big = 'https://upload.wikimedia.org/wikipedia/commons/2/27/Dana_Example_City_FC_2025-178.jpg';
-  assert.equal(openverseCandidate(result({ url: big, width: 3333, height: 5000, source: 'wikimedia' })).url, 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Dana_Example_City_FC_2025-178.jpg/1280px-Dana_Example_City_FC_2025-178.jpg');
+  assert.equal(openverseCandidate(result({ url: big, width: 3333, height: 5000, source: 'wikimedia' })).url, 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Dana_Example_City_FC_2025-178.jpg/1920px-Dana_Example_City_FC_2025-178.jpg');
   assert.equal(openverseCandidate(result({ url: big, width: 1000, height: 1400 })).url, big);
   // A slug for a title reads as words, so the name check finds the person in it.
   assert.equal(openverseCandidate(result({ title: 'soccer-dana-example-city-fc' })).title, 'soccer dana example city fc');

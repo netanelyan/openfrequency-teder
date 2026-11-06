@@ -48,7 +48,7 @@ export function stripBoilerplate(lines) {
 
 const NAMED = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', hellip: '…',
-  eacute: 'é', egrave: 'è', agrave: 'à', ccedil: 'ç', uuml: 'ü', ouml: 'ö', auml: 'ä', szlig: 'ß', ntilde: 'ñ', deg: '°', euro: '€', pound: '£', shy: '', copy: '©', reg: '®', trade: '™', times: '×', middot: '·',
+  eacute: 'é', egrave: 'è', agrave: 'à', ccedil: 'ç', uuml: 'ü', ouml: 'ö', auml: 'ä', szlig: 'ß', ntilde: 'ñ', deg: '°', euro: '€', pound: '£', shy: '', copy: '©', reg: '®', trade: '™', times: '×', middot: '·', laquo: '«', raquo: '»',
 };
 
 export function decodeEntities(s) {
@@ -165,4 +165,28 @@ export function labelTables(text) {
     out.push(head);
   }
   return out.join('\n');
+}
+
+/**
+ * A page too short to carry a post: a web page that is a site's name and a headline (a magazine's home page read as
+ * 89 characters, 2026-11-06) never reaches the outline, which can only refuse it. A feed's item and a data source's
+ * table are not pages: a month of climate data is dense in 357 characters.
+ */
+export const THIN_DOC = 400;
+
+/**
+ * Why a read text is not text, or null: a PDF's bytes read as a page, a page read in an encoding it is not written in
+ * (a windows-1255 page read as UTF-8 is mostly U+FFFD), or a binary file's control bytes. Each reached the 2026-11-06
+ * samples as a document: an education ministry's PDF and a makorrishon.co.il article of 5,607 replacement marks. Pure.
+ */
+export function unreadable(text) {
+  const t = String(text || '');
+  if (/^\s*%PDF-/.test(t)) return 'a PDF file read as text';
+  const n = Math.max(1, t.length);
+  const marks = (t.match(/�/g) || []).length;
+  if (marks >= 20 && marks / n > 0.02) return 'text read in an encoding it is not written in';
+  // eslint-disable-next-line no-control-regex
+  const bytes = (t.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length;
+  if (bytes >= 10 && bytes / n > 0.01) return 'the bytes of a file, not text';
+  return null;
 }

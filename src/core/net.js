@@ -339,14 +339,49 @@ export async function localFetch(url, init = {}) {
   }
 }
 
+/**
+ * The encoding a text body is written in: the one its Content-Type names, else the one the page declares itself
+ * (<meta charset>, <meta http-equiv> or an XML declaration, in its first bytes), else UTF-8. Only a label TextDecoder
+ * knows. An Israeli page of the 2000s is often windows-1255 and says so only in its <meta>: read as UTF-8, the coffee
+ * sample's makorrishon.co.il article was 5,607 replacement marks, and went to the outline as that. Pure.
+ */
+export function charsetOf(contentType = '', head = '') {
+  const named = /charset\s*=\s*["']?([\w:.-]+)/i.exec(contentType)?.[1] || /<meta[^>]+charset\s*=\s*["']?([\w:.-]+)/i.exec(head)?.[1] || /<\?xml[^>]+encoding\s*=\s*["']([\w:.-]+)/i.exec(head)?.[1];
+  if (!named) return 'utf-8';
+  try {
+    return new TextDecoder(named.toLowerCase()).encoding;
+  } catch {
+    return 'utf-8';
+  }
+}
+
+/**
+ * Why a response is no text page, or null: a PDF, an image, a sound, a video or an archive by its type, or by its
+ * first bytes whatever its type says (a server's application/octet-stream). An education ministry's PDF was read as a
+ * page and stored as its bytes (2026-11-06). A CSV served as octet-stream is text and passes. Pure.
+ */
+export function notText(contentType = '', bytes = new Uint8Array()) {
+  const type = String(contentType).split(';')[0].trim().toLowerCase();
+  if (/^(?:application\/(?:pdf|zip|x-zip-compressed|gzip|msword|vnd\.openxmlformats|vnd\.ms-)|image\/|audio\/|video\/|font\/)/.test(type)) return type;
+  const b = bytes.subarray(0, 1024);
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf';
+  if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return 'application/zip';
+  if (b.includes(0)) return 'binary';
+  return null;
+}
+
 /** A text body. `encoding` reads a file that is not UTF-8 (some government CSVs are windows-1255). */
 export async function getText(url, { accept, timeoutMs, headers = {}, maxBytes = 5_000_000, encoding = null } = {}) {
   const res = await doorFetch(url, { headers: { accept: accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', ...headers }, timeoutMs });
   if (!res.ok) throw new NetError(`HTTP ${res.status}: ${url}`, { status: res.status, code: 'http' });
   const len = Number(res.headers.get('content-length') || 0);
   if (len > maxBytes) throw new NetError(`too large (${len} bytes): ${url}`, { code: 'too_large' });
-  const body = encoding ? new TextDecoder(encoding).decode(await res.arrayBuffer()) : await res.text();
-  return { body, finalUrl: res.finalUrl || url, contentType: res.headers.get('content-type') || '' };
+  const contentType = res.headers.get('content-type') || '';
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const binary = notText(contentType, bytes);
+  if (binary) throw new NetError(`not a text page (${binary}): ${url}`, { code: 'type' });
+  const body = new TextDecoder(encoding || charsetOf(contentType, new TextDecoder('latin1').decode(bytes.subarray(0, 4096)))).decode(bytes);
+  return { body, finalUrl: res.finalUrl || url, contentType };
 }
 
 export async function getJson(url, { headers = {}, timeoutMs } = {}) {

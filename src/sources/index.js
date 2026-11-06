@@ -6,7 +6,7 @@ import { now, nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { israelDate } from '../schedule/israel.js';
 import { parseFeed } from './rss.js';
-import { htmlToText, labelTables, mainHtml, titleOf } from './text.js';
+import { htmlToText, labelTables, mainHtml, titleOf, unreadable } from './text.js';
 import { packsDir } from '../core/paths.js';
 import { parseCsv } from './csv.js';
 import { factDocuments, factsDir } from './facts.js';
@@ -157,6 +157,8 @@ async function fetchApi(src, cfg, { day = null, events = [] } = {}) {
   }
   if (api.kind === 'facts') return factDocuments(factsDir(src.account_id));
   if (api.kind === 'bank') return bankDocs(src, api);
+  // Research's own Wikipedia (src/sources/research.js researchWiki) names no article: it reads only what an outline asks for.
+  if (api.kind === 'wikipedia' && !api.titles && !api.title) return [];
   // "{EVENTS}" among a Wikipedia source's titles: the pages of the events this week (a fight card).
   if (api.kind === 'wikipedia') return wikipediaDocs(src, { ...api, titles: (api.titles || [api.title]).flatMap((x) => (x === '{EVENTS}' ? events : [x])) });
   if (api.kind === 'csv') {
@@ -451,7 +453,9 @@ export async function refreshSource(db, impl, src, opts = {}) {
   const out = [];
   for (const d of docs) {
     const text = String(d.text || '').trim();
-    if (text.length < 80) continue;
+    // A text that is not text (a PDF's bytes, a page read in the wrong encoding) is never stored: a fact could be
+    // "quoted" from nothing anyone can read.
+    if (text.length < 80 || unreadable(text)) continue;
     const hash = sha(text);
     let row = db.get('SELECT * FROM documents WHERE source_id = ? AND sha256 = ?', src.id, hash);
     if (!row) {

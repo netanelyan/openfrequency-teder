@@ -22,6 +22,10 @@ import { wikipediaDocs } from './index.js';
 // found is stored under that source, so the slide's source line and the fact's
 // trace lead back to an approved source like everything else.
 //
+// An account whose sources include no Wikipedia (every account the setup makes) gets one
+// of its own the first time research runs (researchWiki): an approved source on its
+// Sources page, the account's to remove.
+//
 // Offline, research reads <pack>/recordings/research/<document key>.json
 // ({ docs: [{ url, title, text }] }) or finds nothing.
 
@@ -30,17 +34,46 @@ const INFOBOX_MAX = 3000;
 const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
 const HEBREW = /[֐-׿]/;
 
-/** The approved sources research may read through, by kind. */
+/** The approved sources research may read through, by kind. A source may read several Wikipedias (api.langs). */
 export function researchSources(db, pack) {
   const rows = db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' ORDER BY id", pack.id);
   const wiki = {};
   let hn = null;
   for (const r of rows) {
     const api = j(r.config_json, {})?.api || {};
-    if (api.kind === 'wikipedia') wiki[api.lang || r.lang || 'en'] ??= r;
+    if (api.kind === 'wikipedia') for (const lang of api.langs?.length ? api.langs : [api.lang || r.lang || 'en']) wiki[lang] ??= r;
     if (api.kind === 'hn') hn ??= r;
   }
   return { wiki, hn };
+}
+
+/** The key of the Wikipedia an account's research reads when its own sources name none. */
+export const WIKI_KEY = 'wikipedia-research';
+
+/**
+ * The Wikipedia an account's research reads when none of its approved sources is one: a source of the account like
+ * any other, approved when it is made (the first time research runs for the account), on its Sources page, the
+ * account's to remove there, and never made again once removed. It reads the account's own language and English, and
+ * nothing on its own: only the articles a post's outline names (candidateDocs leaves it out).
+ *
+ * Why a source and not a free read: every fact is quoted from a document of an approved source, and a slide's source
+ * line and a fact's trace lead back to one. An account made by the setup had none of the kinds research reads
+ * (Wikipedia, Hacker News), so research found nothing for any new customer and the details rule, meant to be fed by
+ * it, dropped their topics instead (2026-11-06). Returns the row, or null when the account removed it or the pack
+ * says research.wikipedia: false.
+ */
+export function researchWiki(db, pack) {
+  const have = db.get('SELECT * FROM sources WHERE account_id = ? AND key = ?', pack.id, WIKI_KEY);
+  if (have) return have.status === 'approved' ? have : null;
+  if (pack.meta?.research?.wikipedia === false) return null;
+  const lang = /^[a-z]{2}$/.test(pack.meta?.language || '') ? pack.meta.language : 'he';
+  const at = nowIso();
+  db.insert('sources', {
+    account_id: pack.id, key: WIKI_KEY, type: 'api', url: `https://${lang}.wikipedia.org/`, name: lang === 'he' ? 'ויקיפדיה' : 'Wikipedia', lang, status: 'approved', origin: 'discovered', approved_at: at, created_at: at,
+    why: 'ערכים של ויקיפדיה על הנושא של כל פוסט, בעברית ובאנגלית: מהם באים הפרטים שמעבר למסמך, וכל פרט נבדק מול הערך עצמו.',
+    config_json: { api: { kind: 'wikipedia', research: true, langs: [...new Set([lang, 'en'])] } },
+  });
+  return db.get('SELECT * FROM sources WHERE account_id = ? AND key = ?', pack.id, WIKI_KEY);
 }
 
 /**
@@ -105,7 +138,9 @@ export async function hnDocs(term, { max = 2 } = {}) {
  */
 export async function research(ctx, { pack, terms = [], names = [], have = [], max = 3, docKey = null }) {
   const { db } = ctx;
-  const srcs = researchSources(db, pack);
+  let srcs = researchSources(db, pack);
+  // Live, an account none of whose sources is a Wikipedia reads its own (researchWiki), once there is a term to look up.
+  if (ctx.mode !== 'recorded' && terms.length && !Object.keys(srcs.wiki).length && researchWiki(db, pack)) srcs = researchSources(db, pack);
   const seen = new Set(have.map((u) => String(u).toLowerCase()));
   const out = [];
   // head: the start of the stored text kept whole (an infobox's rows are too short for aboutSubject to keep).

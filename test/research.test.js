@@ -160,9 +160,19 @@ test('a post is drafted only with three verified details, and the slides must us
 
     const fresh = () => ctx.db.run('DELETE FROM posts');
     fresh();
-    const thin = await buildPost({ ...ctx, llm: llmWith(DETAILS.slice(0, 2)) }, { pack, formatKey: 'plant-story', sample: true, docKey: 'pothos-story' });
+    // Two details where three are asked: the outline's own spare facts (8 verified for 5 slides) count as details
+    // (detailsDepth, 2026-11-06), so the topic stands. Asked for six, two and three spare are short, and it does not.
+    const two = await buildPost({ ...ctx, llm: llmWith(DETAILS.slice(0, 2)) }, { pack, formatKey: 'plant-story', sample: true, docKey: 'pothos-story' });
+    const twoStep = JSON.parse(ctx.db.get("SELECT status, detail_json FROM steps WHERE post_id = ? AND step = 'details'", two.postId).detail_json);
+    assert.equal(ctx.db.get("SELECT status FROM steps WHERE post_id = ? AND step = 'details'", two.postId).status, 'ok');
+    assert.deepEqual([twoStep.verified, twoStep.spare, twoStep.bar], [2, 3, 3]);
+    fresh();
+    const packFile = path.join(home, 'packs', 'demo', 'pack.json');
+    writeFileSync(packFile, JSON.stringify({ ...JSON.parse(readFileSync(packFile, 'utf8')), research: { minDetails: 6 } }));
+    const six = contextFor(home);
+    const thin = await buildPost({ ...six, llm: llmWith(DETAILS.slice(0, 2)) }, { pack: six.pack('demo'), formatKey: 'plant-story', sample: true, docKey: 'pothos-story' });
     assert.equal(thin.status, 'blocked');
-    assert.equal(ctx.db.get("SELECT status FROM steps WHERE post_id = ? AND step = 'details'", thin.postId).status, 'failed');
+    assert.equal(six.db.get("SELECT status FROM steps WHERE post_id = ? AND step = 'details'", thin.postId).status, 'failed');
 
     fresh();
     // Details found but left off the slides: the redraft is told, and without a second recording the post stops there.

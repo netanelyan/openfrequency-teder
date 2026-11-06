@@ -89,7 +89,9 @@ export const TEMPLATES = [
   { id: 'save-x', mechanism: 'save', text: '{s:חוסך|חוסכת|חוסכים} לכם {x} רק בזכות {thing}', kinds: HOWTO, examples: ['חוסכת לכם 3 שעות בשבוע רק בזכות טפטפת אחת'] },
   { id: 'didnt-know', mechanism: 'count', text: '{n} דברים שלא ידעתם על {topic}', kinds: COUNTED, examples: ['7 דברים שלא ידעתם על ליגת העל'] },
   { id: 'few-know', mechanism: 'count', text: '{n} עובדות על {topic} שמעטים מכירים', kinds: COUNTED, examples: ['6 עובדות על ה-UFC שמעטים מכירים'] },
-  { id: 'nobody-tells', mechanism: 'count', text: '{n} דברים על {topic} שאף אחד לא אומר לכם', kinds: ['tips', 'facts'], examples: ['5 דברים על משכנתא שאף אחד לא אומר לכם'] },
+  // "{n} דברים על {topic} שאף אחד לא אומר לכם" is gone (2026-11-06): its own words are on the engine's list of teasers
+  // that sound like a bot (src/voice/tells.js TEASER), let through only as a template's frame. Posts that opened with
+  // it keep its id in hook_pattern; templateById finds nothing for it.
   { id: 'mistakes', mechanism: 'owner', text: '{n} טעויות {s:שעשיתי|שעשיתי|שעשינו} {moment}', kinds: ['owner-story'], examples: ['5 טעויות שעשיתי בשנה הראשונה של העסק'] },
   { id: 'after-year', mechanism: 'owner', text: 'מה {s:למדתי|למדתי|למדנו} {moment}', kinds: ['owner-story'], examples: ['מה למדתי בשנה הראשונה עם עגלת קפה'] },
 ];

@@ -59,7 +59,8 @@ export function declaredFeeds(html, base) {
     if (!/alternate/i.test(attr('rel')) || !/(rss|atom)\+xml|application\/(rss|atom)/i.test(attr('type'))) continue;
     try {
       const url = new URL(attr('href'), base).href;
-      if (!out.some((f) => f.url === url)) out.push({ url, title: decodeEntities(attr('title')), type: attr('type') });
+      // A feed's title is decoded until it is text: "My Jewish Learning &raquo; Feed" became a source's name (2026-11-06), and some sites encode it twice.
+      if (!out.some((f) => f.url === url)) out.push({ url, title: decodeEntities(decodeEntities(attr('title'))), type: attr('type') });
     } catch {
       /* a broken href is not a feed */
     }

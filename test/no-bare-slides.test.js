@@ -143,29 +143,45 @@ test('nothing found at all, not even a scene: the post is refused, not queued, a
   }
 });
 
-test('a slide that names someone whose photograph is refused: the post is refused, though the scenes were found', { timeout: 240_000 }, async () => {
-  for (const dana of ['someone else', 'ok']) {
+test('a slide that names someone whose photograph is refused stands text first on a scene; three such slides refuse the post, before its review', { timeout: 240_000 }, async () => {
+  // Since 2026-11-06 (the five-niche samples: three of five first tries were blocked whole for one name with no licensed
+  // photograph, a sage of the Talmud, a private name) a content slide whose name no photograph shows stands on the
+  // post's scene, its words first, two such slides at most (build.js textLedGaps). The photographs are found as soon as
+  // the slides' searches are written, so a post that cannot stand on them is refused before the review is paid for.
+  for (const dana of ['someone else', 'ok', 'three']) {
     const { home, cleanup } = tempHome({ packs: {} });
     try {
-      const { ctx, pack } = account(home);
+      const { ctx, dir, pack } = account(home);
+      // Three named slides, each photograph of someone else.
+      const NAMES = ['Dana Example', 'Avi Tester', 'Noa Person'];
+      if (dana === 'three') setDraft(dir, 'drought-ranking', (d) => NAMES.forEach((n, i) => (d.slides.slides[i + 1].imageQuery = n)));
       // Every plant and every scene passes; the one photograph found for Dana is of someone else, or (the positive
       // control) of her.
-      const asked = library(await photoFile(home), (q) => (q === 'Dana Example' ? dana : 'ok'));
+      const asked = library(await photoFile(home), (q) => (NAMES.includes(q) ? (dana === 'ok' ? 'ok' : 'someone else') : 'ok'));
       const res = await buildPost(ctx, { pack, sample: true });
-      assert.equal(res.status, dana === 'ok' ? 'sample' : 'blocked', dana === 'ok' ? res.reason : 'a scene is not enough under a name');
+      assert.equal(res.status, dana === 'three' ? 'blocked' : 'sample', res.reason);
       assert.ok(asked.includes('Dana Example'));
-      assert.ok(asked.some((q) => SCENE.test(q)), 'the scenes were there');
-      const [photos] = steps(ctx.db, res.postId, 'photos');
+      const photos = steps(ctx.db, res.postId, 'photos');
       if (dana === 'ok') {
-        assert.deepEqual(photos.grounds.tiktok[2], [2], 'slide 3 stands on her own photograph');
-        assert.ok(photos.grounds.tiktok.every((on) => on.length), 'and every slide on one');
+        assert.deepEqual(photos.at(-1).grounds.tiktok[2], [2], 'slide 3 stands on her own photograph');
+        assert.ok(photos.at(-1).grounds.tiktok.every((on) => on.length), 'and every slide on one');
+        continue;
+      }
+      if (dana === 'someone else') {
+        assert.ok(asked.some((q) => SCENE.test(q)), 'the scenes were there');
+        assert.deepEqual(photos.map((p) => p.status), ['info', 'ok'], 'said when found, and again once drawn');
+        assert.deepEqual(photos.at(-1).textLed, [{ slide: 2, names: ['Dana Example'] }]);
+        assert.ok(photos.at(-1).grounds.tiktok[2].every((k) => /^bg/.test(k)), 'slide 3 stands on a scene');
+        assert.deepEqual(loadPost(ctx.db, res.postId).checks.textLed, [2]);
         continue;
       }
       assert.equal(res.kind, 'no_photo');
       assert.match(res.reason, /Dana Example/);
       assert.match(res.reason, /לשקף 3/);
-      assert.equal(photos?.status, 'failed');
-      assert.deepEqual(photos.gaps.map((g) => [g.slide, g.why]), [[2, 'name']]);
+      assert.equal(photos.at(-1).status, 'failed');
+      assert.equal(photos.at(-1).early, true);
+      assert.deepEqual(photos.at(-1).gaps.map((g) => [g.slide, g.why]), [[2, 'name'], [3, 'name'], [4, 'name']]);
+      assert.equal(steps(ctx.db, res.postId, 'review').length, 0, 'refused before the review');
       assert.ok(!existsSync(path.join(home, 'media', 'posts', res.postId)), "a refused post's slides are not kept");
     } finally {
       cleanup();

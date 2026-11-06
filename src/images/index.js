@@ -77,6 +77,51 @@ const describes = (text, words) => {
 export const MIN_SIDE = { cover: 600, framed: 450, half: 450, ground: 400 };
 
 /**
+ * The most pictures one slide's photograph is screened from, its searches together (findPhotos shares one count among
+ * a slide's query, its subject's name and the name alone). Each screen is a model call.
+ */
+export const MAX_SCREENS = 8;
+
+/**
+ * The size of the file a candidate downloads as, { w, h }: Commons' copy within 2560 pixels, Openverse's Commons copy
+ * 1920 wide (openverseFileUrl), anything else as given. Pure.
+ */
+const fileSize = (c) => {
+  const [w, h] = c.width && c.height ? [c.width, c.height] : c.original || [0, 0];
+  const k = c.provider === 'openverse' && /\/thumb\/.*\/1920px-/.test(c.url || '') && w > 1920 ? 1920 / w : 1;
+  return { w: w * k, h: h * k };
+};
+
+/**
+ * Whether a picture fills a 9:16 slide without being blown up more than twice (the native style's own bound,
+ * src/render/styles/index.js fitE): one that does not is drawn whole as a band over its own blurred copy, which every
+ * reader of the 2026-11-06 samples saw as a poor slide (a 1024x588 French press, a 1498x766 cover of coins). Pure.
+ */
+export const fillsSlide = (c) => {
+  const { w, h } = fileSize(c);
+  return w > 0 && h > 0 && Math.max(1080 / w, 1920 / h) <= 2;
+};
+
+/**
+ * The word a search for a thing turns on: its last word before a place or a time ("vintage french press" is "press",
+ * "camping gear on grass" is "gear", "campfire at night" is "campfire"), singular, or null for a search of fewer than
+ * three letters. Pure.
+ */
+export function headWord(query) {
+  const ws = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const cut = ws.findIndex((w, i) => i > 0 && /^(?:at|on|in|with|of|from|for|by|under|over|near|during|and)$/.test(w));
+  const w = (cut > 0 ? ws.slice(0, cut) : ws).filter((x) => /\p{L}{3,}/u.test(x)).at(-1);
+  const bare = w ? w.replace(/[^\p{L}\p{N}-]/gu, '') : '';
+  return bare ? (bare.endsWith('ss') ? bare : bare.replace(/s$/, '')) : null;
+}
+
+/** Whether a picture's own words name the thing a search turns on (its head word, singular or plural). Pure. */
+export const namesThing = (text, head) => String(text || '').toLowerCase().split(/[^\p{L}\p{N}-]+/u).some((w) => w === head || w === `${head}s` || w === `${head}es`);
+
+/** The candidates in their library's order, those that fill a slide first (the owner's own photographs as they are). Pure. */
+export const fillersFirst = (list) => [...list.filter((c) => c.provider === 'pack' || fillsSlide(c)), ...list.filter((c) => c.provider !== 'pack' && !fillsSlide(c))];
+
+/**
  * Whether a Commons file can be used: a photograph (a JPEG, or a PNG that is no screenshot) with a licence on the
  * allowlist and a name to credit, at least `minSide` pixels on its shorter side. Pure.
  */
@@ -183,12 +228,14 @@ export function openverseLicense(r) {
 
 /**
  * The file to download for an Openverse result. Openverse points at the original, and a Commons original can be a
- * 5000-pixel, 10-megabyte camera file: one wider than 1280 is taken as Commons' own 1280-pixel copy. Commons makes
- * copies only at its standard widths (1280 and 1920 answer, 1440 is a 400). Pure.
+ * 5000-pixel, 10-megabyte camera file: one wider than 1920 is taken as Commons' own 1920-pixel copy. Commons makes
+ * copies only at its standard widths (1280 and 1920 answer, 1440 is a 400). The 1280 copy it took before was too
+ * small to fill a 9:16 slide from any landscape photograph (853 pixels high for 3:2), so each was drawn as a band.
+ * Pure.
  */
 export function openverseFileUrl(url, width) {
   const m = /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/([0-9a-f])\/([0-9a-f]{2})\/([^/?#]+\.(?:jpe?g|png))$/i.exec(String(url || ''));
-  return m && Number(width) > 1280 ? `https://upload.wikimedia.org/wikipedia/commons/thumb/${m[1]}/${m[2]}/${m[3]}/1280px-${m[3]}` : url || null;
+  return m && Number(width) > 1920 ? `https://upload.wikimedia.org/wikipedia/commons/thumb/${m[1]}/${m[2]}/${m[3]}/1920px-${m[3]}` : url || null;
 }
 
 // A slug for a title ("soccer-lionel-messi-fc-barcelona") reads as words, so a name in it is found.
@@ -406,8 +453,10 @@ export function imageCredit(db, post) {
  * is about and is never asked to show an abstract claim, a price cap or a statistic) or 'cover' (everything else: a
  * cover, a portrait, a background, checked against the slide's whole claim). A framed photograph is a content one.
  */
-export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null, minSide = MIN_SIDE.cover, role = minSide === MIN_SIDE.framed ? 'content' : 'cover' }) {
+export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null, minSide = MIN_SIDE.cover, role = minSide === MIN_SIDE.framed ? 'content' : 'cover', budget = { screens: MAX_SCREENS } }) {
   const miss = (k) => why && (why[k] = (why[k] || 0) + 1);
+  // What this post has already chosen and already refused for what it shows (findPhotos keeps one for the post).
+  const memo = ctx.photoMemo || null;
   if (!query || (ctx.mode === 'recorded' && !ctx.imagesLive)) return null;
   // A query with a blocked word in it is searched without that word: "Lamine Yamal World Cup trophy" was refused whole,
   // and a guess-who whose answer has hundreds of free photographs went out with none. What is blocked is still never
@@ -444,10 +493,17 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
     // A query that names someone ("Holly Holm UFC") takes only a picture whose own title
     // names them too: a search can return a photo of somebody else from the same event.
     const names = namesOf(query);
-    for (const c of found) {
+    for (const c of fillersFirst(found)) {
+      const cid = `${c.provider}:${c.providerId}`;
       // A redo for its photographs: the customer turned these down on the post it replaces.
-      if (ctx.avoidImages?.has(`${c.provider}:${c.providerId}`)) {
+      if (ctx.avoidImages?.has(cid)) {
         miss('the customer turned it down');
+        continue;
+      }
+      // One photograph is shown once in a post, and one the screen refused for what it shows (blood, a watermark) is
+      // refused for every slide: the coffee sample screened the same refused pictures again for each of its slides.
+      if (memo?.taken.has(cid) || memo?.refused.has(cid)) {
+        miss(memo.taken.has(cid) ? 'already on another slide of this post' : 'refused earlier in this post');
         continue;
       }
       if (describes(c.alt, block)) {
@@ -461,6 +517,14 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
       const title = c.title ?? c.providerId;
       if (names.length && !namesIn(String(title || ''), names) && (titleNamesSomeone(title) || !namesIn(`${c.alt || ''} ${c.categories || ''}`, names))) {
         miss('its title does not name the person');
+        continue;
+      }
+      // A search for a thing takes a picture whose own words name the thing (headWord): Commons answers a search by any of
+      // its words, and "vintage french press" brought a wine press, a 1937 press photograph and a postcard of bathers,
+      // each a screen (the coffee sample, 2026-11-06). The owner's own photographs are matched on their words already.
+      const head = !names.length && c.provider !== 'pack' ? headWord(query) : null;
+      if (head && !namesThing(`${title || ''} ${c.alt || ''} ${c.categories || ''}`, head)) {
+        miss('its title does not name what the search is for');
         continue;
       }
       if (!c.license) {
@@ -483,13 +547,31 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
           continue;
         }
       }
+      // A slide's screens are counted: one slide of the skincare sample took 15 and another about 28, each a model call,
+      // and the last of them was no better than the first. A slide that runs out stands on its scene instead.
+      if (budget.screens <= 0) {
+        miss('the screens for this slide are used up');
+        return null;
+      }
+      // A slide's searches overlap ("Antiochus IV Epiphanes", then "Antiochus Epiphanes"): a picture already screened
+      // for this slide is not screened for it again.
+      budget.seen ??= new Set();
+      if (budget.seen.has(cid)) {
+        miss('screened already for this slide');
+        continue;
+      }
+      budget.seen.add(cid);
+      budget.screens--;
       // The screen: a picture with blood, an injury, a fighter down, a watermark, a belt or a weapon is never used.
       const screen = await screenImage(ctx, { pack, buf: bytes.buf, type: bytes.type, meta: `${title || ''} ${c.alt || ''} ${c.categories || ''}`, postId, query, claim, role, owner: c.owner || '' });
       if (screen.safety === 'refused') {
         ctx.log?.(`image refused (${screen.why}): ${c.providerId}`);
         miss(`the screen refused it: ${String(screen.why || '').slice(0, 80)}`);
+        // A picture that does not fit this slide may fit another; one refused for what it shows fits none.
+        if (!screen.mismatch) memo?.refused.add(cid);
         continue;
       }
+      memo?.taken.add(cid);
       const match = { title: Boolean(names.length), model: screen.model ? { consistent: screen.model.consistent, mainSubject: screen.model.mainSubject } : null, claim: claim ? claim.slice(0, 200) : null, role, ...(c.upstream ? { upstream: c.upstream } : {}) };
       if (c.track) getJson(c.track, { headers: { authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}` } }).catch(() => {});
       const hash = createHash('sha256').update(bytes.buf).digest('hex');

@@ -9,6 +9,7 @@ import { quotaMonth, room } from '../budget/quota.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
+import { THIN_DOC, unreadable } from '../sources/text.js';
 import { ensureFormats, groupsOf, inTurns, mixOf, pickFormat, pickHook, pickTemplates, turnOrder } from '../formats/rotation.js';
 import { coverCredit, coverFrame, fillTemplate, hookProblems, isTemplateId, speakerOf, templateById, templateOnCover, whoGender } from '../formats/hooks.js';
 import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, SLIDES, structureNumbers } from '../formats/kinds.js';
@@ -22,7 +23,7 @@ import { lineDraft, oneLine, overlayOf, overlayProblems } from '../rules/overlay
 import { isOwnerDoc } from '../sources/facts.js';
 import { MAX_HASHTAGS, SHORT_CAPTION, captionProblems, captionStyleOf, hashtagProblems, storyCaption } from '../rules/caption.js';
 import { ATTRIBUTED_MAX, gate, numbersIn, verifyFact } from '../verify/claims.js';
-import { findImage, MIN_SIDE, packPhotoList, shows, whoIn } from '../images/index.js';
+import { findImage, MAX_SCREENS, MIN_SIDE, packPhotoList, shows, whoIn } from '../images/index.js';
 import { scenesFor } from '../images/scenes.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost, slidePlaces } from '../render/render.js';
@@ -32,7 +33,7 @@ import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, r
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { CLOSING_LINE, closingExtra, closingFrom, closingLesson, closingProblems, closingSlide, isClosingProblem } from './closing.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
-import { aboutSubject, research } from '../sources/research.js';
+import { WIKI_KEY, aboutSubject, research } from '../sources/research.js';
 import { MODEL_KEY, modelFactsDoc, modelFallback } from '../sources/model.js';
 import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 
@@ -92,14 +93,14 @@ export class QuotaError extends PausedError {
 const pickBy = (list, seed) => list[[...String(seed)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % list.length];
 
 /**
- * The hashtags for one post: the format's own, two broad, and the niche tags this
- * post is about (its words appear in the post's text), never more than five
+ * The hashtags for one post: the format's own, two broad, the niche tags this
+ * post is about (its words appear in the post's text), then its own Hebrew keywords, never more than five
  * (MAX_HASHTAGS, src/rules/caption.js). A
  * niche tag the post does not touch ("#צמחיתבלין" under a post about a fern) is
  * left off: a reader sees an unrelated tag as pasted. Without the text (an older
  * caller), the niche tags rotate.
  */
-export function hashtagsFor(pack, format, seed, text = null) {
+export function hashtagsFor(pack, format, seed, text = null, keywords = []) {
   const h = pack.formats.hashtags || {};
   const rot = (list, k) => {
     if (!list?.length) return [];
@@ -123,7 +124,11 @@ export function hashtagsFor(pack, format, seed, text = null) {
     return false;
   };
   const niche = words == null ? rot(h.niche, 'n') : (h.niche || []).filter(mentions);
-  const tags = [...(format.hashtags || []), ...rot(h.broad, 'b').slice(0, 2), ...niche];
+  // Then the post's own Hebrew keywords, a tag each ("פדיון הבן" is "#פדיוןהבן"): the writer chose them as what the post
+  // is about, so they always fit it. Without them a post whose words met no niche tag went out with "#ישראל #טיפים"
+  // alone (the camping and Judaica samples, 2026-11-06).
+  const own = (keywords || []).map((k) => String(k).trim()).filter((k) => /[א-ת]/.test(k) && !/[A-Za-z]/.test(k)).map((k) => `#${k.replace(/[^\p{L}\p{N}_]/gu, '')}`).filter((t) => t.length > 2 && t.length <= 21);
+  const tags = [...(format.hashtags || []), ...rot(h.broad, 'b').slice(0, 2), ...niche, ...own];
   return [...new Set(tags)].slice(0, MAX_HASHTAGS);
 }
 
@@ -135,12 +140,8 @@ export function hashtagsFor(pack, format, seed, text = null) {
 /** How long a source's last read stands before it is read again. */
 export const SOURCE_TTL_MS = 6 * 3600_000;
 
-/**
- * A page too short to carry a post: a web page that is a site's name and a headline (a magazine's home page read as
- * 89 characters, 2026-11-06) never reaches the outline, which can only refuse it. A feed's item and a data source's
- * table are not pages: a month of climate data is dense in 357 characters.
- */
-export const THIN_DOC = 400;
+// A page too short to carry a post never reaches the outline (THIN_DOC, src/sources/text.js), nor one that is not text.
+export { THIN_DOC };
 
 /**
  * A site's home page, or a tag, category or section index: headlines and the openings of articles, never the
@@ -160,8 +161,9 @@ export function indexPage(url) {
 }
 
 export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null, keepBlocked = false } = {}) {
-  // The model's general knowledge (src/sources/model.js) is not read: its pages are made when the sources are thin.
-  const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' AND key <> ? ORDER BY id", pack.id, MODEL_KEY);
+  // The model's general knowledge (src/sources/model.js) is not read: its pages are made when the sources are thin. Nor
+  // is research's own Wikipedia (src/sources/research.js researchWiki): it reads only the articles an outline names.
+  const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' AND key NOT IN (?, ?) ORDER BY id", pack.id, MODEL_KEY, WIKI_KEY);
   // The pages of the events around this day, for a source that reads them (a fight week).
   const events = pack.meta.events ? upcoming(ctx.db, pack.id, day || israelDate(now()), 8).map((e) => decodeURIComponent(String(e.url || '').split('/wiki/')[1] || '').replace(/_/g, ' ')).filter(Boolean) : [];
   const docs = [];
@@ -185,13 +187,59 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null
     ctx.db
       // A post with a fixed subject (a fight week's main event) has only that subject's pages: its own stopped attempt
       // must not use them up, or the retry finds nothing ("no new document" twice for the same card).
-      .all(`SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.created_at >= ?${keepBlocked ? " AND p.status != 'blocked'" : ''}`, pack.id, since)
+      // A post blocked only for its photographs does not use its documents up either: its facts held, and the documents
+      // may carry another format (refusedOutlines keeps this format off them). Each such sample try of 2026-11-06 left
+      // the next one a document short.
+      .all(
+        `SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.created_at >= ?${keepBlocked ? " AND p.status != 'blocked'" : ''} AND NOT (p.status = 'blocked' AND EXISTS (SELECT 1 FROM steps s WHERE s.post_id = p.id AND s.step = 'blocked' AND json_extract(s.detail_json, '$.kind') = 'no_photo'))`,
+        pack.id, since
+      )
       .map((r) => r.document_id)
   );
-  const fresh = docs.filter((d) => !used.has(d.id) && !(d.sourceType === 'web' && String(d.text || '').length < THIN_DOC));
-  // The newest first, and a home page or a tag page after every article (indexPage).
-  fresh.sort((a, b) => indexPage(a.url) - indexPage(b.url) || String(b.published_at || b.fetched_at).localeCompare(String(a.published_at || a.fetched_at)));
+  // One document a page: two approved sources that lead to the same page (vetnutrition.tufts.edu and vet.tufts.edu)
+  // put it before the outline twice. A text that is not text (a PDF's bytes, a page read in the wrong encoding) never
+  // reaches it.
+  const pages = new Set();
+  const fresh = docs.filter((d) => {
+    if (used.has(d.id) || (d.sourceType === 'web' && String(d.text || '').length < THIN_DOC) || unreadable(d.text)) return false;
+    const page = String(d.url || '').toLowerCase().replace(/[#?].*$/, '').replace(/\/+$/, '');
+    if (d.url && pages.has(page)) return false;
+    pages.add(page);
+    return true;
+  });
+  // The newest first, an undated page after every dated article, and a landing page, then a home or tag page, after
+  // those (pageRank).
+  fresh.sort((a, b) => pageRank(a) - pageRank(b) || String(b.published_at || b.fetched_at).localeCompare(String(a.published_at || a.fetched_at)));
   return fresh;
+}
+
+/**
+ * A page that is about an organisation, not an article: a service, a department, an event, a mission, a section of
+ * subjects (an event page, a hospital's nutrition service, a feline health centre and a video's page took the pets
+ * sample's thirty outline calls on 2026-11-06, while thirteen dated articles of its feeds were never asked about). Its
+ * address says so in a part of its path. Pure.
+ */
+export function landingPage(url) {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return false;
+    const parts = decodeURIComponent(u.pathname).toLowerCase().split('/').filter(Boolean);
+    return parts.some((p) => /^(?:about(?:-us)?|mission|our-mission|who-we-are|services?|specialty-services|events?|calendar|contact(?:-us)?|shop|store|products?|donate|membership|join|programs?|departments?(?:-[\w-]+)?|centers?|institutes?|subjects?|media|video|videos|watch|landing|lp)$/.test(p) || /^(?:index|default|home)\.(?:html?|aspx?|php)$/.test(p));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where a document stands in the order the outline is offered them: 0 a dated one, or one that is no web page (a
+ * feed's item, a data source's table, an encyclopedia's article); 1 an undated web page, which sorted as if published
+ * the moment it was read and so came before every real article; 2 a landing page; 3 a home, tag or section page. Pure.
+ */
+export function pageRank(d) {
+  if (indexPage(d.url)) return 3;
+  if (d.sourceType !== 'web') return 0;
+  if (landingPage(d.url)) return 2;
+  return d.published_at ? 0 : 1;
 }
 
 /** The candidates a stored document key names, read from the database (a variation of a post whose feed moved on). */
@@ -868,9 +916,10 @@ export function subjectNames(outline) {
  * post's own documents, the specific details a fan would want: what someone said,
  * the minute, the moment, the backstory, what came after, a telling number. Each
  * is verified against its stored document like any fact. A topic with fewer than
- * the pack's minimum (3 by default) verified details is not drafted: `short`
- * says so, and the post moves on to the next topic. Offline, with no recorded
- * answer, the step does not run.
+ * the pack's minimum (3 by default) verified details, its outline's spare facts
+ * counted (detailsDepth, once the plan is made), is not drafted, and the post
+ * moves on to the next topic. Offline, with no recorded answer, the step does
+ * not run.
  */
 export async function gatherDetails(ctx, { pack, format, outline, cand, ttl = '5m' }) {
   const need = pack.meta.research?.minDetails ?? 3;
@@ -907,6 +956,24 @@ export async function gatherDetails(ctx, { pack, format, outline, cand, ttl = '5
   return { ran: true, facts, docs: found, need, found: facts.length, verified, short: verified < need, usd: res.usd };
 }
 
+/**
+ * Whether a planned topic has the depth a post needs: `need` verified details (gatherDetails), where the outline's own
+ * verified facts beyond one a content slide count as details too (`spare`): they are details the documents held, found
+ * a step earlier. A page of the model's own facts (`modelPage`) can give no more than it holds: its bar is what the
+ * outline left of it. Returns { short, spare, bar }. Pure.
+ *
+ * One detail refused for its quote dropped the skincare sample's fully verified plan (2026-11-06: 7 facts for 6
+ * slides, 2 of 4 details verified), and the pets sample's facts plan on the model's page could never pass (8 facts on
+ * the page, 6 in the outline, so 2 details at most).
+ */
+export function detailsDepth(det, made, { modelPage = null, outline = null } = {}) {
+  const own = made.facts.filter((f) => f.verified && !f.detail).length;
+  const spare = Math.max(0, own - made.items.length);
+  const left = modelPage ? Math.max(0, modelPage.map((d) => String(d.text || '').split('\n').filter((l) => l.trim()).length).reduce((a, b) => a + b, 0) - (outline?.facts || []).length) : null;
+  const bar = left == null ? det.need : Math.min(det.need, left);
+  return { short: det.verified + spare < bar, spare, bar };
+}
+
 /** The post as a draft again, from what the database holds: for an edit, and for the gate before publishing. */
 export function postDraft(post) {
   const data = post.data || {};
@@ -939,11 +1006,13 @@ export const REFUSED_DAYS = 30;
  * (not a head-to-head refused for a face, which the week's faceless list keeps, and a face may be found later).
  */
 export function refusedOutlines(db, accountId, t = now()) {
-  const rows = db.all("SELECT s.detail_json FROM steps s JOIN posts p ON p.id = s.post_id WHERE p.account_id = ? AND s.step = 'outline' AND s.status = 'skipped' AND s.at > ?", accountId, new Date(t - REFUSED_DAYS * DAY).toISOString());
+  // A post blocked for its photographs counts too, for its format and documents only: its documents stay for the other
+  // formats (candidateDocs), and the same format on them would look for the same photographs.
+  const rows = db.all("SELECT s.step, s.detail_json FROM steps s JOIN posts p ON p.id = s.post_id WHERE p.account_id = ? AND ((s.step = 'outline' AND s.status = 'skipped') OR (s.step = 'blocked' AND json_extract(s.detail_json, '$.kind') = 'no_photo')) AND s.at > ?", accountId, new Date(t - REFUSED_DAYS * DAY).toISOString());
   const out = new Set();
   for (const r of rows) {
     const d = j(r.detail_json, {});
-    if (!d.format || !Array.isArray(d.documents) || !d.documents.length || /no licensed photograph/.test(d.why || '')) continue;
+    if (!d.format || !Array.isArray(d.documents) || !d.documents.length || (r.step === 'outline' && /no licensed photograph/.test(d.why || ''))) continue;
     out.add(outlineKey(d.format, d.documents));
   }
   return out;
@@ -1093,6 +1162,10 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // answer. OpenFrequency's second sample try (2026-11-06) sent the first try's 42 refused outlines again, word for
     // word, and the articles behind them were never reached. A post asked for a fixed document asks for it.
     const refusedBefore = docKey || dv.docKey ? new Set() : refusedOutlines(db, pack.id);
+    // The candidates this post asked an outline about and could not plan, in any format: each next format takes the ones
+    // not asked yet first, so the formats go through different documents. Every format of the pets sample asked about
+    // the same first six pages (thirty refusals) while thirteen articles further down were never offered.
+    const triedHere = new Set();
     // Two passes: the sources' documents, then, when none carried a post, one page of the model's general knowledge.
     for (let pass = 0; pass < 2 && !outline; pass++) {
       if (pass === 1) {
@@ -1108,7 +1181,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         // At most maxDocs documents per format reach the model. A document with no
         // recording for this format (offline) never did, so it does not use up a turn.
         let tried = 0;
-        for (const c of pool) {
+        for (const c of [...pool.filter((x) => !triedHere.has(x.key)), ...pool.filter((x) => triedHere.has(x.key))]) {
           if (tried >= maxDocs) break;
           if (refusedBefore.has(outlineKey(f.id, c.docs))) continue;
           const refs = c.docs.map((d, i) => ({ ...d, ref: `D${i + 1}` }));
@@ -1120,6 +1193,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
               meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
             });
             tried++;
+            triedHere.add(c.key);
             if (!res.data.usable) {
               step(db, postId, 'outline', 'skipped', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, why: res.data.why }, res.usd);
               noteTopic(c, res.data.why);
@@ -1144,14 +1218,17 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
             }
             // ---- research: more about this topic, and the details a fan would want, before any slide
             const det = await gatherDetails(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, ttl });
-            if (det.ran) step(db, postId, 'details', det.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
-            // Fewer details than the minimum: not this topic. General wording never fills the gap.
-            if (det.short) {
-              noteTopic(c, `the sources hold ${det.found} of the ${det.need} details a post needs`);
-              continue;
-            }
             // The facts verified and the plan kept to the kind's shape; a plan that cannot keep it leaves the topic for the next.
             const made = planFrom(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, details: det.facts });
+            // Fewer details than the post needs, counting the outline's own verified facts beyond one a slide: not this
+            // topic. General wording never fills the gap. A refused detail is dropped alone (planFrom places only the
+            // verified ones), and the plan stands when what is left is enough.
+            const depth = det.ran && !made.why ? detailsDepth(det, made, { modelPage: c.docs.every((d) => d.sourceKey === MODEL_KEY) ? c.docs : null, outline: res.data }) : null;
+            if (det.ran) step(db, postId, 'details', depth?.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, ...(depth ? { spare: depth.spare, bar: depth.bar } : {}), refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
+            if (depth?.short) {
+              noteTopic(c, `the sources hold ${det.verified} of the ${depth.bar} details a post needs`);
+              continue;
+            }
             if (made.why) {
               step(db, postId, 'plan', 'failed', { topic: res.data.topic, why: made.why, refused: made.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) });
               noteTopic(c, made.why);
@@ -1240,6 +1317,45 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       lastAnswer = res.data;
     }
     if (!draft) return block('voice', 'הטיוטה לא נכתבה');
+
+    // ---- photographs: licensed, recorded, screened, and checked against what each slide says. Found as soon as the
+    // slides' searches are written (the repair, the review and the rewrite never change one), so a post that cannot
+    // stand on its photographs is known before those are paid for: three of the five first samples of 2026-11-06 were
+    // written, repaired, reviewed and rewritten, and only then blocked for a photograph.
+    const photoOn = kindOf(format).photo;
+    const photos = await findPhotos({ ...pctx, mode: ctx.mode }, { pack, format, draft, outline, postId });
+    const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
+    // A blocked post's documents and format, so that a photograph's failure uses up neither (candidateDocs,
+    // refusedOutlines): the same documents may carry another format, and this format other documents.
+    const photoBlock = (reason, detail = {}) => block('no_photo', reason, { ...detail, format: format.id, documents: cand.docs.map((d) => d.id) });
+    // A guess-who whose answer has no licensed photograph shows a bare question mark for a cover, and an answer no
+    // photograph shows is one most of the audience does not know either: every reader failed both. Another topic.
+    // A styled account puts its covers on photographs whatever its theme says (findPhotos), so its guess-who needs the face too.
+    const styledPost = Boolean(draft.style || pack.meta?.style?.name);
+    if (kindName(format) === 'guess-who' && (pack.theme.options?.coverPhoto || styledPost) && !photos.get(draft.slides.length - 1)) {
+      return photoBlock(`אין תמונה מורשית של ${draft.subject?.answer || 'התשובה'}: נחשו-מי צריך פנים לטשטש על השער`);
+    }
+    // No slide goes out empty (the owner, 2026-10-31: "the slides dont have images. no slide can be empty"): a post of
+    // an account that searches photographs, with not one found and no scene either, is another post.
+    const photosNeeded = searchesPhotos(pctx, pack);
+    if (photosNeeded && !photos.size) {
+      step(db, postId, 'photos', 'failed', { why: 'nothing found', scenes: pack.theme.backgroundQueries?.length ? 'theme' : 'derived' });
+      return photoBlock('לא נמצאה אף תמונה מורשית לפוסט, גם לא סצנה של החשבון: שקף לא יוצא בלי תמונה');
+    }
+    // Whom the slides name, and which of them no photograph found shows: a content slide that names someone no licensed
+    // photograph shows (a private name, a sage with no likeness on Commons) stands on its scene, text first, when the
+    // post has few such slides (textLedGaps); a cover or a reveal without its face is another post, said now.
+    const named = photosNeeded ? namedOn({ format, draft, outline }) : new Map();
+    let textLed = [];
+    if (photosNeeded) {
+      const early = textLedGaps(namedGaps({ photos, named }), { format, slides: draft.slides.length });
+      if (early.left.length) {
+        step(db, postId, 'photos', 'failed', { gaps: early.left, early: true });
+        return photoBlock(gapReason(early.left), { gaps: early.left });
+      }
+      textLed = early.led;
+      if (textLed.length) step(db, postId, 'photos', 'info', { textLed: textLed.map((g) => ({ slide: g.slide, names: g.names })) });
+    }
     // A graphic is decoration: one the redraft left malformed (a compare of one item) is dropped and the post checked
     // again without it, not lost with every fact in it verified. The count of slides with a visual is still checked.
     // (The closing slide's problems are the repair's, below, and do not keep a malformed graphic.)
@@ -1439,25 +1555,6 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     if (final.problems.length) return block('fact_check', final.problems.slice(0, 3).map(say).join(' · '));
     step(db, postId, 'verify', 'ok', { token: final.gate.token, facts: verifiedFacts.length, slides: draft.slides.length });
 
-    // ---- photographs: licensed, recorded, screened, and checked against what each slide says
-    const photoOn = kindOf(format).photo;
-    const photos = await findPhotos({ ...pctx, mode: ctx.mode }, { pack, format, draft, outline, postId });
-    const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
-    // A guess-who whose answer has no licensed photograph shows a bare question mark for a cover, and an answer no
-    // photograph shows is one most of the audience does not know either: every reader failed both. Another topic.
-    // A styled account puts its covers on photographs whatever its theme says (findPhotos), so its guess-who needs the face too.
-    const styledPost = Boolean(draft.style || pack.meta?.style?.name);
-    if (kindName(format) === 'guess-who' && (pack.theme.options?.coverPhoto || styledPost) && !photos.get(draft.slides.length - 1)) {
-      return block('no_photo', `אין תמונה מורשית של ${draft.subject?.answer || 'התשובה'}: נחשו-מי צריך פנים לטשטש על השער`);
-    }
-    // No slide goes out empty (the owner, 2026-10-31: "the slides dont have images. no slide can be empty"): a post of
-    // an account that searches photographs, with not one found and no scene either, is another post.
-    const photosNeeded = searchesPhotos(pctx, pack);
-    if (photosNeeded && !photos.size) {
-      step(db, postId, 'photos', 'failed', { why: 'nothing found', scenes: pack.theme.backgroundQueries?.length ? 'theme' : 'derived' });
-      return block('no_photo', 'לא נמצאה אף תמונה מורשית לפוסט, גם לא סצנה של החשבון: שקף לא יוצא בלי תמונה');
-    }
-
     // ---- render
     const factSource = new Map(facts.map((f) => [f.key, sourceLabel(db, f)]));
     // A guess-who's clue is sourced like any slide, but the article it came from is
@@ -1473,17 +1570,18 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
 
     // ---- every slide on a photograph, and a name on a photograph of its own: what was drawn, on every platform
     if (photosNeeded) {
-      const gaps = photoGaps({ grounds: files.grounds || {}, photos, named: namedOn({ format, draft, outline }), slides: slides.length });
-      if (gaps.length) {
+      const after = textLedGaps(photoGaps({ grounds: files.grounds || {}, photos, named, slides: slides.length }), { format, slides: slides.length });
+      if (after.left.length) {
         rmSync(outDir, { recursive: true, force: true });
-        step(db, postId, 'photos', 'failed', { gaps });
-        return block('no_photo', gapReason(gaps), { gaps });
+        step(db, postId, 'photos', 'failed', { gaps: after.left });
+        return photoBlock(gapReason(after.left), { gaps: after.left });
       }
-      step(db, postId, 'photos', 'ok', { grounds: files.grounds });
+      textLed = after.led;
+      step(db, postId, 'photos', 'ok', { grounds: files.grounds, ...(textLed.length ? { textLed: textLed.map((g) => ({ slide: g.slide, names: g.names })) } : {}) });
     }
 
     // ---- store and queue
-    const tags = hashtagsFor(pack, format, postId, [draft.hook, draft.sub, draft.caption, ...(draft.keywords || []), ...draft.slides.map((s) => `${s.title} ${s.body}`)].join(' '));
+    const tags = hashtagsFor(pack, format, postId, [draft.hook, draft.sub, draft.caption, ...(draft.keywords || []), ...draft.slides.map((s) => `${s.title} ${s.body}`)].join(' '), draft.keywords || []);
     db.tx(() => {
       slides.forEach((s, i) =>
         db.insert('slides', {
@@ -1501,7 +1599,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined, closing: draft.closing },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(postStyle ? { styleName: postStyle } : {}) },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(textLed.length ? { textLed: textLed.map((g) => g.slide) } : {}), ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
@@ -1573,6 +1671,39 @@ export function photoGaps({ grounds, photos, named, slides }) {
   return [...out.values()].sort((a, b) => a.slide - b.slide);
 }
 
+/**
+ * The named slides no photograph a post found shows, before anything is drawn: { slide, why: 'name', names } as
+ * photoGaps says them. A slide is covered when any slide's photograph shows every name it has (the renderer puts one
+ * person's photograph on each slide about them, planPhotos). Pure.
+ */
+export function namedGaps({ photos, named }) {
+  const own = [...photos].filter(([k, img]) => typeof k === 'number' && img);
+  const out = [];
+  for (const [i, qs] of named) {
+    const missing = qs.filter((q) => !own.some(([, img]) => shows(img, q)));
+    if (missing.length) out.push({ slide: i, why: 'name', names: missing.map((q) => whoIn(q).join(' ')) });
+  }
+  return out.sort((a, b) => a.slide - b.slide);
+}
+
+/** The most content slides of one post that may stand text first, on a scene, for a name with no photograph. */
+export const TEXT_LED_MAX = 2;
+
+/**
+ * Which of a post's photograph gaps it may go out with: `led`, a content slide that names someone no licensed
+ * photograph shows, which stands on the post's scene with its words first (a private name like Satori Kato, a sage of
+ * the Talmud with no likeness on Commons), at most TEXT_LED_MAX of them; and `left`, every other gap, which blocks the
+ * post: the cover's face, a guess-who's reveal, a slide on no photograph at all, or more text-first slides than that.
+ * A post with three such slides is a post about faces no one can be shown, and another topic serves better. Before
+ * 2026-11-06 one such slide blocked the post whole, three of five first samples among them. Pure.
+ */
+export function textLedGaps(gaps, { format, slides }) {
+  const reveal = kindName(format) === 'guess-who' ? slides - 1 : -1;
+  const may = gaps.filter((g) => g.why === 'name' && g.slide > 0 && g.slide < slides && !g.closing && g.slide !== reveal);
+  const led = may.length <= TEXT_LED_MAX ? may : [];
+  return { led, left: gaps.filter((g) => !led.includes(g)) };
+}
+
 /** A post's photograph gaps, said in a line for its steps and for whoever tries again. */
 export function gapReason(gaps) {
   // "לשער", "בשקף 3", "בשקף הסיום": the slide with its preposition.
@@ -1600,6 +1731,18 @@ export async function sidePhotos(ctx, { pack, outline, postId }) {
     out[key] = img;
   }
   return out;
+}
+
+/**
+ * What a facts or tips cover's photograph is screened against. A famous face, when its search names someone: in
+ * person, never a statue or a plaque (a plaque of Ronaldo's footprints once stood where his face should have been),
+ * but for someone who lived before photography, whose likeness is a painting, a bust or a coin. Anything else is shown
+ * as itself: the cover of a post about dogs or birds asked for "a famous face in person", and the skincare sample's
+ * cover took 15 screens and landed on a stranger. Pure.
+ */
+export function coverClaim(query, hook, about = '') {
+  if (whoIn(query).length) return `${query} in person, the face clearly visible (never a statue, a plaque, a poster, a mural or a crowd; for someone who lived before photography, a painting, a bust or a coin of them): the famous face on the cover of "${hook}"${about}`;
+  return `${query}, large and clear as the main subject of the picture (never a poster, a logo, a screen or a crowd): the photograph on the cover of "${hook}"${about}`;
 }
 
 /**
@@ -1648,7 +1791,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     // Ronaldo's footprints passed as "Ronaldo" and stood where his face should have been.
     const claim = kind === 'guess-who' && draft.subject?.answer
       ? `a portrait of ${draft.subject.answer}, the answer of a guess-who: the reveal shows their face${about}`
-      : idx === 0 && ['facts', 'tips'].includes(kind) ? `${outline.imageQuery} in person, the face clearly visible (never a statue, a plaque, a poster, a mural or a crowd): the famous face on the cover of "${draft.hook}"${about}`
+      : idx === 0 && ['facts', 'tips'].includes(kind) ? coverClaim(outline.imageQuery, draft.hook, about)
       : idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}` : `${s.title} ${s.body}${about}`;
     wants.push({ idx, query: outline.imageQuery, claim });
   }
@@ -1658,12 +1801,16 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       if (s.kind !== 'item' || !s.imageQuery || s.role === 'clue' || (photoOn === 'last' && i === last && wants.length)) return;
       // A facts slide stands on its photograph alone, over the whole screen: "Martínez made 11 saves in the final" went
       // out on a stadium seen from the stands, the keeper a dot in it, and Spain's World Cup on a team of the 1920s.
-      const own = kind === 'facts' ? ` It must show ${s.imageQuery} large, as its clear main subject (a person: them, their face visible, in the years the fact is about; never a far shot of a pitch, a stadium or a crowd where they are a dot, never an old photograph of others)` : '';
+      // Only a person is asked for a face: "a dog: its face visible" sent the screen looking for one.
+      const own = kind === 'facts' ? ` It must show ${s.imageQuery} large, as its clear main subject (${whoIn(s.imageQuery).length ? 'a person: them, their face visible, in the years the fact is about; for someone who lived before photography, a painting, a bust or a coin of them; ' : ''}never a far shot of a pitch, a stadium or a crowd where it is a dot, never an old photograph of others)` : '';
       wants.push({ idx: i, query: s.imageQuery, claim: `${s.title} ${s.body}${own}` });
     });
   }
   const seen = new Set();
   let searches = 0;
+  // The post's photographs are chosen once each, and a picture refused for what it shows is not screened again for
+  // another slide (findImage).
+  ctx = { ...ctx, photoMemo: ctx.photoMemo || { taken: new Set(), refused: new Set() } };
   for (const w of wants) {
     const key = w.query.toLowerCase().trim();
     // At most four searches a post, or one a slide when every slide stands on its own photograph.
@@ -1671,15 +1818,17 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     seen.add(key);
     searches++;
     const why = {};
+    // One count of screens for the slide, whichever of its searches below spends them (MAX_SCREENS).
+    const budget = { screens: MAX_SCREENS };
     // A cover fills the frame; a content slide's photograph sits in one (the last slide of a guess-who fills it too).
     const minSide = w.idx === 0 || (photoOn === 'last' && w.idx === last) ? MIN_SIDE.cover : MIN_SIDE.framed;
-    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why, minSide }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why, minSide, budget }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
     // A cover whose query found nothing tries the post's own subject by name ("Haim Revivo" rather than "Revivo goal Spain 1998").
     const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
     if (!img && (w.idx === 0 || (kind === 'guess-who' && w.idx === last)) && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
       seen.add(who.toLowerCase());
       searches++;
-      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why, minSide }).catch(() => null);
+      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why, minSide, budget }).catch(() => null);
     }
     // A content slide that names someone and found nothing tries the name alone ("Sadio Mane" rather than "Sadio Mane
     // Liverpool 2019 final"): a slide that names someone stands on a photograph of them or the post does not go out. It
@@ -1687,7 +1836,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     const named = w.idx > 0 ? whoIn(w.query).join(' ') : '';
     if (!img && named && named.toLowerCase() !== key && !seen.has(named.toLowerCase())) {
       seen.add(named.toLowerCase());
-      img = await findImage(ctx, { pack, query: named, postId, claim: w.claim, why, minSide }).catch(() => null);
+      img = await findImage(ctx, { pack, query: named, postId, claim: w.claim, why, minSide, budget }).catch(() => null);
     }
     step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode, why });
     if (img) out.set(w.idx, img);

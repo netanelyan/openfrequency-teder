@@ -2890,3 +2890,73 @@ Niches of famous people, teams, products and places (sport, food, travel, tech, 
   (src/autonomy/runner.js), and expires unapproved. Removing the source on the Sources page turns the fallback off.
 
 test/thin-sources.test.js covers the three.
+
+### Five niches of samples: photographs decided early, articles first, details that hold (2026-11-06)
+
+The owner, on a run of one sample for each of five new niches (pets, skincare, coffee, camping, Judaica; the report is
+samples-2026-11-06/SUMMARY.md): "fix all three". Three of the five first tries were blocked for a photograph, after the
+post was written, repaired, reviewed and rewritten; the pets outline was offered a hospital's service page and an event
+page thirty times while thirteen dated articles waited; one refused detail threw away skincare's checked plan.
+
+**Photographs.**
+- *Found as soon as the slides' searches are written* (src/pipeline/build.js buildPost): before the repair, the review
+  and the rewrite, which never change a search. A post that cannot stand on its photographs is refused then, and its
+  photographs are checked again once drawn.
+- *A content slide whose name no licensed photograph shows stands on the post's scene, its words first* (textLedGaps),
+  two such slides a post at most: a private name, a sage with no likeness on Commons. The cover's face, a guess-who's
+  answer, a slide on no photograph at all, or a third such slide still refuse the post. This eases the owner's rule of
+  2026-10-31 ("names cant be written without an image that connects them visually") for what has no image at all; the
+  post's checks say which slides stood text first (checks.textLed).
+- *A person who lived before photography has a likeness* (src/images/safety.js): a painting, an engraving, a bust, a
+  statue or a coin of them, filed under their name, fits as a portrait would. Josephus went out on the Rijksmuseum's
+  engraving; the first run refused it.
+- *A place is not a person* (src/images/names.js): "Wadi Murabba'at", "Shrine of the Book", "Mount Hermon" name no one,
+  and a name's small words ("of the", "da") and apostrophes no longer keep a file's title from matching.
+- *A cover asks for its own subject* (coverClaim): a face only when its search names someone; a dog, a canyon or a
+  French press is asked for as itself. Content slides of a facts post likewise (findPhotos).
+- *Screens are counted* (src/images/index.js findImage): eight a slide (MAX_SCREENS), its searches together; a picture
+  screened for the slide is not screened again; one refused for what it shows (a watermark, blood) is not screened for
+  the post's other slides; one already on a slide is not offered to another; and a search for a thing takes only a
+  picture whose own words name it (headWord: Commons answered "vintage french press" with a wine press and a postcard).
+- *Photographs that fill a 9:16 slide are tried first* (fillersFirst), Openverse's copy of a Commons file is 1920 wide
+  (1280 left every landscape a band), and the screen's point of focus is the main subject when there is no face, so a
+  landscape is cut around its coin or its bird.
+- *A post blocked only for its photographs does not use up its documents* (candidateDocs); its format and documents are
+  not asked again (refusedOutlines), so another format may take them.
+
+**The documents the outline is offered.**
+- *Dated articles first*, then undated web pages, then landing pages (a service, a department, an event, a mission, a
+  section of subjects: landingPage), then home and tag pages (pageRank). Undated pages sorted as if published the moment
+  they were read.
+- *Each format asks first about the documents the formats before it did not* (buildPost), so five formats walk through
+  the account's documents instead of the same six.
+- *One document a page*, and *no text that is not text*: a page's charset is read from its own <meta> or XML declaration
+  when the header names none (src/core/net.js charsetOf; a windows-1255 page was 5,607 replacement marks); a PDF, an image
+  or an archive is no text page (notText); a stored text that is mostly replacement marks, a PDF's bytes or control
+  bytes is never stored or offered (src/sources/text.js unreadable).
+- *Discovery offers no page it cannot use* (src/onboarding/discover.js unreadablePage): one that is not text, one under
+  400 characters (a page its script draws) unless the source follows its articles, and one that refuses a second read
+  (Britannica, aaha.org and cosmeticsandtoiletries.com answered the one read the search made, and 403 after it).
+
+**The details rule.**
+- *A refused detail drops only itself* (detailsDepth, after the plan): the outline's own verified facts beyond one a
+  slide count as details, and a page of the model's own facts asks only for what it holds after the outline.
+- *Research reads a Wikipedia for every account* (src/sources/research.js researchWiki). An account none of whose
+  sources is a Wikipedia gets one the first time research runs: an approved source of the account like the model's
+  general knowledge (2026-11-06), on its Sources page, the account's to remove, and never made again once removed. It
+  reads the account's language and English, and only the articles an outline names; the day's read leaves it out. A
+  source and not a free read, because every fact is quoted from a document of an approved source, and the slide's line
+  and the fact's trace lead to one.
+
+**And.** The outline keeps to the account's own niche and what its audience does with it (the camping account's first
+samples were about migrating birds and an archaeologist's find; its article on Judean desert hikes is now a post about
+the hikes). A list about no person opens on its subject by name, not a famous face. The cover template "{n} דברים על
+{topic} שאף אחד לא אומר לכם" is gone: its words are on the engine's own list of teasers. A new account's niche hashtags
+are the niche whole, its words without their "and", and the owner's topics (src/onboarding/pack.js nicheTags), and a
+post adds its own Hebrew keywords (hashtagsFor).
+
+Replayed from the five runs' own accounts and recorded answers, on the engine as it is now (samples-2026-11-06/_harness
+replay.mjs, a request the first run made answered as it was, any other by hand): Judaica posts on its first try (it
+needed two), Josephus on his engraving, Antiochus and Rabbi Oshaya text first; coffee and camping post on their first
+try; the pets outline is offered its twelve dated articles first. test/sample-fixes.test.js covers each fix;
+test/no-bare-slides.test.js, test/research.test.js and test/images-providers.test.js follow the rules they changed.

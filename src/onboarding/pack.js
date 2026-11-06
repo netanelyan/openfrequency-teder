@@ -115,6 +115,24 @@ ${seed.audience || 'קהל ישראלי רחב'}.
 const VOICE_SCHEMA = { type: 'object', properties: { voice: { type: 'string' } }, required: ['voice'], additionalProperties: false };
 
 /**
+ * A new account's niche hashtags: the niche whole ("#ציודקמפינג"), each of its words, and each of the owner's
+ * topics whole ("#אמנותיהודית"), with a later word's "and" taken off ("ומתנות" is "#מתנות": "#ומתנות" and "#ואביזרים"
+ * were the samples' tags, 2026-11-06), then "#מידע". A tag goes on a post only where the post says its words
+ * (build.js hashtagsFor), so more of them is more chances for one that fits. Pure.
+ */
+export function nicheTags(seed = {}) {
+  const tag = (s) => `#${String(s).replace(/[^\p{L}\p{N}_]/gu, '')}`;
+  const said = String(seed.niche || '').split(/\s+/).filter((w) => w.length > 1);
+  const and = (w, i) => i > 0 && /^ו[א-ת]{3,}/.test(w);
+  const words = said.map((w, i) => (and(w, i) ? w.slice(1) : w));
+  const whole = (s) => (String(s).split(/\s+/).length > 1 && tag(s).length <= 21 ? [tag(s)] : []);
+  // The niche whole, up to its first "and": "ציוד קמפינג וטיולים" is "#ציודקמפינג".
+  const first = said.findIndex(and);
+  const tags = [...whole(said.slice(0, first < 0 ? said.length : first).join(' ')), ...words.map(tag), ...(seed.topics || []).flatMap(whole), '#מידע'];
+  return [...new Set(tags.filter((t) => t.length > 2))];
+}
+
+/**
  * Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. `workspaceId` is the
  * customer's (null for the operator's own account): its look is kept apart from that workspace's other accounts.
  */
@@ -189,7 +207,7 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     formats: formatsFor(formatIds),
     rotate: 'turns',
     caption: { questions: ['מה עוד הייתם רוצים לדעת על זה?', 'זה נוגע לכם?', 'על מה תרצו פירוק כזה?'] },
-    hashtags: { broad: ['#טיפים', '#ישראל'], niche: [...words.map((w) => `#${w.replace(/[^\p{L}\p{N}_]/gu, '')}`).filter((t) => t.length > 2).slice(0, 3), '#מידע'] },
+    hashtags: { broad: ['#טיפים', '#ישראל'], niche: nicheTags(seed) },
     trends: { queries: { he: [`טיפים ${seed.niche}`], en: [`${seed.nicheEn || seed.niche} tips`] }, minViews: { he: 1000, en: 20000 } },
   };
   const rules = { maxQuoteWords: 40, bannedPhrases: [], patterns: [], imageQueryBlock: ['logo', 'brand'] };

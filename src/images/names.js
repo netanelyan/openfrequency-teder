@@ -10,11 +10,18 @@
  * Hill"). A query with a single name word needs that word.
  */
 export function namesIn(title, names) {
-  const words = String(title).toLowerCase().replace(/[_%]/g, ' ').split(/[^\p{L}\p{N}'-]+/u).filter(Boolean);
-  const want = names.map((n) => n.toLowerCase());
+  // A name's joining words ("Shrine of the Book", "Leonardo da Vinci") and its apostrophes ("Murabba'at", filed as
+  // "Murabbaat") do not tell two names apart: a query's names never hold them (namesOf), so a title's are left out
+  // too, or "Shrine Book" never met "Shrine_of_the_Book.jpg" (75 photographs passed over, 2026-11-06).
+  const bare = (w) => w.replace(/['’`]/g, '');
+  const words = String(title).toLowerCase().replace(/[_%]/g, ' ').split(/[^\p{L}\p{N}'’`-]+/u).filter((w) => w && !JOIN.has(w)).map(bare);
+  const want = names.map((n) => bare(n.toLowerCase()));
   if (want.length < 2) return want.every((n) => words.includes(n));
   return want.slice(1).some((b, i) => words.some((w, j) => w === want[i] && words[j + 1] === b));
 }
+
+/** The small words inside a name: "Shrine of the Book", "Leonardo da Vinci", "Simeon bar Yochai". */
+const JOIN = new Set(['of', 'the', 'de', 'del', 'della', 'da', 'di', 'du', 'la', 'le', 'al', 'el', 'ha', 'bin', 'ibn', 'ben', 'bar', 'von', 'van', 'der', 'den']);
 
 /** The names a query asks a picture to show: its capitalised words, less the promotions' and the sport's own. */
 export const namesOf = (query) => String(query).split(/\s+/).filter((w) => /^\p{Lu}\p{L}{2,}/u.test(w) && !/^(UFC|PFL|ONE|MMA|BJJ|FC|The|Stadium|Arena|Park)$/i.test(w));
@@ -24,7 +31,11 @@ export const namesOf = (query) => String(query).split(/\s+/).filter((w) => /^\p{
 const NO_ONE = new Set(['league', 'liga', 'ligue', 'serie', 'bundesliga', 'eredivisie', 'premier', 'champions', 'europa', 'conference', 'libertadores', 'cup', 'copa', 'coupe', 'pokal', 'world', 'euro', 'euros', 'olympics', 'olympic', 'paralympics', 'games', 'final', 'finals', 'trophy', 'championship', 'championships', 'tournament', 'grand', 'prix', 'formula', 'open', 'masters', 'series', 'tour', 'award', 'awards', 'ballon', 'season', 'derby', 'super', 'bowl', 'fight', 'night', 'day', 'week', 'nba', 'nfl', 'nhl', 'mlb', 'fifa', 'uefa', 'var', 'football', 'soccer', 'basketball', 'boxing', 'tennis', 'golf', 'rugby', 'cricket', 'hockey', 'baseball']);
 // A kind of place: the capitalised words just before it are the place's name ("Wembley Stadium", "Camp Nou stadium"),
 // not someone's.
-const PLACE_WORD = /^(?:stadium|arena|park|ground|field|pitch|hall|square|street|beach|bridge|tower|museum|airport|station|market|mountain|river|lake|island|palace|church|temple|castle|court|track|circuit|gym|clubhouse)$/i;
+const PLACE_WORD = /^(?:stadium|arena|park|ground|field|pitch|hall|square|street|beach|bridge|tower|museum|airport|station|market|mountain|mountains|river|lake|island|palace|church|temple|castle|court|track|circuit|gym|clubhouse|wadi|nahal|mount|cave|caves|desert|valley|canyon|crater|forest|reserve|sea|bay|gulf|cape|coast|falls|spring|springs|shrine|tomb|monastery|synagogue|cathedral|mosque|fortress|fort|tel|ein|har|trail)$/i;
+// A kind of place written before its name ("Wadi Murabba'at", "Mount Hermon", "Shrine of the Book"): the capitalised
+// words after it are the place's too. A slide that names a place does not name someone: the camping account's first
+// sample (2026-11-06) was blocked for having no photograph of "Wadi Murabba'at" and of "Shrine Book".
+const PLACE_FIRST = /^(?:wadi|nahal|mount|lake|river|cape|fort|tel|ein|har|gulf|bay|sea|shrine|tomb|temple|church|cathedral|monastery|palace|castle|museum|valley|desert|cave|caves)$/i;
 
 const letters = (w) => w.toLowerCase().replace(/[^\p{L}]/gu, '');
 
@@ -33,13 +44,18 @@ const letters = (w) => w.toLowerCase().replace(/[^\p{L}]/gu, '');
 function nameRuns(query) {
   const words = String(query || '').split(/\s+/).filter(Boolean);
   const place = new Set();
+  const inName = (k) => /^\p{Lu}/u.test(words[k]) || JOIN.has(words[k].toLowerCase());
   words.forEach((w, i) => {
     if (!PLACE_WORD.test(letters(w))) return;
+    place.add(i);
     for (let k = i - 1; k >= 0 && /^\p{Lu}/u.test(words[k]); k--) place.add(k);
+    if (PLACE_FIRST.test(letters(w))) for (let k = i + 1; k < words.length && inName(k); k++) place.add(k);
   });
   const runs = [];
   let run = null;
   words.forEach((w, i) => {
+    // A joining word between two name words keeps them one name ("Leonardo da Vinci"), and is not a name word itself.
+    if (run && JOIN.has(w.toLowerCase()) && i + 1 < words.length && namesOf(words[i + 1]).length && !place.has(i + 1)) return;
     if (place.has(i) || !namesOf(w).length || NO_ONE.has(letters(w))) {
       run = null;
       return;

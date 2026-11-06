@@ -5,7 +5,7 @@ import { API_PRICES, record } from '../budget/ledger.js';
 import { cachedLookup } from '../core/store.js';
 import { askJson } from '../llm/index.js';
 import { declaredFeeds, parseFeed } from '../sources/rss.js';
-import { decodeEntities, titleOf } from '../sources/text.js';
+import { THIN_DOC, decodeEntities, htmlToText, mainHtml, titleOf, unreadable } from '../sources/text.js';
 import { robotsAllows } from '../sources/robots.js';
 import { youtubeClient, youtubeConfigured } from '../trends/index.js';
 import { suggestApis } from './apis.js';
@@ -250,11 +250,37 @@ async function feedsOf(url, notes, { robots = robotsAllows, depth = 0 } = {}) {
       const hit = guessed.find(Boolean);
       if (hit) out.push(hinted(hit));
     }
-    if (!out.length) out.push(hinted({ type: 'web', url: page.finalUrl, name: name(null), newest: null, about }));
+    if (!out.length) {
+      const web = hinted({ type: 'web', url: page.finalUrl, name: name(null), newest: null, about });
+      const why = await unreadablePage(web, page);
+      if (why) notes.push(`${page.finalUrl}: ${why}`);
+      out.push(why ? { ...web, blocked: why } : web);
+    }
   } catch (e) {
     notes.push(`${url}: ${e.message}`);
   }
   return out;
+}
+
+/**
+ * Why a page found for a web source would give the posts nothing, or null; such a candidate is not offered (it is
+ * `blocked`, and the operator's notes say why). Its text is not text (a page read in the wrong encoding, a PDF's
+ * bytes), or it is too thin to carry a post (a page drawn by its script, 199 characters) unless the source follows its
+ * articles from it (a deeper search's hints), or the site turns away a second read: Britannica, aaha.org and
+ * cosmeticsandtoiletries.com answered the one read the search made, were offered and approved, and answered every
+ * read after it with HTTP 403 (2026-11-06). `read` is the second read's reader (the tests give their own).
+ */
+export async function unreadablePage(c, page, { read = (u) => getText(u, { timeoutMs: 12_000 }) } = {}) {
+  const text = htmlToText(mainHtml(page.body));
+  const bad = unreadable(text);
+  if (bad) return `${bad}: not offered`;
+  if (!c.hints?.follow && text.length < THIN_DOC) return `only ${text.length} characters of text, too few for a post: not offered`;
+  try {
+    await read(page.finalUrl);
+  } catch (e) {
+    if (e.status) return `the site refused a second read (HTTP ${e.status}): not offered`;
+  }
+  return null;
 }
 
 /**
