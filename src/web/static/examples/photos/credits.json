@@ -1,0 +1,44 @@
+[
+  {
+    "file": "aloe.jpg",
+    "title": "File:Aloe Vera Plant.JPG",
+    "license": "CC0",
+    "source": "https://commons.wikimedia.org/wiki/File:Aloe_Vera_Plant.JPG",
+    "artist": "Brainmachine"
+  },
+  {
+    "file": "fern.jpg",
+    "title": "File:Fern plant in a pot.jpg",
+    "license": "CC0",
+    "source": "https://commons.wikimedia.org/wiki/File:Fern_plant_in_a_pot.jpg",
+    "artist": "Just2blabber"
+  },
+  {
+    "file": "succulent.jpg",
+    "title": "File:Potted succulents in window (Unsplash).jpg",
+    "license": "CC0",
+    "source": "https://commons.wikimedia.org/wiki/File:Potted_succulents_in_window_(Unsplash).jpg",
+    "artist": "Milada Vigerova mili_vigerova"
+  },
+  {
+    "file": "window.jpg",
+    "title": "File:Efetto della luce (14720466759).jpg",
+    "license": "CC0",
+    "source": "https://commons.wikimedia.org/wiki/File:Efetto_della_luce_(14720466759).jpg",
+    "artist": "fotokoci"
+  },
+  {
+    "file": "cactus.jpg",
+    "title": "File:Le chat et le cactus D210805.jpg",
+    "license": "Public domain",
+    "source": "https://commons.wikimedia.org/wiki/File:Le_chat_et_le_cactus_D210805.jpg",
+    "artist": "Tangopaso"
+  },
+  {
+    "file": "balcony.jpg",
+    "title": "File:Plants on balcony D220524.jpg",
+    "license": "Public domain",
+    "source": "https://commons.wikimedia.org/wiki/File:Plants_on_balcony_D220524.jpg",
+    "artist": "Tangopaso"
+  }
+]

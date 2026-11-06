@@ -8,7 +8,8 @@ import { ensureDir, mediaDir } from '../core/paths.js';
 import { record } from '../budget/ledger.js';
 import { j } from '../db/index.js';
 import { blockedQuery } from '../rules/check.js';
-import { flatten, screenImage } from './safety.js';
+import { detailGrid, flatten, screenImage } from './safety.js';
+import { bandProfile, calmRoom, cropFor, FRAMES, subjectBand, subjectFits, subjectOf } from '../render/crop.js';
 import { imageSize } from './size.js';
 import { namesIn, namesOf } from './names.js';
 
@@ -104,13 +105,14 @@ export const fillsSlide = (c) => {
 
 /**
  * The word a search for a thing turns on: its last word before a place or a time ("vintage french press" is "press",
- * "camping gear on grass" is "gear", "campfire at night" is "campfire"), singular, or null for a search of fewer than
- * three letters. Pure.
+ * "camping gear on grass" is "gear", "campfire at night" is "campfire"), never what it does ("cat eating from bowl" is
+ * "cat"), singular, or null for a search of fewer than three letters. Pure.
  */
 export function headWord(query) {
   const ws = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
   const cut = ws.findIndex((w, i) => i > 0 && /^(?:at|on|in|with|of|from|for|by|under|over|near|during|and)$/.test(w));
-  const w = (cut > 0 ? ws.slice(0, cut) : ws).filter((x) => /\p{L}{3,}/u.test(x)).at(-1);
+  const words = (cut > 0 ? ws.slice(0, cut) : ws).filter((x) => /\p{L}{3,}/u.test(x));
+  const w = words.filter((x) => !/ing$/.test(x)).at(-1) || words.at(-1);
   const bare = w ? w.replace(/[^\p{L}\p{N}-]/gu, '') : '';
   return bare ? (bare.endsWith('ss') ? bare : bare.replace(/s$/, '')) : null;
 }
@@ -442,6 +444,25 @@ export function imageCredit(db, post) {
 }
 
 /**
+ * What a photograph must allow, for this account: an account drawn in a slide style (src/render/styles) shows every
+ * photograph over its whole 9:16 slide ({ calm: false }), and style E sets its words on the photograph ({ calm: true }).
+ * null for an account on the older templates. Pure.
+ */
+export function fitFor(pack) {
+  const name = pack?.meta?.style?.name || pack?.theme?.style?.name || null;
+  return name ? { calm: name === 'E' } : null;
+}
+
+/** The safe area E's words may stand in on a TikTok slide (px), and the room a block of them takes. */
+const E_ROOM = { top: 230, bottom: 1500, need: 480 };
+
+/** The calmest place for E's words on a photograph cut to 9:16 (src/render/crop.js calmRoom), or null. */
+export function calmPlace(grid, dims, subject, { avoid = true } = {}) {
+  const crop = cropFor(dims, FRAMES.tiktok, subject);
+  return calmRoom({ profile: bandProfile(grid, crop), H: FRAMES.tiktok.H, ...E_ROOM, avoid: avoid && subject.known ? subjectBand(crop, subject, FRAMES.tiktok.H) : null });
+}
+
+/**
  * One licensed photograph for a query, stored with its licence, or null.
  * `mode` 'recorded' never touches the network and returns null: offline runs
  * render the theme's own ground instead of a photograph. A run that wants real
@@ -453,7 +474,7 @@ export function imageCredit(db, post) {
  * is about and is never asked to show an abstract claim, a price cap or a statistic) or 'cover' (everything else: a
  * cover, a portrait, a background, checked against the slide's whole claim). A framed photograph is a content one.
  */
-export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null, minSide = MIN_SIDE.cover, role = minSide === MIN_SIDE.framed ? 'content' : 'cover', budget = { screens: MAX_SCREENS } }) {
+export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null, minSide = MIN_SIDE.cover, role = minSide === MIN_SIDE.framed ? 'content' : 'cover', budget = { screens: MAX_SCREENS }, fit = fitFor(pack) }) {
   const miss = (k) => why && (why[k] = (why[k] || 0) + 1);
   // What this post has already chosen and already refused for what it shows (findPhotos keeps one for the post).
   const memo = ctx.photoMemo || null;
@@ -531,6 +552,12 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
         miss('no licence');
         continue;
       }
+      // One whose library says it is too small to fill a 9:16 slide is not even downloaded (Commons answers a burst of
+      // downloads with a minute's wait each).
+      if (fit && c.provider !== 'pack' && (c.width || c.original?.[0]) && !fillsSlide(c)) {
+        miss('too small to fill a 9:16 slide');
+        continue;
+      }
       let bytes;
       try {
         bytes = c.file ? { buf: readFileSync(c.file), type: /\.png$/i.test(c.file) ? 'image/png' : 'image/jpeg' } : await getBytes(c.url);
@@ -546,6 +573,32 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
           miss('a see-through PNG could not be flattened');
           continue;
         }
+      }
+      // A styled account's slide is its photograph over the whole 9:16 screen, cut around its subject (src/render/crop.js):
+      // one that cannot fill the screen without being blown up past twice its size is never drawn as a band over its own
+      // blurred copy, and is passed over here, before it is screened (the owner, 2026-11-06: "tiktok format should be
+      // 9:16. no landscape images with blurred background"). In style E the words stand on the photograph: one with no
+      // calm band anywhere for them is passed over too, before the screen, as a guess of its subject in the middle.
+      const real = imageSize(bytes.buf);
+      const dims = real ? { w: real.width, h: real.height } : null;
+      // A picture whose size cannot be read cannot be shown to fill a 9:16 slide: passed over.
+      if (fit && !dims) {
+        miss('its size could not be read');
+        continue;
+      }
+      if (fit && dims && !fillsSlide({ width: dims.w, height: dims.h })) {
+        miss('too small to fill a 9:16 slide');
+        continue;
+      }
+      const grid = fit?.calm && dims ? await detailGrid(bytes.buf, bytes.type) : null;
+      // One the browser cannot draw (a file too large for its canvas) cannot be shown to have a calm place: passed over.
+      if (fit?.calm && dims && !grid) {
+        miss('its detail could not be measured');
+        continue;
+      }
+      if (grid && !calmPlace(grid, dims, subjectOf(null), { avoid: false })?.calm) {
+        miss('no calm place for the words: a busy picture');
+        continue;
       }
       // A slide's screens are counted: one slide of the skincare sample took 15 and another about 28, each a model call,
       // and the last of them was no better than the first. A slide that runs out stands on its scene instead.
@@ -570,6 +623,19 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
         // A picture that does not fit this slide may fit another; one refused for what it shows fits none.
         if (!screen.mismatch) memo?.refused.add(cid);
         continue;
+      }
+      // Cut to 9:16 around the subject the screen saw, the subject must still be there, and in E the words must still have a
+      // calm band clear of it: else another photograph (this one's screen counted).
+      if (fit && dims) {
+        const subject = subjectOf(screen);
+        if (!subjectFits(dims, FRAMES.tiktok, subject)) {
+          miss('a 9:16 cut would lose its subject');
+          continue;
+        }
+        if (grid && !calmPlace(grid, dims, subject)?.calm) {
+          miss('no calm place for the words beside its subject');
+          continue;
+        }
       }
       memo?.taken.add(cid);
       const match = { title: Boolean(names.length), model: screen.model ? { consistent: screen.model.consistent, mainSubject: screen.model.mainSubject } : null, claim: claim ? claim.slice(0, 200) : null, role, ...(c.upstream ? { upstream: c.upstream } : {}) };

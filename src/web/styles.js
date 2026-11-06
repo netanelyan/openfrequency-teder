@@ -10,6 +10,7 @@ import { resolveStyle } from '../render/styles/tokens.js';
 import { setPackStyle } from '../packs/write.js';
 import { suggestStyle } from '../onboarding/style.js';
 import { ActionError } from './actions.js';
+import { exampleImg } from './examples.js';
 import { csrfField, esc, icon, layout, postButton, shortDate } from './ui.js';
 
 // The account's slide style, in Teder: its last post drawn in every style side by side, the one it is drawn in
@@ -113,12 +114,19 @@ export function backOf(back) {
  * owner, 2026-10-31: "also choosing the design of the slideshow. format A-E" and "i did not find the /styles page. make
  * it more accessible"): on Settings, and on a new account's setup once it has a sample. `back` brings the pick back.
  */
+/** The five styles as a row of examples (a cover of the demo's post in each), each with its letter and name. */
+const styleExamples = () => {
+  const items = STYLE_NAMES.map((s) => [s, exampleImg(`style-${s}`, `דוגמה לשער בסגנון ${s}, ${HE[s]}`, { esc, cls: 'style-ex' })]).filter(([, img]) => img);
+  return items.length ? `<div class="style-exs">${items.map(([s, img]) => `<figure>${img}<figcaption class="small">${s} · ${esc(HE[s])}</figcaption></figure>`).join('')}</div>` : '';
+};
+
 export function designPanel(pack, current, { back = null } = {}) {
   const href = `/styles?account=${encodeURIComponent(pack.id)}${backOf(back) ? `&back=${encodeURIComponent(back)}` : ''}`;
   const about = current ? (current === 'E' && pack.meta.style?.text === 'shadow' ? ABOUT.Eshadow : ABOUT[current]) : '';
   return `<section class="panel" id="design-${esc(pack.id)}"><header><h2>עיצוב המצגות</h2></header>
 <p class="m0"><b>${current ? `סגנון ${esc(current)} · ${esc(HE[current])}` : 'העיצוב הראשון של החשבון'}</b></p>${about ? `<p class="muted small m4">${esc(about)}</p>` : ''}
 <p class="muted small">יש חמישה עיצובים. בעמוד העיצובים רואים את המצגת האחרונה שלכם בכל אחד מהם, ובוחרים.</p>
+${styleExamples()}
 <div class="actions p0 m6"><a class="btn" href="${esc(href)}">${icon('eye')}לראות את כל העיצובים ולבחור</a></div></section>`;
 }
 
@@ -131,7 +139,7 @@ function accountPanel(pc, pack, { lock, prev, suggestion, test, back = null }) {
     const accent = resolveStyle({ ...(pack.meta.style || {}), name: s }, pack.theme.colors?.accent).colors.accent;
     const imgs = st?.files?.length
       ? st.files.map((_, n) => { const src = `/styles/img/${esc(pack.id)}/${esc(key)}/${s}/${n}`; return `<a href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${esc(`סגנון ${s}, שקף ${n + 1}`)}" loading="lazy" width="180" height="320"></a>`; }).join('')
-      : '<p class="muted small">אין עדיין תצוגה</p>';
+      : exampleImg(`style-${s}`, `דוגמה לשער בסגנון ${s}, ${HE[s]}`, { esc, cls: 'style-ex' }) || '<p class="muted small">אין עדיין תצוגה</p>';
     return `<article class="stylecol${s === current ? ' on' : ''}"><header><b>${s} · ${HE[s]}</b>${s === current ? '<span class="chip ok">עכשיו</span>' : s === suggestion.name ? '<span class="chip">מומלץ</span>' : ''}</header>
 <p class="muted small">${esc(s === 'E' && pack.meta.style?.text === 'shadow' ? ABOUT.Eshadow : ABOUT[s])} <img class="sw" src="${swatch(accent)}" alt="" title="${esc(accent)}" width="12" height="12"></p>
 <div class="stylestrip">${imgs}</div>${warnLine(st?.warnings)}
@@ -161,7 +169,7 @@ export async function stylesPage(ctx, pc, { only = null, back = null } = {}) {
   for (const pack of packs) {
     const lock = lockedStyle(ctx.db, pack, (ctx.global || ctx).packs);
     const prev = await previewsOf(ctx, pack).catch((e) => ({ error: e.message }));
-    const suggestion = suggestStyle({ ...pack.meta }, pack.theme.colors, ((ctx.global || ctx).packs).filter((p) => p.id !== pack.id));
+    const suggestion = suggestStyle({ ...pack.meta }, pack.theme.colors, ((ctx.global || ctx).packs).filter((p) => p.id !== pack.id), { business: true });
     panels.push(prev?.error ? `<section class="panel"><header><h2>${esc(pack.meta.displayName)}</h2></header><p class="muted">התצוגה לא נוצרה: ${esc(prev.error)}</p></section>` : accountPanel(pc, pack, { lock, prev, suggestion, test: styleTest(ctx.db, pack), back: to?.href || null }));
   }
   const body = `<div class="head"><div><a class="muted small back" href="${esc(to?.href || '/accounts')}">${icon('chev')}${to?.label || 'חזרה לחשבון'}</a><h1>עיצוב המצגות</h1></div></div>
@@ -194,7 +202,7 @@ export function stylesRoutes() {
         if (!pack) throw new ActionError('אין חשבון כזה', 404);
         if (f.on === '1') {
           const current = lockedStyle(ctx.db, pack, (ctx.global || ctx).packs).theme.style?.name;
-          const ranked = suggestStyle({ ...pack.meta }, pack.theme.colors, ((ctx.global || ctx).packs).filter((p) => p.id !== pack.id)).ranked;
+          const ranked = suggestStyle({ ...pack.meta }, pack.theme.colors, ((ctx.global || ctx).packs).filter((p) => p.id !== pack.id), { business: true }).ranked;
           const two = [...new Set([current || ranked[0], ...ranked])].slice(0, 2);
           if (!current) chooseStyle(ctx.db, pack, two[0]);
           setPackStyle(pack, { test: true });

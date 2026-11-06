@@ -68,6 +68,50 @@ async function flattenNow(buf, ground = '#111111') {
  */
 export const redShare = (buf, type) => renderSlot(() => redShareNow(buf, type));
 
+/**
+ * How much detail each part of a picture holds, through the render browser's canvas (nothing is fetched): the picture
+ * drawn 96 pixels wide, each pixel's edge strength (how far its brightness is from its right and lower neighbours),
+ * averaged over cells of 4 by 4 pixels and scaled so 1 is a hard black-and-white edge in every pixel. A wall, a sky or
+ * a blurred distance comes out under 0.1; nuts, leaves, a crowd or a page of print well over it. { cols, rows, cells }
+ * (src/render/crop.js reads it), or null when the picture cannot be drawn.
+ */
+export const detailGrid = (buf, type) => renderSlot(() => detailGridNow(buf, type)).catch(() => null);
+
+async function detailGridNow(buf, type = 'image/jpeg') {
+  const browser = await getBrowser();
+  const context = await browser.newContext({ viewport: { width: 200, height: 200 } });
+  await context.route('**/*', (route) => route.abort());
+  const tab = await context.newPage();
+  try {
+    await tab.setContent(`<img id="i" src="data:${type};base64,${buf.toString('base64')}">`, { waitUntil: 'load' });
+    return await tab.evaluate(() => {
+      const img = document.getElementById('i');
+      const W = 96;
+      const H = Math.max(4, Math.round((W * img.naturalHeight) / Math.max(1, img.naturalWidth) / 4) * 4);
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = H;
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0, W, H);
+      const d = g.getImageData(0, 0, W, H).data;
+      const lum = new Float32Array(W * H);
+      for (let i = 0; i < W * H; i++) lum[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+      const cols = W / 4;
+      const rows = H / 4;
+      const cells = new Array(cols * rows).fill(0);
+      for (let y = 0; y < H - 1; y++) {
+        for (let x = 0; x < W - 1; x++) {
+          const e = Math.abs(lum[y * W + x] - lum[y * W + x + 1]) + Math.abs(lum[y * W + x] - lum[(y + 1) * W + x]);
+          cells[Math.floor(y / 4) * cols + Math.floor(x / 4)] += e;
+        }
+      }
+      return { cols, rows, cells: cells.map((v) => Math.min(1, v / 16 / 160)) };
+    });
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
 async function redShareNow(buf, type = 'image/jpeg') {
   const browser = await getBrowser();
   const context = await browser.newContext({ viewport: { width: 200, height: 200 } });
@@ -110,10 +154,12 @@ export const SCREEN_SCHEMA = {
     weapon: { type: 'boolean' },
     faceX: { type: 'number' },
     faceY: { type: 'number' },
+    subjectW: { type: 'number' },
+    subjectH: { type: 'number' },
     sure: { type: 'boolean' },
     note: { type: 'string' },
   },
-  required: ['consistent', 'mainSubject', 'blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'weapon', 'faceX', 'faceY', 'sure', 'note'],
+  required: ['consistent', 'mainSubject', 'blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'weapon', 'faceX', 'faceY', 'subjectW', 'subjectH', 'sure', 'note'],
   additionalProperties: false,
 };
 
@@ -125,6 +171,7 @@ const SCREEN_SYSTEM = `You check one photograph before it goes on a public socia
 - logoOrBelt: a promotion's or brand's logo as the main element (a poster, a logo filling the frame), a championship belt held up or worn, or a broadcast graphic. A logo on a backdrop, a microphone, a banner or clothing behind or on the person is not.
 - weapon: a gun, a rifle, a mounted machine gun or a knife anywhere in the picture, real or a training replica. Gloves, pads and sports gear are not.
 - faceX, faceY: where the main person's face is, its centre as a percentage of the picture's width (0 the left edge, 100 the right) and of its height (0 the top). With no person, the centre of the main subject the same way (the animal, the cup, the coin, the building); with no one subject, 50 and 30.
+- subjectW, subjectH: how much of the picture's width and height the main subject takes, as percentages (a face and shoulders in a portrait about 40 and 35; a row of coins across a wide picture about 90 and 30; with no one subject, 30 and 30). The slide is cut from the picture around it, and a subject wider than the cut is lost.
 - sure: false when the picture is too small or unclear to tell.
 - note: a few words on what decided it.
 - mainSubject: what the picture mainly shows, in a few words (a person at a football match, a stadium from outside, a rock, a poster).

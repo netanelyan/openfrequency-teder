@@ -7,6 +7,8 @@ import { familiesOf, resolveStyle, STYLES, themeColors } from './tokens.js';
 import { displayText, slideModel, sourcesOf, textHtml } from './model.js';
 import { BODY_FLOOR, sidesOf, STEP } from './fit.js';
 import { actionHtml } from '../end.js';
+import { calmRoom } from '../crop.js';
+import { LAYOUTS, textureCss } from '../textures.js';
 
 // The five slide styles, drawn (tokens.js has what each one sets, model.js what each slide shows).
 //
@@ -90,6 +92,12 @@ const srcHtml = (slide) => {
   const s = sourcesOf(slide);
   return s ? `<div class="src">${s}</div>` : '';
 };
+// A content slide's place in the post, as a badge before its line (its ranking place, else "1 מתוך 4"): a label of the
+// post's structure, never its text. In the block, with the words, never alone at the top of the screen.
+const badge = (m, cls = 'badge') => {
+  const t = m.rank ? String(m.rank) : m.label || '';
+  return t ? `<span class="${cls}${m.rank ? ' rank' : ''}">${he(t)}</span>` : '';
+};
 const gfx = (m) => (m.visual ? `<div class="gfx">${visualHtml(m.visual)}</div>` : '');
 const unitOf = (v) => (v ? [v.pre, v.post].filter(Boolean) : []);
 
@@ -101,7 +109,7 @@ function drawA(m, slide, g, S) {
     return {
       bt: photo ? g.y(260) : g.y(460),
       html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov"></div>' : ''}
-<div class="blk cov${photo ? '' : ' mid'}">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}</div>`,
+<div class="blk cov${photo ? '' : ' mid'}"><i class="arule"></i>${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}</div>`,
     };
   }
   if (m.kind === 'end') return m.closing ? closingA(m, slide, g, S) : endHtml(m, g, S);
@@ -112,28 +120,39 @@ function drawA(m, slide, g, S) {
       : `<div class="nrow">${v.pre ? `<span class="unit">${he(v.pre)}</span>` : ''}${bigNum(v.num, g.hs(S.text.number.px))}${v.post ? `<span class="unit">${he(v.post)}</span>` : ''}</div>`;
     return {
       bt: photo ? g.y(780) : g.y(300),
-      html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
+      html: `${photoHtml(slide, slide.fullPhoto ? 'ph full' : 'ph')}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${txt('h2', 'hl', S, 'ntitle', m.title, g, { highlight: m.highlight })}${m.meta ? `<div class="meta">${he(m.meta)}</div>` : ''}
 <div class="card">${m.kicker ? `<div class="clbl">${he(m.kicker)}</div>` : ''}${row}${m.body ? `<i class="rule"></i>${txt('p', 'bd', S, 'body', m.body, g)}` : ''}</div>${ctaHtml(m)}${srcHtml(slide)}</div>`,
     };
   }
-  // theme.options.fullPhoto (a store's demo, src/demos/build.js): the slide's photograph fills it, as the cover's
-  // does, and the text stands at the bottom, over the fade into the ground.
+  // The slide's photograph fills it, as the cover's does, and the text stands at the bottom, over the fade into the
+  // ground (stylePage sets fullPhoto on every slide of A since 2026-11-06; it was a store demo's option).
   return {
     bt: photo ? (slide.fullPhoto ? g.y(700) : g.y(780)) : g.y(300),
     html: `${photoHtml(slide, slide.fullPhoto ? 'ph full' : 'ph')}${photo ? '<div class="ov"></div>' : ''}
-<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
+<div class="blk">${photo ? `<div class="wcard">${badge(m)}` : ''}${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${photo ? '</div>' : ''}${srcHtml(slide)}</div>`,
   };
 }
+
+// A's polish (2026-11-06, the owner: "like it was designed on photoshop"): the photograph darkened a little at the top
+// (under TikTok's tabs) and fading into the ground under the words, so the slide has depth; a short bar of the colour
+// over the cover's line; a content slide's words on A's card (as its number slide and its closing slide have them),
+// laid over the foot of the photograph with a soft shadow under it, its place on a pill of the colour at its top.
+const VIGNETTE = (g) => `linear-gradient(to bottom,rgba(0,0,0,.42) 0,rgba(0,0,0,.18) ${g.y(170)}px,rgba(0,0,0,0) ${g.y(380)}px)`;
 
 const CSS_A = (g, S) => `
 /* The photograph starts under TikTok's tabs (PHOTO_TOP), so a face is never behind them, and the words come down with it. */
 .ph{top:${g.y(PHOTO_TOP)}px;height:${g.y(900)}px}
 .ph.full{top:0;height:100%}
 .ov{position:absolute;inset:${g.y(PHOTO_TOP)}px 0 auto 0;height:${g.y(900)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(480)}px,rgba(var(--bg-rgb),1) ${g.y(900)}px)}
-.k-cover .ov{top:0;height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) 35%,rgba(var(--bg-rgb),.92) 72%,rgba(var(--bg-rgb),1) 100%)}
-.full-photo.k-item .ov{top:0;height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),.05) 0%,rgba(var(--bg-rgb),.25) 30%,rgba(var(--bg-rgb),.9) 60%,rgba(var(--bg-rgb),.97) 100%)}
+.k-cover .ov{top:0;height:100%;background:${VIGNETTE(g)},linear-gradient(to bottom,rgba(var(--bg-rgb),0) 35%,rgba(var(--bg-rgb),.92) 72%,rgba(var(--bg-rgb),1) 100%)}
+.full-photo.k-item .ov{top:0;height:100%;background:${VIGNETTE(g)},linear-gradient(to bottom,rgba(var(--bg-rgb),0) 0%,rgba(var(--bg-rgb),0) 52%,rgba(var(--bg-rgb),.45) 72%,rgba(var(--bg-rgb),.7) 100%)}
+.wcard{display:flex;flex-direction:column;gap:${g.y(30)}px;background:rgba(var(--bg-rgb),.93);border-radius:${g.hs(40)}px;padding:${g.y(52)}px ${g.hs(54)}px ${g.y(56)}px;box-shadow:0 ${g.y(30)}px ${g.y(80)}px rgba(0,0,0,.38)}
+.wcard>*{flex:none;max-width:100%}
 .full-photo.k-item .blk{justify-content:flex-end}
+.arule{display:block;width:${g.hs(110)}px;height:${g.y(12)}px;border-radius:${g.hs(6)}px;background:var(--accent)}
+.badge{align-self:flex-start;font:800 ${g.hs(30)}px/1 'Assistant';color:var(--on-accent);background:var(--accent);padding:${g.y(12)}px ${g.hs(26)}px ${g.y(14)}px;border-radius:999px;white-space:nowrap}
+.badge.rank{font:900 ${g.hs(44)}px/1 'Heebo';padding:${g.y(10)}px ${g.hs(30)}px}
 .blk{gap:${g.y(36)}px}
 .blk.cov{justify-content:flex-end;bottom:${g.z.bottom + g.y(40)}px}
 .blk.cov.mid{justify-content:center;top:${g.y(400)}px}
@@ -173,13 +192,15 @@ function drawB(m, slide, g, S) {
   if (m.kind === 'cover') {
     return {
       bt: photo ? g.y(560) : g.y(380),
-      html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov" data-scrim data-min="0.45" data-max="0.7"></div>' : ''}
+      html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="tone"></div><div class="ov" data-scrim data-min="0.45" data-max="0.7"></div><i class="frame"></i>' : ''}
 <div class="blk cov">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}</div>
 <div class="cue">החליקו ←</div>`,
     };
   }
   if (m.kind === 'end') return m.closing ? closingB(m, slide, g, S) : endHtml(m, g, S);
-  const framed = photo ? photoHtml(slide, 'fr') : '';
+  // The slide's photograph over the whole slide under B's dark layer, as B's cover has it: a frame of it sat over its own
+  // blurred copy, which the owner refused (2026-11-06).
+  const under = photo ? `${photoHtml(slide, 'ph full')}<div class="tone"></div><div class="ov" data-scrim data-min="0.5" data-max="0.72"></div><i class="frame"></i>` : '';
   if (m.kind === 'number') {
     const v = m.value;
     const big = m.sides
@@ -187,17 +208,23 @@ function drawB(m, slide, g, S) {
       : `<div class="nrow">${bigNum(v.num, g.hs(S.text.number.px))}${unitOf(v).length ? `<span class="unit">${he(unitOf(v).join(' '))}</span>` : ''}</div>`;
     return {
       bt: g.y(260),
-      html: `<div class="blk">${big}${txt('div', 'cap', S, 'ntitle', m.title, g, { highlight: m.highlight })}${framed}${txt('p', 'bd', S, 'body', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
+      html: `${under}<div class="blk">${big}${txt('div', 'cap', S, 'ntitle', m.title, g, { highlight: m.highlight })}${txt('p', 'bd', S, 'body', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
     };
   }
   return {
     bt: g.y(260),
-    html: `<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${framed || gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
+    html: `${under}<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${photo ? '' : gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
 
 const CSS_B = (g, S) => `
 .ph.full{height:100%}
+/* B's polish (2026-11-06): the photograph in the account's colour (a duotone: its tones in grey, the colour laid over
+   them), under B's dark layer; a poster's thin frame inside the slide's edge. (B's words start under the tabs: no badge of the slide's place over them,
+   which would be a label at the top of the screen.) */
+.st-B.has-photo .ph,.st-B.has-photo .ph img{filter:grayscale(1) contrast(1.12) brightness(1.04)}
+.tone{position:absolute;inset:0;background:var(--accent);mix-blend-mode:multiply;opacity:.62}
+.frame{position:absolute;inset:${g.hs(30)}px;border:${g.hs(3)}px solid rgba(255,255,255,.5);pointer-events:none}
 .ov{position:absolute;inset:0;background:rgba(10,10,10,var(--scrim,.45))}
 .blk{gap:${g.y(32)}px}
 .blk.cov{gap:${g.y(40)}px;bottom:${g.z.bottom + 36 + g.y(28)}px}
@@ -218,6 +245,7 @@ ${BAND}
 .fr.split{display:flex;gap:6px;overflow:hidden}
 .fr.split img{flex:1;min-width:0;object-fit:cover}
 .bd{font-family:'Rubik';font-weight:400;line-height:1.45;color:var(--muted)}
+.has-photo .bd,.has-photo .list li{color:var(--fg)}
 .cta{font:700 36px/1.3 'Rubik';color:var(--accent)}
 .src{font:400 24px/1.3 'Rubik'}
 .list li{font:400 38px/1.4 'Rubik';color:var(--muted)}
@@ -250,12 +278,14 @@ ${m.key ? `<div class="key">${he(m.key)}</div>` : ''}`,
     bt: photo ? g.y(1000) : g.y(260),
     lift: photo ? g.y(700) : null,
     html: `${photoHtml(slide)}${chip}
-<div class="blk">${num}${txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight })}${body}${m.kind === 'number' ? '' : gfx(m)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
+<div class="blk">${num || '<i class="bar"></i>'}${txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight })}${body}${m.kind === 'number' ? '' : gfx(m)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
 
 const CSS_C = (g, S) => `
-.ph{top:${g.y(PHOTO_TOP)}px;height:calc(var(--bt) - ${g.y(80 + PHOTO_TOP)}px)}
+/* C's polish (2026-11-06): the photograph a card laid on C's light panel, inside the side margins, rounded, a soft
+   shadow under it; the label on its lower edge; a bar of the colour over every line. */
+.ph{top:${g.y(PHOTO_TOP)}px;height:calc(var(--bt) - ${g.y(80 + PHOTO_TOP)}px);left:${g.hs(56)}px;width:calc(100% - ${2 * g.hs(56)}px);border-radius:${g.hs(44)}px;box-shadow:0 ${g.y(26)}px ${g.y(70)}px rgba(20,16,10,.22),0 ${g.y(4)}px ${g.y(12)}px rgba(20,16,10,.12)}
 .k-item .ph{height:calc(var(--bt) - ${g.y(120 + PHOTO_TOP)}px)}
 .blk{gap:${g.y(32)}px}
 .blk.cov{gap:${g.y(36)}px}
@@ -266,7 +296,8 @@ const CSS_C = (g, S) => `
 .hl mark.hi{background:none;color:var(--accent)}
 .sub{font:500 ${S.text.sub.px}px/1.35 'Rubik';color:var(--muted)}
 .key{position:absolute;right:${g.z.right}px;left:${g.z.left}px;bottom:${g.z.bottom}px;font:800 30px/1.2 'Rubik';color:var(--accent)}
-.chip{position:absolute;right:${g.z.right}px;top:calc(var(--bt) - ${g.y(192)}px);max-width:${1080 - g.z.left - g.z.right}px;font:900 ${g.hs(S.text.label.px)}px/1.2 'Rubik';color:#fff;background:var(--accent);padding:16px 36px;white-space:nowrap;overflow:hidden}
+.chip{position:absolute;right:${g.z.right}px;top:calc(var(--bt) - ${g.y(192)}px);max-width:${1080 - g.z.left - g.z.right}px;font:900 ${g.hs(S.text.label.px)}px/1.2 'Rubik';color:#fff;background:var(--accent);padding:16px 36px;white-space:nowrap;overflow:hidden;border-radius:${g.hs(16)}px;box-shadow:0 ${g.y(10)}px ${g.y(26)}px rgba(20,16,10,.2)}
+.k-item .bar{width:${g.hs(72)}px;height:${g.y(10)}px}
 .nrow{display:flex;align-items:baseline;gap:20px}
 .num{font-family:'Rubik';font-weight:900;line-height:1;color:var(--accent);white-space:nowrap;unicode-bidi:isolate}
 .unit{font:800 40px/1.1 'Rubik';color:var(--accent);white-space:nowrap}
@@ -287,7 +318,7 @@ function drawD(m, slide, g, S) {
     return {
       bt: photo ? g.y(960) : g.y(560),
       lift: photo ? g.y(640) : null,
-      html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
+      html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk cov">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}<i class="bar"></i></div>`,
     };
   }
@@ -302,16 +333,16 @@ function drawD(m, slide, g, S) {
   return {
     bt: photo ? g.y(880) : g.y(300),
     lift: photo ? g.y(500) : null,
-    html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
+    html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${chip}${txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight })}${num}${body}${m.kind === 'number' ? '' : gfx(m)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
 
 const CSS_D = (g, S) => `
-.ph{top:${g.y(PHOTO_TOP)}px;height:${g.y(900)}px}
-.k-cover .ph{height:${g.y(1000)}px}
-.ov{position:absolute;inset:${g.y(PHOTO_TOP)}px 0 auto 0;height:${g.y(900)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(470)}px,rgba(var(--bg-rgb),1) ${g.y(900)}px)}
-.k-cover .ov{height:${g.y(1000)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(500)}px,rgba(var(--bg-rgb),.92) ${g.y(1000)}px)}
+/* The photograph over the whole slide (2026-11-06: no photograph in a band), fading into the dark ground behind the
+   words from just above where they start. */
+.ph{top:0;height:100%}
+.ov{position:absolute;inset:0;background:${VIGNETTE(g)},linear-gradient(to bottom,rgba(var(--bg-rgb),0) 0,rgba(var(--bg-rgb),0) calc(var(--bt) - ${g.y(360)}px),rgba(var(--bg-rgb),.9) calc(var(--bt) - ${g.y(40)}px),rgba(var(--bg-rgb),.96) 100%)}
 .blk{gap:${g.y(28)}px}
 .blk.cov{gap:${g.y(8)}px}
 .hl{font-family:'Karantina Headline';font-weight:700;line-height:.9;color:var(--fg)}
@@ -319,7 +350,10 @@ const CSS_D = (g, S) => `
 ${BAND}
 .sub{font:500 ${S.text.sub.px}px/1.4 'Rubik';color:var(--muted);margin-top:${g.y(28)}px}
 .bar{display:block;width:88px;height:6px;background:var(--accent);margin-top:${g.y(20)}px}
-.chip{align-self:flex-start;font:800 ${S.text.label.px}px/1.2 'Rubik';color:var(--on-accent);background:var(--accent);padding:6px 18px;white-space:nowrap}
+/* D's polish (2026-11-06): the photograph darkened under the tabs as A's; the place on a chip a size up, a bar of the
+   colour between each line and its words, as the cover has under its line. */
+.chip{align-self:flex-start;font:800 ${g.hs(34)}px/1.2 'Rubik';color:var(--on-accent);background:var(--accent);padding:${g.y(8)}px ${g.hs(24)}px;white-space:nowrap}
+.k-item .blk>.hl+.bd,.k-item .blk>.hl+.list{border-top:${g.y(6)}px solid var(--accent);padding-top:${g.y(26)}px;margin-top:${g.y(6)}px}
 .nrow{display:flex;align-items:baseline;gap:20px}
 .num{font-family:'Karantina';font-weight:700;line-height:.9;color:var(--accent);white-space:nowrap;unicode-bidi:isolate}
 .unit{font:800 38px/1.1 'Rubik';color:var(--fg);white-space:nowrap}
@@ -344,71 +378,60 @@ ${BAND}
 // photograph stands on the solid ground, its graphic drawn there as every style draws it. The source is a line in
 // small type at the foot of the room the text has, faint: the account's credit, not a part of the design.
 
-// How E shows a slide's photograph: over the whole slide when it is close to the slide's shape (a crop keeps at least
-// four fifths of its width), else whole, the slide's width, in the middle of a black slide, as TikTok shows a photo
-// uploaded at its own shape. A landscape press photograph cut to 9:16 kept a third of itself, blown up three times:
-// soft, and often the wrong third. `slide.photoSize` is the photograph's own { w, h } (render.js).
-export function fitE(slide, g) {
-  const sz = slide.photoSize;
-  if (!slide.photo || !sz?.w || !sz?.h) return { mode: 'cover' };
-  const a = sz.w / sz.h;
-  // Every slide is the whole screen of picture: a photograph fills it, cut around its face, whatever its shape (TikTok's
-  // own guidance and every slideshow guide: 9:16, full screen; a landscape one shown whole looked like a letterbox to
-  // the owner). Only one too small to fill without blowing it up past twice its size is shown whole, over a blurred,
-  // darkened copy of itself that fills the rest (stylePage's backdrop): never a black band.
-  const grow = Math.max(1080 / sz.w, g.h / sz.h);
-  if (grow <= 2) return { mode: 'cover' };
-  // At the top, just under TikTok's tabs, its words under it in the middle of the screen: centred, it left the words
-  // high on the slide, under the tabs' edge.
-  const ph = Math.min(g.h - g.z.top, Math.round(1080 / a));
-  return { mode: 'contain', top: g.z.top, ph };
+// How E shows a slide's photograph: over the whole slide, always, cut around its subject (render.js sets the cut,
+// src/render/crop.js cropFor). It was shown whole as a band over its own blurred copy when it was too small to fill,
+// and the owner refused it (2026-11-06: "tiktok format should be 9:16. no landscape images with blurred background"):
+// a photograph that cannot fill a 9:16 slide, or whose subject a 9:16 cut would lose, is not chosen for one
+// (src/images/index.js findImage). `mode` is kept for the callers.
+export function fitE() {
+  return { mode: 'cover' };
 }
 
-// The room E's text has, top and bottom in px, and whether it hugs the photograph from above (`hug`). The middle of
-// the slide, as the app's text tool sets it, unless the photograph's screen found a face there: then the part of the
-// slide above the face or below it, whichever is larger, so the words never cover the eyes. A photograph shown whole
-// on black whose face (or whose unknown face) is in the middle takes its text on the black above it, close to its top
-// edge, when the black has the room. object-position aligns the same point of the photograph and of the slide, so on
-// a full slide the face's place on the slide is its place in the photograph (focusOf: "x% y%").
-function roomE(slide, g, fit) {
+// The room E's words have, top and bottom in px: the photograph's calmest band, clear of its subject (the owner, on the
+// pets post: "the text should appear in an empty space in the background ... not on top of the nuts, but in a place
+// where it looks natural (the wall in the background)"). `slide.calm` is how busy each band of the slide is, measured
+// on the photograph as it is cut (render.js, src/render/crop.js bandProfile), `slide.subjectBand` where its subject
+// stands. A photograph whose band was not measured (the closing slide, a picture the browser could not read) takes
+// the larger part of the slide above or below its subject, when its subject was measured, else the whole band.
+// (photoPos is the cut's offset since 2026-11-06, not the face's place: it says nothing of where the subject is.)
+function roomE(slide, g, need = g.y(560)) {
   const top = g.z.top;
   const bottom = g.h - g.z.bottom;
-  const need = g.y(560);
-  const fy = slide.photo ? Number(/\s(\d+(?:\.\d+)?)%\s*$/.exec(String(slide.photoPos || ''))?.[1]) : NaN;
-  const known = Number.isFinite(fy);
-  // A block too tall for the black around the photograph (render.js tries this before it gives the photograph up).
-  if (slide.textOver) return { top, bottom };
-  if (fit.mode === 'contain') {
-    // Under the photograph, in the middle of the screen; above it when there is no room under; else over it.
-    const below = { top: fit.top + fit.ph + g.y(28), bottom };
-    if (below.bottom - below.top >= g.y(300)) return below;
-    const above = { top, bottom: fit.top - g.y(28), hug: true };
-    if (above.bottom - above.top >= g.y(300)) return above;
-    if (!known) return { top, bottom };
-  } else if (!known) return { top, bottom };
-  const face = fit.mode === 'contain' ? fit.top + (fy / 100) * fit.ph : (fy / 100) * g.h;
-  // About half a face's height on a portrait drawn to fill the slide: what is kept clear above or below its centre.
-  const clear = fit.mode === 'contain' ? Math.round(fit.ph * 0.22) : g.y(260);
-  const below = { top: Math.max(top, Math.min(bottom - need, face + clear)), bottom };
-  const above = { top, bottom: Math.min(bottom, Math.max(top + need, face - clear)) };
+  // A block too tall for its room (render.js tries this before it gives the photograph up).
+  if (slide.textOver || !slide.photo) return { top, bottom };
+  const calm = slide.calm ? calmRoom({ profile: slide.calm, H: g.h, top, bottom, need, avoid: slide.subjectBand || null }) : null;
+  if (calm) return { top: calm.top, bottom: calm.bottom };
+  const sb = slide.subjectBand || null;
+  if (!sb) return { top, bottom };
+  const below = { top: Math.max(top, Math.min(bottom - need, sb.bottom)), bottom };
+  const above = { top, bottom: Math.min(bottom, Math.max(top + need, sb.top)) };
   return below.bottom - below.top >= above.bottom - above.top ? below : above;
+}
+
+/**
+ * About how tall a slide's words come out in E, in px: its lines as the writer broke them, a long one wrapping at
+ * about E's width (18 to 34 characters, by its size), at E's sizes (tokens.js). The room roomE looks for: a window of
+ * this height in the photograph's calmest band. Pure.
+ */
+export function needE(m, g) {
+  const lines = (t, per) => String(t || '').split(/\n/).filter((l) => l.trim()).reduce((n, l) => n + Math.max(1, Math.ceil(l.trim().length / per)), 0);
+  const px = m.kind === 'cover'
+    ? lines(m.hook, 18) * 118 + (m.sub ? lines(m.sub, 34) * 66 + 30 : 0)
+    : lines(m.title, 20) * 109 + (m.body ? lines(m.body, 34) * 66 + 22 : 0) + (m.kind === 'number' ? 150 : 0);
+  return Math.round(Math.min(g.h * 0.6, Math.max(g.y(300), g.y(px + 60))));
 }
 
 function drawE(m, slide, g, S) {
   const photo = hasPhoto(slide);
-  const fit = fitE(slide, g);
-  const room = roomE(slide, g, fit);
+  // The closing slide keeps its line in the middle of the band, as it is designed (closingE).
+  const room = roomE(m.kind === 'end' ? { ...slide, calm: null, subjectBand: null } : slide, g, needE(m, g));
   // A soft shade behind the text only, so white text reads on a bright photograph: its depth is measured on the
   // photograph by the renderer (render.js, data-scrim) between these bounds, so a dark picture keeps all of its colour.
-  // Text on the black around a photograph shown whole needs none. A box carries its own ground: under it the shade is
-  // the faintest.
+  // A box carries its own ground: under it the shade is the faintest.
   const box = slide.textLook !== 'shadow';
-  const onBlack = fit.mode === 'contain' && (room.bottom <= fit.top || room.top >= fit.top + fit.ph);
-  const [lo, hi] = onBlack ? [0, 0] : box ? [0.06, 0.14] : [0.12, 0.42];
+  const [lo, hi] = box ? [0.06, 0.14] : [0.12, 0.42];
   const mid = Math.round((room.top + room.bottom) / 2);
-  const img = fit.mode === 'contain'
-    ? `<img class="ph fit" src="${slide.photo}" alt="" style="top:${fit.top}px;height:${fit.ph}px">`
-    : photoHtml(slide, 'ph full');
+  const img = photoHtml(slide, 'ph full');
   const under = photo ? `${img}<div class="ov" data-scrim data-min="${lo}" data-max="${hi}" style="--mid:${mid}px;--scrim:${lo}"></div>` : '';
   const blk = (cls, inner) => `<div class="blk${cls}${room.hug ? ' hug' : ''}" style="bottom:${g.h - room.bottom}px">${inner}</div>`;
   // The native look marks nothing: no highlighter, no coloured word. A box look keeps its highlight.
@@ -420,7 +443,7 @@ function drawE(m, slide, g, S) {
     };
   }
   // The closing slide stands in the middle of the band, as every other slide of E does.
-  if (m.kind === 'end') return m.closing ? closingE(m, slide, g, S, { fit, room, img }) : { ...endHtml(m, g, S), bt: g.z.top };
+  if (m.kind === 'end') return m.closing ? closingE(m, slide, g, S, { room, img }) : { ...endHtml(m, g, S), bt: g.z.top };
   const rank = S.rank && m.rank ? `<span class="rk">${he(m.rank)}.</span> ` : '';
   const head = txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: mark(m.highlight), pre: rank });
   // A number's line is one row that never breaks (the renderer sets a long one smaller), on a box of its own.
@@ -446,7 +469,6 @@ const CSS_E = (g, S) => {
   return `
 :root{--box:${t.box};--box-ink:${t.ink}}
 .ph.full{height:100%}
-.ph.fit{object-fit:cover;object-position:50% 50%}
 .blk.hug{justify-content:flex-end}
 /* Darkest behind the middle of the text's room (--mid, drawE), fading out to every side: a soft shade behind the
    words, not a band across the photograph. */
@@ -481,6 +503,107 @@ const CSS_E = (g, S) => {
 .st.st-E.has-photo .src,.st.st-E.has-photo .src *{text-shadow:0 1px 3px rgba(0,0,0,.6)!important}
 `;
 };
+
+/* ----------------------------------------------------------------------------------- the designed text slide */
+
+// A slide with no photograph is a post's text designed, on its texture (the owner, 2026-11-06: "when there is no
+// background image, the main visual eye catcher is the text design. you cant just put white text on a background and
+// think that the post will go viral", and "if a slideshow is without picture, the format is the nice text design"). A
+// post in text mode (src/pipeline/build.js postMode) has every slide so, in one of four layouts, the same on every
+// slide of it (its texture's `layout`, src/render/textures.js):
+//   marker  the line huge and bold at the start of the slide, its key word on a stroke of the account's colour, the
+//           words under it smaller and lighter, a bar of the colour above it
+//   boxes   each line on its own solid box, as TikTok's own text tool sets it, the key word's box in the colour, the
+//           words under it on dark boxes, set off from the line
+//   corner  the slide's number (its place, or the number it is about) huge in a corner, on a sticker of the colour, the
+//           line and the words stacked under it
+//   card    the words on a card laid on the texture, turned the other way, a strip of tape across its top, the line in
+//           the display face with a bar of the colour under it
+// The fit is the styles' own (render.js): each text an `.sf` that is set smaller to its floor before it takes a line.
+export { LAYOUTS };
+
+/** The number a slide shows big in the corner layout: the number it is about, else its place in the post. Pure. */
+export function cornerNumber(m, slide) {
+  if (m.kind === 'number' && m.value?.num) return String(m.value.num);
+  if (m.kind === 'cover') return /^\s*([\d][\d,.]*)/.exec(String(m.hook || ''))?.[1] || '';
+  // A content slide's place (a countdown's from its top), never a number its line happens to start with.
+  return m.rank || (slide.n ? String(slide.n) : '');
+}
+
+function drawText(m, slide, g, S) {
+  const layout = LAYOUTS.includes(slide.texture?.layout) ? slide.texture.layout : 'marker';
+  // The display line a size up from the style's own, its floor and its lines kept (the writer wrote to those).
+  // Its floor a little under the style's: the boxes and the heavier weight take some of the width the writer wrote to.
+  const up = (spec, f) => ({ ...spec, px: Math.round(spec.px * f), floor: Math.round((spec.floor || spec.px * BODY_FLOOR) * 0.85) });
+  // The line is the slide's picture: it keeps its size and takes a line more than the style allows on a photograph
+  // before it is set smaller, where on a photograph it keeps to the lines the writer broke it into.
+  const lead = (spec, f) => ({ ...up(spec, f), want: (spec.lines || 2) + 1, lines: (spec.lines || 2) + 1 });
+  // C's face runs wide on its panel: its line a size up less.
+  const k = S.name === 'C' ? 1.12 : 1.36;
+  const D = { ...S, inline: layout === 'boxes', text: { ...S.text, hook: lead(S.text.hook, k * 0.9), title: lead(S.text.title, k), ntitle: lead(S.text.ntitle || S.text.title, k * 0.95), tbody: up(S.text.tbody, 1.1) } };
+  const cover = m.kind === 'cover';
+  const head = cover ? txt('h1', 'hl tl-head', D, 'hook', m.hook, g, { highlight: m.highlight }) : txt('h2', 'hl tl-head', D, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight });
+  const under = cover ? txt('p', 'tl-sub', D, 'sub', m.sub, g) : m.list ? listHtml(m.body, D, g) : txt('p', 'tl-sub', D, m.kind === 'number' ? 'body' : 'tbody', m.body, g);
+  const unit = (v) => (v ? `<span class="tl-unit">${he(v)}</span>` : '');
+  const num = m.kind === 'number' && layout !== 'corner' ? `<div class="tl-num">${unit(m.value.pre)}${bigNum(m.value.num, g.hs(S.text.number.px))}${unit(m.value.post)}</div>` : '';
+  const big = layout === 'corner' ? cornerNumber(m, slide) : '';
+  const src = cover ? '' : srcHtml(slide);
+  const inner = {
+    marker: `<i class="tl-bar"></i>${head}${num}${under}`,
+    boxes: `${head}${num}${under}`,
+    corner: `${big ? `<div class="tl-sticker">${bigNum(big, g.hs(Math.min(260, S.text.number.px * 1.5)), 'num tl-big')}</div>` : '<i class="tl-bar"></i>'}${head}${under}`,
+    card: `<div class="tl-card"><i class="tl-tape"></i>${head}<i class="tl-rule"></i>${num}${under}</div>`,
+  }[layout];
+  return { bt: cover ? g.y(360) : g.y(300), html: `<div class="blk tl tl-${layout}${cover ? ' tl-cover' : ''}">${inner}${src}</div>` };
+}
+
+/** The card layout's own colours: a light card with near-black ink, its accent where it reads at 3:1, else the ink. */
+const cardColors = (c) => {
+  const ground = '#F6F1E7';
+  const accent = contrast(c.accent, ground) >= 3 ? c.accent : '#7A3B12';
+  return `:root{--card-ground:${ground};--card-ink:#16130F;--card-muted:#4A443B;--card-accent:${accent}}`;
+};
+
+/** The designed text slide's own CSS, over the style's: the four layouts, in the style's faces and the account's colour. */
+const CSS_TEXT = (g, S) => `
+/* Inside TikTok's own side margins on every style (C's text runs wider on its panel). */
+.st .blk.tl{justify-content:center;gap:${g.y(34)}px;right:${Math.max(g.z.right, g.ig ? g.z.right : 168)}px;left:${Math.max(g.z.left, g.ig ? g.z.left : 168)}px}
+.st .blk.tl>*,.tl .tl-card>*{max-width:100%}
+.tl .tl-head{font-family:'${S.text.title.family}';font-weight:900;line-height:1.02;letter-spacing:-.5px;color:var(--fg)}
+.tl .tl-sub{font-family:'${S.text.tbody.family}';font-weight:500;line-height:1.35;color:var(--muted)}
+.tl .tl-num{display:flex;align-items:baseline;gap:${g.hs(16)}px;color:var(--accent)}
+.tl .tl-unit{font:800 ${g.hs(48)}px/1.1 '${S.text.tbody.family}';color:var(--accent)}
+/* marker: the key word on a stroke of the colour, a short bar of the colour above it */
+.st .blk.tl-marker{align-items:flex-start;text-align:right;justify-content:flex-end;padding-bottom:${g.y(40)}px}
+.tl .tl-bar{display:block;width:${g.hs(120)}px;height:${g.y(14)}px;background:var(--accent);border-radius:${g.hs(8)}px}
+.tl-marker .tl-head mark.hi{background:linear-gradient(to bottom,transparent 52%,var(--accent) 52%,var(--accent) 92%,transparent 92%);color:inherit;padding:0 .08em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+/* boxes: each line on its own solid box, as TikTok's text tool sets it */
+.st .blk.tl-boxes{align-items:flex-start;text-align:right}
+/* The boxes reach past the words by their padding: the line's own box is that much wider, so they stay inside it. */
+.tl-boxes .tl-head{padding:0 .3em}
+.tl-boxes .tl-sub{padding:0 .37em}
+.tl-marker .tl-head{padding:0 .1em}
+.tl-boxes .tl-head .ln{background:#FFFFFF;color:#111111;padding:.04em .28em .1em;border-radius:.16em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tl-boxes .tl-head mark.hi{background:var(--accent);color:var(--on-accent);border-radius:.12em;padding:0 .06em}
+.tl-boxes .tl-sub{margin-inline-start:${g.hs(70)}px}
+.tl-boxes .tl-sub .ln{background:rgba(0,0,0,.62);color:#FFFFFF;padding:.1em .35em .16em;border-radius:.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tl-boxes .tl-num{background:var(--accent);color:var(--on-accent);align-self:flex-start;padding:${g.y(6)}px ${g.hs(28)}px;border-radius:${g.hs(18)}px}
+/* corner: the number huge on a sticker of the colour at the start of the slide, the words stacked under it */
+.st .blk.tl-corner{justify-content:center;align-items:flex-start;text-align:right}
+.tl-corner .tl-sticker{align-self:flex-start;background:var(--accent);color:var(--on-accent);border-radius:${g.hs(36)}px;padding:${g.y(6)}px ${g.hs(36)}px ${g.y(12)}px;transform:rotate(-4deg);margin:${g.y(30)}px 0 ${g.y(12)}px}
+.tl-corner .tl-big{color:var(--on-accent);letter-spacing:-3px}
+.tl-corner .tl-head mark.hi{color:var(--accent)}
+/* card: the words on a card laid on the texture, turned the other way, a strip of tape across it */
+.st .blk.tl-card{align-items:stretch}
+.tl-card .tl-card{position:relative;display:flex;flex-direction:column;gap:${g.y(26)}px;background:var(--card-ground);padding:${g.y(64)}px ${g.hs(52)}px ${g.y(56)}px;border-radius:${g.hs(10)}px;transform:rotate(1.6deg)}
+.tl-card .tl-card .tl-head{color:var(--card-ink)}
+.tl-card .tl-card .tl-sub{color:var(--card-muted)}
+.tl-card .tl-card .tl-head mark.hi{color:var(--card-accent)}
+.tl-card .tl-tape{position:absolute;top:-${g.y(22)}px;left:50%;width:${g.hs(200)}px;height:${g.y(48)}px;margin-left:-${g.hs(100)}px;background:rgba(255,248,220,.72);transform:rotate(-3deg)}
+.tl-card .tl-rule{display:block;width:${g.hs(150)}px;height:${g.y(12)}px;background:var(--card-accent)}
+/* The source under the words, in the block (E sets it at the foot of the screen, which a card or a sticker can reach). */
+.st .blk.tl .src{position:static;text-align:inherit;color:var(--muted);font:400 ${g.hs(24)}px/1.3 '${S.text.tbody.family}';margin-top:${g.y(10)}px}
+`;
 
 /* --------------------------------------------------------------------------------------------- shared parts */
 
@@ -596,6 +719,7 @@ const CLOSING_CSS = (g, S, chip) => {
     // C: the photograph on top, under TikTok's tabs, the words on C's panel under it with a clear edge between.
     C: `.blk.cl{justify-content:flex-end;gap:${g.y(64)}px}
 ${room}
+.st-C .cl-pw{margin:0 -${g.z.right - g.hs(56)}px 0 -${g.z.left - g.hs(56)}px;border-radius:${g.hs(44)}px}
 .mk{display:block;width:96px;height:12px;background:var(--accent)}
 .cl-line{font-family:'Rubik';font-weight:900;line-height:1.08;color:var(--fg)}
 .cl-act{font-family:'Rubik';font-weight:800;border-radius:0}`,
@@ -667,34 +791,22 @@ mark.hi{color:inherit;background:none}
 /* No outline and no shadow on any letter, the shared graphics' included: the text reads by where it sits. E's own
    lines in its "shadow" look are the one exception, set over this in CSS_E. */
 .st *{text-shadow:none!important;-webkit-text-stroke:0!important}
-/* The backdrop: the slide's own photograph, blurred past recognition of detail, filling the slide behind the design. */
-.bf{position:absolute;top:-80px;left:-80px;width:calc(100% + 160px);height:calc(100% + 160px);object-fit:cover;filter:blur(42px) saturate(1.15);transform:scale(1.04)}
-.bfv{position:absolute;inset:0}
 /* A slide with no photograph: its text moves up, into the middle of the room the photograph left. */
 .no-photo:not(.k-cover) .blk{justify-content:center}
+/* The post's texture, behind everything else on a slide with no photograph. */
+.texg{position:absolute;inset:0}
 .s-instagram .vis{font-size:38px}
 `;
 
-/**
- * The slide's own photograph, blurred and darkened, over the whole slide behind the design: TikTok is a visual feed,
- * and a slide whose photograph sits in a frame, a top half or a band on a flat ground read as empty to the owner ("at
- * least add a blurred background, the same picture"). A to D keep their design over it, the ground's colour laid over
- * the blur so their words read as they did; E has it only behind a photograph too small to fill the slide. Never behind
- * a photograph that already fills the slide, and never a guess-who's answer (its cover has none of its own).
- */
-function backdrop(name, m, slide, g, d) {
-  // E's closing slide shows a small photograph as E shows any: whole, over its blurred copy.
-  if (!slide.photo || slide.split || (m.kind === 'end' && !(m.closing && name === 'E'))) return d;
-  const full = name === 'E' ? fitE(slide, g).mode === 'cover' : m.kind === 'cover' && name !== 'C';
-  if (full) return d;
-  const veil = name === 'E' ? 'rgba(0,0,0,.42)' : 'rgba(var(--bg-rgb),.66)';
-  return { ...d, html: `<img class="bf" src="${slide.photo}" alt=""><div class="bfv" style="background:${veil}"></div>${d.html}` };
-}
+// No slide is its own photograph blurred behind a frame of it: the blurred copy behind every framed or banded
+// photograph (the owner, 2026-10-31: "at least add a blurred background, the same picture") is gone at the owner's
+// word (2026-11-06: "no landscape images with blurred background"). A, B, D and E draw a slide's photograph over the
+// whole slide, cut around its subject; C keeps its photograph on top and its light panel under it, by design.
 
 /** The whole page of one styled slide. `slide.photo` (or `slide.split`) is its own photograph, when it has one. */
 export function stylePage({ theme, size, slide: given, overlay = null }) {
   const st = theme.style;
-  const slide0 = theme.options?.fullPhoto && st.name === 'A' ? { ...given, fullPhoto: true } : given;
+  const slide0 = st.name === 'A' ? { ...given, fullPhoto: true } : given;
   // A post's closing slide (its own design above).
   const closing = given.kind === 'end' && Boolean(given.closing);
   // E's text look (resolveStyle: "box" unless the pack asks for "shadow"). A closing slide is set on E's boxes in either
@@ -704,13 +816,17 @@ export function stylePage({ theme, size, slide: given, overlay = null }) {
   const S = STYLES[st.name];
   const g = geo(size, overlay, st.name);
   const m = slideModel(slide);
-  const d0 = DRAW[st.name](m, slide, g, S);
+  // A slide with no photograph on its post's texture is the post's text designed (drawText), in every style.
+  const textMode = !hasPhoto(slide) && Boolean(slide.texture) && m.kind !== 'end';
+  const d0 = textMode ? drawText(m, slide, g, S) : DRAW[st.name](m, slide, g, S);
   // The account's old follow slide on a photograph of the post, under a veil of the style's own ground, so its words
   // read as they do on the ground: no slide of a post is a bare dark ground (the owner's call). A post's closing slide
   // shows its photograph as its style's design says.
   const d = m.kind === 'end' && !closing && slide.photo
     ? { ...d0, html: `<img src="${slide.photo}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(var(--bg-rgb),.78)"></div>${d0.html}` }
-    : backdrop(st.name, m, slide, g, d0);
+    : d0;
+  // A slide with no photograph stands on the post's texture (src/render/textures.js), never on a flat ground.
+  const ground = !hasPhoto(slide) && slide.texture ? `<div class="texg" style="${textureCss({ ...slide.texture, dark: S.dark !== false }, { ground: st.colors.bg, text: st.colors.text, accent: st.colors.accent }, 1080, g.h)}"></div>` : '';
   const families = familiesOf(st.name);
   const karantina = families.includes('Karantina');
   const z = g.z;
@@ -724,9 +840,11 @@ ${base(g, st.colors, S)}
 ${CSS[st.name](g, S)}
 ${VISUAL_CSS}
 ${closing ? CLOSING_CSS(g, S, chipOf(st.colors, st.name)) : ''}
+${textMode ? `${CSS_TEXT(g, S)}
+${cardColors(st.colors)}` : ''}
 </style></head>
-<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}${look ? ` tx-${look}` : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0"${closing ? ' data-closing="1"' : ''}>
-${d.html}
+<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}${look && !textMode ? ` tx-${look}` : ''}${ground ? ` on-texture tex-${slide.texture.kind}` : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0"${closing ? ' data-closing="1"' : ''}>
+${ground}${d.html}
 <div class="probe">א</div>
 </body></html>`;
 }

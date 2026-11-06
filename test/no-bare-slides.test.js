@@ -7,6 +7,8 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { PROVIDERS } from '../src/images/index.js';
+import { detailGrid } from '../src/images/safety.js';
+import { LAYOUTS, TEXTURES } from '../src/render/textures.js';
 import { closeBrowser, getBrowser } from '../src/render/render.js';
 import { copyPack, keepOnly, opened, setDraft, tempHome } from './helpers.js';
 
@@ -79,7 +81,11 @@ function account(home) {
     delete f.theme.backgroundQueries;
   });
   keepOnly(dir, ['drought-ranking']);
-  setDraft(dir, 'drought-ranking', (d) => d.slides.slides.forEach((s, i) => (s.imageQuery = QUERIES[i])));
+  setDraft(dir, 'drought-ranking', (d) => {
+    // The cover's own search too: a post is all photographs only when its cover has one of its own (build.js postMode).
+    d.outline.imageQuery = 'aloe plant pot';
+    d.slides.slides.forEach((s, i) => (s.imageQuery = QUERIES[i]));
+  });
   const db = new Db(path.join(home, 'data.db'));
   opened.push(db);
   const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home, 'packs') }), log: () => {} });
@@ -91,36 +97,43 @@ function account(home) {
 
 const steps = (db, postId, name) => db.all('SELECT status, detail_json FROM steps WHERE post_id = ? AND step = ?', postId, name).map((r) => ({ status: r.status, ...JSON.parse(r.detail_json || '{}') }));
 
-test("every slide's own photograph refused: every slide still stands on a photograph, the account's scenes", { timeout: 240_000 }, async () => {
+/** Every slide of a post, the closing slide's included, on its texture in one layout: what a post in text mode is. */
+function allText(ctx, postId, label) {
+  const post = loadPost(ctx.db, postId);
+  assert.equal(post.checks.mode, 'text', `${label}: the post is in text mode`);
+  assert.ok(TEXTURES.includes(post.checks.texture?.kind) && LAYOUTS.includes(post.checks.texture?.layout), `${label}: one texture and one layout`);
+  const [photos] = steps(ctx.db, postId, 'photos').filter((p) => p.grounds);
+  for (const [size, list] of Object.entries(photos.grounds)) {
+    assert.equal(list.length, post.slides.length + 1, `${label} ${size}: every slide and the closing slide`);
+    list.forEach((on, i) => assert.deepEqual(on, ['texture'], `${label} ${size} slide ${i + 1}: on the texture, no photograph or scene`));
+  }
+  assert.deepEqual(steps(ctx.db, postId, 'mode').map((x) => x.mode), ['text']);
+  return post;
+}
+
+test("every slide's own photograph refused: the whole post is designed text on its texture, never a scene behind some slides", { timeout: 240_000 }, async () => {
+  // Since the owner's word of 2026-11-06 ("a slideshows cant contain some slides with a photo and some without. if a
+  // slideshow is without picture, the format is the nice text design"): a scene behind a slide is not its photograph.
   const { home, cleanup } = tempHome({ packs: {} });
   try {
     const { ctx, dir, pack } = account(home);
     const file = await photoFile(home);
-    // Every photograph of a slide refused (a logo in it, or someone else's face); only the scenes pass.
     const asked = library(file, (q) => (SCENE.test(q) ? 'ok' : q === 'Dana Example' ? 'someone else' : 'logo'));
-    // Dana is named on no slide here: slide 2 is about a plant like the others.
     setDraft(dir, 'drought-ranking', (d) => (d.slides.slides[1].imageQuery = 'aloe vera pot'));
     const res = await buildPost(ctx, { pack });
     assert.equal(res.status, 'queued', res.reason);
-    const post = loadPost(ctx.db, res.postId);
-    assert.ok(asked.some((q) => SCENE.test(q)), `the scenes were searched: ${asked.join(', ')}`);
-    assert.ok(post.checks.bgImage, 'a scene was found');
+    assert.ok(asked.length, 'the photographs were searched');
     for (const s of steps(ctx.db, res.postId, 'image').filter((x) => typeof x.slide === 'number')) assert.equal(s.status, 'skipped', `slide ${s.slide}'s own photograph was refused`);
-    const [photos] = steps(ctx.db, res.postId, 'photos');
-    assert.equal(photos?.status, 'ok', 'the post says what every slide stands on');
-    for (const [size, list] of Object.entries(photos.grounds)) {
-      // Every slide, and the closing slide after them: none on a bare ground.
-      assert.equal(list.length, post.slides.length + 1, size);
-      list.forEach((on, i) => assert.ok(on.length && on.every((k) => /^bg/.test(k)), `${size} slide ${i + 1} stands on a scene: ${JSON.stringify(on)}`));
-    }
-    assert.ok(!JSON.parse(readFileSync(path.join(dir, 'theme.json'), 'utf8')).backgroundQueries, "the scenes came without a change to theme.json");
+    const post = allText(ctx, res.postId, 'refused');
+    assert.ok(!post.checks.bgImage, 'no scene behind it');
   } finally {
     cleanup();
   }
 });
 
-test('nothing found at all, not even a scene: the post is refused, not queued, and no sample is kept', { timeout: 240_000 }, async () => {
-  // A post and a sample, each from a fresh account (a document a post was drafted from is not drafted from again).
+test("nothing found at all, not even a scene: every slide stands on the post's texture, never on a bare ground", { timeout: 240_000 }, async () => {
+  // The owner, 2026-11-06: "if a slideshow ... fails because of them, we can use generated background, but from a few
+  // options: a cutting mat, paper texture, fabric texture, liquid glass, artisan texture" (src/render/textures.js).
   for (const sample of [false, true]) {
     const { home, cleanup } = tempHome({ packs: {} });
     try {
@@ -128,63 +141,87 @@ test('nothing found at all, not even a scene: the post is refused, not queued, a
       // The libraries answer nothing (Openverse's 504s, Commons' refusals), the scenes included.
       const asked = library(await photoFile(home), () => 'none');
       const res = await buildPost(ctx, { pack, sample });
-      assert.equal(res.status, 'blocked', `${sample ? 'a sample' : 'a post'} with no photograph is refused`);
-      assert.equal(res.kind, 'no_photo');
-      assert.match(res.reason, /תמונה/);
+      assert.equal(res.status, sample ? 'sample' : 'queued', res.reason);
       assert.ok(asked.some((q) => SCENE.test(q)), 'the scenes were searched too');
       const post = loadPost(ctx.db, res.postId);
-      assert.equal(post.status, 'blocked');
-      assert.equal(steps(ctx.db, res.postId, 'queue').length, 0, 'never queued');
-      assert.equal(post.slides.length, 0, 'no slides stored');
-      assert.equal(ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE status IN ('queued', 'sample')").n, 0);
+      assert.ok(TEXTURES.includes(post.checks.texture?.kind), 'the post has its texture');
+      const [photos] = steps(ctx.db, res.postId, 'photos').filter((p) => p.grounds);
+      for (const [size, list] of Object.entries(photos.grounds)) list.forEach((on, i) => assert.deepEqual(on, ['texture'], `${size} slide ${i + 1} on the texture`));
+      // Not flat: the drawn slide has detail everywhere (a flat ground measures 0).
+      const grid = await detailGrid(readFileSync(post.slides[1].files.tiktok), 'image/jpeg');
+      assert.ok(grid.cells.filter((v) => v > 0.004).length > grid.cells.length * 0.5, 'the texture is drawn, not a flat ground');
     } finally {
       cleanup();
     }
   }
 });
 
-test('a slide that names someone whose photograph is refused stands text first on a scene; three such slides refuse the post, before its review', { timeout: 240_000 }, async () => {
-  // Since 2026-11-06 (the five-niche samples: three of five first tries were blocked whole for one name with no licensed
-  // photograph, a sage of the Talmud, a private name) a content slide whose name no photograph shows stands on the
-  // post's scene, its words first, two such slides at most (build.js textLedGaps). The photographs are found as soon as
-  // the slides' searches are written, so a post that cannot stand on them is refused before the review is paid for.
+test('one slide whose photograph is refused makes the whole post designed text; with every photograph found, all photographs', { timeout: 240_000 }, async () => {
+  // The text-first fallback (a named slide on the post's scene, 2026-11-06 morning) is gone: a post is all photographs
+  // or all designed text (build.js postMode), whichever slide it was that had none.
   for (const dana of ['someone else', 'ok', 'three']) {
     const { home, cleanup } = tempHome({ packs: {} });
     try {
       const { ctx, dir, pack } = account(home);
-      // Three named slides, each photograph of someone else.
       const NAMES = ['Dana Example', 'Avi Tester', 'Noa Person'];
       if (dana === 'three') setDraft(dir, 'drought-ranking', (d) => NAMES.forEach((n, i) => (d.slides.slides[i + 1].imageQuery = n)));
-      // Every plant and every scene passes; the one photograph found for Dana is of someone else, or (the positive
-      // control) of her.
       const asked = library(await photoFile(home), (q) => (NAMES.includes(q) ? (dana === 'ok' ? 'ok' : 'someone else') : 'ok'));
       const res = await buildPost(ctx, { pack, sample: true });
-      assert.equal(res.status, dana === 'three' ? 'blocked' : 'sample', res.reason);
+      assert.equal(res.status, 'sample', res.reason);
       assert.ok(asked.includes('Dana Example'));
-      const photos = steps(ctx.db, res.postId, 'photos');
       if (dana === 'ok') {
-        assert.deepEqual(photos.at(-1).grounds.tiktok[2], [2], 'slide 3 stands on her own photograph');
-        assert.ok(photos.at(-1).grounds.tiktok.every((on) => on.length), 'and every slide on one');
+        const post = loadPost(ctx.db, res.postId);
+        assert.equal(post.checks.mode, 'photos', JSON.stringify(steps(ctx.db, res.postId, 'image').map((x) => [x.slide, x.status, x.why || x.reason || x.code])));
+        const grounds = steps(ctx.db, res.postId, 'photos').at(-1).grounds;
+        assert.deepEqual(grounds.tiktok[2], [2], 'slide 3 stands on her own photograph');
+        for (const list of Object.values(grounds)) list.forEach((on, i) => assert.ok(on.length && !on.includes('texture'), `slide ${i + 1} on a photograph: ${JSON.stringify(on)}`));
         continue;
       }
-      if (dana === 'someone else') {
-        assert.ok(asked.some((q) => SCENE.test(q)), 'the scenes were there');
-        assert.deepEqual(photos.map((p) => p.status), ['info', 'ok'], 'said when found, and again once drawn');
-        assert.deepEqual(photos.at(-1).textLed, [{ slide: 2, names: ['Dana Example'] }]);
-        assert.ok(photos.at(-1).grounds.tiktok[2].every((k) => /^bg/.test(k)), 'slide 3 stands on a scene');
-        assert.deepEqual(loadPost(ctx.db, res.postId).checks.textLed, [2]);
-        continue;
-      }
-      assert.equal(res.kind, 'no_photo');
-      assert.match(res.reason, /Dana Example/);
-      assert.match(res.reason, /לשקף 3/);
-      assert.equal(photos.at(-1).status, 'failed');
-      assert.equal(photos.at(-1).early, true);
-      assert.deepEqual(photos.at(-1).gaps.map((g) => [g.slide, g.why]), [[2, 'name'], [3, 'name'], [4, 'name']]);
-      assert.equal(steps(ctx.db, res.postId, 'review').length, 0, 'refused before the review');
-      assert.ok(!existsSync(path.join(home, 'media', 'posts', res.postId)), "a refused post's slides are not kept");
+      const post = allText(ctx, res.postId, dana);
+      assert.deepEqual(post.checks.textLed || [], [], 'no slide text first on a scene');
     } finally {
       cleanup();
     }
+  }
+});
+
+test('every photograph search failing on the network: the post stands on its texture, never on bare slides', { timeout: 240_000 }, async () => {
+  // 2026-11-06: a re-run whose every Commons and Openverse request timed out drew a post of white words on black
+  // slides. The engine's own rule stops it: no photograph found, no post (buildPost), whatever the reason.
+  const { home, cleanup } = tempHome({ packs: {} });
+  try {
+    const { ctx, pack } = account(home);
+    const asked = [];
+    PROVIDERS.pexels = { id: 'pexels', ready: () => true, search: async (q) => { asked.push(q); throw new Error(`fetch failed: ETIMEDOUT (${q})`); } };
+    const res = await buildPost(ctx, { pack, sample: true });
+    assert.ok(asked.length > 0, 'the photographs were searched');
+    assert.equal(res.status, 'sample', res.reason);
+    const post = loadPost(ctx.db, res.postId);
+    const [photos] = steps(ctx.db, res.postId, 'photos').filter((p) => p.grounds);
+    assert.ok(Object.values(photos.grounds).every((list) => list.every((on) => on.length === 1 && on[0] === 'texture')), 'every slide on the texture');
+    // One texture for the whole post, on every slide.
+    assert.equal(new Set(post.slides.map(() => post.checks.texture.kind)).size, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test("a cover that names someone is not given up for text: a post whose other slide has no photograph is another post", { timeout: 240_000 }, async () => {
+  // The one exception to text mode (build.js): a cover whose line names a person shows that person, so a post that
+  // cannot be all photographs is blocked rather than drawn as text with the face dropped. Her photograph is found.
+  const { home, cleanup } = tempHome({ packs: {} });
+  try {
+    const { ctx, dir, pack } = account(home);
+    setDraft(dir, 'drought-ranking', (d) => {
+      d.outline.imageQuery = 'Dana Example';
+      d.slides.slides[2].imageQuery = 'Avi Tester';
+    });
+    library(await photoFile(home), (q) => (q === 'Avi Tester' ? 'someone else' : 'ok'));
+    const res = await buildPost(ctx, { pack, sample: true });
+    assert.equal(res.status, 'blocked', res.reason);
+    assert.match(res.reason, /Dana Example|השער/);
+    assert.equal(steps(ctx.db, res.postId, 'photos').at(-1).mode, 'text');
+  } finally {
+    cleanup();
   }
 });

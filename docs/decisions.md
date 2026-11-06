@@ -2960,3 +2960,83 @@ replay.mjs, a request the first run made answered as it was, any other by hand):
 needed two), Josephus on his engraving, Antiochus and Rabbi Oshaya text first; coffee and camping post on their first
 try; the pets outline is offered its twelve dated articles first. test/sample-fixes.test.js covers each fix;
 test/no-bare-slides.test.js, test/research.test.js and test/images-providers.test.js follow the rules they changed.
+
+### The format itself: 9:16 photographs, words in the calm place, textures, a designed slide among the native ones, examples on the site (2026-11-06)
+
+The owner, on the five samples: "the text should appear in an empty space in the background ... not on top of the nuts,
+but in a place where it looks natural (the wall in the background). if an image is too official and does not have a
+place like that, it should be regenerated"; "tiktok format should be 9:16. no landscape images with blurred
+background"; "not every slide should be this format. i also like more designed formats. the teder website should show
+an example of the format, not only a description"; and later "if a slideshow is about something that doesnt require
+photos, or it fails because of them, we can use generated background, but from a few options: a cutting mat, paper
+texture, fabric texture, liquid glass, artisan texture. each time it should look different".
+
+**No band, no blurred copy.** E always draws a slide's photograph over the whole slide (fitE), and A, B and D do too,
+their design over it (A's fade, B's dark layer, D's fade into its ground); C keeps its photograph on top of its panel.
+The blurred copy of a slide's own photograph behind a frame of it (2026-10-31) is gone in every style. Each photograph is
+cut around its subject for the platform's frame, 9:16 and 4:5 alike (src/render/crop.js cropFor, render.js cutFor).
+
+**A photograph that cannot be cut is not chosen** (src/images/index.js findImage, for an account drawn in a style): one
+too small to fill a 9:16 slide is passed over before it is downloaded or screened; the screen now gives the main
+subject's size (safety.js subjectW, subjectH) beside its centre, and one whose subject a 9:16 cut would lose is
+refused; one whose size cannot be read (a WebP sent for a .jpg, now read by size.js) is passed over.
+
+**E's words stand in the photograph's calm place.** The browser measures each picture's detail (safety.js detailGrid);
+E's words go in the calmest band of the cut, clear of the subject (crop.js calmRoom, styles/index.js roomE), as tall as
+the slide's words (needE). In the search, a picture with no calm band (before its screen) or none clear of its subject
+(after it) is not chosen for E: the next photograph is, the screen counted, as the owner asked ("it should be
+regenerated" by another photograph, never a generated one).
+
+**Textures** (src/render/textures.js): a slide with no photograph that passes stands on its post's texture, one of a
+cutting mat, paper, fabric, liquid glass and artisan plaster, drawn as SVG (noise, lines, gradients): nothing fetched,
+no generated picture (the site says "תדר לא מייצר תמונות ב-AI"). One a post (its id's), a different one from the
+account's last post (build.js postTexture), its tone in the style's own ground and its tint, seed and angle its own; the
+text of every style reads on every texture at 7:1 (tested). A post is no longer blocked for having no photograph, nor
+for names with none (TEXT_LED_MAX, all of them): only the cover's face and a guess-who's answer still need theirs. A slide
+whose own photograph was not found stands on the post's scenes and then its texture, never on another slide's
+photograph again (planPhotos; the pets cover's dog had come back on its next slide).
+
+**A designed slide among the native ones** (render.js mixFor): a post drawn in E draws its number and graphic slides in
+A, the account's colours, a third of its slides at most; a slide A does not fit is drawn in E. pack.json style.mix:
+false keeps an account to one style.
+
+**Examples on the site** (src/web/examples.js): the kinds of slideshow on the setup and in Settings, and the five
+styles on the design panel and the styles page (where an account has no post yet), each with a slide of it drawn by
+scripts/render-examples.js from the demo pack's recordings and public-domain and CC0 plant photographs
+(src/web/static/examples, credits.json), served as static files: drawn ahead, never when a page is asked for, never with
+a key. On a phone each kind's card takes the row, its example beside its words.
+
+test/format-v3.test.js covers each of these; test/styles.test.js and test/no-bare-slides.test.js follow the rules they
+changed (no blurred copy; a post with no photograph on its texture, never blocked for it, never bare).
+
+## All photographs or all designed text; the designed styles for a business (2026-11-06, evening)
+
+**One mode a post** (build.js postMode, the owner: "a slideshows cant contain some slides with a photo and some without.
+if a slideshow is without picture, the format is the nice text design"). Right after the photograph search, a styled
+post is drawn on photographs only when every slide, its cover included, has a fitting photograph of its own (a scene
+behind a slide is not its own). Otherwise the whole post, the closing slide included, is designed text on one texture in
+one layout (checks_json mode, texture). This replaces the text-first fallback: no slide stands text first on a scene any
+more. The one exception: a guess-who, or a cover whose line names a person, is blocked rather than drawn as text without
+the face. A recording whose outline has no cover search has no cover photograph, so its post is text.
+
+**The text design** (styles/index.js drawText): four layouts (marker, boxes, corner, card), one a post, never the last
+post's (postTexture); the line a size up from the style's, taking a line more before it is set smaller; the key word in
+the account's colour; a shape of the design on every slide (a bar, the boxes, a sticker with the slide's place, a taped
+card). Every text stays inside the block (a held pair is let go, the boxes' padding inside the line's box), and the
+source sits under the words. Tested: never plain centred text in one weight and one colour, in any style or layout.
+
+**A business is not given E** (the owner: "dont tick the E format automatically for businesses, as businesses want a
+serious format, like it was designed on photoshop"). suggestStyle({ business: true }) ranks E last and never chooses it.
+A business is every account the setup makes (createPack, for a customer's workspace or the operator's) and every account
+on the styles page; a hand-written pack keeps its own style.name. An account that already has a style keeps it: only the
+suggestion, the two styles a style test starts with, and a new account's look change. The pickers' examples of each
+kind of slideshow are drawn in A (scripts/render-examples.js FORMAT_STYLE).
+
+**The designed styles, polished**, each in its own terms: A the photograph darkened a little under the tabs, a content
+slide's words on A's card with a soft shadow (as its number and closing slides have them), the slide's place on a pill,
+a bar of the colour over the cover's line; B the photograph in the account's colour (grey tones, the colour multiplied
+over them) under B's dark layer and a poster's thin frame (no badge: its words start under the tabs); C the photograph a rounded card on the
+light panel with a soft shadow (the closing slide's rounded too), a bar of the colour over every line, the label chip
+rounded; D the darkening under the tabs, the place on a larger chip, a bar of the colour between the line and its words.
+Before and after: samples-2026-11-06/styles/<A..D>-before.png and -after.png (one recorded post, its photographs on the
+top row, the same post in text mode under it).

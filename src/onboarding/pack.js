@@ -175,7 +175,7 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
   };
   // The slide style (src/render/styles), from what the account is about and its colours, away from a look-alike; and
   // never one the workspace's other accounts already have in an accent this close (validateAll would refuse it).
-  const ranked = suggestStyle({ ...seed, displayName: pack.displayName }, theme.colors, ctx.packs).ranked;
+  const ranked = suggestStyle({ ...seed, displayName: pack.displayName }, theme.colors, ctx.packs, { business: true }).ranked;
   const kin = ctx.packs.filter((p) => groups(p) === group && p.meta?.style?.name);
   const clashes = (name) => kin.some((p) => p.meta.style.name === name && deltaE(resolveStyle({ name }, theme.colors.accent).colors.accent, resolveStyle(p.meta.style, p.theme?.colors?.accent).colors.accent) < 20);
   pack.style = { name: ranked.find((n) => !clashes(n)) || ranked[0] };

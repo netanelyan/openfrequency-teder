@@ -256,7 +256,7 @@ function shareMeta(demo, name, base, origin) {
 ${image ? `<meta property="og:image" content="${esc(image)}"><meta property="og:image:width" content="1080"><meta property="og:image:height" content="${platform === 'tiktok' ? 1920 : 1350}"><meta property="og:image:alt" content="${esc(demo.post?.hook || title)}">` : ''}`;
 }
 
-// A link preview's fetch (WhatsApp, Facebook, Telegram, Slack, X, a search engine) is not the store opening its page.
+// A link preview's request (WhatsApp, Facebook, Telegram, Slack, X, a search engine) is not the store opening its page.
 export const isPreviewBot = (ua) => /WhatsApp|facebookexternalhit|Facebot|meta-externalagent|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|Googlebot|bingbot|Applebot|redditbot|Pinterest/i.test(String(ua || ''));
 
 // The store's products, moving past beside the title: two rows, each list twice so the loop has no seam.

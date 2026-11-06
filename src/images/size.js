@@ -26,6 +26,10 @@ export function imageSize(buf) {
       i += 2 + len;
     }
   }
+  // A WebP (rawpixel sends one for a .jpg's address): its size, no alpha asked of it here (2026-11-06: one went
+  // through the 9:16 checks unmeasured, and its coin was cut in half).
+  const webp = webpSize(buf);
+  if (webp) return { ...webp, alpha: false };
   return null;
 }
 

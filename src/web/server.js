@@ -16,6 +16,7 @@ import * as act from './actions.js';
 import { beforePaying, onboardingRoutes } from './onboarding.js';
 import { deeperPanel, deeperRoutes } from './deeper.js';
 import { previewFile, stylesRoutes } from './styles.js';
+import { EXAMPLE_FILE, EXAMPLES_DIR } from './examples.js';
 import { demoPage, demosFeed, demosRoutes, demoThemeCss, goneHtml, intake, isPreviewBot, offerOf, publicDemo, recordOpen, sendPreview, sendSlide, visitorOf } from './demos.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
@@ -350,6 +351,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         if (p === '/static/icon.svg') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon.svg')), 'image/svg+xml', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/icon-180.png' || p === '/static/icon-512.png') return send(req, res, 200, readFileSync(path.join(STATIC, path.basename(p))), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
+        // The pickers' examples (src/web/examples.js): a format's or a style's, drawn ahead of time, nothing else under it.
+        const ex = /^\/static\/examples\/([^/]+)$/.exec(p);
+        if (ex && EXAMPLE_FILE.test(ex[1]) && existsSync(path.join(EXAMPLES_DIR, ex[1]))) return send(req, res, 200, readFileSync(path.join(EXAMPLES_DIR, ex[1])), 'image/jpeg', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/fonts/Assistant.ttf') return send(req, res, 200, readFileSync(path.join(assetsDir, 'fonts', 'Assistant.ttf')), 'font/ttf', { 'cache-control': 'public, max-age=31536000, immutable' });
         // Liveness, with the commit this build is; readiness (the database, the runner) is /readyz (src/web/health.js).
         if (p === '/healthz') return send(req, res, 200, `ok ${REVISION}`, 'text/plain; charset=utf-8');

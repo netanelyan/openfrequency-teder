@@ -355,6 +355,7 @@ const DOORS = [
   ['/connect/pick/0123456789abcdef0123456789abcdef', 'test/parallel-setup.test.js'],
   ['/new/o1/connect/tiktok/done', 'test/parallel-setup.test.js'],
   ['/s/a-store', 'test/demos.test.js'],
+  ['/static/examples/style-E.jpg', 'test/formats-page.test.js'],
   ['/internal/lead', 'test/demos.test.js'],
   ['/internal/demos', 'test/demos.test.js'],
   ['/internal/setup', 'test/setup.test.js'],

@@ -131,8 +131,19 @@ export function slideModel(s) {
 /** "מקור: X" under a slide, when the account shows its sources, from its facts' sources. */
 export function sourcesOf(s) {
   if (s.noSources) return '';
-  const names = [...new Set((s.sources || []).filter(Boolean))];
+  const names = [...new Set((s.sources || []).filter(Boolean).map(unentity))];
   return names.length ? `מקור: ${names.map((n) => `<bdi dir="auto">${esc(n)}</bdi>`).join(' · ')}` : '';
 }
+
+// A feed's name as its feed wrote it, entities and all ("My Jewish Learning &raquo; Feed"): read as the letters they are
+// before it is escaped for the slide, so the slide never shows "&raquo;".
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', raquo: '»', laquo: '«', ndash: '–', mdash: '—', hellip: '…' };
+const unentity = (t) => String(t).replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+  if (e[0] === '#') {
+    const n = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+    return Number.isFinite(n) && n > 31 ? String.fromCodePoint(n) : m;
+  }
+  return ENTITIES[e.toLowerCase()] ?? m;
+});
 
 export { sentences };

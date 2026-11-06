@@ -67,18 +67,19 @@ test("a facts cover asks a person for a face and anything else for itself", () =
   assert.match(star, /before photography, a painting, a bust or a coin/, 'a figure of antiquity has a likeness, not a photograph');
 });
 
-test('a named slide with no photograph of its name stands text first, two at most; the cover and a reveal never', () => {
+test('a named slide with no photograph of its name stands text first, any number of them; the cover and a reveal never', () => {
   const facts = { kind: 'facts' };
   const gap = (slide, extra = {}) => ({ slide, why: 'name', names: ['Satori Kato'], ...extra });
-  assert.equal(TEXT_LED_MAX, 2);
+  // Two at most until the owner's word of 2026-11-06 on textures: "if a slideshow ... fails because of them, we can use
+  // generated background".
+  assert.equal(TEXT_LED_MAX, Infinity);
   // One private name (the coffee sample's Satori Kato), and two: the post goes out, those slides on its scene.
   assert.deepEqual(textLedGaps([gap(7)], { format: facts, slides: 8 }).led.map((g) => g.slide), [7]);
   assert.deepEqual(textLedGaps([gap(2), gap(4)], { format: facts, slides: 8 }).left, []);
-  // Three (the Judaica sample's Antiochus, Josephus and Rabbi Oshaya, had their busts and coins been refused too): a
-  // post about faces that cannot be shown, another topic.
+  // Three (the Judaica sample's Antiochus, Josephus and Rabbi Oshaya, had their busts and coins been refused too).
   const three = textLedGaps([gap(2), gap(4), gap(6)], { format: facts, slides: 8 });
-  assert.equal(three.led.length, 0);
-  assert.equal(three.left.length, 3);
+  assert.equal(three.led.length, 3);
+  assert.equal(three.left.length, 0);
   assert.equal(textLedGaps([gap(0)], { format: { kind: 'story' }, slides: 8 }).left.length, 1, "the cover's face");
   assert.equal(textLedGaps([gap(7)], { format: { kind: 'guess-who' }, slides: 8 }).left.length, 1, "a guess-who's answer");
   assert.equal(textLedGaps([{ slide: 3, why: 'none' }], { format: facts, slides: 8 }).left.length, 1, 'a slide on no photograph at all');
@@ -387,5 +388,5 @@ test("a new account's hashtags are its niche and topics, and a post adds its own
 test("a feed's title becomes a source's name as text, not as its entities", async () => {
   const { declaredFeeds } = await import('../src/sources/rss.js');
   const page = '<link rel="alternate" type="application/rss+xml" title="My Jewish Learning &raquo; Feed" href="/feed"><link rel="alternate" type="application/rss+xml" title="Sprudge Coffee &amp;raquo; Feed" href="/coffee/feed">';
-  assert.deepEqual(declaredFeeds(page, 'https://www.example.com/').map((f) => f.title), ['My Jewish Learning » Feed', 'Sprudge Coffee » Feed']);
+  assert.deepEqual(declaredFeeds(page, 'https://www.example.com/').map((f) => f.title), ['My Jewish Learning', 'Sprudge Coffee']);
 });

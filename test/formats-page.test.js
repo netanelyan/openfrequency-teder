@@ -112,11 +112,13 @@ test('a new account: the sources step shows the formats with the defaults ticked
   assert.equal(file.rotate, 'turns');
 });
 
-test('two cards to a row on a phone and in a column of Settings on a desk, and nothing scrolls sideways', async () => {
+test('a card a row on a phone, two in a column of Settings on a desk, each with its drawn example, and nothing scrolls sideways', async () => {
+  // A card a row on a phone since each has its example beside its words (2026-11-06, src/web/examples.js): two to a
+  // row left the words a word wide.
   const { sid } = fake.session(customer(1));
   const browser = await chromium.launch();
   try {
-    for (const [width, perRow] of [[390, 2], [360, 2], [1440, 2]]) {
+    for (const [width, perRow] of [[390, 1], [360, 1], [1440, 2]]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
       await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
       const page = await context.newPage();
@@ -125,6 +127,15 @@ test('two cards to a row on a phone and in a column of Settings on a desk, and n
         const cards = [...document.querySelectorAll('#formats-demo .fmt-pick')].map((c) => c.getBoundingClientRect());
         return { cards: cards.length, firstRow: cards.filter((r) => Math.abs(r.top - cards[0].top) < 2).length, sideways: document.documentElement.scrollWidth > window.innerWidth };
       });
+      // Every card's example, served by the site (/static/examples), its own alt.
+      const shown = await page.evaluate(async () => {
+        const imgs = [...document.querySelectorAll('#formats-demo .fmt-ex')];
+        for (const i of imgs) i.loading = 'eager';
+        await Promise.all(imgs.map((i) => (i.complete ? null : new Promise((r) => i.addEventListener('load', r, { once: true }) || i.addEventListener('error', r, { once: true })))));
+        return imgs.map((i) => ({ w: i.naturalWidth, alt: i.alt }));
+      });
+      assert.equal(shown.length, LIBRARY.length);
+      assert.ok(shown.every((x) => x.w > 0 && /^דוגמה לשקף של /.test(x.alt)), JSON.stringify(shown.slice(0, 2)));
       assert.equal(box.cards, LIBRARY.length);
       assert.equal(box.sideways, false, `${width}: no sideways scroll`);
       assert.equal(box.firstRow, perRow, `${width}: ${box.firstRow} to a row`);

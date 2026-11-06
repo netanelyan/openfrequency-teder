@@ -4,6 +4,7 @@ import { inTurns } from '../formats/rotation.js';
 import { setPackFormats } from '../packs/write.js';
 import { ActionError } from './actions.js';
 import { csrfField, esc } from './ui.js';
+import { exampleImg } from './examples.js';
 
 // The kinds of slideshow a customer picks (the owner, 2026-10-31: "i want the customer to pick the formats he likes. it
 // is changable, and each slideshow is in a different format."): on the sources step of a new account, before its
@@ -15,10 +16,13 @@ export const FORMATS_FEW = `צריך לבחור לפחות ${MIN_PICKED} סוג�
 const LEDE_NEW = `בוחרים לפחות ${MIN_PICKED}. כל מצגת תצא בסוג אחר מזו שלפניה, ואפשר לשנות את הבחירה בכל זמן בדף החשבון.`;
 const LEDE_ACCOUNT = `כל מצגת יוצאת בסוג הבא ברשימה, כך ששתי מצגות ברצף לא יוצאות באותו סוג. בוחרים לפחות ${MIN_PICKED}.`;
 
-/** The library as ticks, these ones ticked: a card each with its name and one line on what it is. */
+/**
+ * The library as ticks, these ones ticked: a card each with its name, one line on what it is, and a slide of one drawn
+ * (src/web/examples.js), so the customer sees the kind and not only reads of it.
+ */
 export function formatsPicker(picked) {
   const on = new Set(picked);
-  return `<div class="fmt-picks">${LIBRARY.map((f) => `<label class="fmt-pick"><input type="checkbox" name="fmt_${esc(f.id)}"${on.has(f.id) ? ' checked' : ''}><span><b>${esc(f.name)}</b><small>${esc(f.he)}</small></span></label>`).join('')}</div>`;
+  return `<div class="fmt-picks">${LIBRARY.map((f) => `<label class="fmt-pick"><input type="checkbox" name="fmt_${esc(f.id)}"${on.has(f.id) ? ' checked' : ''}><span><b>${esc(f.name)}</b><small>${esc(f.he)}</small></span>${exampleImg(`format-${f.id}`, `דוגמה לשקף של ${f.name}`, { esc, cls: 'fmt-ex' })}</label>`).join('')}</div>`;
 }
 
 /** The sources step's part of the create form: the defaults ticked, or what the customer ticked before an error. */

@@ -8,11 +8,14 @@ import { buildSlide, TEMPLATE_IMPL } from './templates/index.js';
 import { closingPage, endParts } from './end.js';
 import { everyPhoto, kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
-import { focusOf } from '../images/safety.js';
+import { detailGrid, focusOf } from '../images/safety.js';
+import { bandProfile, cropFor, FRAMES, subjectBand, subjectOf } from './crop.js';
 import { namesIn, whoIn } from '../images/names.js';
 import { overlayOf } from '../rules/overlay.js';
 import { fillsCover, imageSize } from '../images/size.js';
-import { stylePage } from './styles/index.js';
+import { stylePage, themeOf } from './styles/index.js';
+import { slideModel } from './styles/model.js';
+import { textureFor } from './textures.js';
 import { mediaSizes } from '../core/platforms.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
@@ -689,9 +692,12 @@ export const genericScene = (query) => Boolean(query) && !/(?:^|\s)\p{Lu}\p{Ll}/
 
 /**
  * Which photograph each slide of a styled post stands on: Map(slide index -> key of `byIdx`), and how often each is
- * used. Pure. (The rules are said where renderPost calls it.)
+ * used. Pure. (The rules are said where renderPost calls it.) A post with a texture (src/render/textures.js) stands a
+ * slide with none of its own on a photograph of the same subject or on one of its scenes, each twice at most, and on
+ * its texture after that: never on another slide's photograph of something else, which read as the same picture twice
+ * (the cover's dog again on the next slide, 2026-11-06).
  */
-export function planPhotos({ slides, byIdx, postKind }) {
+export function planPhotos({ slides, byIdx, postKind, texture = false }) {
   const has = (k) => Boolean(byIdx.get(k)?.file);
   const MAX_USES = 2;
   const manySubjects = ['guess-who', 'ranking', 'head-to-head', 'list', 'facts'].includes(postKind);
@@ -714,17 +720,65 @@ export function planPhotos({ slides, byIdx, postKind }) {
     // Mane Senegal", share the one that was found, rather than the second standing on a scene under his name.
     const who = whoIn(s.imageQuery);
     const same = q ? own.filter(([, p]) => String(p.query || '').toLowerCase().trim() === q || (who.length && namesIn(String(p.query || ''), who))).map(([k]) => k) : [];
-    const subject = manySubjects || postKind === 'guess-who' ? [] : own.map(([k]) => k).sort((a, b) => a - b);
+    const subject = texture || manySubjects || postKind === 'guess-who' ? [] : own.map(([k]) => k).sort((a, b) => a - b);
     return [...new Set([...same, ...subject, ...sceneKeys])];
   };
   slides.forEach((s, i) => {
     if (plan.has(i) || (s.kind === 'cover' && splitCover)) return;
     const c = candidates(s, i);
     const free = c.find((k) => (uses.get(k) || 0) < MAX_USES);
-    const k = free ?? c.sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0];
+    const k = free ?? (texture ? null : c.sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0]);
     if (k != null) use(i, k);
   });
   return { plan, uses, sceneKeys };
+}
+
+/** The designed style a post in E mixes in, for the slides it suits (mixFor). */
+export const MIX_WITH = 'A';
+
+/**
+ * The slides of a post drawn in E that are drawn in A instead (the owner, 2026-11-06: "not every slide should be this
+ * format. i also like more designed formats"): a content slide whose point is a number or a graphic, which A sets on
+ * its card or beside its photograph, a third of the content slides at most, in their order. None when the account
+ * keeps to one style (pack.json style.mix: false) or is not drawn in E. A slide drawn in A that does not fit A is drawn
+ * in E (renderPost). Pure but for the slide model.
+ */
+export function mixFor(pack, slides) {
+  const style = pack?.meta?.style || {};
+  if ((pack?.theme?.style?.name || style.name) !== 'E' || style.mix === false) return new Set();
+  const content = slides.map((s, i) => [s, i]).filter(([s]) => s.kind === 'item');
+  const most = Math.floor(content.length / 3);
+  const suits = content.filter(([s]) => (s.visual?.type && s.visual.type !== 'none') || slideModel({ ...s, kind: 'item' }).kind === 'number').map(([, i]) => i);
+  return new Set(suits.slice(0, most));
+}
+
+/** Whether a style draws a slide's photograph over the whole slide (C keeps its photograph on top of its panel). */
+export const fullBleed = (style, kind) => style === 'E' || (['A', 'B', 'D'].includes(style) && kind !== 'end');
+
+/**
+ * Where a styled slide's photograph is cut, for the platform's frame: around its subject when the style draws it over
+ * the whole slide (src/render/crop.js cropFor), with, in E, how busy each band of the cut is and where the subject
+ * stands, for the words' place (styles/index.js roomE); else at its face, as before (focusOf).
+ */
+async function cutFor(img, { style, kind, size, grids }) {
+  const sz = img?.file ? imageSize(readFileSync(img.file)) : null;
+  const photoSize = sz ? { w: sz.width, h: sz.height } : null;
+  if (!photoSize || !fullBleed(style, kind)) return { photoPos: focusOf(img) || null, photoSize };
+  let screen = img.safety_json;
+  if (typeof screen === 'string') {
+    try {
+      screen = JSON.parse(screen);
+    } catch {
+      screen = null;
+    }
+  }
+  const subject = subjectOf(screen);
+  const frame = FRAMES[size] || FRAMES.tiktok;
+  const crop = cropFor(photoSize, frame, subject);
+  if (style !== 'E') return { photoPos: crop.pos, photoSize };
+  if (!grids.has(img.file)) grids.set(img.file, await detailGrid(readFileSync(img.file), /\.png$/i.test(img.file) ? 'image/png' : 'image/jpeg'));
+  const grid = grids.get(img.file);
+  return { photoPos: crop.pos, photoSize, calm: grid ? bandProfile(grid, crop, 48) : null, subjectBand: subject.known ? subjectBand(crop, subject, frame.H) : null };
 }
 
 const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i.test(file) ? 'image/svg+xml' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg'};base64,${readFileSync(file).toString('base64')}`;
@@ -737,7 +791,7 @@ const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i
  * an older caller, one photo drawn on the cover or on the last slide (photoOn).
  * Returns { tiktok: [files], instagram: [files] }.
  */
-export async function renderPost({ pack, post, slides, photos = null, photo = null, photoOn = 'cover', format = null, outDir, only = null, platforms = null, lenient = false }) {
+export async function renderPost({ pack, post, slides, photos = null, photo = null, photoOn = 'cover', format = null, outDir, only = null, platforms = null, lenient = false, texture = undefined }) {
   const expected = tokenOf({ slides, caption: post.caption, hook: post.hook, sub: post.sub, extra: post.extra || {} });
   if (!post.token || post.token !== expected) {
     throw new RenderError('refused: this text was not checked by the fact gate (or changed after it)', 'unverified');
@@ -791,13 +845,20 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const grounds = {};
   // An account drawn in one of the slide styles (src/render/styles): each slide is a page of its own.
   const styled = Boolean(pack.theme.style);
+  // Each photograph's detail, measured once for the post (cutFor).
+  const grids = new Map();
+  // The style each slide is drawn in: the post's, but for the slides a designed layout suits in a post drawn in E
+  // (mixFor): their number on A's card, their graphic beside their photograph.
+  const mixed = styled ? mixFor(pack, slides) : new Set();
+  const companion = mixed.size ? themeOf(pack, MIX_WITH) : null;
+  const styleOf = (i) => (mixed.has(i) ? MIX_WITH : pack.theme.style?.name || null);
   const warnings = [];
   // What the renderer measured on each platform's closing slide (drawHtml's `closing`), for the tests and the log.
   const closingDrawn = {};
   // One slide drawn, at `scale` of its type's size: a slide that does not fit with everything on it is drawn again
   // without its framed photograph (a presentation choice: the text and the graphic are what was checked), then with
   // its type allowed smaller. Returns the size its text came out at, as a share of the design's.
-  const drawSlide = async ({ i, s, slide, look, file, size, scale = 1 }) => {
+  const drawSlide = async ({ i, s, slide, look, file, size, scale = 1, theme = pack.theme }) => {
     // Style E puts its text over the photograph before it gives the photograph up: a ranking's number, title and line did
     // not fit on the black above a landscape photograph, and two slides of a countdown went out black.
     const over = styled && pack.theme.style?.name === 'E' && slide.photo ? [{ ...slide, textOver: true }] : [];
@@ -807,7 +868,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     const keep = styled && slide.photo ? [[0.45, { ...slide }]] : [];
     const attempts = [...[{ ...slide }, ...over].map((t) => [FIT_FLOOR, t]), ...keep, ...bare.map((t) => [FIT_FLOOR, t]), [0.45, bare[0] || { ...slide }]];
     for (const [k, sl] of attempts.entries()) {
-      const html = styled ? stylePage({ theme: pack.theme, overlay, size, slide: sl[1] }) : page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), ...look });
+      const html = styled ? stylePage({ theme, overlay, size, slide: sl[1] }) : page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), ...look });
       try {
         const r = await renderHtml(html, { size, file, floor: sl[0], scale, lenient });
         for (const w of r.warnings || []) warnings.push({ size, slide: i, ...w });
@@ -830,7 +891,10 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   //     wall), then any.
   // Never a guess-who's answer before its reveal, never one side of a head-to-head on a slide of both, never another
   // subject's face on a facts, ranking or list slide (those take scenes).
-  const { plan, uses, sceneKeys } = planPhotos({ slides, byIdx, postKind });
+  // The post's texture, behind every slide of it with no photograph (src/render/textures.js): the caller's (buildPost
+  // chooses one unlike the account's last post's), else the post's own. Only a styled account has one.
+  const tex = styled ? texture || textureFor(post.id) : null;
+  const { plan, uses, sceneKeys } = planPhotos({ slides, byIdx, postKind, texture: Boolean(tex) });
   // The closing slide, when the account has one, stands on the least-used scene (or photograph) of the post.
   const endKey = [...sceneKeys, ...[...uses.keys()]].sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0] ?? null;
   // Each size once: a Facebook Page's post is sent Instagram's slides (src/core/platforms.js).
@@ -891,11 +955,8 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         // A small photograph is shown all the same (E shows it whole, on black; A to D blow it up): a photograph, never a
         // dark ground (the owner's call).
         slide.photo = split ? null : own;
-        slide.photoPos = slide.photo ? focus.get(from) || null : null;
-        if (slide.photo) {
-          const sz = imageSize(readFileSync(byIdx.get(from).file));
-          slide.photoSize = sz ? { w: sz.width, h: sz.height } : null;
-        }
+        slide.photoPos = null;
+        if (slide.photo) Object.assign(slide, await cutFor(byIdx.get(from), { style: styleOf(i), kind: s.kind, size, grids }));
         slide.split = split;
         slide.splitPos = split ? [focus.get('ca'), focus.get('cb')] : null;
         slide.hasPhoto = Boolean(slide.photo || split);
@@ -908,8 +969,20 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
           // Style C's key line, at the foot of the cover: the day, or the two sides. Nothing is set over a headline.
           slide.keyLine = day || names;
         }
-        const on = split ? ['ca', 'cb'] : slide.photo ? [from] : [];
-        drawn.push({ i, s, slide, look: {}, file, on, own: split ? null : from, ratio: await drawSlide({ i, s, slide, look: {}, file, size }) });
+        slide.texture = tex;
+        const on = split ? ['ca', 'cb'] : slide.photo ? [from] : tex ? ['texture'] : [];
+        // A slide drawn in the companion style that does not fit it is drawn in the post's own.
+        let theme = mixed.has(i) ? companion : pack.theme;
+        let ratio;
+        try {
+          ratio = await drawSlide({ i, s, slide, look: {}, file, size, theme });
+        } catch (e) {
+          if (e.code !== 'overflow' || theme === pack.theme) throw e;
+          theme = pack.theme;
+          if (slide.photo) Object.assign(slide, await cutFor(byIdx.get(from), { style: pack.theme.style?.name, kind: s.kind, size, grids }));
+          ratio = await drawSlide({ i, s, slide, look: {}, file, size, theme });
+        }
+        drawn.push({ i, s, slide, look: {}, file, on, own: split ? null : from, theme, ratio });
         out[size].push(file);
         continue;
       }
@@ -937,7 +1010,11 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     (scales[size] = drawn.map((d) => Math.round(d.ratio * 100) / 100));
     // What each slide was drawn on, once every slide is drawn: a photograph a slide had to give up is not under it.
     grounds[size] = [];
-    for (const d of drawn) grounds[size][d.i] = d.on.filter((k) => !(dropped[size]?.has(d.i) && k === d.own));
+    // A slide that gave its photograph up stands on the post's texture.
+    for (const d of drawn) {
+      const on = d.on.filter((k) => !(dropped[size]?.has(d.i) && k === d.own));
+      grounds[size][d.i] = on.length || !tex || !styled ? on : ['texture'];
+    }
     // The closing slide is drawn after the last content slide, and alone when `only` names its place (slides.length).
     if (closing && (!only || only.has(slides.length))) {
       // One image goes to Instagram and to a Facebook Page (mediaSizes): their action is the same, the address. TikTok's
@@ -950,22 +1027,23 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       const photo = key != null && uri.has(key) ? key : null;
       let r;
       if (styled) {
-        const sz = photo != null ? imageSize(readFileSync(byIdx.get(photo).file)) : null;
+        const cut = photo != null ? await cutFor(byIdx.get(photo), { style: pack.theme.style?.name, kind: 'end', size, grids }) : {};
         const slide = {
+          texture: tex,
           kind: 'end', closing: true, title: closing.line, action, handle: pack.meta.handle, logo: brand, names: [closing.product, closing.name],
-          photo: photo != null ? uri.get(photo) : null, photoPos: photo != null ? focus.get(photo) || null : null, photoSize: sz ? { w: sz.width, h: sz.height } : null,
+          photo: photo != null ? uri.get(photo) : null, photoPos: null, photoSize: null, ...cut,
         };
         r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide }), { size, file, lenient });
       } else {
         r = await renderHtml(closingPage({ pack, size, closing, action, logo: brand, photo: photo != null ? uri.get(photo) : null, photoPos: photo != null ? focus.get(photo) || null : null, overlay }), { size, file, floor: 0.45, lenient });
       }
       for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
-      grounds[size][slides.length] = photo != null ? [photo] : [];
+      grounds[size][slides.length] = photo != null ? [photo] : tex ? ['texture'] : [];
       closingDrawn[size] = r;
       out[size].push(file);
     } else if (end && styled && !only) {
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
-      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null } }), { size, file, lenient });
+      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null, texture: tex } }), { size, file, lenient });
       for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
       out[size].push(file);
       grounds[size][slides.length] = endKey != null && uri.has(endKey) ? [endKey] : [];

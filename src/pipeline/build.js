@@ -27,6 +27,7 @@ import { findImage, MAX_SCREENS, MIN_SIDE, packPhotoList, shows, whoIn } from '.
 import { scenesFor } from '../images/scenes.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost, slidePlaces } from '../render/render.js';
+import { textureFor } from '../render/textures.js';
 import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, everyPhoto, visualsNeeded } from './prompts.js';
@@ -1323,8 +1324,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // stand on its photographs is known before those are paid for: three of the five first samples of 2026-11-06 were
     // written, repaired, reviewed and rewritten, and only then blocked for a photograph.
     const photoOn = kindOf(format).photo;
-    const photos = await findPhotos({ ...pctx, mode: ctx.mode }, { pack, format, draft, outline, postId });
-    const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
+    let photos = await findPhotos({ ...pctx, mode: ctx.mode }, { pack, format, draft, outline, postId });
     // A blocked post's documents and format, so that a photograph's failure uses up neither (candidateDocs,
     // refusedOutlines): the same documents may carry another format, and this format other documents.
     const photoBlock = (reason, detail = {}) => block('no_photo', reason, { ...detail, format: format.id, documents: cand.docs.map((d) => d.id) });
@@ -1335,12 +1335,15 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     if (kindName(format) === 'guess-who' && (pack.theme.options?.coverPhoto || styledPost) && !photos.get(draft.slides.length - 1)) {
       return photoBlock(`אין תמונה מורשית של ${draft.subject?.answer || 'התשובה'}: נחשו-מי צריך פנים לטשטש על השער`);
     }
-    // No slide goes out empty (the owner, 2026-10-31: "the slides dont have images. no slide can be empty"): a post of
-    // an account that searches photographs, with not one found and no scene either, is another post.
+    // No slide goes out empty (the owner, 2026-10-31: "the slides dont have images. no slide can be empty"). A styled
+    // post with not one photograph found, not even a scene, stands every slide on its texture (src/render/textures.js;
+    // the owner, 2026-11-06: "if a slideshow ... fails because of them, we can use generated background"); an account
+    // on the older templates, which have no texture, is another post.
     const photosNeeded = searchesPhotos(pctx, pack);
+    const texture = postTexture(db, pack, postId);
     if (photosNeeded && !photos.size) {
-      step(db, postId, 'photos', 'failed', { why: 'nothing found', scenes: pack.theme.backgroundQueries?.length ? 'theme' : 'derived' });
-      return photoBlock('לא נמצאה אף תמונה מורשית לפוסט, גם לא סצנה של החשבון: שקף לא יוצא בלי תמונה');
+      step(db, postId, 'photos', texture ? 'info' : 'failed', { why: 'nothing found', scenes: pack.theme.backgroundQueries?.length ? 'theme' : 'derived', ...(texture ? { texture } : {}) });
+      if (!texture) return photoBlock('לא נמצאה אף תמונה מורשית לפוסט, גם לא סצנה של החשבון: שקף לא יוצא בלי תמונה');
     }
     // Whom the slides name, and which of them no photograph found shows: a content slide that names someone no licensed
     // photograph shows (a private name, a sage with no likeness on Commons) stands on its scene, text first, when the
@@ -1356,6 +1359,23 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       textLed = early.led;
       if (textLed.length) step(db, postId, 'photos', 'info', { textLed: textLed.map((g) => ({ slide: g.slide, names: g.names })) });
     }
+    // A post is its photographs or its text designed, never both (the owner, 2026-11-06: "a slideshows cant contain some
+    // slides with a photo and some without. if a slideshow is without picture, the format is the nice text design"): a
+    // styled post with a fitting photograph of its own on every slide, the cover's included, is drawn on them; any other
+    // is drawn, cover to closing slide, as designed text on its texture (postMode).
+    const mode = texture ? postMode({ photos, slides: draft.slides.length }) : 'photos';
+    // The one exception: a post whose cover is a face, a guess-who's answer or the person its cover line names, is
+    // nothing without it, and is another post rather than text.
+    if (mode === 'text' && (kindName(format) === 'guess-who' || named.has(0))) {
+      step(db, postId, 'photos', 'failed', { mode, why: 'a cover that needs its face, in a post that is not all photographs' });
+      return photoBlock(kindName(format) === 'guess-who' ? `לא לכל שקף של נחשו-מי נמצאה תמונה, ובלי התמונות אין לו שער` : `לא לכל שקף נמצאה תמונה, והשער צריך את התמונה של ${named.get(0).map((q) => whoIn(q).join(' ')).join(' ושל ')}`);
+    }
+    if (mode === 'text') {
+      photos = new Map();
+      textLed = [];
+    }
+    step(db, postId, 'mode', 'info', { mode, ...(mode === 'text' ? { texture } : {}) });
+    const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
     // A graphic is decoration: one the redraft left malformed (a compare of one item) is dropped and the post checked
     // again without it, not lost with every fact in it verified. The count of slides with a visual is still checked.
     // (The closing slide's problems are the repair's, below, and do not keep a malformed graphic.)
@@ -1565,12 +1585,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const outDir = path.join(ctx.mediaDir || mediaDir(), 'posts', postId);
     // Drawn in the account's saved look (src/render/style.js), whose hash the post keeps for drawing it again.
     const look = postStyle ? lookFor(db, pack, postStyle, ctx.packs || []) : lockedStyle(db, pack, ctx.packs || []);
-    const files = await renderPost({ pack: { ...pack, theme: look.theme }, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir });
+    const files = await renderPost({ pack: { ...pack, theme: look.theme }, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir, texture });
     step(db, postId, 'render', 'ok', { platforms: Object.keys(files), slides: slides.length });
 
     // ---- every slide on a photograph, and a name on a photograph of its own: what was drawn, on every platform
     if (photosNeeded) {
-      const after = textLedGaps(photoGaps({ grounds: files.grounds || {}, photos, named, slides: slides.length }), { format, slides: slides.length });
+      // A post in text mode has no photograph by design: no slide of it is a gap (its cover was checked above).
+      const after = mode === 'text' ? { left: [], led: [] } : textLedGaps(photoGaps({ grounds: files.grounds || {}, photos, named, slides: slides.length }), { format, slides: slides.length });
       if (after.left.length) {
         rmSync(outDir, { recursive: true, force: true });
         step(db, postId, 'photos', 'failed', { gaps: after.left });
@@ -1599,7 +1620,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined, closing: draft.closing },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(textLed.length ? { textLed: textLed.map((g) => g.slide) } : {}), ...(postStyle ? { styleName: postStyle } : {}) },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(textLed.length ? { textLed: textLed.map((g) => g.slide) } : {}), ...(texture ? { texture, mode } : {}), ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
@@ -1625,6 +1646,25 @@ export function needsSides(pack, format, outline) {
  * post never goes out with a slide on no photograph (photoGaps). An account that lists no library has chosen drawn
  * slides; none does today.
  */
+/**
+ * The texture of a post of a styled account (src/render/textures.js): its own, never the one the account's last post
+ * had, so two posts in a row never share a ground. null for an account on the older templates.
+ */
+/**
+ * Whether a post is drawn on its photographs or as designed text: 'photos' when every slide, the cover's included, has
+ * a photograph of its own (its key in `photos`; a scene behind a slide is not its own), else 'text'. Pure.
+ */
+export function postMode({ photos, slides }) {
+  for (let i = 0; i < slides; i++) if (!photos.get(i)) return 'text';
+  return 'photos';
+}
+
+export function postTexture(db, pack, postId) {
+  if (!(pack.meta?.style?.name || pack.theme?.style)) return null;
+  const last = db.get("SELECT json_extract(checks_json, '$.texture.kind') AS k, json_extract(checks_json, '$.texture.layout') AS l FROM posts WHERE account_id = ? AND id <> ? AND checks_json IS NOT NULL ORDER BY created_at DESC LIMIT 1", pack.id, postId);
+  return textureFor(postId, { avoid: last?.k || null, avoidLayout: last?.l || null });
+}
+
 export const searchesPhotos = (ctx, pack) => !(ctx.mode === 'recorded' && !ctx.imagesLive) && Boolean((pack.meta.imagery?.providers || []).length || packPhotoList(pack).length);
 
 /**
@@ -1686,16 +1726,19 @@ export function namedGaps({ photos, named }) {
   return out.sort((a, b) => a.slide - b.slide);
 }
 
-/** The most content slides of one post that may stand text first, on a scene, for a name with no photograph. */
-export const TEXT_LED_MAX = 2;
+/**
+ * The most content slides of one post that may stand text first, on a scene or the post's texture, for a name with no
+ * photograph: all of them since the owner's word of 2026-11-06 ("if a slideshow ... fails because of them, we can use
+ * generated background"); it was two. The cover's face and a guess-who's answer still need their photograph.
+ */
+export const TEXT_LED_MAX = Infinity;
 
 /**
  * Which of a post's photograph gaps it may go out with: `led`, a content slide that names someone no licensed
  * photograph shows, which stands on the post's scene with its words first (a private name like Satori Kato, a sage of
  * the Talmud with no likeness on Commons), at most TEXT_LED_MAX of them; and `left`, every other gap, which blocks the
- * post: the cover's face, a guess-who's reveal, a slide on no photograph at all, or more text-first slides than that.
- * A post with three such slides is a post about faces no one can be shown, and another topic serves better. Before
- * 2026-11-06 one such slide blocked the post whole, three of five first samples among them. Pure.
+ * post: the cover's face, a guess-who's reveal, a slide on no ground at all. Before 2026-11-06 one such slide blocked
+ * the post whole, three of five first samples among them. Pure.
  */
 export function textLedGaps(gaps, { format, slides }) {
   const reveal = kindName(format) === 'guess-who' ? slides - 1 : -1;

@@ -52,6 +52,10 @@ export function parseFeed(body) {
 }
 
 /** The feeds a page declares about itself (<link rel="alternate" type="...rss|atom...">). */
+// A feed's title without the word the site adds for the feed ("My Jewish Learning » Feed", "Ynet - RSS", "Site Comments
+// Feed"): a slide's source line names the site, not its feed (2026-11-07).
+export const feedName = (t) => String(t || '').replace(/\s*[»|:\-–]\s*(?:comments?\s+)?(?:feed|rss|atom)\s*$/i, '').replace(/\s+(?:comments?\s+)?(?:feed|rss)\s*$/i, '').trim() || String(t || '').trim();
+
 export function declaredFeeds(html, base) {
   const out = [];
   for (const tag of String(html || '').match(/<link\b[^>]*>/gi) || []) {
@@ -60,7 +64,7 @@ export function declaredFeeds(html, base) {
     try {
       const url = new URL(attr('href'), base).href;
       // A feed's title is decoded until it is text: "My Jewish Learning &raquo; Feed" became a source's name (2026-11-06), and some sites encode it twice.
-      if (!out.some((f) => f.url === url)) out.push({ url, title: decodeEntities(decodeEntities(attr('title'))), type: attr('type') });
+      if (!out.some((f) => f.url === url)) out.push({ url, title: feedName(decodeEntities(decodeEntities(attr('title')))), type: attr('type') });
     } catch {
       /* a broken href is not a feed */
     }

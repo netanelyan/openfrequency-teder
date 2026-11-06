@@ -59,8 +59,7 @@ test('no outline and no shadow on any letter, and no progress bar, counter, dots
         assert.doesNotMatch(html, /@demo\.bench/, 'the handle is not on a slide');
         await tab.setContent(html);
         const bad = await tab.evaluate(() =>
-          // The backdrop (.bf) is the one blurred thing: the slide's own photograph behind the design, never a letter.
-          [...document.querySelectorAll('body *:not(.bf)')]
+          [...document.querySelectorAll('body *')]
             .map((el) => getComputedStyle(el))
             .filter((cs) => cs.textShadow !== 'none' || parseFloat(cs.webkitTextStrokeWidth) > 0 || /blur/.test(cs.filter)).length
         );
@@ -81,12 +80,14 @@ test('no label at the top of a slide: no eyebrow over a headline, in any style',
         const html = draw(name, slide);
         assert.doesNotMatch(html, /ראש בראש/, `style ${name}: the cover's category is not drawn`);
         await tab.setContent(html);
-        // Nothing sits above the headline but the slide's own number (C sets it first) and C's and D's label chips.
+        // Nothing sits above the headline but the slide's own number (C sets it first), C's and D's label chips, and A's
+        // badge of the slide's place (2026-11-06), on its card at the foot of the slide as D's chip is, never at the top
+        // of the screen.
         const above = await tab.evaluate(() => {
           const hl = document.querySelector('.hl');
           if (!hl) return [];
           const top = hl.getBoundingClientRect().top;
-          return [...document.querySelectorAll('body *')].filter((el) => el.children.length === 0 && el.textContent.trim() && !el.closest('.probe,style,title') && el.getBoundingClientRect().bottom < top - 1 && !el.closest('.chip,.nrow,.sides')).map((el) => el.textContent.trim());
+          return [...document.querySelectorAll('body *')].filter((el) => el.children.length === 0 && el.textContent.trim() && !el.closest('.probe,style,title') && el.getBoundingClientRect().bottom < top - 1 && !el.closest('.chip,.badge,.nrow,.sides')).map((el) => el.textContent.trim());
         });
         assert.deepEqual(above, [], `style ${name} ${slide.kind}: text above the headline`);
       }
@@ -245,6 +246,18 @@ test('onboarding suggests a style from the niche and the brand, away from a look
   assert.equal(suggestStyle({ niche: 'כדורגל' }, { accent: '#2F6BFF' }, [other]).name, 'E', 'another colour may share the style');
 });
 
+test('a business never gets the native look E ticked for it: a designed style first, E kept on offer last', async () => {
+  for (const about of [{ niche: 'כדורגל' }, { niche: 'חנות בגדים' }, { niche: 'תחביבים' }, { niche: 'טיפים לבינה מלאכותית', topics: ['ChatGPT'] }]) {
+    const s = suggestStyle(about, {}, [], { business: true });
+    assert.notEqual(s.name, 'E', about.niche);
+    assert.equal(s.ranked.at(-1), 'E', 'still on offer');
+    assert.ok(['A', 'B', 'C', 'D'].includes(s.ranked[0]) && ['A', 'B', 'C', 'D'].includes(s.ranked[1]), 'the two ticked are designed');
+  }
+  assert.equal(suggestStyle({ niche: 'כדורגל' }).name, 'E', 'a hand-written pack is suggested as before');
+  const src = (await import('node:fs')).readFileSync(new URL('../src/onboarding/pack.js', import.meta.url), 'utf8');
+  assert.match(src, /suggestStyle\([^;]*\{ business: true \}\)/, 'the setup asks as a business');
+});
+
 test('a style test is judged on views and engagement together, and not at all on too few posts', () => {
   const row = (style, views, engagement) => ({ style, views, engagement });
   const rows = [row('A', 1000, 50), row('A', 1200, 60), row('A', 900, 40), row('B', 3000, 200), row('B', 2500, 150), row('B', 2800, 160)];
@@ -391,14 +404,14 @@ test("E: the cover's hook is set large and centred in the middle band, and the t
     assert.equal(mid.align, 'center');
     const band = (SAFE_ZONES.tiktok.top + 1920 - SAFE_ZONES.tiktok.bottom) / 2;
     assert.ok(Math.abs(mid.y - band) < 120, `in the middle band (${Math.round(mid.y)})`);
-    // A face at 35% of the slide: the text goes below it.
-    await tab.setContent(drawE('box', { ...cover, photoPos: '50% 35%' }));
+    // A face the screen measured at 35% of the slide (src/render/crop.js subjectBand): the text goes below it.
+    await tab.setContent(drawE('box', { ...cover, photoPos: '50% 50%', subjectBand: { top: 0.35 * 1920 - 150, bottom: 0.35 * 1920 + 150 } }));
     const top = await tab.evaluate(() => document.querySelector('.hl').getBoundingClientRect().top);
     assert.ok(top > 0.35 * 1920 + 150, `below the face (${Math.round(top)})`);
   } finally {
     await tab.close();
   }
-  const r = await renderHtml(drawE('box', { ...cover, photoPos: '50% 35%' }), { size: 'tiktok', file: path.join(out, 'E-face.jpg') });
+  const r = await renderHtml(drawE('box', { ...cover, photoPos: '50% 50%', subjectBand: { top: 522, bottom: 822 } }), { size: 'tiktok', file: path.join(out, 'E-face.jpg') });
   assert.deepEqual(r.warnings, []);
 });
 
@@ -416,35 +429,27 @@ test("E is chosen in pack.json and carries its look; the other styles' looks are
   assert.match(styleFitProblems({ hook: 'מי שווה הכי הרבה בעולם ה-AI? חמש חברות, מדד אחד ושווי אחד שמשנה את כל התמונה של השוק והכל', sub: '', slides: [{ kind: 'cover' }] }, { style: 'E' })[0]?.msg || '', /Shorten it/);
 });
 
-test('E fills the slide with every photograph sharp enough to fill it; a small one is shown whole on a blurred copy of itself, its text clear of the face', async () => {
+test('E fills the slide with every photograph, a landscape one too, cut to 9:16: never a band over a blurred copy', async () => {
+  // The owner, 2026-11-06: "tiktok format should be 9:16. no landscape images with blurred background". A photograph
+  // too small to fill, or whose subject a 9:16 cut would lose, is not chosen (src/images/index.js findImage).
   const g = geo('tiktok');
-  assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1920 } }, g).mode, 'cover', 'a 9:16 photograph fills the slide');
-  assert.equal(fitE({ photo, photoSize: { w: 1200, h: 1800 } }, g).mode, 'cover', 'a 2:3 one is cut a little and fills it');
-  assert.equal(fitE({ photo, photoSize: { w: 1080, h: 1350 } }, g).mode, 'cover', 'a 4:5 one fills the slide, cut around its face');
-  assert.equal(fitE({ photo, photoSize: { w: 2560, h: 1440 } }, g).mode, 'cover', 'so does a sharp landscape one: a slide is the whole screen of picture');
-  const wide = fitE({ photo, photoSize: { w: 1600, h: 900 } }, g);
-  assert.deepEqual(wide, { mode: 'contain', top: 220, ph: 608 }, 'a 16:9 one too small to fill is shown whole, at the top under the tabs');
-  assert.equal(fitE({ photo, photoSize: { w: 450, h: 600 } }, g).mode, 'contain', 'a small one is not blown up past twice its size');
-  assert.equal(fitE({ photo }, g).mode, 'cover', 'no size known: as before');
+  for (const size of [{ w: 1080, h: 1920 }, { w: 1200, h: 1800 }, { w: 2560, h: 1440 }, { w: 1600, h: 900 }, { w: 450, h: 600 }]) assert.equal(fitE({ photo, photoSize: size }, g).mode, 'cover', JSON.stringify(size));
   const browser = await getBrowser();
   const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   try {
-    // A face in the middle of a landscape photograph: the text goes on the black above it, with no shade there.
-    await tab.setContent(drawE(null, { ...text, photo, photoSize: { w: 1600, h: 900 }, photoPos: '50% 40%' }));
+    await tab.setContent(drawE(null, { ...text, photo, photoSize: { w: 1600, h: 900 }, photoPos: '37.5% 50%' }));
     const r = await tab.evaluate(() => {
       const img = document.querySelector('img.ph').getBoundingClientRect();
-      const blk = [...document.querySelectorAll('.blk .sf')].map((e) => e.getBoundingClientRect());
-      return { img: [img.top, img.height], top: Math.min(...blk.map((b) => b.top)), bottom: Math.max(...blk.map((b) => b.bottom)), max: Number(document.querySelector('.ov').dataset.max) };
+      return { img: [img.top, img.height], fit: getComputedStyle(document.querySelector('img.ph')).objectFit, blurred: document.querySelectorAll('img.bf, .bf').length };
     });
-    assert.deepEqual(r.img, [220, 608]);
-    assert.ok(r.top >= 220 + 608, `the text is under the photograph, in the middle of the screen (${r.top})`);
-    assert.equal(r.max, 0, 'no shade of its own: the blurred copy under it has its veil');
-    assert.equal(await tab.evaluate(() => document.querySelectorAll('img.bf').length), 1, 'never a black band: a blurred copy of the photograph fills the slide');
+    assert.deepEqual(r.img, [0, 1920], 'over the whole slide');
+    assert.equal(r.fit, 'cover');
+    assert.equal(r.blurred, 0, 'no blurred copy');
   } finally {
     await tab.close();
   }
   const file = path.join(out, 'E-landscape.jpg');
-  const done = await renderHtml(drawE(null, { ...text, photo, photoSize: { w: 1600, h: 900 }, photoPos: '50% 40%' }), { size: 'tiktok', file });
+  const done = await renderHtml(drawE(null, { ...text, photo, photoSize: { w: 1600, h: 900 }, photoPos: '37.5% 50%' }), { size: 'tiktok', file });
   assert.deepEqual(done.warnings, []);
 });
 
@@ -481,13 +486,15 @@ test('every slide of a styled post on a photograph, none on more than two while 
   assert.equal(same.plan.get(2), 1);
 });
 
-test('A to D stand a slide on a blurred copy of its own photograph behind the design; a full-bleed cover has none', () => {
+test('no style stands a slide on a blurred copy of its photograph: A, B, D and E draw it over the whole slide, C on top of its panel', () => {
+  // The owner, 2026-11-06: "no landscape images with blurred background"; 2026-10-31's blurred copy behind a framed
+  // photograph is gone.
   for (const name of ['A', 'B', 'C', 'D']) {
     const html = draw(name, { ...text, photo });
-    assert.match(html, /<img class="bf" src="data:image\/svg\+xml/, `style ${name}: the photograph behind the design, blurred`);
-    assert.match(html, /class="bfv" style="background:rgba\(var\(--bg-rgb\),\.66\)"/, `style ${name}: under the style's own ground`);
-    assert.doesNotMatch(draw(name, text), /class="bf"/, `style ${name}: no photograph, no backdrop`);
+    assert.doesNotMatch(html, /class="bf"|filter:blur/, `style ${name}: no blurred copy`);
+    if (name !== 'C') assert.match(html, /<img class="ph full"/, `style ${name}: the photograph over the whole slide`);
   }
-  assert.doesNotMatch(draw('B', { ...cover, photo }), /class="bf"/, 'a cover whose photograph fills it needs none');
+  assert.match(draw('C', { ...text, photo }), /<img class="ph"/, 'C keeps its photograph on top of its panel');
   assert.doesNotMatch(drawE(null, { ...text, photo }), /class="bf"/, "E's photograph fills its slide");
 });
+

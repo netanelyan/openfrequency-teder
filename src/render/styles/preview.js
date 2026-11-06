@@ -83,6 +83,8 @@ export async function renderStylePreview(db, { pack, post, style, outDir, size =
   const files = await renderPost({
     pack: { ...pack, theme: themeOf(pack, style) }, format, post: { id: post.id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token, extra, ctaKind: draft.cta?.kind },
     slides, photos, outDir: path.join(outDir, style), only, platforms: [size], lenient: true,
+    // A post built in designed text is shown on its own texture and layout (build.js postTexture).
+    ...(post.checks?.texture ? { texture: post.checks.texture } : {}),
   });
   return { files: files[size], slides: [...only], warnings: files.warnings, highlights: marked };
 }

@@ -717,6 +717,15 @@ blockquote.q { margin: 0; padding: 10px 12px; border-inline-start: 3px solid var
 .fmt-pick span { display: grid; gap: 3px; min-width: 0; }
 .fmt-pick b { font-weight: 600; color: var(--ink); }
 .fmt-pick small { color: var(--ink-3); font-size: 13px; line-height: 1.4; }
+/* A slide of each kind and of each style, drawn ahead of time (src/web/examples.js): small, beside its words. */
+.fmt-pick span { flex: 1 1 auto; }
+/* With its example beside it, a card takes the row on a phone, so its words keep their width. */
+@media (max-width: 699px) { .fmt-picks:has(.fmt-ex) { grid-template-columns: minmax(0, 1fr); } }
+.fmt-ex { flex: none; width: 54px; height: 96px; border-radius: 8px; object-fit: cover; margin-inline-start: auto; background: var(--inset); }
+.style-exs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0; }
+.style-exs figure { margin: 0; display: grid; gap: 4px; justify-items: center; text-align: center; min-width: 0; }
+.style-ex { display: block; width: 100%; max-width: 90px; height: auto; aspect-ratio: 9 / 16; border-radius: 8px; object-fit: cover; background: var(--inset); }
+@media (max-width: 420px) { .style-exs { gap: 5px; } .style-exs figcaption { font-size: 11px; } }
 .acct-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 16px 4px 0; }
 .acct-foot form { margin: 0; }
 .acct-foot p { color: var(--ink-p); }

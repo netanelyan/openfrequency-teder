@@ -81,7 +81,7 @@ const nicheOf = (text) => {
  * The style to offer an account: { name, ranked, why }. `about`: { niche, audience, topics, description,
  * displayName }; `colors`: its brand's (theme.json colors); `existing`: the other packs.
  */
-export function suggestStyle(about, colors = {}, existing = []) {
+export function suggestStyle(about, colors = {}, existing = [], { business = false } = {}) {
   const text = aboutOf(about);
   const sc = styleScores(text);
   const tone = brandTone(colors);
@@ -104,7 +104,10 @@ export function suggestStyle(about, colors = {}, existing = []) {
   const niche = nicheOf(text);
   const looksLike = (name) =>
     existing.some((p) => p.meta?.style?.name === name && niche && nicheOf(aboutOf({ ...p.meta, niche: (p.meta.topics || []).join(' ') })) === niche && deltaE(resolveStyle({ name }, colors.accent).colors.accent, resolveStyle(p.meta.style, p.theme?.colors?.accent).colors.accent) < 20);
-  const free = ranked.filter((s) => !looksLike(s));
+  // A business wants a serious, designed look (A to D): the native look E stays on offer, last, and is never chosen
+  // for it. Every account the setup makes is a business's (createPack, the styles page); a hand-written pack is not.
+  if (business) ranked = [...ranked.filter((s) => s !== 'E'), 'E'];
+  const free = ranked.filter((s) => !looksLike(s) && !(business && s === 'E'));
   const name = free[0] || ranked[0];
   if (name !== top) why.push(`לחשבון אחר באותו תחום כבר יש את סגנון ${top} בצבע קרוב, אז החשבון הזה מקבל את הבא בתור`);
   return { name, ranked: [name, ...ranked.filter((s) => s !== name)], why };
