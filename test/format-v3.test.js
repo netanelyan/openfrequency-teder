@@ -6,14 +6,15 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { bandProfile, calmRoom, CALM_MAX, cropFor, FRAMES, subjectBand, subjectFits, subjectOf } from '../src/render/crop.js';
-import { LAYOUTS, TEXTURES, textureFor, textureTones, textureSvg } from '../src/render/textures.js';
+import { decor, LAYOUTS, PALETTES, slideTexture, TEXTURES, textureFor, textureTones, textureSvg } from '../src/render/textures.js';
+import { luminance } from '../src/render/color.js';
 import { mixFor, planPhotos } from '../src/render/render.js';
 import { needE, stylePage, themeOf, geo } from '../src/render/styles/index.js';
 import { STYLES } from '../src/render/styles/tokens.js';
 import { contrast } from '../src/render/color.js';
 import { findImage, fitFor, headWord, PROVIDERS } from '../src/images/index.js';
 import { imageSize } from '../src/images/size.js';
-import { postMode, postTexture } from '../src/pipeline/build.js';
+import { postMode, postTexture, shorterQuery } from '../src/pipeline/build.js';
 import { closeBrowser, getBrowser } from '../src/render/render.js';
 import { copyPack, opened, tempHome } from './helpers.js';
 
@@ -171,6 +172,32 @@ test('a texture is one of five, varies from post to post, never repeats the last
   }
 });
 
+test('each slide of a post in text mode looks its own: the next colour of its playful palette, its own cut-outs, and the words still read', () => {
+  // The owner, 2026-11-07: "each slide should have a different background, or at least look a bit different from the
+  // first slide ... the background should always be playful".
+  for (const name of Object.keys(STYLES)) {
+    const theme = themeOf({ meta: { style: { name } }, theme: { colors: { accent: '#E8A33D' } } }, name);
+    const c = theme.style.colors;
+    for (const kind of TEXTURES) {
+      for (const layout of LAYOUTS) {
+        const post = { ...textureFor(`p-${name}-${kind}-${layout}`), kind, layout, dark: STYLES[name].dark !== false };
+        const tones = [0, 1, 2, 3].map((i) => textureTones(slideTexture(post, i), { ground: c.bg, text: c.text, accent: c.accent }));
+        const need = ['card', 'boxes'].includes(layout) ? 4.5 : 7;
+        tones.forEach((t, i) => assert.ok(contrast(c.text, t.light) >= need, `${name} ${kind} ${layout} slide ${i}: ${contrast(c.text, t.light).toFixed(1)}:1`));
+        assert.notEqual(tones[0].base, tones[1].base, `${name} ${kind}: the second slide is not the first one's colour`);
+        assert.notEqual(decor(slideTexture(post, 0), tones[0], 1080, 1920), decor(slideTexture(post, 1), tones[1], 1080, 1920), 'its own cut-outs');
+      }
+    }
+  }
+  // Under light letters a slide's ground is never a pale colour deepened to olive: the pale ones decorate.
+  const t = { ...textureFor('pYellow'), dark: true };
+  for (let i = 0; i < 8; i++) {
+    const own = PALETTES[t.palette].filter((x) => luminance(x) < 0.35)[i % PALETTES[t.palette].filter((x) => luminance(x) < 0.35).length];
+    assert.ok(own, 'every palette has a deep colour');
+  }
+  assert.ok(PALETTES.every((p) => p.filter((x) => luminance(x) < 0.35).length >= 2), 'two deep colours a palette at least, so slides in a row differ');
+});
+
 test("a slide with no photograph stands on its post's texture in every style, never on a flat ground, on both platforms", async () => {
   const browser = await getBrowser();
   const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
@@ -272,6 +299,11 @@ test('a post in text mode keeps one layout on all its slides, and the layout cha
 test('a post is all photographs only when every slide, its cover included, has its own; a scene does not count', () => {
   const p = (keys) => new Map(keys.map((k) => [k, { id: String(k) }]));
   assert.equal(postMode({ photos: p([0, 1, 2, 3]), slides: 4 }), 'photos');
+  // A post about something to see looks again a word shorter (build.js findPhotos, needsPhotos).
+  assert.equal(shorterQuery('cooked chicken bones'), 'chicken bones');
+  assert.equal(shorterQuery('dog in kitchen'), 'dog');
+  assert.equal(shorterQuery('grapes and raisins'), null);
+  assert.equal(shorterQuery('macadamia nuts'), null);
   assert.equal(postMode({ photos: p([0, 1, 3]), slides: 4 }), 'text', 'one slide without: the whole post is text');
   assert.equal(postMode({ photos: p([1, 2, 3, 'bg']), slides: 4 }), 'text', 'a cover on a scene is not on its own photograph');
   assert.equal(postMode({ photos: p(['bg', 'bg2']), slides: 3 }), 'text');
@@ -336,5 +368,6 @@ test("a feed's name on a slide is the site's, without the word the site adds for
   const { declaredFeeds, feedName } = await import('../src/sources/rss.js');
   assert.equal(declaredFeeds('<link rel="alternate" type="application/rss+xml" title="My Jewish Learning &raquo; Feed" href="/feed">', 'https://x.test/')[0].title, 'My Jewish Learning');
   assert.equal(feedName('Ynet - RSS'), 'Ynet');
+  assert.equal(feedName('My Jewish Learning • Feed'), 'My Jewish Learning');
   assert.equal(feedName('Feed'), 'Feed', 'a title that is only the word stays');
 });

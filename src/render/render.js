@@ -15,7 +15,7 @@ import { overlayOf } from '../rules/overlay.js';
 import { fillsCover, imageSize } from '../images/size.js';
 import { stylePage, themeOf } from './styles/index.js';
 import { slideModel } from './styles/model.js';
-import { textureFor } from './textures.js';
+import { slideTexture, textureFor } from './textures.js';
 import { mediaSizes } from '../core/platforms.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
@@ -969,7 +969,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
           // Style C's key line, at the foot of the cover: the day, or the two sides. Nothing is set over a headline.
           slide.keyLine = day || names;
         }
-        slide.texture = tex;
+        slide.texture = slideTexture(tex, i);
         const on = split ? ['ca', 'cb'] : slide.photo ? [from] : tex ? ['texture'] : [];
         // A slide drawn in the companion style that does not fit it is drawn in the post's own.
         let theme = mixed.has(i) ? companion : pack.theme;
@@ -1043,7 +1043,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       out[size].push(file);
     } else if (end && styled && !only) {
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
-      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null, texture: tex } }), { size, file, lenient });
+      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle, photo: endKey != null ? uri.get(endKey) : null, texture: slideTexture(tex, slides.length) } }), { size, file, lenient });
       for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
       out[size].push(file);
       grounds[size][slides.length] = endKey != null && uri.has(endKey) ? [endKey] : [];

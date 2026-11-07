@@ -9,7 +9,7 @@ import { quotaMonth, room } from '../budget/quota.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
-import { THIN_DOC, unreadable } from '../sources/text.js';
+import { decodeEntities, THIN_DOC, unreadable } from '../sources/text.js';
 import { ensureFormats, groupsOf, inTurns, mixOf, pickFormat, pickHook, pickTemplates, turnOrder } from '../formats/rotation.js';
 import { coverCredit, coverFrame, fillTemplate, hookProblems, isTemplateId, speakerOf, templateById, templateOnCover, whoGender } from '../formats/hooks.js';
 import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, SLIDES, structureNumbers } from '../formats/kinds.js';
@@ -25,6 +25,7 @@ import { MAX_HASHTAGS, SHORT_CAPTION, captionProblems, captionStyleOf, hashtagPr
 import { ATTRIBUTED_MAX, gate, numbersIn, verifyFact } from '../verify/claims.js';
 import { findImage, MAX_SCREENS, MIN_SIDE, packPhotoList, shows, whoIn } from '../images/index.js';
 import { scenesFor } from '../images/scenes.js';
+import { feedName } from '../sources/rss.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost, slidePlaces } from '../render/render.js';
 import { textureFor } from '../render/textures.js';
@@ -784,7 +785,9 @@ export function sourceLabel(db, fact, { article = true } = {}) {
   if (kind === 'model') return null;
   // A topic bank's page is named by where it is from, never by the bank: "מקור: מאגר הנושאים" told a reader nothing.
   if (kind === 'bank') return bankLabel(row.url, row.title, wiki);
-  return row.name;
+  // A source named before feed titles were decoded and lost their "» Feed" (2026-11-06; "My Jewish Learning &raquo;
+  // Feed") is named by its site on the slide all the same.
+  return feedName(decodeEntities(decodeEntities(row.name)));
 }
 
 const HOSTS = {
@@ -1370,6 +1373,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       step(db, postId, 'photos', 'failed', { mode, why: 'a cover that needs its face, in a post that is not all photographs' });
       return photoBlock(kindName(format) === 'guess-who' ? `לא לכל שקף של נחשו-מי נמצאה תמונה, ובלי התמונות אין לו שער` : `לא לכל שקף נמצאה תמונה, והשער צריך את התמונה של ${named.get(0).map((q) => whoIn(q).join(' ')).join(' ושל ')}`);
     }
+    // A post about something people want to see (a place, nature, a dish: the outline's needsPhotos) goes out on its
+    // photographs or not at all (the owner, 2026-11-07: "a slideshow about nature, that talks about places must have
+    // images, same with specific food, things like that - treat it as a rule"): another post, never designed text.
+    if (mode === 'text' && outline?.needsPhotos) {
+      step(db, postId, 'photos', 'failed', { mode, why: 'a post about something to see, not every slide on its photograph' });
+      return photoBlock('הפוסט על משהו שרוצים לראות (מקום, טבע, אוכל), ולא לכל שקף נמצאה תמונה: פוסט כזה יוצא רק עם תמונות');
+    }
     if (mode === 'text') {
       photos = new Map();
       textLed = [];
@@ -1651,6 +1661,20 @@ export function needsSides(pack, format, outline) {
  * had, so two posts in a row never share a ground. null for an account on the older templates.
  */
 /**
+ * A search a word shorter, for a slide whose own found nothing: its first word off a search of three or more ("cooked
+ * chicken bones" is "chicken bones"), or the thing before a place or a time ("dog in kitchen" is "dog"); null when
+ * there is none, or the search joins two things ("grapes and raisins"). Pure.
+ */
+export function shorterQuery(query) {
+  const ws = String(query || '').trim().split(/\s+/).filter(Boolean);
+  if (ws.some((w) => /^(?:and|or|&)$/i.test(w))) return null;
+  const cut = ws.findIndex((w, i) => i > 0 && /^(?:at|on|in|with|of|from|for|by|under|over|near|during)$/i.test(w));
+  const core = cut > 0 ? ws.slice(0, cut) : ws;
+  if (core.length >= 3) return core.slice(1).join(' ');
+  return core.length < ws.length ? core.join(' ') : null;
+}
+
+/**
  * Whether a post is drawn on its photographs or as designed text: 'photos' when every slide, the cover's included, has
  * a photograph of its own (its key in `photos`; a scene behind a slide is not its own), else 'text'. Pure.
  */
@@ -1883,6 +1907,26 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     }
     step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode, why });
     if (img) out.set(w.idx, img);
+  }
+  // A post about something people want to see (outline.needsPhotos) goes out on photographs or not at all (the owner,
+  // 2026-11-07): a content slide whose own search found nothing, and that names no one, looks again, deeper into its own
+  // search's results (the ones it refused are not screened again), then for the post's subject (its cover's search) as
+  // a scene that fits it; a picture the post already shows is not taken twice.
+  if (outline.needsPhotos && styledAll) {
+    const taken = new Set([...out.values()].map((img) => img.id));
+    for (const w of wants.filter((x) => x.idx > 0 && !out.has(x.idx) && !whoIn(x.query).length)) {
+      const s = draft.slides[w.idx];
+      const short = shorterQuery(w.query);
+      const tries = [[w.query, w.claim], ...(short ? [[short, w.claim]] : []), ...(outline.imageQuery && outline.imageQuery !== w.query ? [[outline.imageQuery, `${outline.imageQuery}, as a scene that fits this slide of a post${about}: ${s.title} ${s.body}`]] : [])];
+      for (const [query, claim] of tries) {
+        const img = await findImage(ctx, { pack, query, postId, claim, why: {}, minSide: MIN_SIDE.framed, budget: { screens: MAX_SCREENS } }).catch(() => null);
+        if (!img || taken.has(img.id)) continue;
+        taken.add(img.id);
+        out.set(w.idx, img);
+        step(ctx.db, postId, 'image', 'ok', { slide: w.idx, query, fill: true, provider: img.provider, license: img.license, source: img.source_url });
+        break;
+      }
+    }
   }
   // A cover still without its own photograph takes a portrait one of its slides found (the post's person, checked
   // against that slide): every reader asked for a face on the cover over the kind's drawn art.

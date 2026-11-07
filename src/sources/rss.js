@@ -54,7 +54,7 @@ export function parseFeed(body) {
 /** The feeds a page declares about itself (<link rel="alternate" type="...rss|atom...">). */
 // A feed's title without the word the site adds for the feed ("My Jewish Learning » Feed", "Ynet - RSS", "Site Comments
 // Feed"): a slide's source line names the site, not its feed (2026-11-07).
-export const feedName = (t) => String(t || '').replace(/\s*[»|:\-–]\s*(?:comments?\s+)?(?:feed|rss|atom)\s*$/i, '').replace(/\s+(?:comments?\s+)?(?:feed|rss)\s*$/i, '').trim() || String(t || '').trim();
+export const feedName = (t) => String(t || '').replace(/\s*[»|:\-–•·]\s*(?:comments?\s+)?(?:feed|rss|atom)\s*$/i, '').replace(/\s+(?:comments?\s+)?(?:feed|rss)\s*$/i, '').trim() || String(t || '').trim();
 
 export function declaredFeeds(html, base) {
   const out = [];

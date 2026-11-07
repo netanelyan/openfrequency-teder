@@ -131,6 +131,27 @@ test("every slide's own photograph refused: the whole post is designed text on i
   }
 });
 
+test("a post about something to see (the outline's needsPhotos) with a slide on no photograph is another post, never designed text", { timeout: 240_000 }, async () => {
+  // The owner, 2026-11-07: "a slideshow about nature, that talks about places must have images, same with specific food,
+  // things like that - treat it as a rule."
+  const { home, cleanup } = tempHome({ packs: {} });
+  try {
+    const { ctx, dir, pack } = account(home);
+    const file = await photoFile(home);
+    library(file, (q) => (q === 'aloe plant pot' || SCENE.test(q) ? 'ok' : 'none'));
+    setDraft(dir, 'drought-ranking', (d) => {
+      d.outline.needsPhotos = true;
+      d.slides.slides[1].imageQuery = 'aloe vera pot';
+    });
+    const res = await buildPost(ctx, { pack });
+    assert.equal(res.status, 'blocked', 'blocked, not drawn as text');
+    assert.match(res.reason, /רק עם תמונות/);
+    assert.ok(!steps(ctx.db, res.postId, 'mode').length, 'never drawn');
+  } finally {
+    cleanup();
+  }
+});
+
 test("nothing found at all, not even a scene: every slide stands on the post's texture, never on a bare ground", { timeout: 240_000 }, async () => {
   // The owner, 2026-11-06: "if a slideshow ... fails because of them, we can use generated background, but from a few
   // options: a cutting mat, paper texture, fabric texture, liquid glass, artisan texture" (src/render/textures.js).
