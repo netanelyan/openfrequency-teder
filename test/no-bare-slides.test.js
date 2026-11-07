@@ -152,6 +152,40 @@ test("a post about something to see (the outline's needsPhotos) with a slide on 
   }
 });
 
+test('a slide whose own search finds nothing gets new searches from the model, and the post stays on its photographs', { timeout: 240_000 }, async () => {
+  // The owner, 2026-11-07: "the AI inside the teder engine should fight to get a slideshow with nice images, and cool
+  // backgrounds are only the last last last fallback".
+  const { home, cleanup } = tempHome({ packs: {} });
+  try {
+    const { ctx, dir, pack } = account(home);
+    const file = await photoFile(home);
+    const asked = library(file, (q) => (q === 'clay pot close up' || q === 'pot close up' ? 'none' : 'ok'));
+    setDraft(dir, 'drought-ranking', (d) => (d.slides.slides[1].imageQuery = 'aloe vera pot'));
+    const told = [];
+    const real = ctx.llm.json.bind(ctx.llm);
+    ctx.llm = {
+      ...ctx.llm,
+      json: async (req) => {
+        if (req.task !== 'image-search') return real(req);
+        told.push(req.user);
+        const slides = [...req.user.matchAll(/^Slide (\d+)/gm)].map((m) => ({ slide: Number(m[1]), queries: ['clay pot close up', 'terracotta pot'] }));
+        return { data: { slides }, usage: null, estimated: true };
+      },
+    };
+    const res = await buildPost(ctx, { pack });
+    assert.equal(res.status, 'queued', res.reason);
+    assert.equal(told.length, 1, 'one call for the slides still without a photograph');
+    assert.match(told[0], /Searched: "clay pot close up"/, 'told what was searched');
+    assert.ok(asked.includes('terracotta pot'), 'the new search was made');
+    const rescued = steps(ctx.db, res.postId, 'image').filter((x) => x.rescue);
+    assert.equal(rescued.length, 1);
+    assert.equal(rescued[0].query, 'terracotta pot', 'never the search it already tried');
+    assert.deepEqual(steps(ctx.db, res.postId, 'mode').map((x) => x.mode), ['photos'], 'on its photographs, not designed text');
+  } finally {
+    cleanup();
+  }
+});
+
 test("nothing found at all, not even a scene: every slide stands on the post's texture, never on a bare ground", { timeout: 240_000 }, async () => {
   // The owner, 2026-11-06: "if a slideshow ... fails because of them, we can use generated background, but from a few
   // options: a cutting mat, paper texture, fabric texture, liquid glass, artisan texture" (src/render/textures.js).

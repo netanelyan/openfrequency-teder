@@ -813,9 +813,11 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const closing = post.extra?.closing?.actions ? post.extra.closing : null;
   const end = closing ? null : endSlide;
   const kindNow = format ? kindName(format) : 'list';
-  // A do-dont's rules are someone else's guidance, under licences that ask for credit: its slides name their source
-  // even on an account that keeps its sources off the slides.
-  const noSources = opts.sourceLine === false && kindNow !== 'do-dont';
+  // No slide names its source (the owner, 2026-11-07: "no need to tell the source in each post. it looks too AI"): every
+  // fact keeps its source in the post's record, and an account may still ask for the line (theme.options.sourceLine
+  // true). A do-dont's rules are someone else's guidance, under licences that ask for credit: its slides name their
+  // source whatever the account says.
+  const noSources = opts.sourceLine !== true && kindNow !== 'do-dont';
   // Every slide on a photograph (theme.options.backgroundPhoto): its own, else one of the post's, in turn, else the
   // one found for the post's scene ('bg'). Never a guess-who's answer, whose face would show through the blur.
   // The post's own subject (the cover's photograph, never a guess-who's answer) and its scene; a slide's portrait of

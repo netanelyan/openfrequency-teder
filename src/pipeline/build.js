@@ -1660,6 +1660,53 @@ export function needsSides(pack, format, outline) {
  * The texture of a post of a styled account (src/render/textures.js): its own, never the one the account's last post
  * had, so two posts in a row never share a ground. null for an account on the older templates.
  */
+/** The screens a slide spends on the model's new searches (newSearches), all of them together. */
+export const RESCUE_SCREENS = 6;
+
+const SEARCH_SCHEMA = {
+  type: 'object',
+  properties: {
+    slides: {
+      type: 'array',
+      items: { type: 'object', properties: { slide: { type: 'integer' }, queries: { type: 'array', items: { type: 'string' } } }, required: ['slide', 'queries'], additionalProperties: false },
+    },
+  },
+  required: ['slides'],
+  additionalProperties: false,
+};
+
+export const SEARCH_SYSTEM = `You find photographs for the slides of a social-media slideshow, in free photo libraries (Pexels, Unsplash, Wikimedia Commons, Openverse). Each slide stands on a vertical 9:16 photograph cut around its subject, with a calm area left for the slide's words. A search found nothing that fitted the slides below; the reasons say why (too small to fill the slide, a subject too wide for a vertical cut, no calm area for the words, a picture of something else, a title that does not name what was searched for).
+
+For each slide, give up to 3 new searches in English, 1 to 4 words each, best first, each for a photograph photographers take often that shows what the slide is about:
+- The thing itself, alone or in use, close enough to see ("sugar free gum", "chicken bones on plate"), rather than a person doing something with it.
+- A place by its name, then by a nearby or wider name the libraries know ("Judean Desert", "Dead Sea cliffs", "Ein Gedi").
+- An animal or a plant by its common name.
+- Against "no calm area" or "too wide": the subject smaller in the frame or a simpler scene ("macadamia nuts in bowl", "bird on branch").
+Never a search already tried, a logo, a screen, a page of text, a crowd, or a person the slide does not name. Names are capitalised as they are written; things are in lowercase. One entry per slide given, by its number.`;
+
+/**
+ * New photograph searches for the slides still without one (`left`, each with its own search and why nothing it found
+ * fitted, in `tried`): one call to the model (the screen's, a small one), Map(slide -> [query, ...]), up to three a
+ * slide, never the search it already tried.
+ */
+export async function newSearches(ctx, { draft, outline, left, tried }) {
+  const top = (why) => Object.entries(why || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${k} (${n})`).join('; ');
+  const lines = left.map((w) => {
+    const s = draft.slides[w.idx] || {};
+    const words = (w.idx === 0 ? [draft.hook, draft.sub] : [s.title, s.body]).filter(Boolean).join(' / ').replace(/\s+/g, ' ');
+    const t = tried.get(w.idx);
+    return `Slide ${w.idx}${w.idx === 0 ? ' (the cover)' : ''}: "${words}". Searched: "${t?.query || w.query}". Nothing fitted: ${top(t?.why) || 'nothing was found'}.`;
+  });
+  const { data } = await askJson(ctx, { task: 'image-search', role: 'judge', system: SEARCH_SYSTEM, user: `The post is about: ${outline.topic || draft.hook}.\n\n${lines.join('\n')}`, schema: SEARCH_SCHEMA, effort: 'low', maxTokens: 1200, tag: 'image-search' });
+  const out = new Map();
+  for (const x of data?.slides || []) {
+    const was = String(tried.get(x.slide)?.query || '').toLowerCase().trim();
+    const qs = [...new Set((x.queries || []).map((q) => String(q).trim()).filter((q) => q && q.split(/\s+/).length <= 6 && q.toLowerCase() !== was))].slice(0, 3);
+    if (left.some((w) => w.idx === x.slide) && qs.length) out.set(x.slide, qs);
+  }
+  return out;
+}
+
 /**
  * A search a word shorter, for a slide whose own found nothing: its first word off a search of three or more ("cooked
  * chicken bones" is "chicken bones"), or the thing before a place or a time ("dog in kitchen" is "dog"); null when
@@ -1878,6 +1925,8 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // The post's photographs are chosen once each, and a picture refused for what it shows is not screened again for
   // another slide (findImage).
   ctx = { ...ctx, photoMemo: ctx.photoMemo || { taken: new Set(), refused: new Set() } };
+  // What each slide's own search was and why nothing it found fitted, for the searches after it (newSearches).
+  const tried = new Map();
   for (const w of wants) {
     const key = w.query.toLowerCase().trim();
     // At most four searches a post, or one a slide when every slide stands on its own photograph.
@@ -1907,25 +1956,45 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     }
     step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode, why });
     if (img) out.set(w.idx, img);
+    tried.set(w.idx, { query: w.query, why });
   }
-  // A post about something people want to see (outline.needsPhotos) goes out on photographs or not at all (the owner,
-  // 2026-11-07): a content slide whose own search found nothing, and that names no one, looks again, deeper into its own
-  // search's results (the ones it refused are not screened again), then for the post's subject (its cover's search) as
-  // a scene that fits it; a picture the post already shows is not taken twice.
-  if (outline.needsPhotos && styledAll) {
+  // The engine fights for its photographs, and a post drawn as designed text is the last fallback (the owner,
+  // 2026-11-07: "the AI inside the teder engine should fight to get a slideshow with nice images, and cool backgrounds
+  // are only the last last last fallback"; and a post about something people want to see, outline.needsPhotos, goes out
+  // on photographs or not at all). A slide whose own search found nothing, and that names no one, looks again: deeper
+  // into its own search's results (the ones it refused are not screened again) and a word shorter (shorterQuery); then
+  // the model, told what each slide searched for and why nothing fitted, gives new searches for the slides still
+  // without one (newSearches, one call); then the post's subject (its cover's search) as a scene that fits the slide.
+  // A picture the post already shows is never taken twice.
+  if (styledAll) {
     const taken = new Set([...out.values()].map((img) => img.id));
-    for (const w of wants.filter((x) => x.idx > 0 && !out.has(x.idx) && !whoIn(x.query).length)) {
-      const s = draft.slides[w.idx];
-      const short = shorterQuery(w.query);
-      const tries = [[w.query, w.claim], ...(short ? [[short, w.claim]] : []), ...(outline.imageQuery && outline.imageQuery !== w.query ? [[outline.imageQuery, `${outline.imageQuery}, as a scene that fits this slide of a post${about}: ${s.title} ${s.body}`]] : [])];
-      for (const [query, claim] of tries) {
-        const img = await findImage(ctx, { pack, query, postId, claim, why: {}, minSide: MIN_SIDE.framed, budget: { screens: MAX_SCREENS } }).catch(() => null);
+    const left = () => wants.filter((x) => !out.has(x.idx) && !whoIn(x.query).length);
+    const minOf = (w) => (w.idx === 0 || (photoOn === 'last' && w.idx === last) ? MIN_SIDE.cover : MIN_SIDE.framed);
+    const plain = (w) => (w.idx === 0 ? w.claim : `${draft.slides[w.idx].title} ${draft.slides[w.idx].body}${about}. The photograph shows what the slide is about, large and clear, as its main subject.`);
+    const tryAll = async (w, list, budget, how) => {
+      for (const [query, claim] of list) {
+        const img = await findImage(ctx, { pack, query, postId, claim, why: {}, minSide: minOf(w), budget }).catch(() => null);
         if (!img || taken.has(img.id)) continue;
         taken.add(img.id);
         out.set(w.idx, img);
-        step(ctx.db, postId, 'image', 'ok', { slide: w.idx, query, fill: true, provider: img.provider, license: img.license, source: img.source_url });
-        break;
+        step(ctx.db, postId, 'image', 'ok', { slide: w.idx, query, [how]: true, provider: img.provider, license: img.license, source: img.source_url });
+        return true;
       }
+      return false;
+    };
+    for (const w of left()) {
+      const short = shorterQuery(w.query);
+      await tryAll(w, [[w.query, w.claim], ...(short ? [[short, w.claim]] : [])], { screens: MAX_SCREENS }, 'fill');
+    }
+    if (left().length) {
+      const asked = await newSearches(ctx, { draft, outline, left: left(), tried }).catch((e) => (ctx.log?.(`image: new searches: ${e.message}`), null));
+      if (asked?.size) step(ctx.db, postId, 'image', 'info', { newSearches: Object.fromEntries(asked) });
+      for (const w of left()) if (asked?.get(w.idx)) await tryAll(w, asked.get(w.idx).map((q) => [q, plain(w)]), { screens: RESCUE_SCREENS }, 'rescue');
+    }
+    for (const w of left()) {
+      if (w.idx === 0 || !outline.imageQuery || outline.imageQuery === w.query) continue;
+      const s = draft.slides[w.idx];
+      await tryAll(w, [[outline.imageQuery, `${outline.imageQuery}, as a scene that fits this slide of a post${about}: ${s.title} ${s.body}`]], { screens: MAX_SCREENS }, 'fill');
     }
   }
   // A cover still without its own photograph takes a portrait one of its slides found (the post's person, checked
