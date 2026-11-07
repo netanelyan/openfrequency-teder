@@ -99,7 +99,7 @@ export function keepForAccount(db, accountId, candidates) {
 }
 
 /** What an account already has (every address, so none is offered again) and what its owner removed. */
-function accountKnown(db, accountId) {
+export function accountKnown(db, accountId) {
   const rows = db.all('SELECT url, status FROM sources WHERE account_id = ? AND key <> ?', accountId, MODEL_KEY);
   return { known: rows.map((r) => r.url), dropped: [...new Set(rows.filter((r) => r.status === 'removed').map((r) => hostOf(r.url)).filter(Boolean))] };
 }

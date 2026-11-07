@@ -22,8 +22,9 @@ import { accDot, csrfField, esc, fold, icon, k, layout, postButton, stamp, withS
 import { storeOrigin } from '../demos/store.js';
 import { reading, startLogoFetch, startSiteRead } from '../onboarding/promo.js';
 import { PROMO_TITLE, draftFromForm, newPromoPanel, promoFromForm, promoLater, settlePromo } from './promo.js';
-import { carryMemory, deeperBusy, deeperLine, deeperProgress, lastRound, startDeeper } from '../onboarding/deeper.js';
-import { DEEPER_HE, deeperForm, deeperPanel, keepForAccount } from './deeper.js';
+import { carryMemory, deeperBusy, deeperLine, deeperProgress, lastRound, nextRound, rememberRound, searchDeeper, startDeeper } from '../onboarding/deeper.js';
+import { alertOperator } from '../notify/operator.js';
+import { DEEPER_HE, accountKnown, accountSeed, deeperForm, deeperPanel, keepForAccount } from './deeper.js';
 
 // The new-account flow, on the website:
 //
@@ -100,6 +101,11 @@ export const hasAccount = (db, workspaceId) => customerWorkspace(workspaceId) &&
 export const SAMPLE_TARGET = 5;
 export const SAMPLE_ENOUGH = 3;
 export const SAMPLE_ATTEMPTS = 9;
+/** How often a round of samples finds new sources itself when the account's run dry, and the tries each search adds. */
+export const SAMPLE_HEALS = 2;
+export const HEAL_TRIES = 4;
+/** How many times a round of samples meets an error on our side (a model that did not answer) before it stops. */
+export const SAMPLE_ERRORS = 3;
 
 /** How many samples passed, and while that is fewer than SAMPLE_ENOUGH, that it takes three to go on. */
 export const samplesLine = (good) => {
@@ -275,12 +281,51 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     const got = await read(ctx, pack);
     if (got.failed.length) notes.push(...got.failed.map((s) => `${s.name}: ${s.error}`));
     say(`read ${got.sources} source(s): ${got.docs} document(s)${got.failed.length ? `, ${got.failed.length} failed (${got.failed.map((s) => `${s.name}: ${s.error}`).join(' · ')})` : ''}`);
+    // The round's own fix when the account's sources have nothing (left) to write from (the owner, 2026-11-07: "make
+    // sure no real customer goes trough that (regenerating sources, regenrating demos, asking us for another round of
+    // demos when they got 0, etc)"): a round of the deeper search (src/onboarding/deeper.js), what it finds strong
+    // approved at once and the rest left pending on the Sources page, then the sources read again. At most SAMPLE_HEALS
+    // a round, while the deeper search has rounds left and the setup's cap allows. true when there is new text to read.
+    let heals = 0;
+    const heal = async () => {
+      if (heals >= SAMPLE_HEALS || !nextRound(ctx.db, pack.id)) return false;
+      if (counts && !setupRoom(ctx.db, r.workspace_id ?? null).ok) return false;
+      heals++;
+      progress.set(id, { step: 'sources', done: count() - before, total: SAMPLE_TARGET });
+      say(`the sources ran dry: finding new ones (${heals} of ${SAMPLE_HEALS})`);
+      try {
+        const { known, dropped } = accountKnown(ctx.db, pack.id);
+        const res = await (opts.deeper || searchDeeper)(ctx, accountSeed(ctx.db, pack), { scope: pack.id, known, dropped });
+        rememberRound(ctx.db, pack.id, res.round);
+        keepForAccount(ctx.db, pack.id, res.candidates);
+        const urls = res.candidates.filter(strong).map((c) => c.url);
+        const at = nowIso();
+        const approved = urls.reduce((n, url) => n + Number(ctx.db.run("UPDATE sources SET status = 'approved', approved_at = ? WHERE account_id = ? AND url = ? AND status = 'pending'", at, pack.id, url).changes), 0);
+        notes.push(`המקורות נגמרו, אז חיפשנו מקורות חדשים: ${approved} אושרו לבד, ${res.candidates.filter(offered).length - approved} מחכים בעמוד המקורות`);
+        say(`new sources: ${approved} approved, ${res.candidates.filter(offered).length - approved} pending`);
+        if (!approved) return false;
+        const again = await read(ctx, pack);
+        progress.set(id, { step: 'write', done: count() - before, total: SAMPLE_TARGET });
+        return again.docs > 0;
+      } catch (e) {
+        say(`finding new sources failed: ${e.message}`);
+        return false;
+      }
+    };
+    // A customer's round that still made too few is the operator's to look at, not the customer's to fix: the operator
+    // hears of it (src/notify/operator.js), once a day an account, and the page tells the customer it is being looked at.
+    const tell = (failure, why) => {
+      if (!failure || failure === 'cap' || !counts) return;
+      alertOperator(ctx, `samples:${pack.id}`, { title: `Teder: ${pack.meta.displayName || pack.id} has ${count()} of ${SAMPLE_ENOUGH} samples`, body: `${why}. /new/${id}` }).catch(() => {});
+    };
+    if (!got.docs && (await heal())) got.docs = 1;
     if (!got.docs) {
       const failure = got.sources && got.failed.length === got.sources ? 'unreadable' : 'nofacts';
       notes.push(failure === 'unreadable' ? 'אף מקור מאושר לא נקרא' : 'המקורות נקראו, ואין בהם מסמך לכתוב ממנו');
       if (ctx.mode === 'recorded') notes.push(RECORDED_NOTE);
       say(`no samples written: ${failure}`);
-      return save({ made: 0, failure, at: nowIso() });
+      tell(failure, `${failure}: nothing to write from, after ${heals} search(es) for new sources`);
+      return save({ made: 0, failure, heals, at: nowIso() });
     }
     let tries = 0;
     let errors = 0;
@@ -291,7 +336,7 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     ctx.db.update('onboarding', id, { candidates_json: { ...at.found, rounds: [...(at.found.rounds || []), { at: round, by: counts ? 'customer' : 'operator', ...(counts ? {} : { counted: false }) }] }, updated_at: nowIso() });
     progress.set(id, { step: 'write', done: 0, total: SAMPLE_TARGET });
     let capped = false;
-    while (count() - before < SAMPLE_TARGET && tries < SAMPLE_ATTEMPTS) {
+    while (count() - before < SAMPLE_TARGET && tries < SAMPLE_ATTEMPTS + heals * HEAL_TRIES) {
       // A workspace that has not paid stops at its setup's cap (src/billing/setup-cap.js), before the next sample costs.
       if (counts && !setupRoom(ctx.db, r.workspace_id ?? null).ok) {
         capped = true;
@@ -315,19 +360,23 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
       notes.push(`ניסיון ${tries}: ${res.reason || res.status}`);
       say(`sample try ${tries} refused (${kind}): ${res.reason || res.status}`);
       if (kind === 'error') {
-        // Once more after a moment: a model that did not answer usually answers the second time.
-        if (++errors >= 2) break;
-        await sleep(opts.retryMs ?? 5000);
+        // Again after a moment, a longer one each time: a model that did not answer usually answers the next time.
+        if (++errors >= SAMPLE_ERRORS) break;
+        await sleep((opts.retryMs ?? 5000) * errors);
       } else if (kind === 'no_source') {
-        // Nothing new left to write from.
-        if (++empty >= 2) break;
+        // Nothing new left to write from: new sources, found by the round itself, else the round ends.
+        if (++empty >= 2) {
+          if (!(await heal())) break;
+          empty = 0;
+        }
       }
     }
     const made = count() - before;
-    const failure = made >= SAMPLE_ENOUGH ? null : capped ? 'cap' : errors >= 2 ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
+    const failure = made >= SAMPLE_ENOUGH ? null : capped ? 'cap' : errors >= SAMPLE_ERRORS ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
+    tell(failure, `${failure} after ${tries} tries and ${heals} search(es) for new sources`);
     if (made < SAMPLE_TARGET && ctx.mode === 'recorded') notes.push(RECORDED_NOTE);
     say(`${made} sample(s) in ${tries} tries${failure ? `, failed: ${failure}` : ''}`);
-    return save({ made, failure, at: nowIso() });
+    return save({ made, failure, heals, at: nowIso() });
   }, counts)
     .catch((e) => {
       say(`the samples stopped: ${e.stack || e.message}`);
@@ -373,6 +422,7 @@ function progressLine(p) {
   if (p.step === 'score') return 'כמעט סיימנו, בודקים כל מקור.';
   if (p.step === 'read') return 'קוראים את המקורות שבחרתם.';
   if (p.step === 'write') return `כותבים פוסטים לדוגמה, ${p.done} מתוך ${p.total} מוכנים.`;
+  if (p.step === 'sources') return 'המקורות נגמרו, אז מחפשים מקורות נוספים בעצמנו.';
   return 'עכשיו מחפשים אתרים.';
 }
 
@@ -397,7 +447,48 @@ export function statusOf(ctx, r) {
   const line = busy ? (deep ? deeperLine(deeperProgress(scopeOf(r))) : progressLine(progress.get(r.id))) : '';
   const ready = deep || lastRound(ctx.db, scopeOf(r))?.recent ? DEEPER_HE.ready : r.status === 'review' || r.status === 'discovering' ? 'המקורות מוכנים, אפשר לבחור.' : r.status === 'failed' ? 'החיפוש נעצר.' : busy ? 'פוסט לדוגמה חדש מוכן.' : 'הפוסטים לדוגמה מוכנים.';
   const go = r.status === 'review' || r.status === 'discovering' ? 'לבחור מקורות' : 'להמשיך';
-  return { status: r.status, busy, key, line, ready, go };
+  // While samples are written, the waiting card's stage and its two lines (waitCard).
+  const wait = running.has(r.id) && r.pack_id ? samplesStage(ctx.db, r, progress.get(r.id)) : null;
+  return { status: r.status, busy, key, line, ready, go, ...(wait ? { stage: wait.stage, lines: { count: wait.count, phase: wait.phase } } : {}) };
+}
+
+/* ------------------------------------------------------------------ the wait for samples */
+
+// While samples are written the page shows where the work is, so a few minutes read as progress, not as a page stuck
+// (the owner, 2026-11-07: "make the waiting process nice"): how many are ready, what is being done now, the stages,
+// a line that changes every few seconds, and a placeholder card for each post still coming.
+const WAIT_STAGES = ['קוראים את המקורות', 'בוחרים נושא', 'כותבים', 'בודקים עובדות', 'מחפשים תמונות', 'מעצבים'];
+const WAIT_PHASE = ['קוראים את המקורות שבחרתם.', 'בוחרים נושא ועובדות לפוסט הבא.', 'כותבים את השקפים.', 'בודקים כל עובדה מול המקור שלה.', 'מחפשים לכל שקף תמונה אמיתית.', 'מעצבים את השקפים.'];
+const WAIT_SOURCES = 'המקורות נגמרו, אז מחפשים מקורות נוספים בעצמנו.';
+export const WAIT_TIPS = ['כל פוסט לוקח כמה דקות. אפשר לסגור את הדף, והכתיבה ממשיכה.', 'כל פוסט שמוכן מופיע כאן מיד.', 'פוסט שלא עובר את הבדיקות לא מגיע לכאן. כותבים אחר במקומו.', 'כל עובדה נבדקת מול המקור שלה לפני שהיא עולה על שקף.'];
+
+/**
+ * Where a round of samples is now: { stage (0 to 5, WAIT_STAGES), count, phase }, from its progress and the last step
+ * the post being written took (src/pipeline/build.js step names). Reads the database, writes nothing.
+ */
+export function samplesStage(db, r, p) {
+  const total = p?.total || SAMPLE_TARGET;
+  const done = Math.min(p?.done || 0, total);
+  const count = done ? `${done} מתוך ${total} פוסטים מוכנים` : 'הפוסט הראשון בדרך';
+  if (!p || p.step === 'read') return { stage: 0, count, phase: WAIT_PHASE[0], done, total };
+  if (p.step === 'sources') return { stage: 0, count, phase: WAIT_SOURCES, done, total };
+  const last = db.get('SELECT s.step FROM steps s JOIN posts p ON p.id = s.post_id WHERE p.account_id = ? AND p.sample = 1 ORDER BY s.id DESC LIMIT 1', r.pack_id)?.step || '';
+  const stage = /^(render|queue)$/.test(last) ? 5 : /^(image|photos|mode)$/.test(last) ? 4 : /^(review|rewrite|repair|verify|visual|closing|viral)$/.test(last) ? 3 : /^(details|plan|facts|slides|redraft)$/.test(last) ? 2 : 1;
+  return { stage, count, phase: WAIT_PHASE[stage], done, total };
+}
+
+/** The waiting card while samples are written: polled as pollBox is, and a placeholder card for each post to come. */
+function waitCard(ctx, r, { href }) {
+  const s = statusOf(ctx, r);
+  const w = samplesStage(ctx.db, r, progress.get(r.id));
+  const stages = WAIT_STAGES.map((t, i) => `<li${i < w.stage ? ' class="done"' : i === w.stage ? ' class="on"' : ''}>${esc(t)}</li>`).join('');
+  const box = `<div class="pollbox waitcard" data-poll="/new/${esc(r.id)}/status" data-key="${esc(s.key)}" data-href="${esc(href)}" data-stage="${w.stage}" role="status">
+<div class="wc-top"><span class="wc-ring" aria-hidden="true"></span><div><b data-progress="count">${esc(w.count)}</b><p class="muted m0" data-progress="phase" aria-live="polite">${esc(w.phase)}</p></div></div>
+<ol class="wc-stages" data-stages>${stages}</ol>
+<p class="small muted m0 wc-tip" data-rotate="${esc(WAIT_TIPS.join('|'))}">${esc(WAIT_TIPS[0])}</p>
+<div class="banner info mt12" data-ready hidden>${icon('check')}<div><b data-ready-text>${esc(s.ready)}</b><p>מה שכתבתם כאן נשמר רק אחרי שלוחצים על שמירה.</p></div><a class="btn sm primary" href="${esc(href)}" data-ready-go>${esc(s.go)}</a></div></div>`;
+  const ph = `<article class="card post wc-sk" aria-hidden="true"><div class="pending"><span class="ph"></span><div class="sk-lines"><span class="sk h1"></span><span class="sk sub"></span></div></div></article>`;
+  return { box, placeholders: ph.repeat(Math.max(0, w.total - w.done)) };
 }
 
 /**
@@ -706,6 +797,9 @@ const SAMPLES_HE = {
   nofacts: 'במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן. אפשר להוסיף מקורות או לבחור אחרים, ואז לנסות שוב.',
   unreadable: 'לא הצלחנו לקרוא את המקורות שבחרתם. אפשר להוסיף מקורות או לבחור אחרים, או לנסות שוב בעוד כמה דקות.',
   error: 'משהו נתקע אצלנו באמצע הכתיבה. אפשר לנסות שוב.',
+  // What a customer reads for every other stop: the round already searched for new sources itself, and the operator heard.
+  customer: 'עוד לא יצאו מספיק פוסטים טובים. קיבלנו על זה הודעה ואנחנו כבר בודקים. בינתיים אפשר לנסות שוב.',
+  customerSearched: 'עוד לא יצאו מספיק פוסטים טובים, גם אחרי שחיפשנו מקורות נוספים. קיבלנו על זה הודעה ואנחנו כבר בודקים. בינתיים אפשר לנסות שוב.',
   refused: 'הפוסטים שכתבנו לא עברו את הבדיקות שלנו, ולכן לא הראינו אותם. אפשר לנסות שוב, או להוסיף מקורות עם יותר עובדות.',
   // Stopped at the setup's cap before paying (src/billing/setup-cap.js). While the cap still holds, the page says what
   // opens after activating instead (activateBanner); this is for once it no longer does.
@@ -721,9 +815,13 @@ function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
   if (more.why === 'cap') return '';
   const made = s?.made || 0;
   const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
-  const toSources = failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
+  // A customer is not sent to fix it (the owner, 2026-11-07: "make sure no real customer goes trough that"): the round
+  // already looked for new sources itself and the operator was told; they read that it is being looked at, with one
+  // button to try again. The operator reads what stopped it, with the way to the sources.
+  const toSources = pc.operator && failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
   const again = more.ok ? postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' }) : '';
-  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(SAMPLES_HE[failed] || SAMPLES_HE.error)}</b>${more.ok ? '' : `<p>${withSupport(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
+  const said = pc.operator ? SAMPLES_HE[failed] || SAMPLES_HE.error : failed === 'error' ? SAMPLES_HE.error : s?.heals ? SAMPLES_HE.customerSearched : SAMPLES_HE.customer;
+  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(said)}</b>${more.ok ? '' : `<p>${withSupport(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
 }
 
 function detailPage(ctx, pc, r) {
@@ -799,9 +897,12 @@ ${formatsPanel}${ops}</div>`
     );
   }
   const pack = ctx.pack(r.pack_id);
-  const samples = ctx.db.all("SELECT id FROM posts WHERE account_id = ? AND sample = 1 ORDER BY created_at", r.pack_id).map((x) => loadPost(ctx.db, x.id));
+  // A customer sees the samples that passed and the one being written; a try the checks stopped is the operator's to
+  // read, not the customer's (the owner, 2026-11-07: "make sure no real customer goes trough that").
+  const samples = ctx.db.all(`SELECT id FROM posts WHERE account_id = ? AND sample = 1${pc.operator ? '' : " AND status <> 'blocked'"} ORDER BY created_at`, r.pack_id).map((x) => loadPost(ctx.db, x.id));
   const good = samples.filter((p) => p.status === 'sample').length;
   const busy = running.has(r.id);
+  const wait = busy ? waitCard(ctx, r, { href: `/new/${r.id}` }) : null;
   const reviewed = r.status === 'ready';
   // Another round of samples: the customer's are limited (sampleRoom), the operator's are not.
   const more = pc.operator ? { ok: true, why: null } : sampleRoom(ctx.db, r);
@@ -821,8 +922,8 @@ ${formatsPanel}${ops}</div>`
 ${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn m-primary' }) : ''}
 ${reviewed && !locked ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
-${busy ? pollBox(ctx, r, { href: `/new/${r.id}` }) : ''}
-${samples.length ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>` : ''}</section>
+${wait ? wait.box : ''}
+${samples.length || wait ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}${wait ? wait.placeholders : ''}</div>` : ''}</section>
 ${pack && good && !locked ? fold('design', 'עיצוב המצגות', designPanel(pack, lockedStyle(ctx.db, pack, engine(ctx).packs).theme.style?.name || null, { back: `/new/${r.id}` })) : ''}
 ${fold('account', 'החשבון והחיבור לרשתות', `<section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
 <p class="muted">החשבון נוצר. הוא לא יעלה לאוויר לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>${pc.operator ? `<p class="muted small">התיקייה הפרטית: <span class="ltr">${esc(r.pack_id)}</span></p>` : ''}

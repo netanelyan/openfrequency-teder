@@ -186,6 +186,36 @@ test('a slide whose own search finds nothing gets new searches from the model, a
   }
 });
 
+test('a slide that names a company stands on a photograph of what it makes, found by the model\'s new search; a person still needs their own', { timeout: 240_000 }, async () => {
+  // OpenFrequency's samples (2026-11-07): four posts on Mobileye blocked, each held to a photograph titled "Mobileye".
+  const { home, cleanup } = tempHome({ packs: {} });
+  try {
+    const { ctx, dir, pack } = account(home);
+    const file = await photoFile(home);
+    const asked = library(file, (q) => (q === 'Acme Robotics' || q === 'Robotics' ? 'none' : 'ok'));
+    setDraft(dir, 'drought-ranking', (d) => (d.slides.slides[1].imageQuery = 'Acme Robotics'));
+    const real = ctx.llm.json.bind(ctx.llm);
+    ctx.llm = {
+      ...ctx.llm,
+      json: async (req) => {
+        if (req.task !== 'image-search') return real(req);
+        const slides = [...req.user.matchAll(/^Slide (\d+)[^\n]*Searched: "([^"]*)"/gm)].map((m) => ({ slide: Number(m[1]), person: false, queries: m[2] === 'Acme Robotics' ? ['robot arm factory'] : [] }));
+        return { data: { slides }, usage: null, estimated: true };
+      },
+    };
+    const res = await buildPost(ctx, { pack });
+    assert.equal(res.status, 'queued', res.reason);
+    assert.ok(asked.includes('robot arm factory'), 'the new search was made');
+    const rescued = steps(ctx.db, res.postId, 'image').filter((x) => x.rescue);
+    assert.deepEqual(rescued.map((x) => x.query), ['robot arm factory']);
+    assert.deepEqual(steps(ctx.db, res.postId, 'mode').map((x) => x.mode), ['photos'], 'on its photographs, not blocked and not text');
+    const info = steps(ctx.db, res.postId, 'image').find((x) => x.newSearches);
+    assert.ok(info && info.things.length === 1, 'the name was said to be no person');
+  } finally {
+    cleanup();
+  }
+});
+
 test("nothing found at all, not even a scene: every slide stands on the post's texture, never on a bare ground", { timeout: 240_000 }, async () => {
   // The owner, 2026-11-06: "if a slideshow ... fails because of them, we can use generated background, but from a few
   // options: a cutting mat, paper texture, fabric texture, liquid glass, artisan texture" (src/render/textures.js).

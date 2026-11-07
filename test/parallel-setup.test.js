@@ -517,6 +517,9 @@ const builder = (outcomes, calls = []) => async (c, { pack }) => {
   }
   return { status: 'blocked', kind: o === 'error' ? 'error' : o === 'empty' ? 'no_source' : 'fact_check', reason: `refused: ${o}` };
 };
+/** A stand-in for the deeper search a round runs itself when its sources run dry (onboarding.js heal): `found` is what it finds. */
+const deeperWith = (found = [], asked = []) => async (_c, seed, { scope }) => (asked.push(scope), { round: { n: asked.length, at: AT, queries: [], hosts: [], offered: found.map((c) => c.url), found: found.length }, plan: null, candidates: found, notes: [] });
+const noNewSources = deeperWith();
 const runSamples = async (onb) => {
   await post(`/new/${onb}/samples`, fake.session(customer(wsOf.get(onb))).cookie);
   await Promise.all([...__onboarding.running.values()]);
@@ -527,7 +530,7 @@ test('samples: the sources are read first, then written one by one; the read is 
   const order = [];
   let release;
   const gate = new Promise((r) => (release = r));
-  ctx.samplesOpts = { read: async () => (order.push('read'), await gate, { docs: 4, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'ok', 'ok'], order), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => (order.push('read'), await gate, { docs: 4, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'ok', 'ok'], order), retryMs: 0 };
   const { cookie } = fake.session(customer(wsOf.get('o-s1')));
   await post('/new/o-s1/samples', cookie);
   const during = await (await get('/new/o-s1', cookie)).text();
@@ -546,21 +549,27 @@ test('samples: no facts in the chosen sources is said with what helps, and a way
   const calls = [];
   const logs = [];
   ctx.log = (m) => logs.push(m);
-  ctx.samplesOpts = { read: async () => ({ docs: 0, sources: 2, failed: [] }), build: builder([], calls), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 0, sources: 2, failed: [] }), build: builder([], calls), retryMs: 0 };
   await runSamples('o-s2');
   ctx.log = () => {};
   assert.deepEqual(calls, [], 'nothing written from nothing');
+  // The round looked for new sources itself first (the owner, 2026-11-07: "make sure no real customer goes trough
+  // that"): the customer reads that it is being looked at, with one button, and is not sent to pick sources.
   const html = await (await get('/new/o-s2', fake.session(customer(wsOf.get('o-s2'))).cookie)).text();
-  assert.match(html, /במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן\. אפשר להוסיף מקורות או לבחור אחרים, ואז לנסות שוב\./);
-  assert.match(html, /href="\/sources\?account=samples-two">לבחור מקורות<\/a>/);
+  assert.match(html, /עוד לא יצאו מספיק פוסטים טובים, גם אחרי שחיפשנו מקורות נוספים\. קיבלנו על זה הודעה ואנחנו כבר בודקים\./);
+  assert.doesNotMatch(html, /לבחור מקורות<\/a>/, 'no chore for the customer');
   assert.match(html, /action="\/new\/o-s2\/samples"[^]*?לנסות שוב/);
   assert.doesNotMatch(html, /כתבו לנו/);
+  const op = await (await get('/new/o-s2', fake.session(operator()).cookie)).text();
+  assert.match(op, /במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן/, 'the operator reads what stopped it');
+  assert.match(op, /href="\/sources\?account=samples-two">לבחור מקורות<\/a>/);
+  assert.ok(logs.some((m) => /\[alert\] Teder: .* has 0 of 3 samples/.test(m)), 'the operator was told');
   assert.ok(logs.some((m) => /\[onboarding\] o-s2 .*no samples written: nofacts/.test(m)), 'the log says why');
 
   // Sources that could not be read at all.
-  ctx.samplesOpts = { read: async () => ({ docs: 0, sources: 1, failed: [{ name: 'Site s1', error: 'HTTP 403' }] }), build: builder([]), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 0, sources: 1, failed: [{ name: 'Site s1', error: 'HTTP 403' }] }), build: builder([]), retryMs: 0 };
   await runSamples('o-s2');
-  assert.match(await (await get('/new/o-s2', fake.session(customer(wsOf.get('o-s2'))).cookie)).text(), /לא הצלחנו לקרוא את המקורות שבחרתם/);
+  assert.match(await (await get('/new/o-s2', fake.session(operator()).cookie)).text(), /לא הצלחנו לקרוא את המקורות שבחרתם/);
   assert.match(await (await get('/new/o-s2', fake.session(operator()).cookie)).text(), /Site s1: HTTP 403/, 'the operator reads the raw reason');
 });
 
@@ -569,16 +578,16 @@ test('samples: an error is tried once more by itself; refused ones are followed 
   const logs = [];
   ctx.log = (m) => logs.push(m);
   const calls = [];
-  ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['throw', 'ok', 'refused', 'ok', 'ok', 'ok', 'ok'], calls), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['throw', 'ok', 'refused', 'ok', 'ok', 'ok', 'ok'], calls), retryMs: 0 };
   await runSamples('o-s3');
   assert.deepEqual(calls, ['throw', 'ok', 'refused', 'ok', 'ok', 'ok', 'ok'], 'the error tried again, the refused one followed by another');
   assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", packId).n, 5);
   assert.ok(logs.some((m) => /sample try 1 refused \(error\): model overloaded/.test(m)));
   assert.ok(logs.some((m) => /sample try 3 refused \(fact_check\)/.test(m)));
 
-  // Two errors in a row: stopped, said, two good ones kept.
+  // Three errors in a row: stopped, said, two good ones kept.
   const p2 = await atSamples('o-s4', 'samples.four');
-  ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'throw', 'throw']), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'throw', 'throw', 'throw']), retryMs: 0 };
   await runSamples('o-s4');
   ctx.log = () => {};
   assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", p2).n, 2, 'the good ones are kept');
@@ -587,10 +596,72 @@ test('samples: an error is tried once more by itself; refused ones are followed 
 
   // Three of five is enough: no warning.
   await atSamples('o-s5', 'samples.five');
-  ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'empty', 'empty']), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'ok', 'empty', 'empty']), retryMs: 0 };
   await runSamples('o-s5');
   assert.doesNotMatch(await (await get('/new/o-s5', fake.session(customer(wsOf.get('o-s5'))).cookie)).text(), /banner warn/);
   assert.equal(JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-s5'").candidates_json).samples.made, 3);
+});
+
+test('samples: sources that run dry are found again by the round itself: the strong ones approved, read, and written from', async () => {
+  // The owner, 2026-11-07: "make sure no real customer goes trough that (regenerating sources, regenrating demos, asking
+  // us for another round of demos when they got 0, etc)".
+  const packId = await atSamples('o-h1', 'heal.one');
+  const asked = [];
+  const reads = [];
+  const found = [cand('fresh', { score: { authority: 9, relevance: 9, terms: 'ok', reason: 'מגזין מקצועי בתחום' } }), cand('maybe', { score: { authority: 5, relevance: 6, terms: 'ok', reason: 'בלוג קטן בתחום' } })];
+  ctx.samplesOpts = { deeper: deeperWith(found, asked), read: async () => (reads.push(1), { docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'empty', 'empty', 'ok', 'ok']), retryMs: 0 };
+  await runSamples('o-h1');
+  assert.deepEqual(asked, [packId], 'one search for new sources, for this account');
+  assert.equal(reads.length, 2, 'the sources read again after it');
+  const src = db.all('SELECT url, status FROM sources WHERE account_id = ? AND url LIKE ?', packId, '%example.org/');
+  assert.equal(src.find((x) => x.url.includes('fresh'))?.status, 'approved', 'the strong one approved at once');
+  assert.equal(src.find((x) => x.url.includes('maybe'))?.status, 'pending', 'the rest left for the Sources page');
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", packId).n, 3, 'written on from them');
+  assert.doesNotMatch(await (await get('/new/o-h1', fake.session(customer(wsOf.get('o-h1'))).cookie)).text(), /banner warn/, 'nothing for the customer to do');
+  delete ctx.samplesOpts;
+});
+
+test('samples: the wait shows how many are ready, the stage the post is at, a changing line, and a card for each to come; a stopped try is not the customer\'s', async () => {
+  const packId = await atSamples('o-w1', 'wait.one');
+  let release;
+  const gate = new Promise((r) => (release = r));
+  let n = 0;
+  ctx.samplesOpts = {
+    deeper: noNewSources,
+    read: async () => ({ docs: 9, sources: 1, failed: [] }),
+    build: async (c, { pack }) => {
+      n++;
+      if (n === 1) {
+        db.insert('posts', { id: `p-${pack.id}-stopped`, account_id: pack.id, status: 'blocked', sample: 1, created_at: AT, updated_at: AT });
+        return { status: 'blocked', kind: 'fact_check', reason: 'refused' };
+      }
+      if (n === 2) {
+        db.insert('posts', { id: `p-${pack.id}-w`, account_id: pack.id, status: 'draft', sample: 1, created_at: new Date().toISOString(), updated_at: AT });
+        db.insert('steps', { post_id: `p-${pack.id}-w`, step: 'image', status: 'ok', detail_json: '{}', at: AT });
+        await gate;
+      }
+      return { status: 'blocked', kind: 'fact_check', reason: 'refused' };
+    },
+    retryMs: 0,
+  };
+  const { cookie } = fake.session(customer(wsOf.get('o-w1')));
+  await post('/new/o-w1/samples', cookie);
+  for (let i = 0; i < 50 && n < 2; i++) await new Promise((r) => setTimeout(r, 10));
+  const page = await (await get('/new/o-w1', cookie)).text();
+  assert.match(page, /class="pollbox waitcard"/);
+  assert.match(page, /הפוסט הראשון בדרך/);
+  assert.match(page, /<li class="done">קוראים את המקורות<\/li>[^]*<li class="on">מחפשים תמונות<\/li>/, 'the stage the post is at, the ones before it done');
+  assert.match(page, /data-rotate="[^"]*אפשר לסגור את הדף/);
+  assert.equal((page.match(/class="card post wc-sk"/g) || []).length, 5, 'a card for each post to come');
+  assert.doesNotMatch(page, /p-wait-one-stopped/, 'a stopped try is not shown to the customer');
+  assert.match(await (await get('/new/o-w1', fake.session(operator()).cookie)).text(), /p-wait-one-stopped/, 'the operator sees it');
+  const st = await (await get('/new/o-w1/status', cookie)).json();
+  assert.equal(st.stage, 4);
+  assert.deepEqual(st.lines, { count: 'הפוסט הראשון בדרך', phase: 'מחפשים לכל שקף תמונה אמיתית.' });
+  release();
+  await Promise.all([...__onboarding.running.values()]);
+  delete ctx.samplesOpts;
+  void packId;
 });
 
 test('samples: two rounds for each new account, six a month for the customer, none once it is live; the operator is not limited', async () => {
@@ -638,7 +709,7 @@ test('samples: two rounds for each new account, six a month for the customer, no
   // A round that broke on our side and wrote nothing is not the customer's.
   db.run("DELETE FROM onboarding WHERE id = 'o-r-many'");
   db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 31 AND id <> 'o-r2'");
-  ctx.samplesOpts = { read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['throw', 'throw']), retryMs: 0 };
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['throw', 'throw', 'throw']), retryMs: 0 };
   await runSamples('o-r2');
   const r2 = JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-r2'").candidates_json).rounds;
   assert.deepEqual(r2.map((x) => x.counted), [false]);

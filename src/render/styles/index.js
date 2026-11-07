@@ -538,14 +538,22 @@ function drawText(m, slide, g, S) {
   // The line is the slide's picture: it keeps its size and takes a line more than the style allows on a photograph
   // before it is set smaller, where on a photograph it keeps to the lines the writer broke it into.
   const lead = (spec, f) => ({ ...up(spec, f), want: (spec.lines || 2) + 1, lines: (spec.lines || 2) + 1 });
+  // The words under it keep their size and take up to two lines more before they are set smaller: capped at the style's
+  // lines, they were fitted down to small print under a big line.
+  const below = (spec) => ({ ...up(spec, 1.3), want: (spec.lines || 2) + 2, lines: (spec.lines || 2) + 2 });
   // C's face runs wide on its panel: its line a size up less.
   const k = S.name === 'C' ? 1.12 : 1.36;
-  const D = { ...S, inline: layout === 'boxes', text: { ...S.text, hook: lead(S.text.hook, k * 0.9), title: lead(S.text.title, k), ntitle: lead(S.text.ntitle || S.text.title, k * 0.95), tbody: up(S.text.tbody, 1.1) } };
+  // The words under the line a size up too, a number slide's as well: at the style's own size they read as small print
+  // under a big line on a slide that is all words (OpenFrequency's first suggestion, 2026-11-07).
+  const D = { ...S, inline: layout === 'boxes', text: { ...S.text, hook: lead(S.text.hook, k * 0.9), title: lead(S.text.title, k), ntitle: lead(S.text.ntitle || S.text.title, k * 0.95), tbody: below(S.text.tbody), body: below(S.text.body) } };
   const cover = m.kind === 'cover';
   const head = cover ? txt('h1', 'hl tl-head', D, 'hook', m.hook, g, { highlight: m.highlight }) : txt('h2', 'hl tl-head', D, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight });
   const under = cover ? txt('p', 'tl-sub', D, 'sub', m.sub, g) : m.list ? listHtml(m.body, D, g) : txt('p', 'tl-sub', D, m.kind === 'number' ? 'body' : 'tbody', m.body, g);
   const unit = (v) => (v ? `<span class="tl-unit">${he(v)}</span>` : '');
-  const num = m.kind === 'number' && layout !== 'corner' ? `<div class="tl-num">${unit(m.value.pre)}${bigNum(m.value.num, g.hs(S.text.number.px))}${unit(m.value.post)}</div>` : '';
+  // The number big once: a line that says it already ("20 אלף דולר מחברים ומשפחה") is not followed by it again.
+  const digits = (v) => String(v || '').replace(/[^\d.]/g, '');
+  const said = m.kind === 'number' && digits(m.value?.num) && digits(m.title).includes(digits(m.value?.num));
+  const num = m.kind === 'number' && layout !== 'corner' && !said ? `<div class="tl-num">${unit(m.value.pre)}${bigNum(m.value.num, g.hs(S.text.number.px))}${unit(m.value.post)}</div>` : '';
   const big = layout === 'corner' ? cornerNumber(m, slide) : '';
   const src = cover ? '' : srcHtml(slide);
   const inner = {
@@ -577,17 +585,18 @@ const CSS_TEXT = (g, S) => `
 .st .blk.tl-marker{align-items:flex-start;text-align:right;justify-content:flex-end;padding-bottom:${g.y(40)}px}
 .tl .tl-bar{display:block;width:${g.hs(120)}px;height:${g.y(14)}px;background:var(--accent);border-radius:${g.hs(8)}px}
 .tl-marker .tl-head mark.hi{background:linear-gradient(to bottom,transparent 52%,var(--accent) 52%,var(--accent) 92%,transparent 92%);color:inherit;padding:0 .08em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-/* boxes: each line on its own solid box, as TikTok's text tool sets it */
-.st .blk.tl-boxes{align-items:flex-start;text-align:right}
+/* boxes: each line on its own solid box, centred, as TikTok's text tool sets it (to the start, half the slide stood
+   empty beside short lines) */
+.st .blk.tl-boxes{align-items:center;text-align:center}
 /* The boxes reach past the words by their padding: the line's own box is that much wider, so they stay inside it. */
 .tl-boxes .tl-head{padding:0 .3em}
 .tl-boxes .tl-sub{padding:0 .37em}
 .tl-marker .tl-head{padding:0 .1em}
 .tl-boxes .tl-head .ln{background:#FFFFFF;color:#111111;padding:.04em .28em .1em;border-radius:.16em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .tl-boxes .tl-head mark.hi{background:var(--accent);color:var(--on-accent);border-radius:.12em;padding:0 .06em}
-.tl-boxes .tl-sub{margin-inline-start:${g.hs(70)}px}
+
 .tl-boxes .tl-sub .ln{background:rgba(0,0,0,.62);color:#FFFFFF;padding:.1em .35em .16em;border-radius:.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-.tl-boxes .tl-num{background:var(--accent);color:var(--on-accent);align-self:flex-start;padding:${g.y(6)}px ${g.hs(28)}px;border-radius:${g.hs(18)}px}
+.tl-boxes .tl-num{background:var(--accent);color:var(--on-accent);align-self:center;padding:${g.y(6)}px ${g.hs(28)}px;border-radius:${g.hs(18)}px}
 /* corner: the number huge on a sticker of the colour at the start of the slide, the words stacked under it */
 .st .blk.tl-corner{justify-content:center;align-items:flex-start;text-align:right}
 .tl-corner .tl-sticker{align-self:flex-start;background:var(--accent);color:var(--on-accent);border-radius:${g.hs(36)}px;padding:${g.y(6)}px ${g.hs(36)}px ${g.y(12)}px;transform:rotate(-4deg);margin:${g.y(30)}px 0 ${g.y(12)}px}

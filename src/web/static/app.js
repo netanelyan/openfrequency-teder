@@ -499,6 +499,14 @@
             const text = s.lines?.[el.dataset.progress];
             if (text && el.textContent !== text) el.textContent = text;
           }
+          // The samples' waiting card (onboarding.js waitCard): the stage it is at, the ones before it done.
+          if (s.stage != null && poll.dataset.stage !== String(s.stage)) {
+            poll.dataset.stage = String(s.stage);
+            poll.querySelectorAll('[data-stages] li').forEach((li, i) => {
+              li.classList.toggle('done', i < s.stage);
+              li.classList.toggle('on', i === s.stage);
+            });
+          }
           if (s.key && s.key !== poll.dataset.key && 'swap' in poll.dataset) {
             poll.innerHTML = s.html || '';
             poll.hidden = !s.html;
@@ -527,6 +535,12 @@
       setTimeout(tick, 4000);
     };
     setTimeout(tick, 4000);
+  }
+  // A line that says something new every few seconds while the samples are written (onboarding.js WAIT_TIPS).
+  for (const el of document.querySelectorAll('[data-rotate]')) {
+    const says = el.dataset.rotate.split('|').filter(Boolean);
+    let at = 0;
+    if (says.length > 1) setInterval(() => (el.textContent = says[(at = (at + 1) % says.length)]), 6000);
   }
 
   // Developer mode opens from the settings' version line, tapped seven times in a row: not a button anyone finds.

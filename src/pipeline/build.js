@@ -1152,8 +1152,10 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     let lastKind = 'no_source';
     // A post with a fixed subject (a fight week's card) is about it by design, preview, pick and recap alike: the
     // "posted recently" list is for choosing a topic, and naming its own card there made the outline refuse it.
+    // A topic blocked lately for its photographs is "recent" too, so the next try takes another: OpenFrequency's samples
+    // (2026-11-07) wrote the story of Mobileye four times in a row, each blocked for the same slides' photographs.
     const recent = db
-      .all("SELECT topic FROM posts WHERE account_id = ? AND topic IS NOT NULL AND status NOT IN ('blocked') ORDER BY created_at DESC LIMIT 12", pack.id)
+      .all("SELECT topic FROM posts p WHERE account_id = ? AND topic IS NOT NULL AND (status <> 'blocked' OR (created_at > ? AND EXISTS (SELECT 1 FROM steps s WHERE s.post_id = p.id AND s.step = 'photos' AND s.status = 'failed'))) ORDER BY created_at DESC LIMIT 12", pack.id, new Date(now() - 2 * DAY).toISOString())
       .map((r) => r.topic);
     // A head-to-head refused for a missing face, this week or a moment ago, is not offered again: a card's main event
     // with one unphotographed fighter took all three attempts of a launch post, while the card's other fights had both.
@@ -1668,7 +1670,7 @@ const SEARCH_SCHEMA = {
   properties: {
     slides: {
       type: 'array',
-      items: { type: 'object', properties: { slide: { type: 'integer' }, queries: { type: 'array', items: { type: 'string' } } }, required: ['slide', 'queries'], additionalProperties: false },
+      items: { type: 'object', properties: { slide: { type: 'integer' }, person: { type: 'boolean' }, queries: { type: 'array', items: { type: 'string' } } }, required: ['slide', 'person', 'queries'], additionalProperties: false },
     },
   },
   required: ['slides'],
@@ -1682,6 +1684,11 @@ For each slide, give up to 3 new searches in English, 1 to 4 words each, best fi
 - A place by its name, then by a nearby or wider name the libraries know ("Judean Desert", "Dead Sea cliffs", "Ein Gedi").
 - An animal or a plant by its common name.
 - Against "no calm area" or "too wide": the subject smaller in the frame or a simpler scene ("macadamia nuts in bowl", "bird on branch").
+A slide whose search names someone or something ("Searched" a name):
+- A person (person true): other ways the libraries may write the same person's name, or the same person at a known place or event ("Amnon Shashua", "Shashua Mobileye"), never anyone else.
+- A company, a brand, an organisation, a building or a product line (person false): its photograph need not show the name, which free libraries rarely have; give searches for what it makes or does, or how it looks ("Mobileye": "car dashboard camera", "self driving car"; "Intel headquarters": "computer chip close up", "tech office building").
+Every other slide: person false.
+
 Never a search already tried, a logo, a screen, a page of text, a crowd, or a person the slide does not name. Names are capitalised as they are written; things are in lowercase. One entry per slide given, by its number.`;
 
 /**
@@ -1699,11 +1706,15 @@ export async function newSearches(ctx, { draft, outline, left, tried }) {
   });
   const { data } = await askJson(ctx, { task: 'image-search', role: 'judge', system: SEARCH_SYSTEM, user: `The post is about: ${outline.topic || draft.hook}.\n\n${lines.join('\n')}`, schema: SEARCH_SCHEMA, effort: 'low', maxTokens: 1200, tag: 'image-search' });
   const out = new Map();
+  // The slides whose name is a company, a brand, a building or the like, not a person (out.things).
+  const things = new Set();
   for (const x of data?.slides || []) {
     const was = String(tried.get(x.slide)?.query || '').toLowerCase().trim();
     const qs = [...new Set((x.queries || []).map((q) => String(q).trim()).filter((q) => q && q.split(/\s+/).length <= 6 && q.toLowerCase() !== was))].slice(0, 3);
     if (left.some((w) => w.idx === x.slide) && qs.length) out.set(x.slide, qs);
+    if (x.person === false) things.add(x.slide);
   }
+  out.things = things;
   return out;
 }
 
@@ -1970,7 +1981,8 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     const taken = new Set([...out.values()].map((img) => img.id));
     const left = () => wants.filter((x) => !out.has(x.idx) && !whoIn(x.query).length);
     const minOf = (w) => (w.idx === 0 || (photoOn === 'last' && w.idx === last) ? MIN_SIDE.cover : MIN_SIDE.framed);
-    const plain = (w) => (w.idx === 0 ? w.claim : `${draft.slides[w.idx].title} ${draft.slides[w.idx].body}${about}. The photograph shows what the slide is about, large and clear, as its main subject.`);
+    // What a new search's photograph is checked against: what the slide (or the cover) is about, no name asked of it.
+    const plain = (w) => (w.idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}. The cover's photograph shows what the post is about, large and clear, as its main subject; it need not show any name.` : `${draft.slides[w.idx].title} ${draft.slides[w.idx].body}${about}. The photograph shows what the slide is about, large and clear, as its main subject; it need not show any name.`);
     const tryAll = async (w, list, budget, how) => {
       for (const [query, claim] of list) {
         const img = await findImage(ctx, { pack, query, postId, claim, why: {}, minSide: minOf(w), budget }).catch(() => null);
@@ -1986,10 +1998,28 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       const short = shorterQuery(w.query);
       await tryAll(w, [[w.query, w.claim], ...(short ? [[short, w.claim]] : [])], { screens: MAX_SCREENS }, 'fill');
     }
-    if (left().length) {
-      const asked = await newSearches(ctx, { draft, outline, left: left(), tried }).catch((e) => (ctx.log?.(`image: new searches: ${e.message}`), null));
-      if (asked?.size) step(ctx.db, postId, 'image', 'info', { newSearches: Object.fromEntries(asked) });
-      for (const w of left()) if (asked?.get(w.idx)) await tryAll(w, asked.get(w.idx).map((q) => [q, plain(w)]), { screens: RESCUE_SCREENS }, 'rescue');
+    // The model's new searches take the slides that name someone or something too (a company was held to a photograph
+    // titled with its name: OpenFrequency's samples of 2026-11-07, four of them blocked on "Mobileye" and "Intel
+    // headquarters"). A name the model says is no person (a company, a brand, a building) stands on a photograph of what
+    // it makes or looks like: the slide's search becomes the one that found it, and the slide no longer names anyone
+    // (namedOn). A person keeps needing a photograph of them.
+    const unshown = wants.filter((x) => !out.has(x.idx) && (x.idx !== 0 || kind !== 'guess-who'));
+    if (unshown.length) {
+      const asked = await newSearches(ctx, { draft, outline, left: unshown, tried }).catch((e) => (ctx.log?.(`image: new searches: ${e.message}`), null));
+      if (asked?.size) step(ctx.db, postId, 'image', 'info', { newSearches: Object.fromEntries(asked), things: [...(asked.things || [])] });
+      for (const w of unshown) {
+        if (!asked?.get(w.idx)) continue;
+        const named = whoIn(w.query).length > 0;
+        if (named && !asked.things?.has(w.idx)) {
+          // A person: the new searches must still show them (shows, at the end of buildPost's checks).
+          await tryAll(w, asked.get(w.idx).map((q) => [q, w.claim]), { screens: RESCUE_SCREENS }, 'rescue');
+          continue;
+        }
+        if (!(await tryAll(w, asked.get(w.idx).map((q) => [q, plain(w)]), { screens: RESCUE_SCREENS }, 'rescue')) || !named) continue;
+        const query = out.get(w.idx).query;
+        if (w.idx === 0) outline.imageQuery = query;
+        else draft.slides[w.idx].imageQuery = query;
+      }
     }
     for (const w of left()) {
       if (w.idx === 0 || !outline.imageQuery || outline.imageQuery === w.query) continue;

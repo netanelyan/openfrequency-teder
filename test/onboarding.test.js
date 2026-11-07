@@ -253,11 +253,13 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
       return m ? visible(html).slice(Math.max(0, m.index - 80), m.index + 40) : null;
     };
     assert.equal(around(samplesPage), null, 'the samples page has no developer text');
-    assert.match(samplesPage, /במקורות שבחרתם לא מצאנו מספיק עובדות לכתוב מהן/, 'samples that could not be written are said plainly, with what helps');
-    assert.match(samplesPage, /href="\/sources\?account=demo-green-kitchen">לבחור מקורות/, 'and a way to the sources');
-    // What helps there is the sources, not writing to us (the connect panel's own note may say "כתבו לנו" while this
-    // server has no Zernio key, src/web/connect.js CONNECT_CLOSED_HE).
-    const failed = samplesPage.indexOf('במקורות שבחרתם לא מצאנו');
+    // Samples that could not be written are the operator's to look at, not the customer's to fix (the owner,
+    // 2026-11-07: "make sure no real customer goes trough that"): said plainly, with one button, and no chore.
+    assert.match(samplesPage, /עוד לא יצאו מספיק פוסטים טובים/, 'samples that could not be written are said plainly');
+    assert.doesNotMatch(samplesPage, /href="\/sources\?account=demo-green-kitchen">לבחור מקורות/, 'the customer is not sent to the sources');
+    // Not "write to us" either (the connect panel's own note may say "כתבו לנו" while this server has no Zernio key,
+    // src/web/connect.js CONNECT_CLOSED_HE).
+    const failed = samplesPage.indexOf('עוד לא יצאו מספיק פוסטים טובים');
     assert.doesNotMatch(samplesPage.slice(failed, samplesPage.indexOf('</p>', failed)), /כתבו לנו/);
     assert.match(samplesPage, /id="schedule"/, 'the days and times are offered before going live');
     assert.match(samplesPage, /name="back" value="\/new\//, 'and the form comes back here');

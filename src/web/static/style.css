@@ -998,6 +998,24 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
 .samplebar > p { flex: 1 1 220px; }
 .samplebar > .actions { flex: 0 1 auto; }
 .samples > .pollbox { margin: 0 4px 16px; }
+/* The wait for samples (onboarding.js waitCard): a turning ring, how many are ready and what is done now, the stages
+   (done ones ticked, the current one in the accent), a line that changes, and a shimmering card for each post to come.
+   With reduced motion the ring still turns, slower: a ring standing still reads as stuck. */
+.waitcard { padding: 18px 20px; border-radius: 18px; background: var(--fill); display: grid; gap: 14px; }
+.wc-top { display: flex; align-items: center; gap: 14px; }
+.wc-top b { font-size: 17px; }
+.wc-ring { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .wc-ring { animation: spin 2.4s linear infinite !important; } }
+html.a-still .wc-ring { animation: spin 2.4s linear infinite !important; }
+.wc-stages { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.wc-stages li { font-size: 13px; padding: 5px 12px; border-radius: 999px; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); transition: background 0.3s, color 0.3s; }
+.wc-stages li.done { color: var(--ok); box-shadow: inset 0 0 0 1px currentColor; }
+.wc-stages li.done::before { content: '✓ '; }
+.wc-stages li.on { color: var(--accent-ink); background: var(--accent-fill); box-shadow: none; }
+.wc-tip { min-height: 1.5em; }
+.post.wc-sk .ph { position: relative; overflow: hidden; }
+.post.wc-sk .ph::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--sk-hi), transparent); transform: translateX(100%); animation: sk-shine 1.4s linear infinite; }
+.post.wc-sk .sk-lines { flex: 1; gap: 8px; max-width: 320px; }
 .js .js-hide { display: none; }
 .js-show { display: none; }
 .js .js-show { display: inline; }

@@ -7,7 +7,7 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
 import { closeBrowser } from '../src/render/render.js';
-import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, tempHome } from './helpers.js';
 
 // What the owner saw (2026-10-31), "the text is not centered." and "the text in here is without any space. fix every
 // visual that is incorrect. also mobile": a sample the checks stopped, on a new account's setup page, drawn with its
@@ -82,10 +82,14 @@ test('the setup page opens on its samples: the count, the buttons and the cards 
   assert.ok(count > 0 && more > 0 && count < first && more < first, 'how many passed and the button for more, over the cards');
   assert.ok(first < connect && connect < schedule, 'then the networks, then the days and times');
   assert.ok(html.indexOf('<section class="samples" id="samples"') < html.indexOf('החשבון נוצר.'), 'the account panel after the samples');
-  // Every card is in the samples' block: the two stopped ones and the one with slides.
+  // Every card is in the samples' block. A customer's holds the one with slides: a try the checks stopped is the
+  // operator's to read (the owner, 2026-11-07: "make sure no real customer goes trough that"), whose block has all three.
   const block = html.slice(html.indexOf('id="samples"'), connect);
-  assert.equal((block.match(/<article class="card acc acc-demo post/g) || []).length, 3);
-  assert.equal((block.match(/מצגת שלא הושלמה/g) || []).length, 2);
+  assert.equal((block.match(/<article class="card acc acc-demo post/g) || []).length, 1);
+  assert.equal((block.match(/מצגת שלא הושלמה/g) || []).length, 0);
+  const op = await (await get('/new/o-lay', fake.session(operator()).cookie)).text();
+  const opBlock = op.slice(op.indexOf('id="samples"'), op.indexOf('id="connect"'));
+  assert.equal((opBlock.match(/<article class="card acc acc-demo post/g) || []).length, 3);
 });
 
 test('a post the checks stopped before it had slides: its page draws no "TikTok view" over nothing and no empty caption', async () => {
@@ -120,9 +124,10 @@ test('in a real browser: a stopped sample keeps its words off the card\'s edge, 
   try {
     browser = await chromium.launch();
     // Dark is the browser's choice (the of-theme cookie), never the device's setting.
-    const open = async (url, width, height, theme = 'light') => {
+    const opSid = fake.session(operator()).sid;
+    const open = async (url, width, height, theme = 'light', as = sid) => {
       const context = await browser.newContext({ viewport: { width, height }, ...(width < 600 ? { isMobile: true, hasTouch: true } : {}) });
-      await context.addCookies([{ name: 'of_session', value: sid, url: base }, ...(theme === 'dark' ? [{ name: 'of-theme', value: 'dark', url: base }] : [])]);
+      await context.addCookies([{ name: 'of_session', value: as, url: base }, ...(theme === 'dark' ? [{ name: 'of-theme', value: 'dark', url: base }] : [])]);
       const page = await context.newPage();
       await page.goto(`${base}${url}`, { waitUntil: 'domcontentloaded' });
       return page;
@@ -130,9 +135,10 @@ test('in a real browser: a stopped sample keeps its words off the card\'s edge, 
     const sideways = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
     // A: the stopped samples, one under the other on a desk as on a phone (/new is one column, the owner, 2026-11-05:
-    // "if 2 blocks are near each other, why do some have an empty space near them").
+    // "if 2 blocks are near each other, why do some have an empty space near them"), as the operator reads them: a
+    // customer is not shown a try the checks stopped.
     for (const [width, height, scheme] of [[1440, 900, 'light'], [390, 844, 'dark'], [360, 780, 'light']]) {
-      const page = await open('/new/o-lay', width, height, scheme);
+      const page = await open('/new/o-lay', width, height, scheme, opSid);
       // The cards with no slides, found by what they are (no strip), not by the class the fix gave them.
       const stopped = 'article.post:not(:has(.strip))';
       const cards = await page.$$eval(stopped, (els) =>
@@ -142,12 +148,14 @@ test('in a real browser: a stopped sample keeps its words off the card\'s edge, 
           return { above: Math.min(...parts.map((q) => q.top)) - r.top, below: r.bottom - Math.max(...parts.map((q) => q.bottom)), clipped: el.scrollHeight - el.clientHeight };
         })
       );
+      // The operator reads a stopped try as a full card, with what stopped it; a customer is shown none.
       assert.equal(cards.length, 2, `${width}: both stopped samples`);
-      for (const c of cards) {
-        assert.ok(c.below >= 16, `${width}: the last line is ${c.below}px from the card's bottom edge`);
-        assert.ok(Math.abs(c.above - c.below) <= 6, `${width}: the words sit in the middle of the card (${c.above}px over, ${c.below}px under)`);
-        assert.ok(c.clipped <= 1, `${width}: nothing cut off`);
+      {
+        const theirs = await open('/new/o-lay', width, height, scheme);
+        assert.equal(await theirs.$$eval(stopped, (els) => els.length), 0, `${width}: no stopped try for the customer`);
+        await theirs.context().close();
       }
+      for (const c of cards) assert.ok(c.clipped <= 1, `${width}: nothing cut off`);
       if (width === 1440) {
         const tops = await page.$$eval(stopped, (els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
         assert.ok(tops[1] > tops[0], 'one under the other on a desk too');
