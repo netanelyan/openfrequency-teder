@@ -921,6 +921,7 @@ ${formatsPanel}${ops}</div>`
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn m-primary' }) : ''}
 ${reviewed && !locked ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
+${pc.dev && !reviewed && r.status !== 'live' && pack ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר בלי דוגמאות`, { cls: 'btn sm', confirm: 'לחצו שוב כדי להעלות לאוויר בלי דוגמאות' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${wait ? wait.box : ''}
 ${samples.length || wait ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}${wait ? wait.placeholders : ''}</div>` : ''}</section>
@@ -1232,7 +1233,9 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
       /^\/new\/([\w-]+)\/live$/,
       (ctx, user, m) => {
         const r = row(ctx, m[1]);
-        if (r.status !== 'ready') throw new ActionError('קודם עוברים על הדוגמאות');
+        // The operator may take an account live before its samples (the owner, 2026-11-07, for OpenFrequency's own
+        // account, whose samples had no photographs: "i wont allow the demos"); its posts then come from the plan.
+        if (r.status !== 'ready' && !(user.operator && r.pack_id)) throw new ActionError('קודם עוברים על הדוגמאות');
         ctx.db.update('accounts', r.pack_id, { status: 'active', mode: 'approve', updated_at: nowIso() });
         ctx.db.update('onboarding', r.id, { status: 'live', updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'went_live', accountId: r.pack_id });

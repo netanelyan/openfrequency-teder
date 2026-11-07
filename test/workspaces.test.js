@@ -257,6 +257,8 @@ const casesFor = () => {
     ['/accounts/bravo/style-pick', { style: 'B' }],
     ['/accounts/bravo/style-test', { on: '1' }],
     ['/accounts/bravo/kill'],
+    // A post written now (src/web/write-now.js) is the operator's alone: a customer of any workspace is refused.
+    ['/accounts/bravo/write'],
     ['/accounts/bravo/resume'],
     ['/accounts/bravo/quota', { suggested: '1', redos: '0', cap: '0' }],
     // The days and times B posts on are B's to choose.

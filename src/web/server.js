@@ -14,6 +14,7 @@ import * as data from './data.js';
 import * as pages from './pages.js';
 import * as act from './actions.js';
 import { beforePaying, onboardingRoutes } from './onboarding.js';
+import { writeNowRoutes } from './write-now.js';
 import { deeperPanel, deeperRoutes } from './deeper.js';
 import { previewFile, stylesRoutes } from './styles.js';
 import { EXAMPLE_FILE, EXAMPLES_DIR } from './examples.js';
@@ -320,6 +321,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
     ...onboardingRoutes(connectLinks),
     ...deeperRoutes(),
+    ...writeNowRoutes(),
     ...scheduleRoutes(),
     ...stylesRoutes(),
     ...demosRoutes(),

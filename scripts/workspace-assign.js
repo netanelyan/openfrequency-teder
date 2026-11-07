@@ -2,6 +2,7 @@
 // npm run workspace:assign -- --list
 // npm run workspace:assign -- --workspace <id> <account> [<account> ...] --dry-run
 // npm run workspace:assign -- --workspace <id> <account> [<account> ...] [--move]
+// npm run workspace:assign -- --workspace none <account> [<account> ...] --move
 //
 // Puts accounts (packs) in an openfrequency-accounts workspace: the people of that workspace see them in Teder,
 // nobody else does (src/web/workspace.js). The id is the workspace's number in accounts (the superadmin console,
@@ -12,6 +13,9 @@
 //   --dry-run   what would change, and nothing else: the database is opened read-only, not even migrated.
 //   --move      also move an account that is already in another workspace (without it, that is refused: it
 //               would take the account, and everything in it, away from that workspace's people).
+//   none        no workspace: the account is the operator's alone, as Toran's "none" gives a store back to the
+//               operator (the owner, 2026-11-07, for OpenFrequency's own account: "i would rather have both on the
+//               admin account"). An account's setup (its onboarding row) moves with it, in every case.
 //
 // A real run needs a backup from the last 24 hours (npm run backup), changes all the accounts named or none, and
 // writes each change to the audit log.
@@ -39,7 +43,8 @@ if (!existsSync(file)) {
 }
 
 const wsAt = args.indexOf('--workspace');
-const workspace = wsAt >= 0 ? Number(args[wsAt + 1]) : null;
+const toNone = wsAt >= 0 && args[wsAt + 1] === 'none';
+const workspace = wsAt >= 0 && !toNone ? Number(args[wsAt + 1]) : null;
 const names = args.filter((a, i) => !a.startsWith('--') && i !== wsAt + 1);
 const where = (w) => (w == null ? 'no workspace' : `workspace ${w}`);
 
@@ -59,7 +64,7 @@ if (flag('list')) {
   process.exit(0);
 }
 
-if (!Number.isInteger(workspace) || workspace < 1 || !names.length) usage();
+if ((!toNone && (!Number.isInteger(workspace) || workspace < 1)) || !names.length) usage();
 for (const n of names) if (!/^[a-z0-9][a-z0-9-]*$/.test(n)) usage();
 
 /** What would change, given the accounts as they are. Problems stop a real run before anything is written. */
@@ -115,6 +120,7 @@ if (p.problems.length) {
 db.tx(() => {
   for (const c of p.changes.filter((x) => !x.same)) {
     db.run('UPDATE accounts SET workspace_id = ?, updated_at = ? WHERE id = ?', workspace, new Date().toISOString(), c.id);
+    db.run('UPDATE onboarding SET workspace_id = ? WHERE pack_id = ?', workspace, c.id);
     audit(db, { actor: 'workspace:assign', action: 'workspace_assigned', accountId: c.id, detail: { from: c.from, to: workspace } });
   }
 });

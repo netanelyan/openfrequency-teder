@@ -664,6 +664,21 @@ test('samples: the wait shows how many are ready, the stage the post is at, a ch
   void packId;
 });
 
+test('the operator may take an account live without its samples, in developer mode; a customer may not', async () => {
+  // The owner, 2026-11-07, for OpenFrequency's own account: "i wont allow the demos because they dont have images".
+  const packId = await atSamples('o-l1', 'live.one');
+  const cust = fake.session(customer(wsOf.get('o-l1'))).cookie;
+  const refused = await post('/new/o-l1/live', cust, {}, { ajax: true });
+  assert.notEqual(refused.status, 200, 'the customer goes through the samples');
+  assert.match((await refused.json()).message, /קודם עוברים על הדוגמאות/);
+  const op = fake.session(operator()).cookie;
+  assert.doesNotMatch(await (await get('/new/o-l1', op)).text(), /להעלות לאוויר בלי דוגמאות/, 'not without developer mode');
+  assert.match(await (await get('/new/o-l1', `${op}; of_dev=1`)).text(), /להעלות לאוויר בלי דוגמאות/);
+  await post('/new/o-l1/live', op);
+  assert.equal(db.get('SELECT status FROM onboarding WHERE id = ?', 'o-l1').status, 'live');
+  assert.deepEqual({ ...db.get('SELECT status, mode FROM accounts WHERE id = ?', packId) }, { status: 'active', mode: 'approve' }, 'live in approve mode: every post waits');
+});
+
 test('samples: two rounds for each new account, six a month for the customer, none once it is live; the operator is not limited', async () => {
   // The rounds the tests above wrote are this workspace's month too: start it empty.
   db.run("UPDATE onboarding SET candidates_json = '{}' WHERE workspace_id = 31 AND status <> 'review'");

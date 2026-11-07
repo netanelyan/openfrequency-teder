@@ -781,7 +781,7 @@ function accountSection(ctx, { pack, acc, mode, customer, resumable, spend, publ
   const id = esc(pack.id);
   const paused = acc.status === 'paused';
   const head = `<header class="panel acct-head">${accDot(pack.id)}<div class="who"><h2 id="acct-name-${id}">${esc(pack.meta.displayName)}</h2><span class="muted ltr">@${esc(pack.meta.handle)}</span></div>${paused ? '<span class="chip warn">מושהה</span>' : '<span class="chip ok">פעיל</span>'}
-<div class="links m-hide"><a class="btn sm" href="/sources?account=${id}">מקורות</a><a class="btn sm" href="/rivals?account=${id}">מתחרים</a><a class="btn sm" href="/sounds?account=${id}">סאונדים</a></div></header>`;
+<div class="links m-hide"><a class="btn sm" href="/sources?account=${id}">מקורות</a><a class="btn sm" href="/rivals?account=${id}">מתחרים</a><a class="btn sm" href="/sounds?account=${id}">סאונדים</a></div>${ctx.dev ? postButton(ctx, `/accounts/${pack.id}/write`, `${icon('spark')}לכתוב פוסט עכשיו`, { cls: 'btn sm' }) : ''}</header>`;
   // On a phone the account's other pages are rows at the grid's foot (the sources are a tab of their own), and what
   // approval and TikTok mean for a customer, two lines that never change, one row to open.
   const rows = `<nav class="list m-only" aria-label="עוד בחשבון">${navRow(`/rivals?account=${id}`, 'accounts', 'מתחרים')}${navRow(`/sounds?account=${id}`, 'wave', 'סאונדים')}</nav>`;

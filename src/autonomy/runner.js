@@ -117,6 +117,24 @@ export function generationTargets(db, pack, { t = now(), lead = 0 } = {}) {
 }
 
 /**
+ * The account's next slot with no post in it, half an hour from now at the earliest, within `days`: where a post
+ * written now goes (src/web/write-now.js). null when every slot of those days is taken.
+ */
+export function nextFreeSlot(db, pack, { t = now(), days = 14 } = {}) {
+  const sched = scheduleOf(db, pack);
+  const taken = db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status NOT IN ('blocked', 'drafting')", pack.id).map((r) => r.slot_at);
+  const have = new Set(taken);
+  let day = israelDate(t);
+  for (let i = 0; i < days; i++, day = addDays(day, 1)) {
+    const room = (postsOn(day, sched.postsPerDay) ?? Infinity) - taken.filter((s) => israelDate(Date.parse(s)) === day).length;
+    if (room <= 0) continue;
+    const free = slotsFor(day, sched, { notBefore: i === 0 ? t + 30 * 60_000 : null }).slots.find((s) => !have.has(s.toISOString()));
+    if (free) return free.toISOString();
+  }
+  return null;
+}
+
+/**
  * Draft posts for these slots: [{ pack, slotAt }]. Through a batch when Claude
  * is live, every post at once; otherwise one after another.
  */
