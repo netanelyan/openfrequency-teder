@@ -36,6 +36,8 @@
 !docs/screenshots/*.png
 !src/web/static/*.png
 !assets/brand/png/*.png
+!src/web/static/examples/*.jpg
+!src/web/static/examples/photos/*.jpg
 
 node_modules/
 npm-debug.log*
