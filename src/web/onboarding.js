@@ -110,8 +110,9 @@ export const samplesLine = (good) => {
 };
 
 /**
- * How many rounds of samples a customer may ask for: two for each new account (the first five, and one more press), and
- * six in a calendar month across all their new accounts. Each round is up to SAMPLE_ATTEMPTS full-price builds outside
+ * How many rounds of samples a customer may ask for: two for each new account (the first five, and one more press), past
+ * which an account still short of SAMPLE_ENOUGH samples may go on asking, and six in a calendar month across all their
+ * new accounts. Each round is up to SAMPLE_ATTEMPTS full-price builds outside
  * the month's plan, so the plan alone would not bound it. A round counts once it starts writing; one that wrote nothing
  * because something broke on our side (failure 'error') does not. None once the account is live: its posts come from the
  * plan. The operator is not limited, and the month's six do not count in one of the company's own workspaces
@@ -127,7 +128,12 @@ const counted = (found) => (found?.rounds || []).filter((x) => x.counted !== fal
  */
 export function sampleRoom(db, r, t = now()) {
   if (r.status === 'live') return { ok: false, why: 'live' };
-  if (counted(r.found).length >= SAMPLE_ROUNDS.perOnboarding) return { ok: false, why: 'onboarding' };
+  // An account still short of the samples it needs to go on (SAMPLE_ENOUGH, counted from what each round made) is not
+  // stopped by its own count of rounds: it cannot go live without them, and "write to us" left the owner's own account
+  // stuck after two rounds on thin sources made none (the owner, 2026-11-07: "i want a redo button"). The workspace's
+  // month and the setup's cap below still bound what its rounds cost.
+  const made = counted(r.found).reduce((n, x) => n + (Number(x.made) || 0), 0);
+  if (made >= SAMPLE_ENOUGH && counted(r.found).length >= SAMPLE_ROUNDS.perOnboarding) return { ok: false, why: 'onboarding' };
   if (customerWorkspace(r.workspace_id ?? null)) {
     const month = monthKey(t);
     const used = db

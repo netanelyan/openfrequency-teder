@@ -208,7 +208,11 @@ test('the caps: the month of sample rounds and the light edits of the day are no
 
     own('1');
     assert.deepEqual(sampleRoom(db, fresh), { ok: true, why: null }, 'the month of rounds is not counted');
-    assert.deepEqual(sampleRoom(db, { ...fresh, found: { rounds: [{ at: month }, { at: month }] } }).why, 'onboarding', 'the two rounds per new account stand, as in no workspace');
+    assert.deepEqual(sampleRoom(db, { ...fresh, found: { rounds: [{ at: month, made: 3 }, { at: month, made: 0 }] } }).why, 'onboarding', 'the two rounds per new account stand, as in no workspace');
+    // An account whose rounds made fewer than the three it needs to go on may ask again (the owner, 2026-11-07: "i want
+    // a redo button"): its own account had two rounds on thin sources that made none, and was told to write to us.
+    assert.deepEqual(sampleRoom(db, { ...fresh, found: { rounds: [{ at: month, made: 0 }, { at: month, made: 2 }] } }), { ok: true, why: null }, 'short of three: one more round');
+    assert.deepEqual(sampleRoom(db, { ...fresh, found: { rounds: [{ at: month }, { at: month }] } }), { ok: true, why: null }, 'rounds from before they counted what they made: none made');
     await edit(people, PERSON, { id }, changed);
     assert.equal(asked.length, 1, 'checked by the model, not stopped by the cap');
     assert.equal(loadPost(db, id).slides.filter((x) => x.kind === 'item')[1].title, changed.title_1);
