@@ -524,7 +524,10 @@ export { LAYOUTS };
 
 /** The number a slide shows big in the corner layout: the number it is about, else its place in the post. Pure. */
 export function cornerNumber(m, slide) {
-  if (m.kind === 'number' && m.value?.num) return String(m.value.num);
+  // A number slide shows its number big only when its line does not say a number already: a story's slide went out
+  // with "488" on its sticker over the line "244 גרם פירורים לכל בסיס", two numbers on one slide and the post's count
+  // (1, 2, 3, 488, 5) broken (2026-11-07). Otherwise it keeps its place, like every other slide.
+  if (m.kind === 'number' && m.value?.num && !/\d/.test(String(m.title || ''))) return String(m.value.num);
   if (m.kind === 'cover') return /^\s*([\d][\d,.]*)/.exec(String(m.hook || ''))?.[1] || '';
   // A content slide's place (a countdown's from its top), never a number its line happens to start with.
   return m.rank || (slide.n ? String(slide.n) : '');

@@ -9,7 +9,7 @@ import { bandProfile, calmRoom, CALM_MAX, cropFor, FRAMES, subjectBand, subjectF
 import { decor, LAYOUTS, PALETTES, slideTexture, TEXTURES, textureFor, textureTones, textureSvg } from '../src/render/textures.js';
 import { luminance } from '../src/render/color.js';
 import { mixFor, planPhotos } from '../src/render/render.js';
-import { needE, stylePage, themeOf, geo } from '../src/render/styles/index.js';
+import { cornerNumber, needE, stylePage, themeOf, geo } from '../src/render/styles/index.js';
 import { STYLES } from '../src/render/styles/tokens.js';
 import { contrast } from '../src/render/color.js';
 import { findImage, fitFor, headWord, PROVIDERS } from '../src/images/index.js';
@@ -370,4 +370,11 @@ test("a feed's name on a slide is the site's, without the word the site adds for
   assert.equal(feedName('Ynet - RSS'), 'Ynet');
   assert.equal(feedName('My Jewish Learning • Feed'), 'My Jewish Learning');
   assert.equal(feedName('Feed'), 'Feed', 'a title that is only the word stays');
+});
+
+test("the corner's sticker: a number slide's number when its line says none, else the slide's place, so a post counts 1 to 5", () => {
+  const num = (title) => ({ kind: 'number', title, value: { num: '488' }, rank: '' });
+  assert.equal(cornerNumber(num('פירורים לכל בסיס'), { n: 4 }), '488', 'the number is the news: big on the sticker');
+  assert.equal(cornerNumber(num('244 גרם פירורים לכל בסיס'), { n: 4 }), '4', 'the line says a number: the sticker keeps the place');
+  assert.equal(cornerNumber({ kind: 'text', title: 'כד של פירורים', rank: '' }, { n: 2 }), '2');
 });
