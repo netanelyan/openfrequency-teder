@@ -6,6 +6,7 @@ import { CHANNELS, CHANNEL_HE, reachLinks, reminderFrom, reminderReady, TEDER_CO
 import { lastSync, leadsSource, refreshStages, syncLeads } from '../leads/sync.js';
 import { outreachOn, sendPitch } from '../leads/outreach.js';
 import { ActionError } from './actions.js';
+import { accountsLinks } from './accounts.js';
 import { running, startBuild } from './demos.js';
 import { LOGOS } from './logos.js';
 import { csrfField, esc, icon, layout, postButton, stamp } from './ui.js';
@@ -246,7 +247,11 @@ function leadsPage(ctx, pc, q, env) {
     ? `${lede}<div class="posts leads">${cards.join('\n')}</div>${total > SHOWN ? `<p class="muted small mt12">מוצגות ${SHOWN} הראשונות מתוך ${total}.</p>` : ''}`
     : `<div class="empty">${icon('inbox')}<b>${esc(empty[0])}</b><span>${esc(empty[1])}</span></div>`;
   const poll = building ? `<div data-poll="/leads/status.json" data-key="${esc(buildKey(db))}" data-href="/leads?tab=${tab[0]}" hidden></div>` : '';
-  const body = `<div class="head"><div><h1>לידים</h1></div><div class="end">${leadsSource(env).url ? postButton(pc, '/leads/sync', 'לעדכן מתורן', { cls: 'btn sm' }) : ''}</div>
+  // The shared list of both products is on accounts' /admin/leads (the owner, 2026-11-08: "make the shared lead dashboard
+  // be in the admin dashboard, not in one of the products"); this page keeps Teder's own tools.
+  const shared = `<div class="banner info">${icon('inbox')}<div><b>הרשימה המשותפת של תורן ותדר נמצאת בניהול</b><p>שם בונים לכל חנות את תורן, את תדר או את שניהם, ושולחים הודעה אחת או שתיים.</p></div><a class="btn sm primary" href="${esc(accountsLinks(env).admin)}/leads">לרשימה בניהול</a></div>`;
+  const body = `${shared}
+<div class="head"><div><h1>לידים</h1></div><div class="end">${leadsSource(env).url ? postButton(pc, '/leads/sync', 'לעדכן מתורן', { cls: 'btn sm' }) : ''}</div>
 <p class="sub">חנויות שתורן מצא ודירג. בונים לחנות דמו של תדר, שולחים לה את העמוד שלו מהטלפון, ומסמנים כאן מה קרה.${last?.ok ? ` עודכן מתורן ${esc(stamp(last.at))}.` : ''}</p></div>
 ${syncLine(pc, db, env)}
 ${tabs}
