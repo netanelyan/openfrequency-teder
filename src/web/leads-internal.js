@@ -12,6 +12,8 @@ import { buildLeadDemo, markLeadSent } from './leads.js';
 //
 //   GET  /internal/leads/state?toran=<Toran's store id>&domain=<the store's domain>
 //        the lead and its demo, or lead null when Teder has no such store
+//   GET  /internal/leads/list
+//        every lead with its demo, Toran's id and the domain, for the shared lead dashboard on accounts' /admin
 //   POST /internal/leads/demo   { store: <one store as Toran's GET /internal/stores gives it>, by }
 //        the store as a lead (added, or brought up to date, as the hourly sync does: never a customer's site, never one
 //        that asked not to be written to), then its demo built or linked, as /leads' "לבנות דמו" does
@@ -78,6 +80,15 @@ export async function leadsInternal(ctx, req, env, action, query, { origin }) {
     if (toran === undefined || (!toran && !domainKey(domain))) return [400, { error: 'bad_request' }];
     refreshStages(ctx);
     return [200, { ok: true, lead: leadState(ctx, findLead(ctx.db, toran, domain), { origin }) }];
+  }
+  if (action === 'list') {
+    // Every lead at once, for the shared lead dashboard on accounts' /admin (the owner, 2026-11-08: "make the shared
+    // lead dashboard be in the admin dashboard, not in one of the products"): Toran merges them with its stores by its
+    // id, else by the domain. Opted-out leads are left out, as everywhere else here.
+    if (req.method !== 'GET') return [405, { error: 'method_not_allowed' }];
+    refreshStages(ctx);
+    const rows = ctx.db.all('SELECT * FROM leads WHERE opted_out_at IS NULL ORDER BY id DESC LIMIT 2000');
+    return [200, { ok: true, leads: rows.map((l) => ({ ...leadState(ctx, l, { origin }), toranId: l.toran_id || null, domain: l.domain, name: l.name || null })) }];
   }
   if (req.method !== 'POST') return [405, { error: 'method_not_allowed' }];
   const b = await readBody(req);

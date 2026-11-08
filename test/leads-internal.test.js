@@ -170,6 +170,17 @@ test('approved: the state says demo_ready with its page; marking first sends it 
   assert.equal(ready.lead.leadUrl, `https://teder.openfrequency.co.il/leads?tab=ready#lead-${lead.id}`);
   // Found by the domain alone too (www. left out).
   assert.equal((await (await state({ domain: `www.${STORE.domain}` })).json()).lead.id, lead.id);
+  // The whole list, for the shared lead dashboard on accounts' /admin: the same lead, with Toran's id and its domain;
+  // only GET, and only with the token.
+  const listed = await fetch(`${base}/internal/leads/list`, { headers: auth });
+  assert.equal(listed.status, 200);
+  const list = await listed.json();
+  const want = route('/internal/leads/list').answers[0];
+  sameShape(list.leads[0], want.body.leads[0], want.nullable);
+  const mine = list.leads.find((x) => x.id === lead.id);
+  assert.deepEqual([mine.toranId, mine.domain, mine.stage], [String(STORE.id), STORE.domain, 'demo_ready']);
+  assert.equal((await fetch(`${base}/internal/leads/list`)).status, 401);
+  assert.equal((await post('/internal/leads/list', {})).status, 405);
 
   const early = await (await post('/internal/leads/mark', { toran: String(STORE.id), stage: 'reminder', by: 'Demo' })).json();
   assert.equal(early.ok, false, 'no reminder before the first message');
