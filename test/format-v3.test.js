@@ -378,3 +378,13 @@ test("the corner's sticker: a number slide's number when its line says none, els
   assert.equal(cornerNumber(num('244 גרם פירורים לכל בסיס'), { n: 4 }), '4', 'the line says a number: the sticker keeps the place');
   assert.equal(cornerNumber({ kind: 'text', title: 'כד של פירורים', rank: '' }, { n: 2 }), '2');
 });
+
+test("style A's check measures a slide's words in the card they are drawn on, so a line that runs over is sent back, not drawn", async () => {
+  // A myth's line passed the check at the slide's 760px and ran a third line on its photograph's card, 652px, which
+  // stopped the post at the drawing (2026-11-08).
+  const { styleFitProblems } = await import('../src/render/styles/fit.js');
+  const draft = { hook: 'מיתוסים על קפה', sub: '', slides: [{ kind: 'cover', title: '' }, { kind: 'item', role: 'myth', title: 'רובוסטה זה קפה שכמעט\nלא שותים', highlight: 'לא שותים', body: '' }] };
+  const problems = styleFitProblems(draft, { style: 'A', platforms: ['tiktok', 'instagram'], postKind: 'myth-fact' });
+  assert.ok(problems.some((p) => p.where === 'slide 1 title' && /too long/.test(p.msg)), JSON.stringify(problems));
+  assert.equal(styleFitProblems({ ...draft, slides: [draft.slides[0], { ...draft.slides[1], title: 'רובוסטה זה קפה\nשכמעט לא שותים' }] }, { style: 'A', platforms: ['tiktok'], postKind: 'myth-fact' }).filter((p) => p.where === 'slide 1 title').length, 0, 'the same words broken to fit pass');
+});

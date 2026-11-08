@@ -54,11 +54,13 @@ export const STYLES = {
     text: {
       hook: T('Heebo', 900, 108, 1.04, { lines: 3, floor: 88, tracking: -1, breaks: true }),
       sub: T('Assistant', 700, 48, 1.3, { lines: 2 }),
-      title: T('Heebo', 900, 80, 1.05, { lines: 2, floor: 64, tracking: -1, breaks: true }),
-      ntitle: T('Heebo', 900, 80, 1.05, { lines: 2, floor: 64, tracking: -1, breaks: true }),
+      // On a photograph a slide's words sit on a card 54px in from each side (CSS_A .wcard): the check measures them
+      // in that width, as body has (a myth's line passed it at 760px and ran a third line at 652, 2026-11-08).
+      title: T('Heebo', 900, 80, 1.05, { lines: 2, floor: 64, tracking: -1, breaks: true, inset: 108 }),
+      ntitle: T('Heebo', 900, 80, 1.05, { lines: 2, floor: 64, tracking: -1, breaks: true, inset: 108 }),
       // The card's line: the card is the text's width less its padding (52) and border (2) on both sides.
       body: T('Assistant', 400, 36, 1.45, { lines: 3, inset: 108 }),
-      tbody: T('Assistant', 400, 40, 1.45, { lines: 2 }),
+      tbody: T('Assistant', 400, 40, 1.45, { lines: 2, inset: 108 }),
       number: T('Heebo', 900, 160, 1),
       label: T('Assistant', 700, 30, 1.2),
       // On A's card: the card's padding (52) and border (2) on both sides.
