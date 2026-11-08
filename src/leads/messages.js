@@ -1,6 +1,7 @@
 // What the operator sends a lead from /leads (src/web/leads.js), and when. Nothing here sends anything: the page
 // prepares each message, the operator sends it by hand from their own phone or mail, and says on the page which way
-// it went. It keeps Toran's outreach rules (openfrequency-toran src/outreach.ts, the Communications Law's section
+// it went; or, since 2026-11-08, presses once and Toran sends it from our WhatsApp number as Meta's approved template
+// (src/leads/outreach.js; Toran's src/ops/outreach.ts holds the template's wording and every limit). It keeps Toran's outreach rules (openfrequency-toran src/outreach.ts, the Communications Law's section
 // 30A): one approach that says who is writing and how to stop, at most one reminder FOLLOWUP_DAYS later, never on
 // Shabbat, and nothing more unless the store writes back. A store that answers "לא" is marked "לא רלוונטי" by the
 // operator, and Toran's own opt-out hides it (src/leads/sync.js).

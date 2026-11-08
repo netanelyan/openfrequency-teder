@@ -390,7 +390,10 @@ test('"דמו מוכן": the cold first message, never "ביקשתם", and a but
   assert.ok(links.includes(`mailto:hello@kettles.example.co.il?subject=${encodeURIComponent('מצגת לדוגמה לחנות הקומקומים')}&body=${encodeURIComponent(msg.replace(/\n/g, '\r\n'))}`), 'mail with its subject and body');
   assert.ok(links.includes('tel:035551234'));
   assert.ok(links.includes(KETTLES.social.instagram) && links.includes(KETTLES.social.tiktok), 'the profiles, to copy the message into');
-  assert.match(card, /<a class="btn primary" href="https:\/\/wa\.me\//, 'WhatsApp is the one blue button');
+  // Since 2026-11-08 Toran sends it from our number at one press (src/leads/outreach.js): that is the one blue button,
+  // and the links beside it open the message to send by hand.
+  assert.match(card, /<form method="post" action="\/leads\/\d+\/wa">[^]*?<button class="btn primary"/, 'sending from our number is the one blue button');
+  assert.match(card, /<a class="btn" href="https:\/\/wa\.me\//, 'WhatsApp by hand beside it');
   assert.equal((card.match(/btn primary/g) || []).length, 1);
   assert.match(card, /<select id="via-\d+" name="via"><option value="whatsapp">וואטסאפ<\/option><option value="email">מייל<\/option><option value="phone">טלפון<\/option><option value="instagram">אינסטגרם<\/option><option value="tiktok">טיקטוק<\/option><option value="other">דרך אחרת<\/option><\/select>/);
 

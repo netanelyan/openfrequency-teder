@@ -1332,6 +1332,10 @@ details.more[open] > summary { background: var(--fill-2); }
 .lead-state { display: flex; align-items: center; gap: 10px; }
 .lead-state .spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent-fill); animation: spin 0.9s linear infinite; }
 .lead-reach, .lead-do, .lead-more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* Sending from our number (Toran, src/leads/outreach.js): the card's one blue button, above the message to copy. */
+.lead-wa { display: grid; gap: 6px; justify-items: start; margin: 0 0 16px; }
+.lead-wa form { margin: 0; }
+.lead-wa p { margin: 0; }
 .lead-do { padding: 16px 20px 0; }
 .lead-do form, .lead-more > form { display: contents; }
 .lead-sent { display: flex; flex-wrap: wrap; gap: 10px; flex: 1 1 100%; }

@@ -4,6 +4,7 @@ import { requestDemo } from '../demos/build.js';
 import { DemoError } from '../demos/store.js';
 import { CHANNELS, CHANNEL_HE, reachLinks, reminderFrom, reminderReady, TEDER_COLD_FIRST, TEDER_REMINDER, topicOf } from '../leads/messages.js';
 import { lastSync, leadsSource, refreshStages, syncLeads } from '../leads/sync.js';
+import { outreachOn, sendPitch } from '../leads/outreach.js';
 import { ActionError } from './actions.js';
 import { running, startBuild } from './demos.js';
 import { LOGOS } from './logos.js';
@@ -22,6 +23,9 @@ import { csrfField, esc, icon, layout, postButton, stamp } from './ui.js';
 //                                  origin 'outreach'; a store that already has one is linked to it instead
 //   POST /leads/<id>/sent          the first message went, and which way (via)
 //   POST /leads/<id>/reminded      the one reminder went
+//   POST /leads/<id>/wa            the first message, or the one reminder when it is due, sent now by Toran from our
+//                                  WhatsApp number as Meta's approved template (src/leads/outreach.js), then marked
+//                                  as "שלחתי" marks it (via whatsapp); nothing is marked when it did not go
 //   POST /leads/<id>/replied|joined|irrelevant|back   where the store is now; back undoes "לא רלוונטי"
 //   POST /leads/<id>/notes         the operator's note
 //
@@ -90,12 +94,12 @@ function onNets(lead) {
 }
 
 /** The message, to copy, and a button for every way to reach the store: the first one the card's one blue button. */
-function reachBox(lead, text, id, { lead: leadWith = null } = {}) {
+function reachBox(lead, text, id, { lead: leadWith = null, quiet = false } = {}) {
   const links = reachLinks(lead, text);
   // The way the first message went comes first for the reminder.
   if (leadWith) links.sort((a, b) => (b.via === leadWith) - (a.via === leadWith));
   const buttons = links
-    .map((l, i) => `<a class="btn${i === 0 ? ' primary' : ''}" href="${esc(l.href)}" data-copy="#${id}"${/^https:/.test(l.href) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(l.label)}</a>`)
+    .map((l, i) => `<a class="btn${i === 0 && !quiet ? ' primary' : ''}" href="${esc(l.href)}" data-copy="#${id}"${/^https:/.test(l.href) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(l.label)}</a>`)
     .join('');
   return `<label class="f">${leadWith ? 'התזכורת' : 'ההודעה'}<textarea id="${id}" rows="9" readonly dir="rtl">${esc(text)}</textarea></label>
 ${buttons ? `<div class="lead-reach">${buttons}</div>${links.some((l) => !l.prefilled) ? '<p class="muted small">בטלפון וברשתות ההודעה לא נכתבת לבד. הכפתור מעתיק אותה, ואפשר גם להעתיק מכאן.</p>' : ''}` : '<p class="muted small">לא מצאנו לחנות וואטסאפ, מייל, טלפון או פרופיל ברשתות. אפשר לחפש באתר שלה ולהעתיק את ההודעה מכאן.</p>'}`;
@@ -108,7 +112,10 @@ function sentForm(ctx, lead, action, label) {
 }
 
 /** The card's own part for its stage: what is known, and its one next step (main, the blue button). Returns { body, main }. */
-function stagePart(ctx, lead, { origin, t }) {
+/** The one press that sends it from our number (Toran), when the lead has a WhatsApp and Toran is reachable. */
+const waButton = (ctx, lead, label) => postButton(ctx, `/leads/${lead.id}/wa`, `${icon('send')}${label}`, { cls: 'btn primary', confirm: 'לשלוח עכשיו בוואטסאפ מהמספר שלנו? לחצו שוב כדי לשלוח' });
+
+function stagePart(ctx, lead, { origin, t, pitch = false }) {
   const id = lead.id;
   const name = lead.name || lead.domain;
   const btn = (act, label, cls = 'btn') => postButton(ctx, `/leads/${id}/${act}`, label, { cls });
@@ -122,14 +129,16 @@ function stagePart(ctx, lead, { origin, t }) {
   const url = pageUrl(origin, lead);
   if (lead.stage === 'demo_ready') {
     if (!url) return { body: '<p class="muted">העמוד של הדמו לא באוויר.</p>', main: '' };
-    return { body: `${reachBox(lead, TEDER_COLD_FIRST({ storeName: name, url, topic: topicOf(lead.demo_topic) }), `msg-${id}`)}<p class="small"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">לראות את העמוד של החנות</a></p>`, main: sentForm(ctx, lead, 'sent', 'שלחתי') };
+    const wa = pitch && lead.whatsapp ? `<div class="lead-wa">${waButton(ctx, lead, 'לשלוח בוואטסאפ מהמספר שלנו')}<p class="muted small">ההודעה יוצאת מהמספר שלנו כתבנית שמטא אישרה, עם כפתור למצגת וכפתור "הסירו אותי", ומסומנת שנשלחה. אפשר גם להעתיק ולשלוח בעצמכם.</p></div>` : '';
+    return { body: `${wa}${reachBox(lead, TEDER_COLD_FIRST({ storeName: name, url, topic: topicOf(lead.demo_topic) }), `msg-${id}`, { quiet: Boolean(wa) })}<p class="small"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">לראות את העמוד של החנות</a></p>`, main: sentForm(ctx, lead, 'sent', 'שלחתי') };
   }
   if (lead.stage === 'sent' || lead.stage === 'opened') {
     const opened = lead.opens ? `<p>העמוד נפתח ${esc(times(lead.opens))} מאז, לאחרונה ${esc(stamp(lead.last_open_at))}.</p>` : '';
     const sent = `<p>נשלח${lead.sent_via ? ` ב${esc(CHANNEL_HE[lead.sent_via])}` : ''} ב־${esc(stamp(lead.sent_at))}.</p>${opened}`;
     if (lead.reminder_sent_at) return { body: `${sent}<p class="muted">התזכורת נשלחה ב־${esc(stamp(lead.reminder_sent_at))}. מכאן לא כותבים להם יותר, אלא אם הם עונים.</p>`, main: btn('replied', 'ענו', 'btn primary') };
     if (url && reminderReady(lead.sent_at, t)) {
-      return { body: `${sent}${reachBox(lead, TEDER_REMINDER({ storeName: name, url }), `rem-${id}`, { lead: lead.sent_via })}`, main: sentForm(ctx, lead, 'reminded', 'שלחתי את התזכורת') };
+      const wa = pitch && lead.whatsapp ? `<div class="lead-wa">${waButton(ctx, lead, 'לשלוח את התזכורת בוואטסאפ מהמספר שלנו')}</div>` : '';
+      return { body: `${sent}${wa}${reachBox(lead, TEDER_REMINDER({ storeName: name, url }), `rem-${id}`, { lead: lead.sent_via, quiet: Boolean(wa) })}`, main: sentForm(ctx, lead, 'reminded', 'שלחתי את התזכורת') };
     }
     const later = url ? `<p class="muted">התזכורת האחת תהיה מוכנה ב־${esc(stamp(reminderFrom(lead.sent_at, t)))}.</p>` : '<p class="muted">העמוד של הדמו כבר לא באוויר, אז אין למה לשלוח תזכורת.</p>';
     return { body: `${sent}${later}`, main: btn('replied', 'ענו', 'btn primary') };
@@ -216,7 +225,9 @@ function leadsPage(ctx, pc, q, env) {
   const tabCount = (stages) => stages.reduce((s, x) => s + (n[x] || 0), 0);
   const tabs = `<nav class="tabs" aria-label="שלבים">${TABS.map(([k, label, stages]) => `<a href="/leads?tab=${k}"${k === tab[0] ? ' aria-current="true"' : ''}>${esc(label)}<span class="num">${tabCount(stages)}</span></a>`).join('')}</nav>`;
   const rows = leadRows(db, tab[2]);
-  const opts = { origin: pc.origin || '', t };
+  // Since 2026-11-08 a lead with a WhatsApp number is sent its message at one press, by Toran from our number (the
+  // owner: "if i press the send button to a demo suggestion, i want it to go to whatsapp, so toran should send it").
+  const opts = { origin: pc.origin || '', t, pitch: outreachOn(env) };
   const cards = rows.map((l) => leadCard(pc, l, opts));
   const building = rows.some((l) => l.stage === 'new' && ['new', 'building'].includes(l.demo_status));
   const last = lastSync(db);
@@ -318,6 +329,34 @@ export function leadsRoutes({ env = process.env } = {}) {
         if (r.why) throw new ActionError('החיבור לתורן לא מוגדר בשרת הזה');
         if (r.error) throw new ActionError('תורן לא ענה. ננסה שוב בעוד שעה.', 502);
         return { ok: true, message: r.added === 1 ? 'נוספה חנות אחת' : r.added ? `נוספו ${r.added} חנויות` : 'הרשימה מעודכנת', redirect: '/leads' };
+      },
+    ],
+    [
+      'POST',
+      /^\/leads\/(\d+)\/wa$/,
+      async (ctx, user, m) => {
+        operatorOnly(user);
+        const lead = leadOf(ctx, m[1]);
+        if (!lead.whatsapp) throw new ActionError('אין לחנות הזו מספר וואטסאפ מהאתר שלה, אז מהמספר שלנו לא שולחים לה');
+        const first = lead.stage === 'demo_ready';
+        const reminder = ['sent', 'opened'].includes(lead.stage) && Boolean(lead.sent_at) && !lead.reminder_sent_at;
+        if (!first && !reminder) throw new ActionError('אין לחנות הזו הודעה לשלוח עכשיו');
+        if (reminder && !reminderReady(lead.sent_at, now())) throw new ActionError('עוד לא הזמן לתזכורת');
+        // Toran needs the page's slug only (its template's button holds the address); our public host when it is set.
+        const host = String(env.PUBLIC_HOST || '').trim().toLowerCase();
+        const demo = lead.demo_id ? ctx.db.get('SELECT status, slug FROM demos WHERE id = ?', lead.demo_id) : null;
+        const url = pageUrl(host ? `https://${host}` : 'https://teder.openfrequency.co.il', { demo_status: demo?.status, demo_slug: demo?.slug });
+        if (!url) throw new ActionError('העמוד של הדמו לא באוויר');
+        const out = await sendPitch(ctx, { stage: first ? 'first' : 'reminder', phone: String(lead.whatsapp).replace(/\D/g, ''), name: lead.name || lead.domain, url, ref: `lead:${lead.id}`, by: user.name }, { env });
+        if (!out.sent) throw new ActionError(out.said);
+        if (first) {
+          setLead(ctx, lead.id, { stage: 'sent', sent_at: nowIso(), sent_via: 'whatsapp' });
+          audit(ctx.db, { actor: user.name, action: 'lead_sent', detail: { lead: lead.id, domain: lead.domain, via: 'whatsapp', by: 'toran' } });
+          return { ok: true, message: 'נשלח בוואטסאפ מהמספר שלנו, וסומן שנשלח. התזכורת האחת תהיה מוכנה בעוד ארבעה ימים.', redirect: back(lead, 'sent') };
+        }
+        setLead(ctx, lead.id, { reminder_sent_at: nowIso() });
+        audit(ctx.db, { actor: user.name, action: 'lead_reminded', detail: { lead: lead.id, domain: lead.domain, via: 'whatsapp', by: 'toran' } });
+        return { ok: true, message: 'התזכורת נשלחה בוואטסאפ מהמספר שלנו. זו הייתה האחרונה, אלא אם יענו.', redirect: back(lead, TAB_OF[lead.stage]) };
       },
     ],
     [
