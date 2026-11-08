@@ -35,6 +35,7 @@ import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, r
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { CLOSING_LINE, closingExtra, closingFrom, closingLesson, closingProblems, closingSlide, isClosingProblem } from './closing.js';
 import { NO_FACE, artDirect, notAFace } from './art.js';
+import { writeClosing } from './closer.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { WIKI_KEY, aboutSubject, research } from '../sources/research.js';
 import { MODEL_KEY, modelFactsDoc, modelFallback } from '../sources/model.js';
@@ -1334,6 +1335,24 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const art = await artDirect(pctx, { pack, format, draft, outline, postId });
     if (art) step(db, postId, 'art', 'ok', { changed: art.changed, subjectKind: outline.subjectKind || null, cover: outline.imageQuery || '', slides: draft.slides.map((s) => s.imageQuery || ''), closing: draft.closingScene?.query || '' }, art.usd);
 
+    // ---- the closing slide's own line, written once the whole slideshow is read (pipeline/closer.js): taken when it
+    // keeps the closing's rules and adds no problem the post did not have; else the writer's line stays.
+    const lastLine = await writeClosing(pctx, { pack, draft, outline, facts: facts.filter((f) => f.verified), postId });
+    if (lastLine) {
+      let taken = false;
+      if (!lastLine.problems.length) {
+        const next = { ...structuredClone(draft), closing: lastLine.closing };
+        const after = checkDraft(pctx, pack, { draft: next, format, facts, items, attempt: 1, moment: outline?.momentKeys || null });
+        const before = new Set(checked.problems.filter((p) => !isClosingProblem(p)).map(say));
+        if (!after.problems.some(isClosingProblem) && after.problems.every((p) => before.has(say(p)))) {
+          draft = next;
+          checked = after;
+          taken = true;
+        }
+      }
+      step(db, postId, 'closer', taken ? 'ok' : 'skipped', { line: lastLine.line, why: lastLine.why, ...(lastLine.problems.length ? { problems: lastLine.problems } : {}) }, lastLine.usd);
+    }
+
     // ---- photographs: licensed, recorded, screened, and checked against what each slide says. Found as soon as the
     // slides' searches are written (the repair, the review and the rewrite never change one), so a post that cannot
     // stand on its photographs is known before those are paid for: three of the five first samples of 2026-11-06 were
@@ -1642,7 +1661,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined, closing: draft.closing },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(textLed.length ? { textLed: textLed.map((g) => g.slide) } : {}), ...(texture ? { texture, mode } : {}), ...(postStyle ? { styleName: postStyle } : {}) },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, ...(photos.get('end') ? { endImage: photos.get('end').id } : {}), coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(textLed.length ? { textLed: textLed.map((g) => g.slide) } : {}), ...(texture ? { texture, mode } : {}), ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
@@ -2107,6 +2126,18 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
         step(ctx.db, postId, 'image', 'ok', { slide: k === 'bg' ? 'background' : k, query });
       }
     }
+  }
+  // The closing slide's own background, the scene the art director chose for it (pipeline/art.js): the line and the
+  // action read over a picture of the account's world, never the post's least-used photograph (the owner, 2026-11-08,
+  // on a closing slide over a random photograph: "CTA is not the best"). Not found, the renderer goes on as before.
+  if (draft.closing && draft.closingScene?.query) {
+    const s = draft.closingScene;
+    const claim = `the background of the closing slide of a post about ${outline.topic || pack.meta.displayName}, behind the line "${draft.closing.line || ''}": it must show ${s.show || s.query}, calm, with room for the line, and no person as the main subject`;
+    const img = await findImage(ctx, { pack, query: s.query, postId, claim, minSide: MIN_SIDE.cover }).catch((e) => (ctx.log?.(`closing background: ${e.message}`), null));
+    if (img && ![...out.values()].some((x) => x.id === img.id)) {
+      out.set('end', img);
+      step(ctx.db, postId, 'image', 'ok', { slide: 'closing', query: s.query });
+    } else step(ctx.db, postId, 'image', 'skipped', { slide: 'closing', query: s.query });
   }
   return out;
 }

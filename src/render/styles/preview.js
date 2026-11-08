@@ -72,7 +72,7 @@ export async function renderStylePreview(db, { pack, post, style, outDir, size =
     return existsSync(here) ? { ...row, file: here } : row;
   };
   const photos = new Map(
-    [...post.slides.map((s) => [s.idx, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file && existsSync(p.file))
+    [...post.slides.map((s) => [s.idx, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ['end', img(post.checks?.endImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file && existsSync(p.file))
   );
   const format = formatOfPost(db, pack, post);
   const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '', ...(draft.coverVisual ? { coverVisual: draft.coverVisual } : {}), ...closingExtra(draft) };

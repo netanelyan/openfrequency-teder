@@ -74,8 +74,9 @@ test('a post the reviewer does not flag costs one cheap review call and no rewri
     const ctx = withReviewer(home, (req) => ({ reviews: [...req.user.matchAll(/^\[(\d+)\]/gm)].map((m) => ({ index: Number(m[1]), botScore: 2, tells: [], factProblem: '' })) }), undefined, calls);
     const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
     assert.equal(res.status, 'queued', res.reason);
-    // The art director reads the slideshow before its photographs are searched (src/pipeline/art.js, 2026-11-08).
-    assert.deepEqual(calls.map((c) => c.task), ['outline', 'details', 'slides', 'art-direction', 'review']);
+    // The art director reads the slideshow before its photographs are searched, and the closing slide's line is written
+    // from the whole of it (src/pipeline/art.js, src/pipeline/closer.js, 2026-11-08).
+    assert.deepEqual(calls.map((c) => c.task), ['outline', 'details', 'slides', 'art-direction', 'closing', 'review']);
   } finally {
     cleanup();
   }

@@ -697,6 +697,15 @@ export const genericScene = (query) => Boolean(query) && !/(?:^|\s)\p{Lu}\p{Ll}/
  * its texture after that: never on another slide's photograph of something else, which read as the same picture twice
  * (the cover's dog again on the next slide, 2026-11-06).
  */
+/**
+ * What the closing slide stands on: its own background, the scene the art director chose for it ('end',
+ * src/pipeline/art.js), else the least-used scene (or photograph) of the post (planPhotos' `sceneKeys` and `uses`).
+ */
+export function endKeyOf({ byIdx, sceneKeys = [], uses = new Map() }) {
+  if (byIdx.get('end')?.file) return 'end';
+  return [...sceneKeys, ...[...uses.keys()]].sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0] ?? null;
+}
+
 export function planPhotos({ slides, byIdx, postKind, texture = false }) {
   const has = (k) => Boolean(byIdx.get(k)?.file);
   const MAX_USES = 2;
@@ -897,8 +906,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   // chooses one unlike the account's last post's), else the post's own. Only a styled account has one.
   const tex = styled ? texture || textureFor(post.id) : null;
   const { plan, uses, sceneKeys } = planPhotos({ slides, byIdx, postKind, texture: Boolean(tex) });
-  // The closing slide, when the account has one, stands on the least-used scene (or photograph) of the post.
-  const endKey = [...sceneKeys, ...[...uses.keys()]].sort((a, b) => (uses.get(a) || 0) - (uses.get(b) || 0))[0] ?? null;
+  const endKey = endKeyOf({ byIdx, sceneKeys, uses });
   // Each size once: a Facebook Page's post is sent Instagram's slides (src/core/platforms.js).
   for (const size of platforms || mediaSizes(pack.meta.platforms)) {
     out[size] = [];
@@ -1025,7 +1033,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
       // No slide is a bare ground (the owner, 2026-10-31): the closing slide stands on a photograph of the post, sharp. A
       // style takes the post's least-used one; an older template the post's own (photocard), its ground, else that one.
-      const key = styled ? endKey : bleed && postPhoto ? postKey : ground ? groundKey : endKey;
+      const key = endKey === 'end' || styled ? endKey : bleed && postPhoto ? postKey : ground ? groundKey : endKey;
       const photo = key != null && uri.has(key) ? key : null;
       let r;
       if (styled) {

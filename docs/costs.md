@@ -41,6 +41,12 @@ prices ($3 in, $15 out a million tokens; half that through the Message Batches A
 | Step | Model | Tokens (in / out) | A post, direct | A post, batch |
 |---|---|---|---|---|
 | Art direction (`src/pipeline/art.js`): every slide's photograph, the closing's background | Sonnet, low effort | ~2,400 / ~700 | ~$0.018 | ~$0.009 |
+| The closing slide's line (`src/pipeline/closer.js`), from the whole slideshow | Sonnet, medium effort | ~2,500 / ~600 (thinking included) | ~$0.017 | ~$0.008 |
+| The closing's background photograph: one search, up to 8 checks | Haiku (the image screen) | | ~$0.004 | ~$0.004 |
+| Slides with context: one sentence more a slide, and a repair or a rewrite when a slide has none | Sonnet | ~+300 out a post, a repair round now and then | ~$0.01 | ~$0.005 |
+| **Together** | | | **~$0.05 a post** | **~$0.026** |
+
+So a post made goes from about $0.15 to about $0.20, well under the $0.45 the owner allowed.
 
 The table grows as the next steps land (the context check, the closing slide's own call, the setup's). Measure the
 real numbers with `npm run live-day` once they are deployed.

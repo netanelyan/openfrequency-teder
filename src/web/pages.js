@@ -93,6 +93,7 @@ const STEP_HE = {
 /** Whose line the closing slide carries (src/pipeline/closing.js), in the post's trace. */
 const CLOSING_HE = {
   writer: 'השורה שנכתבה עם השקפים',
+  closer: 'השורה שנכתבה לשקף האחרון, אחרי שכל המצגת נקראה',
   repair: 'הבדיקה עצרה את השורה הראשונה, וזו נכתבה בתיקון',
   safe: 'הבדיקה עצרה את השורה גם אחרי התיקונים, ובמקומה שורה מהפרטים של החשבון',
   safeFirst: 'הבדיקה עצרה את השורה שנכתבה, ובמקומה שורה מהפרטים של החשבון',

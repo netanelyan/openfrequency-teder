@@ -416,7 +416,7 @@ export function creditedTo(img) {
 }
 
 // The photographs a slide may stand on without being its own: the post's scenes and a head-to-head's two halves.
-const groundIds = (post) => [post.checks?.bgImage, ...(post.checks?.sceneImages || []), ...(post.checks?.coverImages || [])];
+const groundIds = (post) => [post.checks?.bgImage, post.checks?.endImage, ...(post.checks?.sceneImages || []), ...(post.checks?.coverImages || [])];
 
 /** Every photograph a post shows: its slides' and its lead one, and the scenes its other slides stand on, once each. */
 export function postImages(db, post) {
