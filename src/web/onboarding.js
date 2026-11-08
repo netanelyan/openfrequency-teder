@@ -1,5 +1,6 @@
 import { monthKey, newId, now, nowIso } from '../core/clock.js';
 import { customerWorkspace } from '../billing/own.js';
+import { workspaceAllowed } from '../billing/entitlement.js';
 import { meterSetup, setupRoom } from '../billing/setup-cap.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
@@ -505,7 +506,7 @@ export function onboardingWork(ctx, { t = now(), within = DAY_MS } = {}) {
   const since = new Date(t - within).toISOString();
   const busy = [...running.keys()];
   const mine = ctx.workspaceId == null ? '' : ' AND workspace_id = ?';
-  const rows = ctx.db.all(`SELECT * FROM onboarding WHERE (updated_at >= ? OR id IN (${busy.map(() => '?').join(', ') || 'NULL'}))${mine} ORDER BY updated_at DESC LIMIT 20`, since, ...busy, ...(mine ? [ctx.workspaceId] : []));
+  const rows = ctx.db.all(`SELECT * FROM onboarding WHERE (updated_at >= ? OR status IN ('samples', 'ready') OR id IN (${busy.map(() => '?').join(', ') || 'NULL'}))${mine} ORDER BY updated_at DESC LIMIT 20`, since, ...busy, ...(mine ? [ctx.workspaceId] : []));
   const out = [];
   for (const raw of rows) {
     const r = { ...raw, seed: j(raw.seed_json, {}), found: j(raw.candidates_json, {}) };
@@ -525,6 +526,14 @@ export function onboardingWork(ctx, { t = now(), within = DAY_MS } = {}) {
     const base = { id: `o:${r.id}:samples`, subject: ctx.pack(r.pack_id)?.meta.displayName || niche };
     if (job) {
       out.push({ ...base, state: 'running', title: STATUS_HE.samples, line: progressLine(progress.get(r.id)), at: r.updated_at });
+      continue;
+    }
+    // Samples enough, paid, and the account not live: one press is left, and the setup says so until it is pressed,
+    // however long ago it was made (the owner, 2026-11-08: "someone cant know if he finished it or not").
+    const unpaid = customerWorkspace(r.workspace_id) && !workspaceAllowed(ctx.db, r.workspace_id, t);
+    const waitsLive = ctx.db.get('SELECT status FROM accounts WHERE id = ?', r.pack_id)?.status === 'onboarding' && (r.status === 'ready' || r.status === 'samples') && sampleCount(ctx.db, r.pack_id) >= SAMPLE_ENOUGH;
+    if (waitsLive && !unpaid) {
+      out.push({ ...base, state: 'ready', title: 'החשבון עוד לא באוויר', line: 'הפוסטים לדוגמה מוכנים. נשאר להעלות אותו לאוויר, ועד אז לא נכתבים לו פוסטים.', href: `${page}#golive`, go: 'להעלות לאוויר', at: r.updated_at });
       continue;
     }
     // Done writing, and not yet gone through ('ready' and 'live' are the steps after).
@@ -652,6 +661,11 @@ ${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`)
  * once Teder is paid for, with the paywall's own way to pay (accounts' /setup page). `capped`: the setup reached its cap
  * (src/billing/setup-cap.js), so more samples wait too. Without a sample, that what was built is kept.
  */
+/** The one step left: the samples are ready and the account is not live yet, so nothing is written for it. */
+function goLiveBanner(pc, r) {
+  return `<div class="banner info" id="golive">${icon('power')}<div><b>הדוגמאות מוכנות. נשאר צעד אחד: להעלות את החשבון לאוויר</b><p>עד שהחשבון באוויר תדר לא כותב לו פוסטים. במצב אישור כל פוסט מחכה לכם, ושום דבר לא יוצא בלי שתאשרו.</p></div>${postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' })}</div>`;
+}
+
 function activateBanner(pc, { good, capped }) {
   const pay = `<a class="btn sm primary" href="${esc(pc.links?.setup || '')}">איך משלמים</a>`;
   if (!good) return `<div class="banner info" id="activate">${icon('check')}<div><b>${esc(CAP_HE.noneTitle)}</b><p>${esc(CAP_HE.none)}</p></div>${pay}</div>`;
@@ -911,17 +925,20 @@ ${formatsPanel}${ops}</div>`
   const locked = Boolean(pc.unpaid);
   const sched = pack && r.status !== 'live' && !locked ? scheduleData(ctx.db, pack) : null;
   const activate = locked && r.status !== 'live' && (more.why === 'cap' || good >= SAMPLE_ENOUGH) ? activateBanner(pc, { good, capped: more.why === 'cap' }) : '';
+  // Three samples, paid: one press takes the account live, said at the top of the page until it is pressed (the owner,
+  // 2026-11-08: "there is no button for the setup, and someone cant know if he finished it or not"). The samples are on
+  // this same page, so pressing it is looking at them; "עברתי על הדוגמאות" was a step of its own, and after it the setup
+  // left every list.
+  const golive = !locked && r.status !== 'live' && good >= SAMPLE_ENOUGH ? goLiveBanner(pc, r) : '';
   // The samples lead the page (the owner, 2026-10-31: "why are the slideshows at the end of the page? make them at the
   // top"): how many passed and the buttons that act on them, the progress while more are written, the cards; then the
   // account, its networks and its days and times.
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `<div class="setup">${head}${activate}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
+    `<div class="setup">${head}${activate}${golive}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
 <section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
 <div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
-${good >= SAMPLE_ENOUGH && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn m-primary' }) : ''}
-${reviewed && !locked ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
-${pc.dev && !reviewed && r.status !== 'live' && pack ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר בלי דוגמאות`, { cls: 'btn sm', confirm: 'לחצו שוב כדי להעלות לאוויר בלי דוגמאות' }) : ''}
+${pc.dev && !golive && !reviewed && r.status !== 'live' && pack ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר בלי דוגמאות`, { cls: 'btn sm', confirm: 'לחצו שוב כדי להעלות לאוויר בלי דוגמאות' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${wait ? wait.box : ''}
 ${samples.length || wait ? `<div class="posts">${samples.map((p) => postCard(pc, p, pack)).join('')}${wait ? wait.placeholders : ''}</div>` : ''}</section>
@@ -1235,7 +1252,7 @@ export function onboardingRoutes(links = () => ({ base: '', secret: '' })) {
         const r = row(ctx, m[1]);
         // The operator may take an account live before its samples (the owner, 2026-11-07, for OpenFrequency's own
         // account, whose samples had no photographs: "i wont allow the demos"); its posts then come from the plan.
-        if (r.status !== 'ready' && !(user.operator && r.pack_id)) throw new ActionError('קודם עוברים על הדוגמאות');
+        if (r.status !== 'ready' && sampleCount(ctx.db, r.pack_id) < SAMPLE_ENOUGH && !(user.operator && r.pack_id)) throw new ActionError('קודם עוברים על הדוגמאות');
         ctx.db.update('accounts', r.pack_id, { status: 'active', mode: 'approve', updated_at: nowIso() });
         ctx.db.update('onboarding', r.id, { status: 'live', updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'went_live', accountId: r.pack_id });

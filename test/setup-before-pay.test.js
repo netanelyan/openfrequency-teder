@@ -148,7 +148,9 @@ test('before paying: the customer goes through /new end to end and sees the samp
   assert.match(html, /5 דוגמאות עברו את כל הבדיקות\./);
   assert.ok(html.includes(`<b>${READY_LINE}</b><p>${CAP_HE.after}</p>`), 'the samples ready, and what opens after paying');
   assert.ok(html.includes(`<a class="btn sm primary" href="${PAY}">איך משלמים</a>`), 'with the way to pay');
-  assert.match(html, /action="\/new\/[\w-]+\/reviewed"/, '"עברתי על הדוגמאות" stays');
+  // Before paying the page has one thing to do, the way to pay: going live (one press since 2026-11-08, no "עברתי על
+  // הדוגמאות" before it) comes after.
+  assert.doesNotMatch(html, /action="\/new\/[\w-]+\/reviewed"|id="golive"/, 'no step toward going live before paying');
   assert.match(html, new RegExp(`action="/new/${id}/samples"`), 'another round is offered (under the cap)');
   // Nothing on the page leads to the paywall.
   assert.doesNotMatch(html, /\/live"|\/connect\/|\/connections"|\/styles\?|id="schedule"|#edit"/, 'no going live, connecting, designs, days and times or editing');

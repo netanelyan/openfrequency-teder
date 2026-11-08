@@ -54,7 +54,7 @@ test('the line over the samples: how many passed, and under three that it takes 
   assert.equal(samplesLine(6), '6 דוגמאות עברו את כל הבדיקות.');
 });
 
-test('two samples are not enough to go on; the third opens "עברתי על הדוגמאות", and then the account goes live', async () => {
+test('two samples are not enough to go on; the third opens going live, one press said at the top of the page, and the account goes live', async () => {
   const at = new Date().toISOString();
   db.insert('onboarding', { id: 'o-3', seed_json: { niche: 'אפייה', examples: [] }, status: 'samples', workspace_id: 1, pack_id: 'demo', candidates_json: { candidates: [], formats: [], said: [] }, created_at: at, updated_at: at });
   const { cookie } = fake.session(customer(1));
@@ -62,7 +62,8 @@ test('two samples are not enough to go on; the third opens "עברתי על הד
   sample(2);
   let html = await (await get('/new/o-3', cookie)).text();
   assert.match(html, /2 דוגמאות עברו את כל הבדיקות\. צריך לפחות 3 כדי להמשיך\./);
-  assert.doesNotMatch(html, /action="\/new\/o-3\/reviewed"/, 'no button with two');
+  assert.doesNotMatch(html, /action="\/new\/o-3\/(reviewed|live)"/, 'no button with two');
+  assert.ok(!html.includes('id="golive"'), 'and no step left said');
   assert.match(html, /לפני שיש לפחות שלושה פוסטים לדוגמה ועברתם עליהם/);
   const refused = await post('/new/o-3/reviewed', cookie);
   assert.equal(refused.status, 303);
@@ -75,11 +76,16 @@ test('two samples are not enough to go on; the third opens "עברתי על הד
   sample(3);
   html = await (await get('/new/o-3', cookie)).text();
   assert.match(html, /<p class="muted small m0">3 דוגמאות עברו את כל הבדיקות\.<\/p>/);
-  assert.match(html, /action="\/new\/o-3\/reviewed"/, 'the button with three');
+  // The one step left, at the top of the page with its button, and no "עברתי על הדוגמאות" before it (the owner,
+  // 2026-11-08: "there is no button for the setup, and someone cant know if he finished it or not").
+  assert.match(html, /<div class="banner info" id="golive">[^]*נשאר צעד אחד: להעלות את החשבון לאוויר[^]*action="\/new\/o-3\/live"/, 'the step left, with its button');
+  assert.doesNotMatch(html, /action="\/new\/o-3\/reviewed"/, 'no step of its own before it');
   assert.doesNotMatch(html, /חמישה פוסטים|חמש הדוגמאות|מתוך 5/, 'nothing promises five');
-  assert.equal((await post('/new/o-3/reviewed', cookie)).status, 303);
-  assert.equal(stage(), 'ready');
+  // Home's block says the account is not live yet, however long ago the samples were written, until it is.
+  db.run("UPDATE onboarding SET updated_at = '2026-01-01T00:00:00.000Z' WHERE id = 'o-3'");
+  assert.match(await (await get('/', cookie)).text(), /החשבון עוד לא באוויר[^]*href="\/new\/o-3#golive"/, 'on home, with the way there');
   assert.equal((await post('/new/o-3/live', cookie)).status, 303);
   assert.equal(stage(), 'live');
   assert.deepEqual({ ...db.get("SELECT status, mode FROM accounts WHERE id = 'demo'") }, { status: 'active', mode: 'approve' });
+  assert.doesNotMatch(await (await get('/', cookie)).text(), /החשבון עוד לא באוויר/, 'live: gone from home');
 });
