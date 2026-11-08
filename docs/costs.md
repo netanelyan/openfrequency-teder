@@ -31,6 +31,20 @@ rather than being tried again in a loop, and inside a post the calls are bounded
 most 6 documents per format offered to the outline, one redraft, two repair rounds,
 two rewrite passes, a replacement tried twice at most).
 
+## More AI for better posts (2026-11-08)
+
+The owner, on an Airbnb post that opened on its founder's headshot, with fragments for slides and a weak closing
+slide: "involve AI in setting up the page and creating slideshows, even if it X3 the cost of a slideshow". The ceiling
+is three times $0.15, **$0.45 a post**. What each new step adds, estimated from its prompt and answer at Sonnet's
+prices ($3 in, $15 out a million tokens; half that through the Message Batches API, as the day's posts go):
+
+| Step | Model | Tokens (in / out) | A post, direct | A post, batch |
+|---|---|---|---|---|
+| Art direction (`src/pipeline/art.js`): every slide's photograph, the closing's background | Sonnet, low effort | ~2,400 / ~700 | ~$0.018 | ~$0.009 |
+
+The table grows as the next steps land (the context check, the closing slide's own call, the setup's). Measure the
+real numbers with `npm run live-day` once they are deployed.
+
 ## Setting up before paying (2026-11-02)
 
 A customer who signed up and has not paid may set the account up and see its samples

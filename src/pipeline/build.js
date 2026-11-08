@@ -34,6 +34,7 @@ import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, everyPhoto, visualsNeeded } from './prompts.js';
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { CLOSING_LINE, closingExtra, closingFrom, closingLesson, closingProblems, closingSlide, isClosingProblem } from './closing.js';
+import { NO_FACE, artDirect, notAFace } from './art.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { WIKI_KEY, aboutSubject, research } from '../sources/research.js';
 import { MODEL_KEY, modelFactsDoc, modelFallback } from '../sources/model.js';
@@ -1328,6 +1329,11 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     }
     if (!draft) return block('voice', 'הטיוטה לא נכתבה');
 
+    // ---- art direction: the whole slideshow read at once, and what each photograph shows (pipeline/art.js): the
+    // thing, the place, the moment, a face only on a slide about that person.
+    const art = await artDirect(pctx, { pack, format, draft, outline, postId });
+    if (art) step(db, postId, 'art', 'ok', { changed: art.changed, subjectKind: outline.subjectKind || null, cover: outline.imageQuery || '', slides: draft.slides.map((s) => s.imageQuery || ''), closing: draft.closingScene?.query || '' }, art.usd);
+
     // ---- photographs: licensed, recorded, screened, and checked against what each slide says. Found as soon as the
     // slides' searches are written (the repair, the review and the rewrite never change one), so a post that cannot
     // stand on its photographs is known before those are paid for: three of the five first samples of 2026-11-06 were
@@ -1770,10 +1776,13 @@ export function namedOn({ format, draft, outline }) {
   const last = draft.slides.length - 1;
   const one = (q) => (whoIn(q).length ? [q] : []);
   const named = new Map();
-  const cover = kind === 'head-to-head' ? [...one(outline?.imageQuery), ...one(outline?.imageQueryB)] : ['facts', 'tips', 'guess-who'].includes(kind) ? [] : one(outline?.imageQuery);
+  // A post about a company, a product or an idea names no face on its cover, and a slide the art director put on a
+  // thing names no one, whatever capitalised word ("Airbnb") its search holds (pipeline/art.js).
+  const faceless = notAFace(outline) && !outline?.coverShot?.person;
+  const cover = kind === 'head-to-head' ? [...one(outline?.imageQuery), ...one(outline?.imageQueryB)] : ['facts', 'tips', 'guess-who'].includes(kind) || faceless ? [] : one(outline?.imageQuery);
   if (cover.length) named.set(0, cover);
   draft.slides.forEach((s, i) => {
-    if (i === 0 || s.kind !== 'item' || s.role === 'clue' || kind === 'meme') return;
+    if (i === 0 || s.kind !== 'item' || s.role === 'clue' || kind === 'meme' || s.shot?.person === false) return;
     const list = [...(kind === 'guess-who' && i === last ? one(outline?.imageQuery) : []), ...one(s.imageQuery)];
     if (list.length) named.set(i, list);
   });
@@ -1925,7 +1934,10 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       ? `a portrait of ${draft.subject.answer}, the answer of a guess-who: the reveal shows their face${about}`
       : idx === 0 && ['facts', 'tips'].includes(kind) ? coverClaim(outline.imageQuery, draft.hook, about)
       : idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}` : `${s.title} ${s.body}${about}`;
-    wants.push({ idx, query: outline.imageQuery, claim });
+    // What the art director asked the picture to show, and, on a post about no person, that it is not a portrait.
+    const asked = idx === 0 && outline.coverShot?.show ? ` The photograph shows: ${outline.coverShot.show}.` : '';
+    const noFace = kind !== 'guess-who' && notAFace(outline) && !outline.coverShot?.person ? ` ${NO_FACE}` : '';
+    wants.push({ idx, query: outline.imageQuery, claim: `${claim}${asked}${noFace}` });
   }
   // A clue's photograph would give the answer away; a meme is the account's own design.
   if (photoOn && kind !== 'meme') {
@@ -1935,7 +1947,9 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       // out on a stadium seen from the stands, the keeper a dot in it, and Spain's World Cup on a team of the 1920s.
       // Only a person is asked for a face: "a dog: its face visible" sent the screen looking for one.
       const own = kind === 'facts' ? ` It must show ${s.imageQuery} large, as its clear main subject (${whoIn(s.imageQuery).length ? 'a person: them, their face visible, in the years the fact is about; for someone who lived before photography, a painting, a bust or a coin of them; ' : ''}never a far shot of a pitch, a stadium or a crowd where it is a dot, never an old photograph of others)` : '';
-      wants.push({ idx: i, query: s.imageQuery, claim: `${s.title} ${s.body}${own}` });
+      const shot = s.shot?.show ? ` The photograph shows: ${s.shot.show}.` : '';
+      const noFace = notAFace(outline) && !s.shot?.person && !whoIn(s.imageQuery).length ? ` ${NO_FACE}` : '';
+      wants.push({ idx: i, query: s.imageQuery, claim: `${s.title} ${s.body}${own}${shot}${noFace}` });
     });
   }
   const seen = new Set();
@@ -1958,7 +1972,8 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     const minSide = w.idx === 0 || (photoOn === 'last' && w.idx === last) ? MIN_SIDE.cover : MIN_SIDE.framed;
     let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why, minSide, budget }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
     // A cover whose query found nothing tries the post's own subject by name ("Haim Revivo" rather than "Revivo goal Spain 1998").
-    const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
+    // A post about a company, a product or an idea does not: its subject's name finds its founders and its logo.
+    const who = notAFace(outline) && kind !== 'guess-who' ? '' : String(draft.subject?.answer || draft.subject?.a || '').trim();
     if (!img && (w.idx === 0 || (kind === 'guess-who' && w.idx === last)) && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
       seen.add(who.toLowerCase());
       searches++;
@@ -1967,7 +1982,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     // A content slide that names someone and found nothing tries the name alone ("Sadio Mane" rather than "Sadio Mane
     // Liverpool 2019 final"): a slide that names someone stands on a photograph of them or the post does not go out. It
     // is not counted among the post's searches, so no later slide loses its own.
-    const named = w.idx > 0 ? whoIn(w.query).join(' ') : '';
+    const named = w.idx > 0 && draft.slides[w.idx]?.shot?.person !== false ? whoIn(w.query).join(' ') : '';
     if (!img && named && named.toLowerCase() !== key && !seen.has(named.toLowerCase())) {
       seen.add(named.toLowerCase());
       img = await findImage(ctx, { pack, query: named, postId, claim: w.claim, why, minSide, budget }).catch(() => null);
@@ -2040,7 +2055,10 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // White), and never in a ranking (it would show number one) or a guess-who (the answer).
   const subjectWords = String(`${draft.subject?.a || ''} ${draft.subject?.answer || ''} ${outline.imageQuery || ''}`).toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
   if (!out.has(0) && wants.some((w) => w.idx === 0) && (photoOn === 'cover' || photoOn === 'every') && !['ranking', 'guess-who'].includes(kind)) {
-    const portrait = [...out.entries()].find(([i, img]) => i > 0 && String(img.query).toLowerCase().split(/\s+/).some((w) => subjectWords.includes(w)));
+    // A post about a company, a product or an idea never moves a face to its cover (pipeline/art.js): an Airbnb post
+    // opened on its founder's headshot.
+    const faceless = notAFace(outline);
+    const portrait = [...out.entries()].find(([i, img]) => i > 0 && !(faceless && (draft.slides[i]?.shot?.person || whoIn(img.query).length)) && String(img.query).toLowerCase().split(/\s+/).some((w) => subjectWords.includes(w)));
     if (portrait) {
       out.set(0, portrait[1]);
       out.delete(portrait[0]);
