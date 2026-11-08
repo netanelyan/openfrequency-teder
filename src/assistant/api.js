@@ -196,16 +196,17 @@ export function assistantApi(ctx, { env = process.env, port }) {
 
   /**
    * Reject, with one of the form's reasons and the customer's own words. A redo is written while the month has one
-   * left (the website's rules, src/web/actions.js reject); `redo` says what happened: writing, none (used up),
-   * paused, sample.
+   * left (the website's rules, src/web/actions.js reject) unless the body says `redo: false`; `redo` says what
+   * happened: writing, declined, none (used up), paused, sample.
    */
   function reject({ c, params: [id], body }) {
     const user = actorOf(body);
     const reason = String(body.reason || '');
     if (!REDO_REASONS.includes(reason)) throw new ApiError(400, 'bad_reason', `reason: one of ${REDO_REASONS.join(', ')}`);
     if (body.freeText != null && typeof body.freeText !== 'string') throw new ApiError(400, 'bad_request', 'freeText: a string');
+    if (body.redo != null && typeof body.redo !== 'boolean') throw new ApiError(400, 'bad_request', 'redo: true or false');
     const post = mustPost(c, id, DECIDE);
-    const r = keep(act.reject(c, user, { id: post.id }, { reason, note: String(body.freeText || '').slice(0, 300) }));
+    const r = keep(act.reject(c, user, { id: post.id }, { reason, note: String(body.freeText || '').slice(0, 300), redo: body.redo === false ? '0' : '1' }));
     const after = loadPost(c.db, post.id);
     traced(c.db, post.id, user, 'reject', { reason, redo: after.reject?.redo || null });
     return { ok: true, message: r.message, post: { id: post.id, status: after.status }, redo: after.reject?.redo || null, quota: quotaOf(c.db, post.account_id) };

@@ -151,11 +151,13 @@ export function unapprove(ctx, user, { id }) {
 }
 
 /**
- * Reject a post, with a reason (src/budget/quota.js REDO_REASONS) and the customer's own words. While the month has
- * redos left, a replacement is written beside the answer with that reason (src/pipeline/redo.js) and counted as a
- * redo once it reaches them; when they are used up, the post is only discarded. A sample, or an account that cannot
- * generate now (paused, the kill switch), gets no replacement and uses no redo. `job` (not sent to the browser) is
- * the replacement being written, for the tests.
+ * Reject a post, with a reason (src/budget/quota.js REDO_REASONS) and the customer's own words. The customer chooses
+ * whether a replacement is written (the owner, 2026-11-08: "not every rejection should trigger a redo. user chooses
+ * it"): `form.redo` '0' only takes the post down and uses nothing; '1' (and a caller that does not say, as the
+ * assistant's API before it asked) writes one. While the month has redos left, the replacement is written beside the
+ * answer with that reason (src/pipeline/redo.js) and counted as a redo once it reaches them; when they are used up, the
+ * post is only discarded. A sample, or an account that cannot generate now (paused, the kill switch), gets no
+ * replacement and uses no redo. `job` (not sent to the browser) is the replacement being written, for the tests.
  */
 export function reject(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
@@ -168,13 +170,14 @@ export function reject(ctx, user, { id }, form) {
   const left = retireDraft(ctx.db, post);
   const engine = engineOf(ctx);
   const q = room(ctx.db, post.account_id, { redo: true });
-  const redo = !post.sample && q.ok && canRun(ctx.db, post.account_id).ok && Boolean(engine.pack(post.account_id));
-  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : q.ok ? 'paused' : 'none' };
+  const wants = !['0', 'false', false].includes(form.redo);
+  const redo = wants && !post.sample && q.ok && canRun(ctx.db, post.account_id).ok && Boolean(engine.pack(post.account_id));
+  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : !wants ? 'declined' : q.ok ? 'paused' : 'none' };
   ctx.db.update('posts', id, { status: 'rejected', reason, reject_json: rejected, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo }) });
   const draftLeft = left ? ` ${DRAFT_LEFT}` : '';
   if (!redo) {
-    const why = post.sample ? 'נדחה. הסיבה נשמרה.' : !q.ok ? `נדחה, והפוסט ירד. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.` : 'נדחה. הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.';
+    const why = post.sample ? 'נדחה. הסיבה נשמרה.' : !wants ? 'נדחה, והפוסט ירד. הסיבה נשמרה, ולא נכתב פוסט במקומו.' : !q.ok ? `נדחה, והפוסט ירד. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.` : 'נדחה. הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.';
     return { ok: true, message: `${why}${draftLeft}` };
   }
   // Started here, not awaited: redoPost holds the redo (its first drafting row) before it first waits.

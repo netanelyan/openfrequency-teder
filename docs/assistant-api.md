@@ -126,8 +126,10 @@ draft-now account's TikTok draft going to the app at once. Answers `{ ok, messag
 
 ### `POST /customers/:ws/posts/:id/reject`
 
-`{ by, reason, freeText }`. `reason` is one of `topic`, `shorter`, `tone`, `photo`, `other`; `freeText` is the
-customer's own words (300 characters at most), which the replacement's writer reads.
+`{ by, reason, freeText, redo }`. `reason` is one of `topic`, `shorter`, `tone`, `photo`, `other`; `freeText` is the
+customer's own words (300 characters at most), which the replacement's writer reads. `redo` (optional, boolean) is the
+customer's choice, as on the website since 2026-11-08: `false` only takes the post down, and the answer's `redo` is
+`declined`; `true`, or no `redo` at all, writes a replacement as below.
 
 The website's rules apply (`src/budget/quota.js`). While the month has redos left, a replacement is written with that
 reason and counted as a redo once it reaches the customer, never as a suggestion. When the redos are used up, the post

@@ -257,6 +257,30 @@ test('a rejection writes a replacement with its reason, counted as a redo and ne
   }
 });
 
+test('the customer chooses: "לדחות" takes the post down and writes nothing, "לדחות ולכתוב אחר" writes a replacement', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    setNow(OCT);
+    const first = await buildPost(ctx, { pack, formatKey: 'care-guide', slotAt: israelInstant('2026-10-14', '12:45').toISOString() });
+    assert.equal(first.status, 'queued', first.reason);
+    const queued = postPage({ csrf: 'x' }, postFull(ctx, first.postId));
+    assert.match(queued, /<button class="btn danger" type="submit" name="redo" value="0">לדחות<\/button><button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב אחר<\/button>/, 'two choices, rejecting alone first');
+    const before = ctx.db.get('SELECT COUNT(*) AS n FROM posts').n;
+    const r = reject(ctx, customer, { id: first.postId }, { reason: 'topic', note: 'לא מתאים לנו', redo: '0' });
+    assert.equal(r.job, undefined, 'nothing is written');
+    assert.match(r.message, /הסיבה נשמרה, ולא נכתב פוסט במקומו/);
+    assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM posts').n, before);
+    const old = loadPost(ctx.db, first.postId);
+    assert.deepEqual([old.status, old.reject.reason, old.reject.note, old.reject.redo], ['rejected', 'topic', 'לא מתאים לנו', 'declined']);
+    const u = usage(ctx.db, 'demo');
+    assert.deepEqual([u.redos.used, u.redos.held, u.redos.left], [0, 0, DEFAULT_PLAN.redos], 'no redo used');
+  } finally {
+    cleanup();
+  }
+});
+
 test('what each reason asks of the replacement: another topic, the same story shorter or in another tone, other photographs', () => {
   const { home, cleanup } = tempHome();
   try {

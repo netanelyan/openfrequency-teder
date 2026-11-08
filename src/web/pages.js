@@ -33,15 +33,18 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
 // a URL) keeps its own direction inside an isolated run.
 
 /**
- * The rejection form: a reason (each one steers the replacement, src/pipeline/redo.js) and the customer's own words.
- * `left` is the month's redos left, when the page knows it.
+ * The rejection form: a reason (each one steers a replacement, src/pipeline/redo.js) and the customer's own words, then
+ * the customer's choice (the owner, 2026-11-08: "not every rejection should trigger a redo. user chooses it"): "לדחות"
+ * only takes the post down, "לדחות ולכתוב אחר" also writes a replacement and uses one of the month's redos. A sample, or
+ * a month with no redos left, has only the first. `left` is the month's redos left, when the page knows it.
  */
 function rejectForm(ctx, post, { ajax = null, left = null } = {}) {
-  const tail = left == null ? '' : left > 0 ? `<p class="muted small m0">פוסט חלופי ייכתב לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>` : '<p class="muted small m0">ההחלפות של החודש נוצלו, אז דחייה רק מורידה את הפוסט.</p>';
+  const canRedo = !post.sample && left !== 0;
+  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? '<p class="muted small m0">ההחלפות של החודש נוצלו, אז דחייה רק מורידה את הפוסט.</p>' : '') : `<p class="muted small m0">פוסט חלופי נכתב לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
   return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
 <label class="f">למה לדחות?<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
 <input type="text" name="note" placeholder="מה לשנות, במילים שלכם (לא חובה)" maxlength="300">
-${tail}<button class="btn danger" type="submit">לדחות את הפוסט</button></form>`;
+${tail}<div class="rejectacts"><button class="btn danger" type="submit" name="redo" value="0">לדחות</button>${canRedo ? '<button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב אחר</button>' : ''}</div></form>`;
 }
 
 /** What a post counted as in the customer's month (src/budget/quota.js). */

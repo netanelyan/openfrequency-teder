@@ -108,13 +108,15 @@
     const btn = form.querySelector('[data-confirm]');
     if (btn && btn.dataset.armed !== '1') return;
     e.preventDefault();
-    const submit = form.querySelector('button[type=submit]');
+    // The button pressed is the one that spins, and its own name and value go with the form (a rejection's "לדחות" or
+    // "לדחות ולכתוב אחר").
+    const submit = e.submitter || form.querySelector('button[type=submit]');
     submit?.setAttribute('aria-busy', 'true');
     try {
       const res = await fetch(form.action, {
         method: 'POST',
         headers: { 'x-of-ajax': '1', 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(new FormData(form)),
+        body: new URLSearchParams(e.submitter ? new FormData(form, e.submitter) : new FormData(form)),
         credentials: 'same-origin',
       });
       const out = await res.json().catch(() => ({ ok: false, message: 'תשובה לא צפויה מהשרת' }));

@@ -656,6 +656,8 @@ blockquote.q { margin: 0; padding: 10px 12px; border-inline-start: 3px solid var
 .actions form { display: contents; }
 .rejectbox { padding: 0 20px 20px; display: none; gap: 10px; }
 .rejectbox.open { display: grid; }
+.rejectacts { display: flex; flex-wrap: wrap; gap: 8px; }
+.rejectacts .btn { flex: 1 1 auto; }
 
 /* A post's light edits: each slide small, its photograph to swap and the button that removes it. */
 .lightlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
