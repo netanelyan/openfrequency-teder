@@ -14,6 +14,7 @@ import { suggestStyle } from './style.js';
 import { DEFAULT_PICKED, formatsFor } from '../formats/library.js';
 import { resolveStyle } from '../render/styles/tokens.js';
 import { writeScenes } from '../images/scenes.js';
+import { setupWriting } from './setup-ai.js';
 
 // A new pack, written from an onboarding: the owner's seed, the sources they
 // approved, and a look none of the customer's other accounts has. No code: the
@@ -136,7 +137,7 @@ export function nicheTags(seed = {}) {
  * Write a new pack. Returns { id, dir }. Throws with every problem if it would not validate. `workspaceId` is the
  * customer's (null for the operator's own account): its look is kept apart from that workspace's other accounts.
  */
-export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null, formatIds = DEFAULT_PICKED, promo = null }) {
+export async function createPack(ctx, { seed, candidates, displayName, handle, examplesFromOwner = [], workspaceId = null, formatIds = DEFAULT_PICKED, promo = null, siteText = '' }) {
   const id = packIdOf(handle);
   if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id)) throw new Error('the handle must be latin letters and digits, so the pack id can be made from it');
   const dir = path.join(packsDir(), id);
@@ -179,6 +180,18 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
   const kin = ctx.packs.filter((p) => groups(p) === group && p.meta?.style?.name);
   const clashes = (name) => kin.some((p) => p.meta.style.name === name && deltaE(resolveStyle({ name }, theme.colors.accent).colors.accent, resolveStyle(p.meta.style, p.theme?.colors?.accent).colors.accent) < 20);
   pack.style = { name: ranked.find((n) => !clashes(n)) || ranked[0] };
+  // The setup's writing (src/onboarding/setup-ai.js): the description, the promise, the style among the ones this
+  // account may have (a business never gets E), the hashtags and the caption questions, written for this business by a
+  // model that reads it, each falling back to what is made above.
+  const QUESTIONS = ['מה עוד הייתם רוצים לדעת על זה?', 'זה נוגע לכם?', 'על מה תרצו פירוק כזה?'];
+  const allowed = [pack.style.name, ...ranked.filter((n) => n !== pack.style.name && n !== 'E' && !clashes(n))];
+  const wrote = await setupWriting(ctx, {
+    seed, displayName: pack.displayName, promo, siteText, allowed,
+    fallback: { description: pack.description, promise: promo?.promise || '', style: pack.style.name, hashtags: nicheTags(seed), questions: QUESTIONS },
+  });
+  pack.description = wrote.description;
+  if (pack.promo && wrote.kept.includes('promise')) pack.promo = { ...pack.promo, promise: wrote.promise };
+  pack.style = { name: wrote.style };
   const sources = {
     sources: approved.map((c, i) => ({
       id: `${c.type}-${i + 1}-${(() => {
@@ -206,8 +219,8 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     // The formats the customer picked on the sources step, in turn (src/formats/library.js, rotation.js turnOrder).
     formats: formatsFor(formatIds),
     rotate: 'turns',
-    caption: { questions: ['מה עוד הייתם רוצים לדעת על זה?', 'זה נוגע לכם?', 'על מה תרצו פירוק כזה?'] },
-    hashtags: { broad: ['#טיפים', '#ישראל'], niche: nicheTags(seed) },
+    caption: { questions: wrote.questions },
+    hashtags: { broad: ['#טיפים', '#ישראל'], niche: wrote.hashtags },
     trends: { queries: { he: [`טיפים ${seed.niche}`], en: [`${seed.nicheEn || seed.niche} tips`] }, minViews: { he: 1000, en: 20000 } },
   };
   const rules = { maxQuoteWords: 40, bannedPhrases: [], patterns: [], imageQueryBlock: ['logo', 'brand'] };

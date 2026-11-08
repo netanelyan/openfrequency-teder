@@ -103,7 +103,9 @@ export async function readSitePromo(url, { read = readStore, get, getPage = getT
   draft.promise = promiseFrom(description, { name: draft.name || name });
   // What the engine fills in by itself stays on the store's own domain (src/packs/promo.js).
   if (promoProblems(draft, { domain: domainOf(origin) }).includes('domain')) draft.target = { kind: 'site', url: '' };
-  return { draft, read: ok, ...(logo ? { logo } : {}) };
+  // The site's own description goes with it, for the setup's writing (src/onboarding/setup-ai.js).
+  const said = promoText(description).slice(0, 2000);
+  return { draft, read: ok, ...(said ? { description: said } : {}), ...(logo ? { logo } : {}) };
 }
 
 /** The reads running now, by onboarding id: the page says it is still reading. */
@@ -121,7 +123,7 @@ export function startSiteRead(db, id, site, { opts = {}, log = null } = {}) {
       if (!got) return saveSetup(db, id, { siteRead: 'failed' });
       if (!got.read) log?.(`[onboarding] ${id}: the store's site ${site} did not answer; the customer writes the closing slide`);
       const mine = setupOf(db, id).promoBy === 'customer';
-      return saveSetup(db, id, { siteRead: got.read ? 'ok' : 'failed', ...(mine ? {} : { promo: got.draft, promoBy: 'site' }), ...(got.logo ? { siteLogo: got.logo } : {}) });
+      return saveSetup(db, id, { siteRead: got.read ? 'ok' : 'failed', ...(mine ? {} : { promo: got.draft, promoBy: 'site' }), ...(got.logo ? { siteLogo: got.logo } : {}), ...(got.description ? { siteText: got.description } : {}) });
     })
     .catch((e) => {
       log?.(`[onboarding] ${id}: reading ${site} stopped: ${e.message}`);

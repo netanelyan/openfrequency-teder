@@ -48,6 +48,10 @@ prices ($3 in, $15 out a million tokens; half that through the Message Batches A
 
 So a post made goes from about $0.15 to about $0.20, well under the $0.45 the owner allowed.
 
+Once an account, the setup's writing (`src/onboarding/setup-ai.js`: the description, the promise, the style, the
+hashtags and the caption questions; Sonnet, medium effort, ~2,500 in / ~900 out): about $0.02, inside the setup's
+$1.50 and the $3.50 an unpaid workspace may spend.
+
 The table grows as the next steps land (the context check, the closing slide's own call, the setup's). Measure the
 real numbers with `npm run live-day` once they are deployed.
 

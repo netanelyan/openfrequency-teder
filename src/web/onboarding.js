@@ -1003,7 +1003,7 @@ async function createAccount(ctx, user, r, f) {
   capCheck(ctx, user, r.workspace_id);
   let made;
   try {
-    made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds, promo }), !user.operator);
+    made = await metered(ctx.db, r, () => createPack(engine(ctx), { seed: r.seed, candidates, displayName: n.displayName, handle: n.handle, examplesFromOwner: r.seed.examples, workspaceId: r.workspace_id ?? null, formatIds, promo, siteText: r.setup?.siteText || '' }), !user.operator);
   } catch (e) {
     throw createError(ctx, e);
   }
