@@ -8,7 +8,7 @@ import { ROOT } from '../src/core/paths.js';
 import { setNow } from '../src/core/clock.js';
 import { outreachOn, outreachUrl, sendPitch, UNREACHABLE } from '../src/leads/outreach.js';
 import { leadsRoutes } from '../src/web/leads.js';
-import { INTERNAL_TOKEN, tempHome } from './helpers.js';
+import { INTERNAL_TOKEN, serverFree, tempHome } from './helpers.js';
 
 // /leads' "לשלוח בוואטסאפ מהמספר שלנו" (the owner, 2026-11-08: "if i press the send button to a demo suggestion, i want it
 // to go to whatsapp, so toran should send it"): Teder hands the pitch to Toran (POST /internal/outreach/send,
@@ -30,8 +30,8 @@ async function stubToran() {
     res.writeHead(a.status, { 'content-type': 'application/json' });
     res.end(JSON.stringify(a.body));
   });
-  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { state, base: `http://127.0.0.1:${srv.address().port}`, close: () => new Promise((r) => srv.close(r)) };
+  const port = await serverFree(srv);
+  return { state, base: `http://127.0.0.1:${port}`, close: () => new Promise((r) => srv.close(r)) };
 }
 
 test('the client hands the pitch to Toran as the contract says, and reads every answer', async () => {

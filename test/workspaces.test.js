@@ -330,6 +330,8 @@ const casesFor = () => {
     [`/leads/${B.lead}/irrelevant`],
     [`/leads/${B.lead}/back`],
     [`/leads/${B.lead}/notes`, { notes: 'A was here' }],
+    // Asking Toran to send a lead its message on WhatsApp is the operator's alone too.
+    [`/leads/${B.lead}/wa`],
   ];
 };
 
