@@ -270,8 +270,12 @@ const leadOf = (ctx, id) => {
 const setLead = (ctx, id, patch) => ctx.db.update('leads', id, { ...patch, updated_at: nowIso() });
 const back = (lead, tab) => `/leads?tab=${tab}#lead-${lead.id}`;
 
-/** Build (or link) the store's demo, on the operator's click. */
-function buildFor(ctx, user, lead) {
+/**
+ * Build (or link) the store's demo: the operator's click here, or Toran's lead page asking for it
+ * (src/web/leads-internal.js). { message, demo, linked } where linked says an existing demo was joined to it; an
+ * ActionError when it already has one or is being built.
+ */
+export function buildLeadDemo(ctx, by, lead) {
   const { db } = ctx;
   const linked = lead.demo_id ? db.get('SELECT * FROM demos WHERE id = ?', lead.demo_id) : null;
   if (linked && ['new', 'building'].includes(linked.status) && running.has(linked.id)) throw new ActionError('הדמו של החנות הזו נבנה עכשיו');
@@ -287,11 +291,33 @@ function buildFor(ctx, user, lead) {
     }
   }
   setLead(ctx, lead.id, { demo_id: demo.id });
-  if (demo.status === 'approved' || demo.status === 'ready') return { ok: true, message: 'לחנות הזו כבר היה דמו, והוא מחובר אליה עכשיו', redirect: back(lead, demo.status === 'approved' ? 'ready' : 'new') };
+  if (demo.status === 'approved' || demo.status === 'ready') return { message: 'לחנות הזו כבר היה דמו, והוא מחובר אליה עכשיו', demo, linked: true };
   // A build that a restart cut off (still marked building, with nothing running) starts again, like a failed one.
   if (!running.has(demo.id)) startBuild(ctx, demo.id);
-  audit(db, { actor: user.name, action: 'lead_demo', detail: { lead: lead.id, domain: lead.domain, demo: demo.id } });
-  return { ok: true, message: 'בונים את הדמו. זה לוקח כמה דקות.', redirect: back(lead, 'new') };
+  audit(db, { actor: by, action: 'lead_demo', detail: { lead: lead.id, domain: lead.domain, demo: demo.id } });
+  return { message: 'בונים את הדמו. זה לוקח כמה דקות.', demo, linked: false };
+}
+
+/** Build (or link) the store's demo, on the operator's click. */
+function buildFor(ctx, user, lead) {
+  const out = buildLeadDemo(ctx, user.name, lead);
+  return { ok: true, message: out.message, redirect: back(lead, out.linked && out.demo.status === 'approved' ? 'ready' : 'new') };
+}
+
+/** Mark a lead's first message or its one reminder sent, the way "שלחתי" does: { message } or an ActionError. */
+export function markLeadSent(ctx, by, lead, stage, via, { from = null } = {}) {
+  if (stage === 'first') {
+    if (lead.stage !== 'demo_ready') throw new ActionError('אפשר לסמן "שלחתי" רק כשהדמו מוכן');
+    setLead(ctx, lead.id, { stage: 'sent', sent_at: nowIso(), sent_via: via });
+    audit(ctx.db, { actor: by, action: 'lead_sent', detail: { lead: lead.id, domain: lead.domain, via, ...(from ? { by: from } : {}) } });
+    return { message: 'סומן שנשלח' };
+  }
+  if (!['sent', 'opened'].includes(lead.stage) || !lead.sent_at) throw new ActionError('אין לחנות הזו תזכורת לשלוח');
+  if (lead.reminder_sent_at) throw new ActionError('התזכורת לחנות הזו כבר נשלחה');
+  if (!reminderReady(lead.sent_at, now())) throw new ActionError('עוד לא הזמן לתזכורת');
+  setLead(ctx, lead.id, { reminder_sent_at: nowIso() });
+  audit(ctx.db, { actor: by, action: 'lead_reminded', detail: { lead: lead.id, domain: lead.domain, via, ...(from ? { by: from } : {}) } });
+  return { message: 'סומן שהתזכורת נשלחה' };
 }
 
 const MOVES = {
@@ -377,18 +403,8 @@ export function leadsRoutes({ env = process.env } = {}) {
         if (act === 'sent' || act === 'reminded') {
           const via = [...CHANNELS, 'other'].includes(f.via) ? f.via : null;
           if (!via) throw new ActionError('צריך לבחור איך שלחתם');
-          if (act === 'sent') {
-            if (lead.stage !== 'demo_ready') throw new ActionError('אפשר לסמן "שלחתי" רק כשהדמו מוכן');
-            setLead(ctx, lead.id, { stage: 'sent', sent_at: nowIso(), sent_via: via });
-            audit(ctx.db, { actor: user.name, action: 'lead_sent', detail: { lead: lead.id, domain: lead.domain, via } });
-            return { ok: true, message: 'סומן שנשלח', redirect: back(lead, 'sent') };
-          }
-          if (!['sent', 'opened'].includes(lead.stage) || !lead.sent_at) throw new ActionError('אין לחנות הזו תזכורת לשלוח');
-          if (lead.reminder_sent_at) throw new ActionError('התזכורת לחנות הזו כבר נשלחה');
-          if (!reminderReady(lead.sent_at, now())) throw new ActionError('עוד לא הזמן לתזכורת');
-          setLead(ctx, lead.id, { reminder_sent_at: nowIso() });
-          audit(ctx.db, { actor: user.name, action: 'lead_reminded', detail: { lead: lead.id, domain: lead.domain, via } });
-          return { ok: true, message: 'סומן שהתזכורת נשלחה', redirect: back(lead, TAB_OF[lead.stage]) };
+          const out = markLeadSent(ctx, user.name, lead, act === 'sent' ? 'first' : 'reminder', via);
+          return { ok: true, message: out.message, redirect: back(lead, act === 'sent' ? 'sent' : TAB_OF[lead.stage]) };
         }
         if (act === 'back') {
           if (lead.stage !== 'irrelevant') throw new ActionError('החנות הזו כבר ברשימה');

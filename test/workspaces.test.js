@@ -362,6 +362,7 @@ const DOORS = [
   ['/static/examples/style-E.jpg', 'test/formats-page.test.js'],
   ['/internal/lead', 'test/demos.test.js'],
   ['/internal/demos', 'test/demos.test.js'],
+  ['/internal/leads/state', 'test/leads-internal.test.js'],
   ['/internal/setup', 'test/setup.test.js'],
   ['/internal/workspaces/1/delete', 'test/workspace-delete.test.js'],
 ];

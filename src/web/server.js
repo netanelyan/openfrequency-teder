@@ -26,6 +26,7 @@ import { assistantApi, isAssistantPath } from '../assistant/api.js';
 import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
 import { connectRoutes, goPage, publicConnect, publicOnboardingConnect, publicPick } from './connect.js';
 import { leadsRoutes } from './leads.js';
+import { leadsInternal } from './leads-internal.js';
 import { setupFeed } from './setup.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
@@ -417,6 +418,13 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // pages' address is the public name's; without one (a laptop), the address this request came to.
       if (req.method === 'GET' && p === '/internal/demos') {
         const [status, body] = demosFeed(ctx, req, env, { origin: publicHost ? `https://${publicHost}` : `http://${host}` });
+        return json(req, res, status, body);
+      }
+      // Toran's lead page asks about the same store here, builds its Teder demo and marks it sent when one message carried
+      // both demos (src/web/leads-internal.js): the same checks.
+      const li = /^\/internal\/leads\/(state|demo|mark)$/.exec(p);
+      if (li) {
+        const [status, body] = await leadsInternal(ctx, req, env, li[1], url.searchParams, { origin: publicHost ? `https://${publicHost}` : `http://${host}` });
         return json(req, res, status, body);
       }
       // Accounts' setup checklist asks for a workspace's steps here (src/web/setup.js): the same checks, and each step's
