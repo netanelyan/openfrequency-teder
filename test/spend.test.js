@@ -138,9 +138,10 @@ test('the day is drafted in batches: one batch per round for every post at once,
     const bctx = { ...ctx, llm: batcher };
     const res = await Promise.all([0, 1, 2].map(() => batcher.run(() => buildPost(bctx, { pack, formatKey: 'care-guide' }))));
     assert.deepEqual(res.map((r) => r.status), ['queued', 'queued', 'queued'], JSON.stringify(res.map((r) => r.reason)));
-    assert.deepEqual(sizes, [3, 3, 3, 3], 'three posts: their outlines in one batch, then their details, then their slides, then their reviews');
+    // The art director and the closing slide's own line are a round each since 2026-11-08 (src/pipeline/art.js, closer.js).
+    assert.deepEqual(sizes, [3, 3, 3, 3, 3, 3], 'three posts: their outlines in one batch, then their details, their slides, their art direction, their closing lines, their reviews');
     const rows = ctx.db.all("SELECT * FROM spend WHERE api = 'claude'");
-    assert.equal(rows.length, 12, 'each call once: the batcher records it, askJson does not again');
+    assert.equal(rows.length, 18, 'each call once: the batcher records it, askJson does not again');
     assert.ok(rows.every((r) => r.batch === 1 && r.usage_json && !r.estimated), 'every call recorded from its usage, as a batch call');
     const outline = rows.find((r) => r.tag === 'outline');
     assert.ok(Math.abs(outline.usd - claudeCost(JSON.parse(outline.usage_json), outline.model) / 2) < 1e-12, 'at half price');
@@ -183,9 +184,9 @@ test('a batch that does not end by its deadline is cancelled, and the run is dra
     assert.equal(sizes[0], 2, 'the outlines went as one batch');
     assert.equal(cancelled.length, 1, 'the batch past its deadline was cancelled, once');
     assert.match(logs.join('\n'), /still not ended after .* cancelled, its 2 request\(s\) asked directly/);
-    assert.equal(direct, 8, 'its two requests, and every request after it, asked directly');
+    assert.equal(direct, 12, 'its two requests, and every request after it, asked directly (six rounds a post since the art director and the closing line)');
     const rows = ctx.db.all("SELECT * FROM spend WHERE api = 'claude'");
-    assert.equal(rows.length, 8, 'each direct call recorded once');
+    assert.equal(rows.length, 12, 'each direct call recorded once');
     assert.ok(rows.every((r) => r.batch === 0 && !r.estimated), 'at the full price, from its usage');
     assert.equal(batcher.owned.size, 0, 'the given-up batch is left for recoverBatches to record what it did');
     assert.equal(ctx.db.get('SELECT status FROM batches').status, 'in_progress');
