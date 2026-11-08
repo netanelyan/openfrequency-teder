@@ -1175,13 +1175,17 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // Two passes: the sources' documents, then, when none carried a post, one page of the model's general knowledge.
     for (let pass = 0; pass < 2 && !outline; pass++) {
       if (pass === 1) {
-        if (!fallback) break;
+        // The model's page holds no numbers or dates (src/sources/model.js), which a ranking and an on-this-day post
+        // stand on: with only those left to try, it is not asked (a plant shop's ranking asked it twice for nothing,
+        // 2026-11-07).
+        if (!fallback || formatsToTry.every((f) => SOURCED_NUMBERS.has(kindName(f)))) break;
         const m = await modelFactsDoc(pctx, pack, { avoid: recent });
         step(db, postId, 'model_facts', m.doc ? 'ok' : 'failed', { subject: m.subject || null, why: m.why || null, document: m.doc?.id || null, facts: m.doc ? m.doc.text.split(/\n/).length : 0 }, m.usd);
         if (!m.doc) break;
         candidates = candidatesOf([m.doc]);
       }
       tries: for (const f of formatsToTry) {
+        if (pass === 1 && SOURCED_NUMBERS.has(kindName(f))) continue;
         // On this day: only documents that mention this day of the year.
         const pool = poolFor(f, candidates, postDay, { maxAgeDays: pack.meta.research?.maxAgeDays || null });
         // At most maxDocs documents per format reach the model. A document with no
@@ -1662,6 +1666,9 @@ export function needsSides(pack, format, outline) {
  * The texture of a post of a styled account (src/render/textures.js): its own, never the one the account's last post
  * had, so two posts in a row never share a ground. null for an account on the older templates.
  */
+/** The kinds that stand on numbers or dates from a source, which the model's general-knowledge page never has. */
+export const SOURCED_NUMBERS = new Set(['ranking', 'on-this-day']);
+
 /** The screens a slide spends on the model's new searches (newSearches), all of them together. */
 export const RESCUE_SCREENS = 6;
 

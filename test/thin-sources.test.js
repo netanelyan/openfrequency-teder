@@ -366,3 +366,20 @@ test('"לחפש מקורות חדשים" on the setup\'s sources step and on the
     cleanup();
   }
 });
+
+test("a ranking stands on its sources' numbers: with sources too thin, the model's page (which has none) is not asked for it", async () => {
+  // A plant shop's ranking asked the model for its own page twice, and neither could rank anything (2026-11-07).
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    const asked = [];
+    ctx.llm = thinModel(asked);
+    const res = await buildPost(ctx, { pack, sample: true, formatKey: 'plant-ranking' });
+    assert.equal(res.status, 'blocked');
+    assert.ok(asked.some((a) => a.task === 'outline'), 'the sources are tried');
+    assert.ok(!asked.some((a) => a.task === 'model_facts'), "the model's page is not asked for a ranking");
+  } finally {
+    cleanup();
+  }
+});

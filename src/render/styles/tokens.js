@@ -96,8 +96,10 @@ export const STYLES = {
     text: {
       hook: T('Rubik', 900, 108, 1.04, { lines: 3, floor: 88, breaks: true }),
       sub: T('Rubik', 500, 44, 1.35, { lines: 3 }),
-      title: T('Rubik', 900, 88, 1.08, { lines: 2, floor: 72, breaks: true }),
-      ntitle: T('Rubik', 900, 88, 1.08, { lines: 2, floor: 72, breaks: true }),
+      // Three lines for a slide's line, as its panel has room for: at two, a facts post's facts were cut to about 28
+      // characters and lost their details ("every month or two" became "once a month", the plant sample, 2026-11-07).
+      title: T('Rubik', 900, 88, 1.08, { lines: 3, floor: 72, breaks: true }),
+      ntitle: T('Rubik', 900, 88, 1.08, { lines: 3, floor: 72, breaks: true }),
       body: T('Rubik', 400, 42, 1.5, { lines: 4 }),
       tbody: T('Rubik', 400, 42, 1.5, { lines: 4 }),
       number: T('Rubik', 900, 132, 1),
