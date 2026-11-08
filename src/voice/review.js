@@ -42,6 +42,7 @@ What gives a Hebrew text away (each one raises the score):
 - Claims with nothing behind them: a superlative with no number, "מהפכה", "משנה את כללי המשחק", abstract nouns ("חוויה", "פתרון", "פלטפורמה") where a thing could be named.
 - Form or brochure Hebrew: "ניתן", "על מנת", "במידה ו", "בגין", "נדרש", "באמצעות", a passive with "על ידי", "כ-80" where a person says "בערך 80". Translated Hebrew: "בסופו של יום", "עושה את ההבדל", "כשזה מגיע ל", English word order or idioms in Hebrew letters.
 - A moral or a summary at the end, a stock opener, a polite assistant line, engagement bait ("תייגו", "מה דעתכם?").
+- A slide that leaves you asking what it is about: a slide's title and its text, read alone, never say who, when or why it matters ("אין כסף לשכר דירה, אז השכירו מזרנים" with nothing to say who rented what, or when). Tell "no context", 4 or more, on the slide's text (or its title when it has no text): the slides that spread stand alone (the owner, 2026-11-08: "sentences are too short so context is not there"). A short text that does give the who or the when is fine.
 
 What a person writes: the concrete detail first (a number, a name, a minute, a place), plain verbs, everyday words ("אפשר", "צריך", "בערך"), an opinion said as an opinion, and an uneven rhythm. A short, plain, specific sentence is human: never mark it down for being simple.
 

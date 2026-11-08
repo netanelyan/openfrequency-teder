@@ -60,7 +60,9 @@ export const STYLES = {
       ntitle: T('Heebo', 900, 80, 1.05, { lines: 2, floor: 64, tracking: -1, breaks: true, inset: 108 }),
       // The card's line: the card is the text's width less its padding (52) and border (2) on both sides.
       body: T('Assistant', 400, 36, 1.45, { lines: 3, inset: 108 }),
-      tbody: T('Assistant', 400, 40, 1.45, { lines: 2, inset: 108 }),
+      // Three lines: a slide's text is one sentence of context under its title (the owner, 2026-11-08: "sentences are
+      // too short so context is not there"), and two lines held about 85 characters.
+      tbody: T('Assistant', 400, 40, 1.45, { lines: 3, inset: 108 }),
       number: T('Heebo', 900, 160, 1),
       label: T('Assistant', 700, 30, 1.2),
       // On A's card: the card's padding (52) and border (2) on both sides.
