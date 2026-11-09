@@ -186,10 +186,13 @@ test('in a real browser on a phone, the accessibility button is beside the tab b
               return floats.some((q) => Math.min(r.right, q.right) - Math.max(r.left, q.left) > 2 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 2);
             })
             .map((el) => `${el.tagName.toLowerCase()} ${(el.name || el.textContent || '').trim().slice(0, 20)}`);
-          return { row: Math.abs((btn.top + btn.bottom) / 2 - (bar.top + bar.bottom) / 2) < 2, beside: btn.right <= bar.left - 4 && btn.left >= 0, under, side: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+          // Beside the tabs: in the glass look the bar itself stops short of the button; in the pro look (style-pro.css, the
+          // default) the bar runs the full width and keeps an empty slot at its end, so the tabs are what it stays beside.
+          const tabsLeft = Math.min(...[...document.querySelectorAll('.tabbar a')].map((a) => a.getBoundingClientRect().left));
+          return { row: Math.abs((btn.top + btn.bottom) / 2 - (bar.top + bar.bottom) / 2) < 2, beside: btn.right <= Math.max(bar.left, tabsLeft) - 4 && btn.left >= 0, under, side: document.documentElement.scrollWidth - document.documentElement.clientWidth };
         });
         assert.ok(m.row, `${p} at ${width}: the button in the tab bar's row`);
-        assert.ok(m.beside, `${p} at ${width}: beside the bar, not on it, on the screen`);
+        assert.ok(m.beside, `${p} at ${width}: beside the tabs, on none of them, on the screen`);
         assert.deepEqual(m.under, [], `${p} at ${width}: nothing to tap under the bar or the button`);
         assert.equal(m.side, 0, `${p} at ${width}: no sideways scroll`);
       }
