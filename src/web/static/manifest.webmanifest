@@ -4,6 +4,7 @@
   "description": "אישור פוסטים לפני שהם יוצאים לטיקטוק, לאינסטגרם ולפייסבוק.",
   "lang": "he",
   "dir": "rtl",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,6 +12,9 @@
   "theme_color": "#eeeff2",
   "icons": [
     { "src": "/static/icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

@@ -37,6 +37,7 @@ import { customerWorkspace } from '../billing/own.js';
 import { healthFor, healthPanel, readiness, REVISION } from './health.js';
 import { notLive } from '../publish/live.js';
 import { progressOf, progressPanel, progressStatus } from './progress.js';
+import { installOf } from './install.js';
 import { setFormats } from './formats.js';
 import { setPromo } from './promo.js';
 import { dropLogo, LOGO_HE, logoType, setLogo } from './logo.js';
@@ -355,7 +356,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // A browser asks for /favicon.ico on its own (Safari always): answer with the icon, not the login page.
         if (p === '/favicon.ico') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon-180.png')), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/icon.svg') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon.svg')), 'image/svg+xml', { 'cache-control': 'public, max-age=86400' });
-        if (p === '/static/icon-180.png' || p === '/static/icon-512.png') return send(req, res, 200, readFileSync(path.join(STATIC, path.basename(p))), 'image/png', { 'cache-control': 'public, max-age=86400' });
+        // The icons a phone keeps (static/manifest.webmanifest, src/web/install.js): 180 for an iPhone, 192 and 512 for
+        // Android, and the maskable ones, the mark on a full square, for a launcher that cuts its own shape.
+        if (/^\/static\/icon-(180|192|512|maskable-192|maskable-512)\.png$/.test(p)) return send(req, res, 200, readFileSync(path.join(STATIC, path.basename(p))), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
         // The pickers' examples (src/web/examples.js): a format's or a style's, drawn ahead of time, nothing else under it.
         const ex = /^\/static\/examples\/([^/]+)$/.exec(p);
@@ -631,7 +634,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
         // `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}` };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: installOf(req.headers['user-agent'], jar) };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);

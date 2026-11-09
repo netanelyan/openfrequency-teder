@@ -22,6 +22,7 @@ import { LOGO_TITLE, logoPanel } from './logo.js';
 import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
 import { captionAction } from '../pipeline/closing.js';
 import { MODEL_KEY, MODEL_NAME, UNSOURCED_HE } from '../sources/model.js';
+import { installCard, installPanel } from './install.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -505,6 +506,7 @@ ${d.progressHtml || ''}
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.</p>'}
 </section>
+${installCard(ctx.install)}
 ${tiktokPanel(d)}
 ${d.summary ? summaryPanel(ctx, d) : ''}`;
   return layout({ ...ctx, title: 'היום', active: 'today' }, body);
@@ -1295,10 +1297,11 @@ ${ctx.operator ? fold('costs', 'עלות החודש', costsPanel(ctx, d, { dev }
 ${d.quotas ? fold('quotas', 'מכסות ועלות לפי לקוח', quotasPanel(ctx, d.quotas)) : ''}
 ${fold('push', 'התראות', `<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
 <p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
-<p class="muted small">באייפון: פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
+<p class="muted small">באייפון ההתראות עובדות רק כשפותחים את תדר מהאייקון במסך הבית. <a href="#install">איך מוסיפים את האייקון</a></p>
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>`)}
+${fold('install', 'להוסיף לטלפון', installPanel(ctx.install))}
 ${d.email ? fold('email', 'מיילים', emailPanel(ctx, d.email)) : ''}
 ${ctx.operator ? fold('generate', 'מתי נכתבים הפוסטים', `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה${timeSelect('at', s.generateAt)}</label><button class="btn" type="submit">שמירה</button></form></section>`) : ''}
 ${ctx.operator ? fold('demos', 'דמואים לחנויות', `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>`) : ''}

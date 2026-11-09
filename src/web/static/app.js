@@ -194,6 +194,71 @@
     }
   });
 
+  // Adding Teder to the phone (src/web/install.js; the owner, 2026-11-09: "add a little tutorial on how to add the
+  // website as an app to the phone"). Inside the installed app none of it shows (Settings' fold with it), and the
+  // browser remembers the app was opened, so home's card stays away there too. An iPad that says it is a Mac gets
+  // Safari's steps by its touch screen. Where Chrome offers to install (beforeinstallprompt), its steps become one
+  // button that asks it; dismissed, the steps come back; installed, the card goes. The x closes home's card for good in
+  // this browser (the cookie of_install, read by the server). The copy button copies this site's address.
+  const installs = [...document.querySelectorAll('[data-install]')];
+  if (installs.length) {
+    const keep = (v) => {
+      try {
+        document.cookie = `of_install=${v}; Path=/; Max-Age=31536000; SameSite=Lax`;
+      } catch {
+        /* a browser that keeps no cookie: the card comes back next time */
+      }
+    };
+    const standalone = window.matchMedia?.('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').matches || navigator.standalone === true;
+    const show = (key) => {
+      for (const box of installs) for (const v of box.querySelectorAll('[data-for]')) v.hidden = v.dataset.for !== key;
+    };
+    if (standalone) {
+      keep('app');
+      for (const box of installs) (box.closest('details.mfold') || box).remove();
+    } else {
+      if (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) show('ios-safari');
+      const steps = installs[0].querySelector('[data-for]:not([hidden])')?.dataset.for;
+      let asked = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        asked = e;
+        show('prompt');
+      });
+      document.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-install-close]')) {
+          keep('hide');
+          e.target.closest('[data-install]')?.remove();
+          return;
+        }
+        const cp = e.target.closest('[data-install-copy]');
+        if (cp) {
+          try {
+            await navigator.clipboard.writeText(`${location.origin}/`);
+            say(cp.dataset.done || 'הקישור הועתק');
+          } catch {
+            say(`לא הצלחתי להעתיק. הקישור: ${location.origin}/`, true);
+          }
+          return;
+        }
+        if (!e.target.closest('[data-install-go]') || !asked) return;
+        const ask = asked;
+        asked = null;
+        try {
+          await ask.prompt();
+          if ((await ask.userChoice).outcome !== 'accepted' && steps) show(steps);
+        } catch {
+          if (steps) show(steps);
+        }
+      });
+      window.addEventListener('appinstalled', () => {
+        keep('app');
+        document.querySelector('[data-install="card"]')?.remove();
+        say('תדר נוסף למסך הבית');
+      });
+    }
+  }
+
   // A segmented control submits as soon as it changes.
   document.querySelectorAll('form[data-autosubmit]').forEach((form) => {
     form.addEventListener('change', () => form.requestSubmit());

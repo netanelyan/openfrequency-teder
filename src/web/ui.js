@@ -152,6 +152,13 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 14h4l2 3h4l2-3h4"/></symbol>
 <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><path d="M8.5 9H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1.5"/><path d="M12 3v11M8.5 6.5L12 3l3.5 3.5"/></symbol>
+<symbol id="i-dots" viewBox="0 0 24 24"><path stroke-width="3" d="M5.5 12h.01M12 12h.01M18.5 12h.01"/></symbol>
+<symbol id="i-kebab" viewBox="0 0 24 24"><path stroke-width="3" d="M12 5.5v.01M12 12v.01M12 18.5v.01"/></symbol>
+<symbol id="i-addsq" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8.5v7M8.5 12h7"/></symbol>
+<symbol id="i-get" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/></symbol>
+<symbol id="i-install" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8.5 20.5h7M12 7.5v6M9.5 11l2.5 2.5 2.5-2.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
 </defs></svg>`;
 
 // Six sections, the same on a phone (the tab bar) and on a desk (the side bar): no More tab. Home is the overview,
@@ -263,6 +270,8 @@ ${htmlOpen(ctx.theme, ctx.side === 'mini' ? 'side-mini' : '')}
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 ${themeMeta(ctx.theme)}
 <meta name="apple-mobile-web-app-title" content="תדר">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>${esc(ctx.title)} · תדר</title>
 ${SHARE_META}
 <link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
