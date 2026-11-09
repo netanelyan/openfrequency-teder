@@ -28,6 +28,7 @@ import { connectRoutes, goPage, publicConnect, publicOnboardingConnect, publicPi
 import { leadsRoutes } from './leads.js';
 import { leadsInternal } from './leads-internal.js';
 import { setupFeed } from './setup.js';
+import { lookOf, lookSheet } from './look.js';
 import { scheduleRoutes } from './schedule.js';
 import { workspaceDeleteRoute } from './workspace-delete.js';
 import { CHANGED_PATH, entitlementChangedRoute } from './entitlement-changed.js';
@@ -249,6 +250,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     const e = await paid.check(workspaceId, { live: true });
     return { allowed: e.allowed, said: e.source === 'fresh' ? 'unpaid' : 'failed' };
   };
+  // The website's look (look.js): read once, as the server starts, so a change to TEDER_STYLE needs a restart.
+  const look = lookOf(env);
   const publicHost = String(env.PUBLIC_HOST || '').trim().toLowerCase() || null;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
   const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
@@ -346,7 +349,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
 
       // ---- static, no session
       if (req.method === 'GET' || req.method === 'HEAD') {
-        if (p === '/static/style.css') return send(req, res, 200, readFileSync(path.join(STATIC, 'style.css')), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
+        if (p === '/static/style.css') return send(req, res, 200, lookSheet(look), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         if (p === '/static/app.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'app.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         if (p === '/static/theme.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'theme.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         // A browser asks for /favicon.ico on its own (Safari always): answer with the icon, not the login page.

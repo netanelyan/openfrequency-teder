@@ -155,7 +155,12 @@ test('in a real browser: Tab reaches the button, a switch is a class on <html> t
         await page.goto(`${base}${p}`, { waitUntil: 'load' });
         const r = await page.evaluate(() => Object.fromEntries(['.a11y-btn', '.tabbar', '.actionbar'].map((s) => [s, document.querySelector(s)?.getBoundingClientRect().toJSON()])));
         assert.ok(r['.a11y-btn'].bottom <= 844 && r['.a11y-btn'].left >= 0, `${p}: the button on the screen`);
-        assert.ok(apart(r['.a11y-btn'], r['.tabbar']), `${p}${init ? ' big' : ''}: not over the tab bar`);
+        // Over no tab. In the glass look the bar stops short of the button; in the pro look (style-pro.css, the default)
+        // the bar runs the full width and keeps an empty slot at its end where the button sits, so the tabs are what
+        // the button must stay clear of.
+        const tabs = await page.$$eval('.tabbar a', (as) => as.map((a) => a.getBoundingClientRect().toJSON()));
+        assert.ok(tabs.length > 0 && tabs.every((t) => apart(r['.a11y-btn'], t)), `${p}${init ? ' big' : ''}: not over a tab`);
+        assert.ok(r['.a11y-btn'].bottom <= r['.tabbar'].bottom && r['.a11y-btn'].top >= r['.tabbar'].top - 1 || apart(r['.a11y-btn'], r['.tabbar']), `${p}${init ? ' big' : ''}: in the bar's own slot or clear of it`);
         if (r['.actionbar']) assert.ok(apart(r['.a11y-btn'], r['.actionbar']), `${p}${init ? ' big' : ''}: not over the action bar`);
       }
       await context.close();

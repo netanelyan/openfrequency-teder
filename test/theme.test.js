@@ -14,6 +14,7 @@ import { goPage } from '../src/web/connect.js';
 import { demoPage, goneHtml } from '../src/web/demos.js';
 import { readDemo } from '../src/demos/build.js';
 import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
+import { lookSheet } from '../src/web/look.js';
 
 // Light or dark, one choice for every OpenFrequency site (the owner, 2026-11-02: "make sure that every repo starts on
 // light mode. changing it on one subdomain changes it on all of the subdomains"). The four repos keep one contract: the
@@ -180,7 +181,8 @@ test('every <html> of a page is written by ui.js htmlOpen and every colour meta 
 test('no page stylesheet turns dark on the device\'s setting: every dark rule hangs on data-theme', async () => {
   for (const [file, url] of [['style.css', '/static/style.css'], ['demo.css', '/static/demo.css']]) {
     const css = await (await get(url)).text();
-    assert.equal(css, readFileSync(path.join(ROOT, 'src', 'web', 'static', file), 'utf8'));
+    // style.css goes out with the pro look's layer after it, the default (look.js); demo.css as it is.
+    assert.equal(css, file === 'style.css' ? lookSheet('pro').toString('utf8') : readFileSync(path.join(ROOT, 'src', 'web', 'static', file), 'utf8'));
     assert.doesNotMatch(css, /prefers-color-scheme/, `${file}: no @media (prefers-color-scheme)`);
     assert.match(css, /:root\s*\{\s*color-scheme: light;/, `${file}: light first`);
     assert.match(css, /:root\[data-theme="dark"\] \{\s*color-scheme: dark;/, `${file}: dark by the attribute`);
