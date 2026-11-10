@@ -244,6 +244,10 @@ test('TikTok connected while waiting: a profile for the onboarding, the handle o
   // The way back to the setup it came from (the owner, 2026-11-05: "make a button of 'לחזור להגדרת החשבון'").
   const backToSetup = '<a class="btn primary" href="/new/o-conn#connect">לחזור להגדרת החשבון</a>';
   assert.ok(doneHtml.includes(`<div class="links">${backToSetup}</div>`), 'back to the setup, its one button');
+  // And there by itself after two seconds (the owner, 2026-11-09: "it should redirect or have a button to the page we got
+  // from"), saying what was connected.
+  assert.ok(doneHtml.includes('<meta http-equiv="refresh" content="2;url=/new/o-conn#connect">'));
+  assert.match(done.headers.get('set-cookie') || '', /^of_flash=/);
   assert.equal(setupOf(db, 'o-conn').zernio.connections.tiktok.username, 'cafe.yafo');
   assert.equal((await get(`${back.pathname}?e=${back.searchParams.get('e')}&s=${'0'.repeat(64)}`)).status, 404, 'a forged return');
   const err = await (await get(`${back.pathname}${back.search}&error=oauth_denied&platform=tiktok&is_user_fixable=true`)).text();
@@ -338,6 +342,8 @@ test('Instagram back through Facebook Login: one account is picked by itself, se
   const pickedHtml = await picked.text();
   assert.match(pickedHtml, /אינסטגרם מחובר[\s\S]*@bench\.two/);
   assert.ok(pickedHtml.includes('<div class="links"><a class="btn primary" href="/new/o-ig#connect">לחזור להגדרת החשבון</a></div>'), 'and from the pick, back to the setup');
+  assert.ok(pickedHtml.includes('<meta http-equiv="refresh" content="2;url=/new/o-ig#connect">'), 'and on to it by itself');
+  assert.doesNotMatch(pickedHtml, /אפשר לסגור את הדף/);
   assert.equal(setupOf(db, 'o-ig').zernio.connections.instagram.id, 'ig-pg2');
   assert.equal((await get(link)).status, 404, 'good once');
 

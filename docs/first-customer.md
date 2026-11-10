@@ -44,8 +44,9 @@ Technical notes about keys and errors are in [operator-notes.md](operator-notes.
    - **One Page** they manage and may post on: it is connected by itself, and the page says "פייסבוק מחובר".
    - **Several:** Teder's own page "איזה עמוד פייסבוק לחבר?" ("<their Facebook name>, מצאנו כמה עמודים שאתם מנהלים.
      בוחרים את העמוד שאליו המצגות יעלו."), one button per Page with its name. Tapping one connects it: "<the Page's
-     name> מחובר עכשיו. אפשר לסגור את הדף." The list works once and for 15 minutes; after that it says "הבחירה הזו
-     כבר לא בתוקף" and they press "לחבר את פייסבוק" again.
+     name> מחובר עכשיו.", and two seconds later they are back on the page they connected from, with a toast
+     "פייסבוק מחובר" (a "לחזור לתדר" button if the browser does not go by itself). The list works once and for 15
+     minutes; after that it says "הבחירה הזו כבר לא בתוקף" and they press "לחבר את פייסבוק" again.
    - **None:** "לא מצאנו עמוד פייסבוק". A Page Facebook lists without the task CREATE_CONTENT (publishing as the
      Page) is not offered (src/publish/zernio.js facebookPages). The page tells them to open a Page for the business
      in Facebook, or to ask whoever manages the Page for permission to post on it, and then connect again.

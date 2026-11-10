@@ -805,7 +805,7 @@ function accountSection(ctx, { pack, acc, mode, customer, resumable, spend, publ
     : '';
   // The networks, with (the operator's) what each platform really goes out through.
   const networks = connect
-    ? `<section class="panel acct-net">${connectPanel(ctx, connect, { heading: 'h3' })}${ctx.operator ? `<dl class="kv mt12"><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd></dl>` : ''}</section>`
+    ? `<section class="panel acct-net">${connectPanel(ctx, connect, { heading: 'h3', back: `/accounts?account=${encodeURIComponent(pack.id)}#connect-${encodeURIComponent(pack.id)}` })}${ctx.operator ? `<dl class="kv mt12"><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd></dl>` : ''}</section>`
     : '';
   const foot = paused
     ? ''

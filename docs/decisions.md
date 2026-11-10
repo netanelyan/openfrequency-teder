@@ -3097,3 +3097,29 @@ Tests: test/every-day.test.js (ten declines in a row on one day and the eleventh
 kept; declines and expired posts eat none of the 40, and what the pages say; the runner's second chance after a pause,
 its 20 minutes, and a day that is over; approval mode with a passed slot; the guard and its alert), and test/quota.test.js
 for the new counts.
+
+## Back to the page the connect started from (2026-11-09)
+
+After connecting Instagram through Zernio the page said "אינסטגרם מחובר ... @<the account> מחובר עכשיו ל-<its name>.
+אפשר לסגור את הדף." The owner: "it should redirect or have a button to the page we got from".
+
+The connect opens in the same tab (the button's answer is goPage, which goes on to Zernio), so there is no window to
+close and nothing to refresh behind it. Now each connect button sends the page it is on (`back`: the account page at
+its networks, or the setup at #connect), the return address carries it (`&b=`, beside the signature), and the page
+that says it worked goes back there after two seconds (a meta refresh: no script, and the CSP is untouched), with the
+button "לחזור לתדר" (in a setup, "לחזור להגדרת החשבון", as before) for a browser that does not. The page it lands on
+shows a toast, "אינסטגרם מחובר" (server.js flash, 20 seconds). The same for a pick among several Instagram accounts or
+Facebook Pages (the pick keeps the way back) and for a connect made before the account existed (back to its setup). A
+return with no `b` (the assistant's signed link, or a connect started before this) goes to the setup while there is
+one, else to the account page. A refusal stays put, "לנסות שוב" first and the way back beside it.
+
+`b` is a path on this site or nothing (connect.js backPath): "/" and then no second slash or backslash, no spaces or
+control characters, 300 characters at most. Anything else is dropped and the default is used: the return address needs
+no session, so it can never send anyone to another site. It is not signed, on purpose: a changed one can only open
+another page of Teder, which asks for its own session. Why a page and not a 302 straight back: the return from Zernio
+is a cross-site navigation, and a redirect would carry that on; a page of ours that goes on is a navigation of our own.
+
+UNVERIFIED with a real Zernio connect: that Zernio keeps the `b` parameter on the return address as it keeps `e` and
+`s` (it appends its own to whatever query the address has), and that the browser keeps the toast's cookie set on that
+cross-site return (SameSite=Strict on a top-level navigation). If the toast does not show, the page still says it
+worked, and the panel shows the account connected.

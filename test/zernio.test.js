@@ -33,6 +33,7 @@ import {
   zernioTick,
 } from '../src/publish/connect.js';
 import { customer, fakeAccounts, listenFree, opened, operator, paidWorkspaces, tempHome } from './helpers.js';
+import { backPath } from '../src/web/connect.js';
 
 // Zernio as the publisher of customer accounts (src/publish/connect.js, src/publish/zernio.js): one profile per
 // account, the customer's own connect, its health, TikTok drafts and Instagram carousels to the connected accounts,
@@ -455,9 +456,52 @@ test('an account still in its setup: the connect pages have the way back to it, 
     db.run("UPDATE onboarding SET status = 'live' WHERE id = 'o-alpha'");
     html = await done('&connected=tiktok&accountId=tk1');
     assert.doesNotMatch(html, /לחזור להגדרת החשבון/, 'live: no setup to go back to');
+    assert.ok(html.includes('<div class="links"><a class="btn primary" href="/accounts?account=alpha#connect-alpha">לחזור לתדר</a></div>'), 'live: back to the account page');
   } finally {
     db.run("DELETE FROM onboarding WHERE id = 'o-alpha'");
   }
+});
+
+test('connected, the page goes back to where the connect started, by itself and with a button, and says it there; never another site', async () => {
+  // The owner, 2026-11-09, of "אינסטגרם מחובר ... מחובר עכשיו ל-OpenFrequency. אפשר לסגור את הדף": "it should redirect
+  // or have a button to the page we got from".
+  const cookie = fake.session(customer(1)).cookie;
+  const page = await (await get('/accounts?account=alpha', cookie)).text();
+  assert.match(page, /<form method="post" action="\/accounts\/alpha\/connect\/instagram"><input type="hidden" name="_csrf" value="[^"]+"><input type="hidden" name="back" value="\/accounts\?account=alpha#connect-alpha">/, 'the button sends the page it is on');
+  const csrf = await csrfOf(cookie);
+  const calls = Z.calls.length;
+  await form('/accounts/alpha/connect/instagram', cookie, { _csrf: csrf, back: '/accounts?account=alpha#connect-alpha' });
+  const ask = Z.calls.slice(calls).find((c) => c.path === '/connect/instagram');
+  const ret = new URL(ask.q.redirect_url);
+  assert.equal(ret.pathname, '/connect/alpha/instagram/done');
+  assert.equal(ret.searchParams.get('b'), '/accounts?account=alpha#connect-alpha', 'the return address carries it');
+  connected(ask.q.profileId, 'instagram', 'ig1', 'alpha.ig');
+  const done = await get(`${ret.pathname}${ret.search}&connected=instagram&accountId=ig1`);
+  assert.equal(done.status, 200);
+  const html = await done.text();
+  assert.match(html, /<h1>אינסטגרם מחובר<\/h1>/);
+  assert.match(html, /מחובר עכשיו ל-[^<]+\.<\/p>/);
+  assert.doesNotMatch(html, /אפשר לסגור את הדף/);
+  assert.ok(html.includes('<meta http-equiv="refresh" content="2;url=/accounts?account=alpha#connect-alpha">'), 'on by itself after 2 seconds');
+  assert.ok(html.includes('<a class="btn primary" href="/accounts?account=alpha#connect-alpha">לחזור לתדר</a>'), 'and a button, for a browser that does not');
+  assert.match(done.headers.get('set-cookie') || '', /^of_flash=%D7%90%D7%99%D7%A0%D7%A1%D7%98%D7%92%D7%A8%D7%9D%20%D7%9E%D7%97%D7%95%D7%91%D7%A8;/, 'the toast there: "אינסטגרם מחובר"');
+  // The page it goes back to shows the toast once.
+  const flashed = await (await get('/accounts?account=alpha', `${cookie}; of_flash=${encodeURIComponent('אינסטגרם מחובר')}`)).text();
+  assert.match(flashed, /data-flash="אינסטגרם מחובר"/);
+
+  // Never another site: anything but a path on this one is dropped, and the account page is the way back.
+  for (const evil of ['https://evil.example/x', '//evil.example/x', '/\\evil.example', 'javascript:alert(1)', '/a b']) {
+    const u = new URL(ret);
+    u.searchParams.set('b', evil);
+    const h = await (await get(`${u.pathname}${u.search}&connected=instagram&accountId=ig1`)).text();
+    assert.ok(h.includes('<meta http-equiv="refresh" content="2;url=/accounts?account=alpha#connect-alpha">'), evil);
+    assert.doesNotMatch(h, /evil\.example|javascript:/, evil);
+  }
+  assert.deepEqual([backPath('/new/o-1#connect'), backPath('//evil.example'), backPath('/\\evil.example'), backPath('https://evil.example'), backPath('/x'.repeat(200))], ['/new/o-1#connect', null, null, null, null]);
+  // A refused connect: "לנסות שוב" first, the way back beside it.
+  const failed = await (await get(`${ret.pathname}${ret.search}&error=oauth_denied&platform=instagram`)).text();
+  assert.match(failed, /<div class="links"><a class="btn primary" href="[^"]+">לנסות שוב<\/a><a class="btn" href="\/accounts\?account=alpha#connect-alpha">לחזור לתדר<\/a><\/div>/);
+  assert.doesNotMatch(failed, /http-equiv="refresh"/, 'a refusal stays to be read');
 });
 
 test('an expired connect link sends the customer to the account page, whose button opens a fresh connect, and not to WhatsApp', async () => {

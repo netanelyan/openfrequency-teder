@@ -34,6 +34,14 @@ import { a11yLink, csrfField, esc, htmlOpen, icon, postButton, tederMark, themeB
 //     the id a pick kept on the server (src/publish/connect.js holdPick), good once and for 15 minutes. A Facebook
 //     Page always comes back that way (Zernio posts to a Page, never to a profile): one Page the customer manages is
 //     connected by itself, several are listed on the same page.
+//   - every return from a connect that worked takes the browser back to the page it started from (the owner,
+//     2026-11-09, of "אינסטגרם מחובר ... @<the account> מחובר עכשיו ל-<its name>. אפשר לסגור את הדף": "it should
+//     redirect or have a button to the page we got from"). The connect opens in the same tab (goPage), so there is no
+//     window to close: the button that starts it sends the page it is on (`back`, a path on this site, backPath), the
+//     return address carries it (`b`), and the page that says it worked goes back there after GO_AFTER_S seconds,
+//     with a "לחזור לתדר" button for a browser that does not, and a toast there that says what was connected. A
+//     return with no `b` (the assistant's link, a connect started before this) goes to the account's setup while it
+//     has one, else to the account's page.
 
 export const PLATFORM_NAME = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
 // Names in a row, as Hebrew writes them: טיקטוק, אינסטגרם ופייסבוק.
@@ -93,11 +101,13 @@ export function requirements(d) {
  * onboarding's, src/web/onboarding.js). `base` is where the buttons post: the account's, or the onboarding's before
  * the account exists. `heading` (a tag, 'h3') makes the platforms' names the panel's heading, as on the account page,
  * where the panel is the networks' own; without it they are a line, under the onboarding section's heading. Each
- * platform is a row: its name, its state and the account connected, and the button at the row's end.
+ * platform is a row: its name, its state and the account connected, and the button at the row's end. `back` is the page
+ * the panel is on (a path on this site): each button sends it, and the connect comes back to it.
  */
-export function connectPanel(ctx, d, { base = null, heading = null } = {}) {
+export function connectPanel(ctx, d, { base = null, heading = null, back = null } = {}) {
   const { pack } = d;
   const at = base || `/accounts/${pack.id}`;
+  const fields = backPath(back) ? { back } : {};
   const rows = d.platforms
     .map((s) => {
       const [cls, he] = STATE_CHIP[s.state];
@@ -107,10 +117,10 @@ export function connectPanel(ctx, d, { base = null, heading = null } = {}) {
         s.state === 'meta' || !d.configured
           ? ''
           : s.state === 'none'
-            ? postButton(ctx, action, `${icon('plus')}לחבר את ${name}`, { cls: 'btn sm primary' })
+            ? postButton(ctx, action, `${icon('plus')}לחבר את ${name}`, { cls: 'btn sm primary', fields })
             : s.state === 'reconnect'
-              ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary' })
-              : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost' });
+              ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary', fields })
+              : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost', fields });
       return `<li class="net"><span class="who"><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? (s.platform === 'facebook' ? ` <bdi class="muted" dir="auto">${esc(s.username)}</bdi>` : ` <span class="ltr muted">@${esc(s.username)}</span>`) : ''}</span>${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החיבור ל${esc(name)} התנתק, ופוסטים לא מגיעים לשם עד שמחברים שוב.</div>` : ctx.operator ? `<div class="muted small ltr">${esc(s.issue)}</div>` : `<div class="muted small">${esc(name)} ביקש לאשר את החיבור מחדש. עד אז פוסטים לא מגיעים לשם.</div>`) : ''}${s.platform === 'instagram' && s.state === 'none' && d.configured ? `<div class="muted small">${esc(INSTAGRAM_NEEDS_HE)}</div>` : ''}${button ?`<span class="act">${button}</span>` : ''}</li>`;
     })
     .join('');
@@ -179,13 +189,14 @@ export function connectRoutes(links) {
     [
       'POST',
       /^\/accounts\/([\w-]+)\/connect\/(tiktok|instagram|facebook)$/,
-      async (ctx, user, m) => {
+      async (ctx, user, m, f = {}) => {
         const pack = mustPack(ctx, m[1]);
         if (!zernioConfigured()) throw new ActionError(CONNECT_CLOSED_HE);
         const { base, secret } = links();
         let url;
         try {
-          url = await startConnect(ctx.db, pack, m[2], { doneUrl: doneLink(secret, { base, accountId: pack.id, platform: m[2] }), actor: user.name });
+          // The page the button is on goes with the return address, for the connect to come back to.
+          url = await startConnect(ctx.db, pack, m[2], { doneUrl: withBack(doneLink(secret, { base, accountId: pack.id, platform: m[2] }), backPath(f.back)), actor: user.name });
         } catch (e) {
           if (e.code === 'not_connectable') throw new ActionError(`${PLATFORM_NAME[m[2]]} לא צריך חיבור בחשבון הזה.`);
           ctx.log?.(`[connect] ${pack.id} ${m[2]}: ${e.message}`);
@@ -244,13 +255,14 @@ export function connectRoutes(links) {
 const handleHe = (username) => `⁦@${username}⁩`;
 
 // The browser's light or dark (ui.js themeOf), which server.js reads from the request and every page here is given.
-function resultPage({ title, text, actions = '', v = 1, theme = 'light' }) {
-  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<meta name="robots" content="noindex"><title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
+// `go`: a page of this site (backPath) the page goes on to by itself after GO_AFTER_S seconds; its button is in `actions`.
+function resultPage({ title, text, actions = '', v = 1, theme = 'light', go = null }) {
+  return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<meta name="robots" content="noindex">${go ? `<meta http-equiv="refresh" content="${GO_AFTER_S};url=${esc(go)}">` : ''}<title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"></head>
 <body class="login"><main class="card">${themeButton(theme)}
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1>${esc(title)}</h1>
 <p>${withSupport(text)}</p>
-${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
+${go ? '<p class="muted small">עוד רגע חוזרים לדף שממנו התחלתם.</p>' : ''}${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
 }
 
 /**
@@ -281,6 +293,29 @@ const expired = (account, theme) => resultPage({ theme, ...EXPIRED, actions: `<a
  */
 export const SETUP_BACK_HE = 'לחזור להגדרת החשבון';
 const setupBack = (onboardingId, cls = 'btn primary') => (onboardingId ? `<a class="${cls}" href="/new/${esc(encodeURIComponent(onboardingId))}#connect">${SETUP_BACK_HE}</a>` : '');
+/**
+ * A page of this site to go back to after a connect (`back` from the button, `b` on the return address), or null.
+ * Only a path on this host: "/" and then anything but a second slash or a backslash (so never "//host"), no
+ * spaces or control characters, 300 characters at most. Anything else is dropped, never followed: the return address
+ * needs no session, so it must not be a way to send someone to another site. `b` is not signed: the worst a changed one
+ * can do is open another page of Teder, which asks for a session of its own.
+ */
+export function backPath(v) {
+  const s = String(v ?? '');
+  return s.length <= 300 && /^\/(?![\/\\])[^\s\\\u0000-\u001f\u007f]*$/.test(s) ? s : null;
+}
+/** The return address with the page to go back to on it. */
+const withBack = (url, back) => (back ? `${url}&b=${encodeURIComponent(back)}` : url);
+/** The account's page, at its networks: where a connect of a live account goes back to when it was not told. */
+const accountHome = (accountId) => `/accounts?account=${encodeURIComponent(accountId)}#connect-${encodeURIComponent(accountId)}`;
+export const BACK_HE = 'לחזור לתדר';
+/** The way back as a button: to a setup it says so (SETUP_BACK_HE), anywhere else "לחזור לתדר". */
+const homeButton = (home, cls = 'btn primary') => `<a class="${cls}" href="${esc(home)}">${home.startsWith('/new/') ? SETUP_BACK_HE : BACK_HE}</a>`;
+/** Seconds before a page that says a connect worked goes back by itself. */
+export const GO_AFTER_S = 2;
+/** What the page a connect went back to says, as a toast (server.js flash), once. */
+const connectedHe = (name) => `${name} מחובר`;
+
 /** The setup an account is still in: its onboarding, not live or given up (null when there is none). */
 const setupFor = (db, accountId) => db.get("SELECT id FROM onboarding WHERE pack_id = ? AND status NOT IN ('live', 'abandoned') ORDER BY updated_at DESC LIMIT 1", accountId)?.id || null;
 /** The setup a connect's target belongs to: the onboarding itself, or the setup its account is still in. */
@@ -316,7 +351,7 @@ const PICKS = {
  * pick), { prefer } (one account on offer, connected by itself), or null when there is nothing to pick. `target` is
  * { kind: 'account' | 'onboarding', id, profileId }: the profile is ours, never the one in the address.
  */
-async function selection(ctx, { target, platform, query, actions, t, theme }) {
+async function selection(ctx, { target, platform, query, actions, t, theme, home = null }) {
   const sel = selectionOf(query);
   if (!sel) return null;
   // Instagram through Facebook Login picks an account, a Facebook connect picks a Page: each only on its own return. A
@@ -334,18 +369,23 @@ async function selection(ctx, { target, platform, query, actions, t, theme }) {
     const got = await kind.select({ profileId: target.profileId, pageId: pages[0].pageId, tempToken: sel.tempToken, connectToken: sel.connectToken, userProfile: sel.userProfile });
     return { prefer: { [platform]: got.accountId } };
   }
-  const id = holdPick(ctx.db, { target, platform, tempToken: sel.tempToken, connectToken: sel.connectToken, userProfile: sel.userProfile, pages }, { t });
+  // The page to go back to is kept with the pick, for the page that says it worked (publicPick).
+  const id = holdPick(ctx.db, { target, platform, tempToken: sel.tempToken, connectToken: sel.connectToken, userProfile: sel.userProfile, pages, back: home }, { t });
   return { page: [200, pickerPage(pages, id, { platform, theme, who: String(sel.userProfile?.name || sel.userProfile?.displayName || '').slice(0, 60), back: setupBack(setupOfTarget(ctx.db, target), 'btn ghost') })] };
 }
 
 /**
  * GET /connect/pick/<id>?page=<pageId>: the Instagram account (or Facebook Page) picked on our own page. [status, html].
  * The id names a pick kept on the server (taken once); a page that was not on offer is refused without asking Zernio.
+ * Connected, the page goes back to where the connect started (the pick keeps it), and says so there: [status, html,
+ * flash].
  */
 export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }) {
   const pick = takePick(ctx.db, id, { t });
   if (!pick) return [404, resultPage({ theme, title: 'הבחירה הזו כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף באתר.' })];
   const back = setupBack(setupOfTarget(ctx.db, pick.target));
+  const setupId = setupOfTarget(ctx.db, pick.target);
+  const home = backPath(pick.back) || (setupId ? `/new/${encodeURIComponent(setupId)}#connect` : pick.target.kind === 'account' ? accountHome(pick.target.id) : '/');
   const page = pick.pages.find((p) => p.pageId === String(pageId || ''));
   if (!page) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id}: a pick of a page that was not on offer`);
@@ -369,7 +409,7 @@ export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }
       if (pack) await refreshConnections(ctx.db, pack, { t, prefer });
     }
     const who = platform === 'facebook' ? page.name || got.username || 'העמוד בפייסבוק' : got.username || page.username ? handleHe(got.username || page.username) : 'החשבון באינסטגרם';
-    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו. אפשר לסגור את הדף.`, actions: back })];
+    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו.`, actions: homeButton(home), go: home }), null, connectedHe(name)];
   } catch (e) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id} ${platform} pick: ${e.message}`);
     return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: 'לא הצלחנו לחבר את החשבון שבחרתם. אפשר לחבר שוב מהדף באתר.', actions: back })];
@@ -379,7 +419,8 @@ export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }
 /**
  * GET /new/<onboarding>/connect/<platform>/done: back from Zernio after a connect made before the account existed.
  * [status, html]. `ctx` is the engine's; the signature names the onboarding. What is connected is read from Zernio, and
- * an account created in the meantime takes it over at once.
+ * an account created in the meantime takes it over at once. Connected, the page goes back to the setup by itself and
+ * says so there: [status, html, flash].
  */
 export async function publicOnboardingConnect(ctx, { onboardingId, platform, query, links, t = now(), theme = 'light' }) {
   const ob = ctx.db.get('SELECT id, pack_id, seed_json FROM onboarding WHERE id = ?', onboardingId);
@@ -397,7 +438,7 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
   let kept;
   let prefer = query.get('accountId') ? { [platform]: query.get('accountId') } : {};
   try {
-    const picked = await selection(ctx, { target: { kind: 'onboarding', id: ob.id, profileId: setupOf(ctx.db, ob.id).zernio?.profileId || null }, platform, query, actions: back, t, theme });
+    const picked = await selection(ctx, { target: { kind: 'onboarding', id: ob.id, profileId: setupOf(ctx.db, ob.id).zernio?.profileId || null }, platform, query, actions: back, t, theme, home: `/new/${encodeURIComponent(ob.id)}#connect` });
     if (picked?.page) return picked.page;
     if (picked?.prefer) prefer = picked.prefer;
     kept = await refreshOnboardingConnections(ctx.db, ob.id, { t, prefer });
@@ -414,12 +455,13 @@ export async function publicOnboardingConnect(ctx, { onboardingId, platform, que
   const c = kept[platform];
   if (c?.status !== 'connected') return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר. אפשר לנסות שוב.`, actions: back })];
   const niche = j(ob.seed_json, {})?.niche || '';
-  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${c.username ? handleHe(c.username) : `החשבון ב${name}`} מחובר עכשיו${niche ? ` לחשבון החדש על ${niche}` : ''}. כשהחשבון ייווצר, החיבור יעבור אליו לבד.`, actions: back })];
+  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${c.username ? handleHe(c.username) : `החשבון ב${name}`} מחובר עכשיו${niche ? ` לחשבון החדש על ${niche}` : ''}. כשהחשבון ייווצר, החיבור יעבור אליו לבד.`, actions: back, go: `/new/${encodeURIComponent(ob.id)}#connect` }), connectedHe(name)];
 }
 
 /**
- * GET /connect/<account>/<platform>[/done]: [status, html, location?]. `ctx` is the engine's (no session, so no
- * workspace): the signature names the account. `links` is { base, secret }.
+ * GET /connect/<account>/<platform>[/done]: [status, html, location?, flash?]. `ctx` is the engine's (no session, so no
+ * workspace): the signature names the account. `links` is { base, secret }. Back from Zernio and connected, the page goes
+ * back by itself to where the connect started (`b`, backPath), and `flash` is what that page says in its toast.
  */
 export async function publicConnect(ctx, { account, platform, done, query, links, t = now(), theme = 'light' }) {
   const { base, secret } = links;
@@ -432,9 +474,11 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const name = PLATFORM_NAME[platform];
   // An account still in its setup: each page from here on has the way back to it (setupBack), grey beside "לנסות שוב".
   const setup = setupFor(ctx.db, pack.id);
-  const back = setupBack(setup);
+  // Where the connect started, or the setup while there is one, or the account's page.
+  const home = backPath(query.get('b')) || (setup ? `/new/${encodeURIComponent(setup)}#connect` : accountHome(pack.id));
+  const back = homeButton(home);
   if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED, actions: back })];
-  const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>${setupBack(setup, 'btn')}`;
+  const again = () => `<a class="btn primary" href="${esc(connectLink(secret, { base, accountId: pack.id, platform, t }))}">לנסות שוב</a>${homeButton(home, 'btn')}`;
 
   if (!done) {
     try {
@@ -457,7 +501,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
     return [200, resultPage({ theme, title: 'החיבור לא הצליח', text, actions: again() })];
   }
   try {
-    const picked = await selection(ctx, { target: { kind: 'account', id: pack.id, profileId: profileIdOf(ctx.db, pack) }, platform, query, actions: again(), t, theme });
+    const picked = await selection(ctx, { target: { kind: 'account', id: pack.id, profileId: profileIdOf(ctx.db, pack) }, platform, query, actions: again(), t, theme, home });
     if (picked?.page) return picked.page;
     const prefer = picked?.prefer || (query.get('accountId') ? { [platform]: query.get('accountId') } : {});
     await refreshConnections(ctx.db, pack, { t, prefer });
@@ -468,6 +512,6 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const s = connectState(ctx.db, pack, platform);
   if (s.state !== 'connected') return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
   ctx.db.update('accounts', pack.id, { updated_at: nowIso() });
-  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}. אפשר לסגור את הדף.`, actions: back })];
+  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}.`, actions: back, go: home }), null, connectedHe(name)];
 }
 

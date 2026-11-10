@@ -380,24 +380,25 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // Connecting a TikTok, Instagram or Facebook Page from a link the assistant sent, and back from Zernio (src/web/connect.js).
         const cn = /^\/connect\/([\w-]+)\/(tiktok|instagram|facebook)(\/done)?$/.exec(p);
         if (cn) {
-          const [status, html, location] = await publicConnect(ctx, { account: cn[1], platform: cn[2], done: Boolean(cn[3]), query: url.searchParams, links: connectLinks(), theme });
+          const [status, html, location, said] = await publicConnect(ctx, { account: cn[1], platform: cn[2], done: Boolean(cn[3]), query: url.searchParams, links: connectLinks(), theme });
           if (location) {
             res.writeHead(302, { location, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
             return res.end();
           }
-          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
+          // Connected: the page goes back to where the connect started, and the toast there says what was connected.
+          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer', ...(said ? { 'set-cookie': flash(said) } : {}) });
         }
         // The Instagram account or Facebook Page picked on our own page, after a headless connect that offered several (src/web/connect.js).
         const pk = /^\/connect\/pick\/([0-9a-f]{32})$/.exec(p);
         if (pk) {
-          const [status, html] = await publicPick(ctx, { id: pk[1], pageId: url.searchParams.get('page'), theme });
-          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
+          const [status, html, , said] = await publicPick(ctx, { id: pk[1], pageId: url.searchParams.get('page'), theme });
+          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer', ...(said ? { 'set-cookie': flash(said) } : {}) });
         }
         // Back from Zernio after a connect made while a new account's sources were searched, before the account existed.
         const oc = /^\/new\/([\w-]+)\/connect\/(tiktok|instagram|facebook)\/done$/.exec(p);
         if (oc) {
-          const [status, html] = await publicOnboardingConnect(ctx, { onboardingId: oc[1], platform: oc[2], query: url.searchParams, links: connectLinks(), theme });
-          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
+          const [status, html, said] = await publicOnboardingConnect(ctx, { onboardingId: oc[1], platform: oc[2], query: url.searchParams, links: connectLinks(), theme });
+          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer', ...(said ? { 'set-cookie': flash(said) } : {}) });
         }
         // The service worker, from the root so its scope is the whole site.
         if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
