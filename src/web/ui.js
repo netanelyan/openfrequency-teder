@@ -248,19 +248,21 @@ export function payBanner(ctx) {
   return `<div class="banner ${due ? 'warn' : 'info'} pay" id="pay">${icon(due ? 'alert' : 'clock')}<div><b>${esc(he.title(when))}</b><p>${esc(he.text(when))}</p></div><a class="btn sm${due ? ' primary' : ''}" href="${esc(ctx.links.setup)}">${esc(PAY_HE.button)}</a></div>`;
 }
 
-/** The page around a body. ctx: { title, active, csrf, quota: { used, limit }, waiting, user, accounts, current } */
+/** The page around a body. ctx: { title, active, csrf, quota: { used, out, limit }, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
   const nav = navFor(ctx).map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const tabs = navFor(ctx).map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
-  // The month's suggestions of the accounts shown (src/budget/quota.js): the ring fills as they are used, orange from
-  // 75%, red from 90%, as an account's own meter does.
-  const q = ctx.quota || { used: 0, limit: 0 };
+  // The month's posts of the accounts shown, the ones already out of the plan's (src/budget/quota.js): "פורסמו X / 40".
+  // The promise is posts the customer got (the owner, 2026-11-09: "because we promise 40 videos a month, there cant be
+  // a day without posts"), so the ring fills as they go out and a full one is the month kept, never a warning: no
+  // orange or red here any more, as there was while it counted suggestions used up.
+  const q = ctx.quota || { used: 0, out: 0, limit: 0 };
   const limit = Number(q.limit) || 0;
-  const taken = Number(q.used) || 0;
+  const taken = Number(q.out ?? q.used) || 0;
   const used = limit ? Math.min(100, Math.round((taken / limit) * 100)) : 0;
-  const ring = `<svg class="ring${used >= 90 ? ' bad' : used >= 75 ? ' warn' : ''}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
+  const ring = `<svg class="ring" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
   // Light or dark as the browser chose on any of the sites (themeOf); the switch is in the bar on every page, between
   // the month's count and signing out on a phone, on the sign-out row at the foot of the side bar on a desk.
   return `<!doctype html>
@@ -288,7 +290,7 @@ ${SPRITE}
   <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'להרחיב את סרגל הצד' : 'לכווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'להרחיב' : 'לכווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#plan" title="הצעות החודש: ${taken} מתוך ${limit}">${ring}<span class="lbl">הצעות</span><span class="amt num ltr"><b>${taken}</b><span> / ${limit}</span></span></a>
+    <a class="spend" href="/settings#plan" title="פורסמו ${taken} מתוך ${limit} החודש">${ring}<span class="lbl">פורסמו</span><span class="amt num ltr"><b>${taken}</b><span> / ${limit}</span></span></a>
     ${themeButton(ctx.theme)}
     ${ctx.links?.logout ? `<a class="logout" href="${esc(ctx.links.logout)}" title="יציאה">${icon('logout')}<span class="lbl">יציאה</span></a>` : ''}
   </div>

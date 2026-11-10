@@ -91,7 +91,10 @@ test("a customer's account page: the header, the month, the week, the queue, app
   assert.match(html, /<a class="btn sm" href="\/new">/, 'a new account starts here, as before');
 
   // The month, a meter for each part of the plan.
-  assert.match(html, /<span>הצעות שנוצלו<\/span><span class="num"><b>6<\/b> מתוך 40<\/span>/, 'six suggestions this month (the stopped one is not counted)');
+  // The plan counts the posts the customer got (src/budget/quota.js): three out, one approved still to go; the two
+  // waiting and the stopped one are not among them.
+  assert.match(html, /<span>פורסמו<\/span><span class="num"><b>3<\/b> מתוך 40<\/span>/, 'three out this month');
+  assert.match(html, /ועוד פוסט מאושר שמחכה לשעה שלו/);
   assert.match(html, /<span>החלפות שנוצלו<\/span><span class="num"><b>0<\/b> מתוך 10<\/span>/);
   assert.equal((html.match(/<meter /g) || []).length, 2);
   assert.doesNotMatch(html, /עלות החודש|\$\d/, "what it cost is the operator's");

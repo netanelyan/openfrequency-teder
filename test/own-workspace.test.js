@@ -78,7 +78,8 @@ let n = 0;
 const post = (db, account, patch = {}) => {
   const at = new Date(OCT).toISOString();
   const id = `own${++n}`;
-  db.insert('posts', { id, account_id: account, status: 'queued', quota_kind: 'suggestion', quota_month: '2026-10', created_at: at, updated_at: at, ...patch });
+  // Out: what the plan counts is the posts the customer got (src/budget/quota.js).
+  db.insert('posts', { id, account_id: account, status: 'published', quota_kind: 'suggestion', quota_month: '2026-10', created_at: at, updated_at: at, ...patch });
   return id;
 };
 
@@ -146,7 +147,7 @@ test("the plan: an own workspace's account has its own 40 and 10, set by the ope
     assert.deepEqual([a.suggested.used, a.suggested.limit, a.shared], [9, 40, false]);
     assert.equal(usage(db, 'bravo').suggested.used, 5);
     assert.deepEqual([monthShare(db, 'alpha'), monthShare(db, 'bravo')], [40, 40], 'each schedule the whole month, not a share');
-    assert.deepEqual(monthsOf(db, ['alpha', 'bravo']), { used: 14, limit: 80 }, 'two months, one each');
+    assert.deepEqual(monthsOf(db, ['alpha', 'bravo']), { used: 14, out: 14, limit: 80 }, 'two months, one each');
     // The operator's numbers, as for an account in no workspace.
     assert.equal(setPlan(db, 'alpha', { suggested: '12', redos: '3' }).suggested, 12);
     assert.equal(setQuota(ctx, OPERATOR, { id: 'bravo' }, { suggested: '20' }).ok, true);

@@ -175,7 +175,7 @@ export function numbers(db, accountId, from, to) {
 
 const part = (p) => ({ used: p.used, held: p.held, limit: p.limit, left: p.left });
 
-/** One account's month: suggestions and redos used of the plan, and what is held by drafts in progress. */
+/** One account's month: the plan's posts the customer got and the redos used, and what is held by drafts in progress. */
 export function quotaOf(db, accountId, t = now()) {
   const u = usage(db, accountId, t);
   return { month: u.month, suggestions: part(u.suggested), redos: part(u.redos) };

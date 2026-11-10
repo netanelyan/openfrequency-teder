@@ -264,16 +264,16 @@ test("the Settings page shows the operator what the month cost, with no cap to s
   assert.equal(res.status, 404, 'the old cap form is gone');
 });
 
-test("a customer's Settings say the plan: 40 suggestions, 10 redos, small changes free; never the budget or money", async () => {
+test("a customer's Settings say the plan: 40 posts, 10 redos, small changes free; never the budget or money", async () => {
   const cookie = await login();
   const html = await (await get('/settings', cookie)).text();
   assert.match(html, /id="plan"/);
-  assert.match(html, /40 הצעות לפוסטים, ו-10 החלפות/);
+  assert.match(html, /כל חודש מגיעים אליכם 40 פוסטים, ואפשר לבקש 10 פעמים שפוסט שדחיתם ייכתב מחדש/);
   assert.match(html, /שינויים קטנים לא נספרים בכלל/);
-  assert.match(html, /נוצלו \d+ מתוך 40 הצעות · \d+ מתוך 10 החלפות/);
+  assert.match(html, /פורסמו \d+ מתוך 40 · \d+ מתוך 10 החלפות/);
   assert.ok(!html.includes('תקציב חודשי'), "the budget is the operator's");
   for (const p of ['/', '/settings', '/accounts']) assert.doesNotMatch(await (await get(p, cookie)).text(), /טוקנ|\$\d/, `${p} shows tokens or dollars`);
-  assert.match(await (await get('/', cookie)).text(), /<span class="lbl">הצעות<\/span>/, "the header counts the month's suggestions");
+  assert.match(await (await get('/', cookie)).text(), /<span class="lbl">פורסמו<\/span>/, "the header counts the month's posts out");
 });
 
 test('a changed theme.json waits on the Accounts page until the owner applies it', async () => {

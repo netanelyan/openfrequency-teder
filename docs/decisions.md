@@ -3040,3 +3040,58 @@ light panel with a soft shadow (the closing slide's rounded too), a bar of the c
 rounded; D the darkening under the tabs, the place on a larger chip, a bar of the colour between the line and its words.
 Before and after: samples-2026-11-06/styles/<A..D>-before.png and -after.png (one recorded post, its photographs on the
 top row, the same post in text mode under it).
+
+## A post every day; the plan counts the posts the customer got (2026-11-09)
+
+The owner: "because we promise 40 videos a month, there cant be a day without posts. even if 10 posts are being
+declined, the customer has to get the 11th". And, from 2026-11-08 and still standing: "not every rejection should
+trigger a redo. user chooses it".
+
+**What it was.** A post counted against the month's 40 the moment it reached the customer, whatever they did with it
+after (src/budget/quota.js "suggestion"). A declined post kept its slot, so the day's generation never drafted that slot
+again: a rejection without a redo, or with the month's 10 redos used up, left the day without a post, and every decline
+was one of the customer's 40 gone.
+
+**What it is.**
+
+- *The plan counts the posts the customer got* (quota.js GOT): approved, by them or by the engine for the company's own
+  accounts, then held for a connection, sent, out, or in their TikTok inbox. A post waiting for them holds its place
+  while it waits, as a draft in progress does, so the day's posts cannot together pass the plan; declined or left to
+  expire, it gives the place back. A redo the customer got is one of the plan's posts as well (it is a post they got),
+  and stays one of the month's redos from the moment it reaches them, as before. When the posts they got, those waiting
+  and those being written reach the plan, nothing more is drafted until the next month: the promise is kept.
+- *A declined post's day gets another post, as many times as it is declined* (src/autonomy/every-day.js). The customer
+  still chooses what comes: "לדחות ולכתוב מחדש" (it was "לדחות ולכתוב אחר") writes the same post again their way, with
+  their reason, while the month has redos; "לדחות", or a redo asked for when the redos are used up, gets a new post for
+  the same day, on another topic. The rejection starts it at once (src/web/actions.js reject). Whatever is still left
+  without a post (a redo our checks stopped twice, a new post that was blocked, a rejection while the account was
+  paused) the runner drafts again for that day in its next tick (runner.js 2d, refillDeclined), each slot no sooner
+  than 20 minutes after its last try. A replacement written without a slot (a redo whose time was too close) holds the
+  slot of the post it replaced, up the chain.
+- *Approval mode is unchanged.* No post goes out without the customer's approval, and one not approved by the end of its
+  day expires. The new post keeps the declined one's slot even when that time has passed: it waits for them, and
+  approved the same day it goes out at once (a customer's own schedule has no publishing windows). A day that is over,
+  or has less than an hour left, is not drafted again: its post would expire unseen. So a day whose post was declined
+  always has another one waiting while the day lasts.
+- *The guard is ours, never the customer's* (quota.js DRAFTS_PER_DAY = 20): every draft of an account in an Israel day
+  counts (the day-ahead batch, a declined day's new post, a redo, a blocked post's second try). A day at its busiest is
+  under 10, and ten declines and the eleventh under 15. At 20 the account drafts nothing more that day (build.js
+  DraftCapError, a PausedError, so the batch and the redo stop for it as for a pause) and the operator hears it once a
+  day (alert draft-cap:<account>, src/notify/operator.js, the same three ways as every alert). Nothing the customer
+  reads names a limit.
+- *What the customer reads* says the promise: the side bar's ring is "פורסמו X / 40" and fills as posts go out (no
+  orange or red any more: a full ring is the month kept); the account page and Settings say "פורסמו X מתוך 40", with
+  the approved posts still to go out under it, the redos used, and "כל הפוסטים של החודש אצלכם" when they got them all.
+  Settings explains: a post counts only once they approved it; a declined one does not, and another comes for the same
+  day; asking for it to be written again is a redo; one not approved by the end of its day does not go out and does not
+  count. The operator's table counts the posts the customer got too, beside the ledger's cost of every post offered.
+
+**Still open, for the owner.** The public website and the contract say "40 מצגות מוצעות בחודש, ועד 10 החלפות"
+(openfrequency-web sections.mjs, the FAQ). Counting what the customer got is more than that promise, never less, so
+nothing there is wrong; the words could say it now ("40 מצגות שאישרתם בחודש"). Not changed here: the contract's words
+are the owner's.
+
+Tests: test/every-day.test.js (ten declines in a row on one day and the eleventh waits, the customer's choice of a redo
+kept; declines and expired posts eat none of the 40, and what the pages say; the runner's second chance after a pause,
+its 20 minutes, and a day that is over; approval mode with a passed slot; the guard and its alert), and test/quota.test.js
+for the new counts.

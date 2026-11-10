@@ -143,7 +143,8 @@ export function detect(ctx, { t = now() } = {}) {
     const u = usage(db, pack.id, t);
     // A month the workspace's accounts share runs low for all of them at once: said once, not once per account.
     const whose = u.plan.scope === 'workspace' ? `ws${u.plan.workspaceId}` : pack.id;
-    if (u.suggested.used > 0 && u.suggested.left <= QUOTA_LOW) keep({ ...base, type: 'quota.low', key: `quota.low:${whose}:${u.month}`, data: { month: u.month } });
+    // Taken: the posts the customer got and those waiting for them (src/budget/quota.js counts what they got).
+    if (u.suggested.used + u.suggested.waiting > 0 && u.suggested.left <= QUOTA_LOW) keep({ ...base, type: 'quota.low', key: `quota.low:${whose}:${u.month}`, data: { month: u.month } });
   }
   // Sunday morning: one summary per customer, of the seven days before it.
   const today = israelDate(t);

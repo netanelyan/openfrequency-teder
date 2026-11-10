@@ -2,9 +2,21 @@ import { HOUR, monthKey, now, nowIso } from '../core/clock.js';
 import { lastKnown } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { monthSpend } from './ledger.js';
+import { israelDate, israelInstant } from '../schedule/israel.js';
 
-// A customer's month: how many slideshows it is suggested, how many rejected ones are written again, and what it
-// costs us. Every count is read from the posts themselves, never kept beside them, so nothing can drift.
+// A customer's month: how many posts they got, how many rejected ones are written again their way, and what it costs
+// us. Every count is read from the posts themselves, never kept beside them, so nothing can drift.
+//
+// THE PROMISE IS POSTS THE CUSTOMER GOT, NOT POSTS WE OFFERED (the owner, 2026-11-09: "because we promise 40 videos a
+// month, there cant be a day without posts. even if 10 posts are being declined, the customer has to get the 11th").
+// Until then a post counted against the 40 the moment it reached the customer, so every decline ate one of their 40
+// and could leave its day empty. Now the plan's number (`suggested`, the name kept for the code that reads it) counts
+// the posts the customer got: approved, by them or by the engine for the company's own accounts, and on its way or
+// out (GOT below). A post that waits for them holds its place while it waits (`waiting`), as a draft in progress does
+// (`held`), so the day's posts cannot together go past the plan; a declined post, or one left to expire, gives its
+// place back. A declined post's day is drafted again (src/autonomy/every-day.js), as many times as it takes, so a
+// decline never leaves a day without a post. What keeps that from running away is ours and the customer never sees
+// it: DRAFTS_PER_DAY below, with the operator told when an account reaches it.
 //
 // THE PLAN IS THE ONLY LIMIT, AND IT IS THE CUSTOMER'S. A workspace (one paying customer) gets its plan's slideshows
 // and redos a month, shared by every account (page) it has: the full plan 40 and 10, the small one 15 and 4, as accounts
@@ -18,15 +30,19 @@ import { monthSpend } from './ledger.js';
 // ours, in a workspace only so that its people see it, and shares nothing with the workspace's other accounts. A
 // customer's plan is changed in accounts, never here.
 //
-//   suggestion   a post that passed every check and reached the customer for approval. It counts in the month it
-//                reached them, whatever they did with it after: approved, rejected or left to expire
-//   redo         a post written again because the customer rejected one, with their reason. It counts as a redo,
-//                never as a suggestion; when the redos are used up a rejection only discards the post
+//   suggestion   a post that passed every check and reached the customer for approval, in the month it reached them.
+//                It is one of the plan's posts once they got it (approved, then out), and only then; declined or left
+//                to expire, it counts for nothing
+//   redo         a post written again their way because the customer rejected one with their reason and asked for
+//                it. It is one of the plan's posts once they got it, as a suggestion is; and it is one of the month's
+//                redos once it reached them, whatever they did with it after. When the redos are used up, a rejection
+//                that asks for one gets a new post for the day instead (src/web/actions.js reject)
 //   retry        a post our checks blocked, and every repair call inside a post: our cost, never counted
 //
 // A post still being drafted holds its place (for a day at most: a batch takes hours, a draft that never finished
-// was lost to a restart), so a batch of the day's posts cannot together go past the quota. When the suggestions are
-// used up, nothing more is generated for the account until the next month (runner.js, buildPost).
+// was lost to a restart), and so does one waiting for the customer. When the posts the customer got, with those
+// waiting and those being written, reach the plan, nothing more is generated for the account until the next month
+// (runner.js, buildPost).
 //
 // What the posts cost is recorded (ledger.js) and shown to the operator, by what it went to (ledger() below). It
 // never stops a post.
@@ -37,8 +53,25 @@ export const DEFAULT_PLAN = { suggested: 40, redos: 10 };
  * (published_at is when a part went out): that one is not theirs to lose. Sent again and out, it counts again.
  */
 const COUNTS = "NOT (status = 'failed' AND published_at IS NULL)";
+/**
+ * The posts the customer got, what the plan's number counts: approved (by them, or by the engine for the company's
+ * own accounts), held for a connection, being sent, out, or in their TikTok inbox as a draft; or failed with a part
+ * already out. A failed post with nothing out is not theirs yet: sent again and out, it counts.
+ */
+const GOT = "(status IN ('approved', 'held', 'publishing', 'published', 'drafted') OR (status = 'failed' AND published_at IS NOT NULL))";
+/** Of those, the ones already out: what "פורסמו" says. */
+const OUT = "(status IN ('published', 'drafted') OR (status = 'failed' AND published_at IS NOT NULL))";
 /** How long a draft in progress holds a place in the quota. */
 export const HOLD_MS = 24 * HOUR;
+/**
+ * The most posts drafted for one account in one Israel day, every kind together (the day-ahead batch, a declined
+ * day's new post, a redo, a blocked post's second try). Ours, never shown to the customer: a guard against a loop
+ * that would draft and pay without end. A day of an account at its most (2 slots today, 2 tomorrow, a second try
+ * each) is under 10, and the owner's "even if 10 posts are being declined, the customer has to get the 11th" is
+ * under 15; past 20 something is wrong, the account drafts nothing more that day and the operator hears it
+ * (src/pipeline/build.js DraftCapError).
+ */
+export const DRAFTS_PER_DAY = 20;
 /** The most the operator may set, so a typo cannot open an account to thousands of posts. */
 export const MAX_PLAN = { suggested: 1000, redos: 1000 };
 
@@ -127,36 +160,48 @@ export function setPlan(db, accountId, { suggested, redos }) {
 
 
 /**
- * Where an account stands this month: suggestions and redos used, held by drafts in progress, and left, all of the
- * month it has (its workspace's, shared, or its own); `accounts` is each sharing account's own count, for the pages
- * that list them; and what the account has cost so far, for the operator's eyes. `used + held` is what a new draft is
- * weighed against.
+ * Where an account stands this month, all of the month it has (its workspace's, shared, or its own):
+ *   suggested   the plan's posts: `used` the posts the customer got (GOT), `out` those of them already out, `waiting`
+ *               the ones waiting for them, `held` drafts in progress (redos too: a redo is a post of the plan as well),
+ *               and `left` what a new draft may still take: limit - used - waiting - held
+ *   redos       the month's redos: `used` every redo that reached the customer, `held` redos being written, `left`
+ * `accounts` is each sharing account's own count (posts got, redos), for the pages that list them; and what the
+ * account has cost so far, for the operator's eyes.
  */
 export function usage(db, accountId, t = now()) {
   const month = monthKey(t);
   const plan = planOf(db, accountId);
   const ids = sharing(db, accountId, plan);
   const inIds = `(${ids.map(() => '?').join(', ')})`;
-  const rows = db.all(`SELECT account_id, quota_kind, COUNT(*) AS n FROM posts WHERE account_id IN ${inIds} AND quota_month = ? AND quota_kind IN ('suggestion', 'redo') AND ${COUNTS} GROUP BY account_id, quota_kind`, ...ids, month);
-  const used = {};
+  const rows = db.all(
+    `SELECT account_id, quota_kind, SUM(CASE WHEN ${GOT} THEN 1 ELSE 0 END) AS got, SUM(CASE WHEN ${OUT} THEN 1 ELSE 0 END) AS out,
+       SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS waiting, SUM(CASE WHEN ${COUNTS} THEN 1 ELSE 0 END) AS reached
+     FROM posts WHERE account_id IN ${inIds} AND quota_month = ? AND quota_kind IN ('suggestion', 'redo') GROUP BY account_id, quota_kind`,
+    ...ids,
+    month
+  );
+  const posts = { got: 0, out: 0, waiting: 0 };
+  let redos = 0;
   const accounts = Object.fromEntries(ids.map((id) => [id, { suggested: 0, redos: 0 }]));
   for (const r of rows) {
-    used[r.quota_kind] = (used[r.quota_kind] || 0) + r.n;
-    accounts[r.account_id][r.quota_kind === 'redo' ? 'redos' : 'suggested'] += r.n;
+    posts.got += r.got;
+    posts.out += r.out;
+    posts.waiting += r.waiting;
+    accounts[r.account_id].suggested += r.got;
+    if (r.quota_kind === 'redo') {
+      redos += r.reached;
+      accounts[r.account_id].redos += r.reached;
+    }
   }
   const since = new Date(t - HOLD_MS).toISOString();
   const held = Object.fromEntries(
     db.all(`SELECT CASE WHEN redo_of IS NULL THEN 'suggestion' ELSE 'redo' END AS k, COUNT(*) AS n FROM posts WHERE account_id IN ${inIds} AND status = 'drafting' AND sample = 0 AND created_at >= ? GROUP BY k`, ...ids, since).map((r) => [r.k, r.n])
   );
-  const part = (k, limit) => {
-    const u = used[k] || 0;
-    const h = held[k] || 0;
-    return { used: u, held: h, limit, left: Math.max(0, limit - u - h) };
-  };
+  const drafting = (held.suggestion || 0) + (held.redo || 0);
   return {
     month,
-    suggested: part('suggestion', plan.suggested),
-    redos: part('redo', plan.redos),
+    suggested: { used: posts.got, out: posts.out, waiting: posts.waiting, held: drafting, limit: plan.suggested, left: Math.max(0, plan.suggested - posts.got - posts.waiting - drafting) },
+    redos: { used: redos, held: held.redo || 0, limit: plan.redos, left: Math.max(0, plan.redos - redos - (held.redo || 0)) },
     cost: { spent: monthSpend(db, accountId, t).usd },
     plan,
     accounts,
@@ -165,30 +210,45 @@ export function usage(db, accountId, t = now()) {
 }
 
 /**
+ * How many posts were drafted for an account in the Israel day of `t`, every kind (not samples): what DRAFTS_PER_DAY
+ * is weighed against.
+ */
+export function draftsToday(db, accountId, t = now()) {
+  const from = israelInstant(israelDate(t), '00:00').toISOString();
+  return db.get('SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND sample = 0 AND created_at >= ? AND created_at <= ?', accountId, from, new Date(t).toISOString()).n;
+}
+
+/**
  * The months of a set of accounts, each counted once: a workspace's accounts share one, and adding theirs up would count
- * it again for each. { used, limit } of the suggestions.
+ * it again for each. { used, out, limit } of the plan's posts: got, out, and the plan.
  */
 export function monthsOf(db, accountIds, t = now()) {
   const seen = new Set();
-  const out = { used: 0, limit: 0 };
+  const out = { used: 0, out: 0, limit: 0 };
   for (const id of accountIds) {
     const u = usage(db, id, t);
     const key = u.plan.scope === 'workspace' ? `ws:${u.plan.workspaceId}` : `acc:${id}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.used += u.suggested.used;
+    out.out += u.suggested.out;
     out.limit += u.suggested.limit;
   }
   return out;
 }
 
-/** May a new draft start? { ok, why, usage }. A redo is weighed against the redos, anything else against the suggestions. */
+/**
+ * May a new draft start? { ok, why, full, usage }. Every draft needs a place among the plan's posts (a redo too: it is
+ * a post the customer may get); a redo also needs one of the month's redos. `full` says which ran out: 'posts' or
+ * 'redos'.
+ */
 export function room(db, accountId, { redo = false, t = now() } = {}) {
   const u = usage(db, accountId, t);
-  const part = redo ? u.redos : u.suggested;
-  if (part.left > 0) return { ok: true, why: null, usage: u };
-  const what = redo ? 'redos' : 'suggested slideshows';
-  return { ok: false, why: `${accountId}: this month's ${what} are used up (${part.used}${part.held ? ` and ${part.held} in progress` : ''} of ${part.limit})`, usage: u };
+  const s = u.suggested;
+  const r = u.redos;
+  if (s.left <= 0) return { ok: false, full: 'posts', why: `${accountId}: this month's posts are all taken (${s.used} got${s.waiting ? `, ${s.waiting} waiting` : ''}${s.held ? `, ${s.held} in progress` : ''}, of ${s.limit})`, usage: u };
+  if (redo && r.left <= 0) return { ok: false, full: 'redos', why: `${accountId}: this month's redos are used up (${r.used}${r.held ? ` and ${r.held} in progress` : ''} of ${r.limit})`, usage: u };
+  return { ok: true, full: null, why: null, usage: u };
 }
 
 /** The Israel month a post that reached the customer now is counted in. */
@@ -202,7 +262,8 @@ export const quotaMonth = (t = now()) => monthKey(t);
  *   account                   the account's work that is no one post's (the morning's feedback, scoring topics)
  *   drafting, sample          a post still being written; an onboarding sample
  * Counts are of posts by the month they reached the customer (or were blocked); dollars are by the month they were
- * spent. `perDelivered` is every dollar over the suggestions and redos that reached the customer.
+ * spent. `perDelivered` is every dollar over the suggestions and redos that reached the customer; `got` the posts of
+ * the month the customer got, what the plan counts.
  */
 export function ledger(db, accountId, month = monthKey()) {
   const rows = db.all(
@@ -214,13 +275,15 @@ export function ledger(db, accountId, month = monthKey()) {
     month
   );
   const posts = Object.fromEntries(db.all('SELECT quota_kind, COUNT(*) AS n FROM posts WHERE account_id = ? AND quota_month = ? AND quota_kind IS NOT NULL GROUP BY quota_kind', accountId, month).map((r) => [r.quota_kind, r.n]));
+  // What the plan counts (GOT): the posts of the month the customer got, of both kinds.
+  const got = db.get(`SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND quota_month = ? AND quota_kind IN ('suggestion', 'redo') AND ${GOT}`, accountId, month).n;
   // Named bucket, not kind: posts has a kind of its own (the format's), and GROUP BY kind would group by that.
   const by = Object.fromEntries(rows.map((r) => [r.bucket, { usd: r.usd, calls: r.calls, estimated: Boolean(r.estimated) }]));
   const kinds = ['suggestion', 'redo', 'retry', 'edit', 'account', 'drafting', 'sample'];
   const out = kinds.map((kind) => ({ kind, posts: posts[kind] ?? null, usd: by[kind]?.usd || 0, calls: by[kind]?.calls || 0, estimated: by[kind]?.estimated || false }));
   const total = out.reduce((s, r) => s + r.usd, 0);
   const delivered = (posts.suggestion || 0) + (posts.redo || 0);
-  return { accountId, month, rows: out, total, delivered, perDelivered: delivered ? total / delivered : null, estimated: out.some((r) => r.estimated) };
+  return { accountId, month, rows: out, total, delivered, got, perDelivered: delivered ? total / delivered : null, estimated: out.some((r) => r.estimated) };
 }
 
 /** The last `n` Israel months, newest first: for the ledger's table. */

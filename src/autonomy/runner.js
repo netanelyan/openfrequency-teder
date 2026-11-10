@@ -30,6 +30,7 @@ import { STUCK_REASON } from '../publish/errors.js';
 import { alertOperator } from '../notify/operator.js';
 import { alertNotLive, diskOnly } from '../publish/live.js';
 import { leadsTick } from '../leads/sync.js';
+import { refillDeclined } from './every-day.js';
 
 // The engine running on its own: one tick a minute. Each tick publishes first (3 to 4a below), and only then starts
 // the day's slower work (0, 1, 2, then 4b on), so a long morning of drafting never makes a due post late.
@@ -47,12 +48,17 @@ import { leadsTick } from '../leads/sync.js';
 //      away. With Claude live, the whole day's posts are drafted together through
 //      the Message Batches API at half price, in the background, while the ticks
 //      go on publishing. No more posts than the account's month has left
-//      (src/budget/quota.js, 40 suggestions and 10 redos): when its suggestions
-//      are used up, nothing until the next month. No money cap stops or slows
+//      (src/budget/quota.js: the plan's 40 count the posts the customer got,
+//      with those waiting for them and those being written): when they are all
+//      taken, nothing until the next month. No money cap stops or slows
 //      anything.
 //   2b. a slot whose post was blocked is drafted again the same day, directly, once, while it is 90 minutes away or
 //      more (redraftBlocked); a batch that has not ended in two hours is given up and drafted directly
 //      (src/llm/batch.js BATCH_DEADLINE_MS), so a stuck batch never holds a day's generation
+//   2d. a post every day (the owner, 2026-11-09: "there cant be a day without posts. even if 10 posts are being
+//      declined, the customer has to get the 11th"): a slot of today or later whose post was declined, and that
+//      nothing holds now, is drafted again (refillDeclined, src/autonomy/every-day.js), as often as it is declined,
+//      within the drafts a day an account may have (src/budget/quota.js DRAFTS_PER_DAY)
 //   2c. an account that should be posting and drafted nothing in 24 hours is told to the operator, once a day
 //      (nothingDrafted, src/notify/operator.js)
 //   3. modes, at each post's slot:
@@ -411,6 +417,10 @@ export async function tick(ctx, { t = now() } = {}) {
   // ---- 2b. a slot whose post was blocked (a model, batch or render failure, a restart, a check it did not pass) is
   // drafted again the same day, directly, once, while it is still REDRAFT_LEAD_MS away: not the next morning
   if (!ctx.generating) await redraftBlocked(ctx, report, { t }).catch((e) => report.errors.push({ step: 'redraft', error: e.message }));
+
+  // ---- 2d. a declined post's day gets another post (src/autonomy/every-day.js): the rejection starts it at once, and
+  // this catches what is left without one (a redo our checks stopped, a new post blocked, a rejection while paused)
+  await refillDeclined(ctx, report, { t }).catch((e) => report.errors.push({ step: 'refill', error: e.message }));
 
   // ---- 2c. an account that should be posting and drafted nothing in a day: the operator hears, once a day
   await nothingDrafted(ctx, report, { t }).catch((e) => report.errors.push({ step: 'nothing drafted', error: e.message }));

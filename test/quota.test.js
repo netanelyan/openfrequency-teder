@@ -21,9 +21,11 @@ import { accountRows, postFull, quotasData, week } from '../src/web/data.js';
 import { accountsPage, postPage, quotasPanel } from '../src/web/pages.js';
 import { opened, tempHome } from './helpers.js';
 
-// A customer's month (src/budget/quota.js): 40 suggested slideshows and 10 redos by default, counted from the posts
-// themselves; what our checks block is ours; no money cap anywhere, what the posts cost only recorded; and a new month
-// starts every count again.
+// A customer's month (src/budget/quota.js): 40 posts and 10 redos by default, counted from the posts themselves; the
+// plan's posts are the ones the customer got (approved or out), since the owner, 2026-11-09: "because we promise 40
+// videos a month, there cant be a day without posts. even if 10 posts are being declined, the customer has to get the
+// 11th" (test/every-day.test.js); what our checks block is ours; no money cap anywhere, what the posts cost only
+// recorded; and a new month starts every count again.
 
 after(() => closeBrowser());
 afterEach(() => {
@@ -52,7 +54,7 @@ const row = (db, patch) => {
   return id;
 };
 
-test('a suggestion counts once it reaches the customer, whatever they do with it; a blocked post, a sample and an old draft never count', () => {
+test('a post counts once the customer got it (approved or out); one waiting and a draft hold a place; declined, expired, blocked, a sample and an old draft never count', () => {
   const { home, cleanup } = tempHome();
   try {
     const { db } = contextFor(home);
@@ -62,21 +64,25 @@ test('a suggestion counts once it reaches the customer, whatever they do with it
     row(db, { status: 'blocked', quota_kind: 'retry', quota_month: '2026-10' });
     row(db, { status: 'sample', sample: 1 });
     row(db, { status: 'queued', quota_kind: 'redo', quota_month: '2026-10', redo_of: 'q1' });
-    // Drafts in progress hold a place, a redo's against the redos; one a restart left a day and a half ago does not.
+    // Drafts in progress hold a place, a redo's against the redos too; one a restart left a day and a half ago does not.
     row(db, { status: 'drafting' });
     row(db, { status: 'drafting', redo_of: 'q3' });
     row(db, { status: 'drafting', at: OCT - 36 * 3_600_000 });
     const u = usage(db, 'demo');
-    assert.deepEqual(u.suggested, { used: 5, held: 1, limit: DEFAULT_PLAN.suggested, left: 34 });
+    // Got: the approved and the published one. Waiting: the queued suggestion and the queued redo. Being written: two.
+    // The rejected and the expired one gave their places back.
+    assert.deepEqual(u.suggested, { used: 2, out: 1, waiting: 2, held: 2, limit: DEFAULT_PLAN.suggested, left: 34 });
     assert.deepEqual(u.redos, { used: 1, held: 1, limit: DEFAULT_PLAN.redos, left: 8 });
     // The default plan, and the operator's own.
     assert.deepEqual([planOf(db, 'demo').suggested, planOf(db, 'demo').redos], [40, 10]);
     assert.deepEqual([setPlan(db, 'demo', { suggested: '6', redos: '2' }).suggested, planOf(db, 'demo').redos], [6, 2]);
-    assert.deepEqual(usage(db, 'demo').suggested.left, 0, 'five used and one in progress of six');
-    assert.equal(room(db, 'demo').ok, false);
-    assert.equal(room(db, 'demo', { redo: true }).ok, false, 'one used and one in progress of two');
+    assert.deepEqual(usage(db, 'demo').suggested.left, 0, 'two got, two waiting and two in progress of six');
+    assert.deepEqual([room(db, 'demo').ok, room(db, 'demo').full], [false, 'posts']);
+    assert.equal(room(db, 'demo', { redo: true }).ok, false, 'a redo needs a place among the posts too');
+    setPlan(db, 'demo', { suggested: '7', redos: '2' });
+    assert.deepEqual([room(db, 'demo').ok, room(db, 'demo', { redo: true }).full], [true, 'redos'], 'one used and one in progress of two redos');
     assert.deepEqual(setPlan(db, 'demo', { suggested: '2.5', redos: '-1' }).problems, ['suggested', 'redos']);
-    assert.equal(planOf(db, 'demo').suggested, 6, 'a refused plan changes nothing');
+    assert.equal(planOf(db, 'demo').suggested, 7, 'a refused plan changes nothing');
     setPlan(db, 'demo', { suggested: '', redos: '' });
     assert.equal(planOf(db, 'demo').suggested, 40, 'an empty field is the default again');
   } finally {
@@ -142,10 +148,10 @@ test('when the month\'s suggestions are used up, nothing is drafted and nothing 
     const pack = ctx.pack('demo');
     setNow(OCT);
     setPlan(ctx.db, 'demo', { suggested: '0' });
-    await assert.rejects(buildPost(ctx, { pack, formatKey: 'care-guide' }), (e) => e instanceof QuotaError && /suggested slideshows are used up \(0 of 0\)/.test(e.message));
+    await assert.rejects(buildPost(ctx, { pack, formatKey: 'care-guide' }), (e) => e instanceof QuotaError && /this month's posts are all taken \(0 got, of 0\)/.test(e.message));
     assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM posts').n, 0, 'no post was started');
     assert.equal(monthSpend(ctx.db, 'demo').usd, 0, 'nothing was spent');
-    // One left: a queued post is a suggestion of this month, and the next one is refused.
+    // One left: a queued post is a suggestion of this month, and while it waits it holds the place: the next one is refused.
     setPlan(ctx.db, 'demo', { suggested: '1' });
     const res = await buildPost(ctx, { pack, formatKey: 'care-guide' });
     assert.equal(res.status, 'queued', res.reason);
@@ -160,7 +166,7 @@ test('when the month\'s suggestions are used up, nothing is drafted and nothing 
   }
 });
 
-test('the runner drafts no more than the month has left, and nothing once it is used up, until a raised quota or the next month', async () => {
+test('the runner drafts no more than the month has left, and nothing once the customer got all of it, until a raised quota or the next month', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
@@ -171,8 +177,11 @@ test('the runner drafts no more than the month has left, and nothing once it is 
     let r = await tick(ctx, { t: tuesday });
     assert.equal(r.generated.length, 2, JSON.stringify(r.generated));
     assert.ok(r.generated.every((g) => g.status === 'queued'), JSON.stringify(r.generated));
-    assert.equal(usage(ctx.db, 'demo').suggested.left, 0);
-    // A blocked post would have been ours; here the two reached the customer and the month is used up.
+    assert.equal(usage(ctx.db, 'demo').suggested.left, 0, 'the two wait for the customer and hold the last two places');
+    // The customer approves both: they got all 40, and the month is theirs. (Left to expire, the two would have given
+    // their places back, and the next day would be drafted: test/every-day.test.js.)
+    for (const g of r.generated) ctx.db.update('posts', g.post, { status: 'approved', approved_at: new Date(tuesday).toISOString(), approved_by: 'customer' });
+    assert.equal(usage(ctx.db, 'demo').suggested.used, 40);
     const wed = israelInstant('2026-10-14', '07:05').getTime();
     setNow(wed);
     r = await tick(ctx, { t: wed });
@@ -203,7 +212,7 @@ test('no cost cap: a month that has cost $500 still drafts up to its plan, and t
     assert.ok(usage(ctx.db, 'demo').cost.spent > 500, 'what the posts cost is recorded on top, for the operator');
     // The plan is posts only: a cap sent with it is not read, and nothing about money is kept.
     const saved = setQuota(ctx, owner, { id: 'demo' }, { suggested: '45', redos: '', cap: '0.01' });
-    assert.equal(saved.message, 'נשמר: 45 הצעות ו-10 החלפות בחודש.');
+    assert.equal(saved.message, 'נשמר: 45 פוסטים ו-10 החלפות בחודש.');
     assert.deepEqual(Object.keys(planOf(ctx.db, 'demo')).sort(), ['name', 'redos', 'scope', 'set', 'suggested', 'workspaceId']);
     assert.equal(planOf(ctx.db, 'demo').scope, 'account', "the operator's own account has a month of its own");
     assert.ok(!ctx.db.all('PRAGMA table_info(accounts)').some((c) => c.name === 'cap_usd'), 'the column is gone');
@@ -214,7 +223,7 @@ test('no cost cap: a month that has cost $500 still drafts up to its plan, and t
   }
 });
 
-test('a rejection writes a replacement with its reason, counted as a redo and never as a suggestion; when the redos are gone it only discards', async () => {
+test('a rejection writes a replacement with its reason, counted as a redo; when the redos are gone the day gets another post instead', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
@@ -240,24 +249,30 @@ test('a rejection writes a replacement with its reason, counted as a redo and ne
     const steer = JSON.parse(ctx.db.get("SELECT detail_json FROM steps WHERE post_id = ? AND step = 'feedback'", neu.id).detail_json).steer;
     assert.deepEqual([steer.kind, steer.reason, steer.note], ['redo', 'shorter', 'שלוש שורות לכל היותר']);
     const u = usage(ctx.db, 'demo');
-    assert.deepEqual([u.suggested.used, u.redos.used], [1, 1], 'the rejected post stays a suggestion; the replacement is a redo');
-    // The redos are used up: rejecting the replacement discards it, and nothing is written.
+    assert.deepEqual([u.suggested.used, u.suggested.waiting, u.redos.used], [0, 1, 1], 'the rejected post counts for nothing; the replacement waits, and is a redo');
+    // The redos are used up: rejecting the replacement and asking for a redo gets another post for the same day.
     const before = ctx.db.get('SELECT COUNT(*) AS n FROM posts').n;
     const again = reject(ctx, customer, { id: neu.id }, { reason: 'tone' });
-    assert.equal(again.job, undefined);
-    assert.match(again.message, /כל 1 ההחלפות של החודש נוצלו/);
-    assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM posts').n, before);
-    assert.deepEqual([loadPost(ctx.db, neu.id).status, loadPost(ctx.db, neu.id).reject.redo], ['rejected', 'none']);
+    assert.ok(again.job, 'a new post for the day is written');
+    assert.match(again.message, /כל 1 ההחלפות של החודש נוצלו, אז במקום לכתוב אותו מחדש נכתב עכשיו פוסט אחר לאותו יום/);
+    assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM posts').n, before + 1, 'its place is held before the answer goes back');
+    const day = await again.job;
+    assert.equal(day.ok, true, day.why);
+    const next = loadPost(ctx.db, day.postId);
+    assert.deepEqual([next.status, next.quota_kind, next.redo_of, next.slot_at], ['queued', 'suggestion', null, old.slot_at], 'a new post, not a redo, on the same day');
+    assert.deepEqual([loadPost(ctx.db, neu.id).status, loadPost(ctx.db, neu.id).reject.redo, loadPost(ctx.db, neu.id).reject.day, loadPost(ctx.db, neu.id).reject.dayPost], ['rejected', 'none', 'queued', day.postId]);
+    assert.equal(usage(ctx.db, 'demo').redos.used, 1, 'no redo used for it');
     // The pages: each post links to the other, and a queued post's form offers the reasons and says what is left.
     assert.match(postPage({ csrf: 'x' }, postFull(ctx, first.postId)), /נכתב פוסט חלופי[\s\S]*href="\/post\//);
     assert.match(postPage({ csrf: 'x' }, postFull(ctx, neu.id)), /פוסט חלופי<\/b><p>נכתב במקום/);
-    assert.match(postPage({ csrf: 'x' }, postFull(ctx, neu.id)), /לא נכתב פוסט חלופי/);
+    assert.match(postPage({ csrf: 'x' }, postFull(ctx, neu.id)), new RegExp(`נכתב פוסט אחר לאותו יום</b><p><a href="/post/${day.postId}"`));
+    assert.doesNotMatch(postPage({ csrf: 'x' }, postFull(ctx, neu.id)), /לא נכתב פוסט חלופי/);
   } finally {
     cleanup();
   }
 });
 
-test('the customer chooses: "לדחות" takes the post down and writes nothing, "לדחות ולכתוב אחר" writes a replacement', async () => {
+test('the customer chooses: "לדחות" takes the post down and the day gets another post, "לדחות ולכתוב מחדש" writes this one again their way', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
@@ -266,16 +281,25 @@ test('the customer chooses: "לדחות" takes the post down and writes nothing,
     const first = await buildPost(ctx, { pack, formatKey: 'care-guide', slotAt: israelInstant('2026-10-14', '12:45').toISOString() });
     assert.equal(first.status, 'queued', first.reason);
     const queued = postPage({ csrf: 'x' }, postFull(ctx, first.postId));
-    assert.match(queued, /<button class="btn danger" type="submit" name="redo" value="0">לדחות<\/button><button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב אחר<\/button>/, 'two choices, rejecting alone first');
+    assert.match(queued, /<button class="btn danger" type="submit" name="redo" value="0">לדחות<\/button><button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב מחדש<\/button>/, 'two choices, rejecting alone first');
+    assert.match(queued, /אחרי דחייה מגיע פוסט אחר לאותו יום/);
     const before = ctx.db.get('SELECT COUNT(*) AS n FROM posts').n;
     const r = reject(ctx, customer, { id: first.postId }, { reason: 'topic', note: 'לא מתאים לנו', redo: '0' });
-    assert.equal(r.job, undefined, 'nothing is written');
-    assert.match(r.message, /הסיבה נשמרה, ולא נכתב פוסט במקומו/);
-    assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM posts').n, before);
-    const old = loadPost(ctx.db, first.postId);
-    assert.deepEqual([old.status, old.reject.reason, old.reject.note, old.reject.redo], ['rejected', 'topic', 'לא מתאים לנו', 'declined']);
+    assert.ok(r.job, 'a new post for the day is written');
+    assert.match(r.message, /נדחה, והסיבה נשמרה. פוסט אחר לאותו יום נכתב עכשיו/);
+    assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM posts').n, before + 1);
+    let old = loadPost(ctx.db, first.postId);
+    assert.deepEqual([old.status, old.reject.reason, old.reject.note, old.reject.redo, old.reject.day], ['rejected', 'topic', 'לא מתאים לנו', 'declined', 'writing']);
+    assert.match(postPage({ csrf: 'x' }, postFull(ctx, first.postId)), /פוסט אחר לאותו יום נכתב עכשיו/);
+    const day = await r.job;
+    assert.equal(day.ok, true, day.why);
+    const next = loadPost(ctx.db, day.postId);
+    assert.deepEqual([next.status, next.quota_kind, next.redo_of, next.slot_at], ['queued', 'suggestion', null, old.slot_at], 'not a redo: a new post on the same day');
+    old = loadPost(ctx.db, first.postId);
+    assert.deepEqual([old.reject.day, old.reject.dayPost], ['queued', day.postId]);
     const u = usage(ctx.db, 'demo');
     assert.deepEqual([u.redos.used, u.redos.held, u.redos.left], [0, 0, DEFAULT_PLAN.redos], 'no redo used');
+    assert.deepEqual([u.suggested.used, u.suggested.waiting], [0, 1], 'the declined one gave its place to the new one');
   } finally {
     cleanup();
   }
@@ -448,7 +472,7 @@ test('light edits: a photograph the post already has, a slide removed, and text 
     await edit(lctx, customer, { id }, changed);
     assert.equal(loadPost(ctx.db, id).slides[1].title, changed.title_0);
     const u = usage(ctx.db, 'demo');
-    assert.deepEqual([u.suggested.used, u.redos.used], [1, 0], 'light edits are neither a suggestion nor a redo');
+    assert.deepEqual([u.suggested.used + u.suggested.waiting, u.redos.used], [1, 0], 'light edits are neither a post more nor a redo');
     assert.equal(ledger(ctx.db, 'demo', '2026-10').rows.find((r) => r.kind === 'edit').calls, 2);
   } finally {
     cleanup();
@@ -489,28 +513,33 @@ test("a customer's light edits are fact-checked up to 30 times a day across thei
   }
 });
 
-test("the account page says 'X of 40 used, Y of 10 redos'; the operator sees every customer's month and its ledger", () => {
+test("the account page says 'פורסמו X מתוך 40, Y of 10 redos'; the operator sees every customer's month and its ledger", () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
     setNow(OCT);
-    for (let i = 0; i < 3; i++) row(ctx.db, { quota_kind: 'suggestion', quota_month: '2026-10' });
+    for (let i = 0; i < 3; i++) row(ctx.db, { status: 'published', quota_kind: 'suggestion', quota_month: '2026-10' });
+    row(ctx.db, { status: 'approved', quota_kind: 'suggestion', quota_month: '2026-10' });
+    // Declined and waiting posts are not among what the customer got.
+    for (let i = 0; i < 5; i++) row(ctx.db, { status: 'rejected', quota_kind: 'suggestion', quota_month: '2026-10' });
     row(ctx.db, { quota_kind: 'redo', quota_month: '2026-10', redo_of: 'x' });
     ctx.db.insert('spend', { account_id: 'demo', api: 'claude', usd: 0.5, month: '2026-10', at: new Date(OCT).toISOString() });
     const rows = accountRows(ctx).map((r) => ({ ...r, week: week(ctx, r.pack.id), style: null }));
     // The month's panel: a line each, the count large and the plan beside it, a meter under each.
     const month = accountsPage({ csrf: 'x' }, rows);
-    assert.match(month, /<span>הצעות שנוצלו<\/span><span class="num"><b>3<\/b> מתוך 40<\/span><\/div><meter min="0" max="40"[^>]* value="3"/);
+    assert.match(month, /<span>פורסמו<\/span><span class="num"><b>3<\/b> מתוך 40<\/span><\/div><meter min="0" max="40"[^>]* value="3"/);
+    assert.match(month, /ועוד פוסט מאושר שמחכה לשעה שלו/);
     assert.match(month, /<span>החלפות שנוצלו<\/span><span class="num"><b>1<\/b> מתוך 10<\/span><\/div><meter min="0" max="10"[^>]* value="1"/);
+    assert.doesNotMatch(month, /הצעות/, 'the customer reads posts, never suggestions');
     const html = quotasPanel({ csrf: 'x' }, quotasData(ctx));
-    assert.match(html, /3\/40/);
+    assert.match(html, /4\/40/, 'the operator reads what the customer got: three out and one approved');
     assert.match(html, /data-k="עלות"><span class="num ltr">\$0\.50<\/span><\/td>/);
     assert.doesNotMatch(html, /name="cap"|תקרה/, 'no cap to set');
     assert.match(html, /action="\/accounts\/demo\/quota"/);
     assert.match(html, /placeholder="40"/);
-    // Used up: the card says when it starts again.
-    for (let i = 0; i < 37; i++) row(ctx.db, { quota_kind: 'suggestion', quota_month: '2026-10' });
-    assert.match(accountsPage({ csrf: 'x' }, accountRows(ctx).map((r) => ({ ...r, week: week(ctx, r.pack.id), style: null }))), /ההצעות של החודש נוצלו<\/span> פוסטים חדשים ייכתבו מתחילת החודש הבא/);
+    // All got: the card says the month is theirs, and when it starts again.
+    for (let i = 0; i < 36; i++) row(ctx.db, { status: 'published', quota_kind: 'suggestion', quota_month: '2026-10' });
+    assert.match(accountsPage({ csrf: 'x' }, accountRows(ctx).map((r) => ({ ...r, week: week(ctx, r.pack.id), style: null }))), /כל הפוסטים של החודש אצלכם<\/span> הפוסטים הבאים ייכתבו מתחילת החודש הבא/);
   } finally {
     cleanup();
   }

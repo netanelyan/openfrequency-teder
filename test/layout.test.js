@@ -67,7 +67,7 @@ const get = (p, cookie) => fetch(`${base}${p}`, { redirect: 'manual', headers: {
 
 test('the month on Settings: the label and the count are apart, never "החודשנוצלו"', async () => {
   const html = await (await get('/settings', fake.session(customer(1)).cookie)).text();
-  assert.match(html, /<div class="row"><span>החודש<\/span> <b class="num">נוצלו \d+ מתוך 40 הצעות · \d+ מתוך 10 החלפות<\/b><\/div>/);
+  assert.match(html, /<div class="row"><span>החודש<\/span> <b class="num">פורסמו \d+ מתוך 40 · \d+ מתוך 10 החלפות<\/b><\/div>/);
   assert.doesNotMatch(html, /החודש<\/span><b/);
 });
 

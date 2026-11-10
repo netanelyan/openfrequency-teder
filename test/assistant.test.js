@@ -310,11 +310,12 @@ test('a rejection uses a redo per the quota, as on the website, and the status c
 
   const st = (await call('GET', c2('status'))).body.accounts[0];
   assert.deepEqual([st.quota.redos.used, st.quota.redos.limit, st.quota.redos.left], [1, 1, 0]);
-  assert.equal(st.quota.suggestions.used, 1, 'the replacement is a redo, never a suggestion');
+  // The plan counts the posts the customer got (src/budget/quota.js): the rejected one never, the replacement once approved.
+  assert.equal(st.quota.suggestions.used, 0, 'neither the rejected post nor the waiting replacement is one they got');
   assert.equal(st.quota.suggestions.limit, 40);
   assert.ok(st.week && 'views' in st.week && 'best' in st.week);
 
-  // The redos are used up: the next rejection only discards the post.
+  // The redos are used up: the next rejection writes no redo (and this post has no day of its own to fill).
   const again = await call('POST', c2(`posts/${replacement}/reject`), { by, reason: 'tone' });
   assert.deepEqual([again.body.redo, again.body.quota.redos.left], ['none', 0]);
   await Promise.all(handler.assistant.jobs);

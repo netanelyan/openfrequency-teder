@@ -5,6 +5,7 @@ import { audit, setSetting, step } from '../core/store.js';
 import { loadPost, checkPost, formatOfPost, igCaption, postDraft, textsOf } from '../pipeline/build.js';
 import { drawAgain, photoChoices, withImages } from '../pipeline/light.js';
 import { redoPost } from '../pipeline/redo.js';
+import { dayOpen, daySlotOf, refillSlot } from '../autonomy/every-day.js';
 import { reviewTexts } from '../voice/review.js';
 import { lineDraft } from '../rules/overlay.js';
 import { kindName } from '../formats/kinds.js';
@@ -152,12 +153,20 @@ export function unapprove(ctx, user, { id }) {
 
 /**
  * Reject a post, with a reason (src/budget/quota.js REDO_REASONS) and the customer's own words. The customer chooses
- * whether a replacement is written (the owner, 2026-11-08: "not every rejection should trigger a redo. user chooses
- * it"): `form.redo` '0' only takes the post down and uses nothing; '1' (and a caller that does not say, as the
- * assistant's API before it asked) writes one. While the month has redos left, the replacement is written beside the
- * answer with that reason (src/pipeline/redo.js) and counted as a redo once it reaches them; when they are used up, the
- * post is only discarded. A sample, or an account that cannot generate now (paused, the kill switch), gets no
- * replacement and uses no redo. `job` (not sent to the browser) is the replacement being written, for the tests.
+ * what comes instead (the owner, 2026-11-08: "not every rejection should trigger a redo. user chooses it"), and either
+ * way the day is not left without a post (the owner, 2026-11-09: "because we promise 40 videos a month, there cant be
+ * a day without posts. even if 10 posts are being declined, the customer has to get the 11th"; src/autonomy/every-day.js):
+ *
+ *   form.redo '1' (and a caller that does not say,   the same post written again their way, with that reason
+ *   as the assistant's API before it asked)          (src/pipeline/redo.js), while the month has redos; it counts as
+ *                                                    a redo once it reaches them
+ *   form.redo '0', or a redo with none left          a new post for the same day, on another topic (refillSlot)
+ *
+ * The declined post comes down first and gives its place in the month back (the plan counts the posts the customer
+ * got), so what comes instead never eats into their 40. Nothing comes instead for a sample; for an account that
+ * cannot generate now (paused, the kill switch: the runner drafts the day once it runs again, if the day is still
+ * open); for a post whose day is over; or when the month's posts are all taken. `job` (not sent to the browser) is
+ * what is being written, for the tests.
  */
 export function reject(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
@@ -169,26 +178,43 @@ export function reject(ctx, user, { id }, form) {
   const reason = `${REJECT_REASON_HE[code]}${said ? `: ${said}` : ''}`.slice(0, 300);
   const left = retireDraft(ctx.db, post);
   const engine = engineOf(ctx);
-  const q = room(ctx.db, post.account_id, { redo: true });
+  const pack = engine.pack(post.account_id);
   const wants = !['0', 'false', false].includes(form.redo);
-  const redo = wants && !post.sample && q.ok && canRun(ctx.db, post.account_id).ok && Boolean(engine.pack(post.account_id));
-  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : !wants ? 'declined' : q.ok ? 'paused' : 'none' };
-  ctx.db.update('posts', id, { status: 'rejected', reason, reject_json: rejected, updated_at: nowIso() });
-  audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo }) });
+  // Down first, so its place in the month is free for what comes instead.
+  ctx.db.update('posts', id, { status: 'rejected', reason, updated_at: nowIso() });
+  const runs = !post.sample && canRun(ctx.db, post.account_id).ok && Boolean(pack);
+  const q = room(ctx.db, post.account_id, { redo: true });
+  const redo = wants && runs && q.ok;
+  const slot = post.sample ? null : daySlotOf(ctx.db, post);
+  const fresh = !redo && runs && q.full !== 'posts' && Boolean(slot) && dayOpen(slot);
+  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : !wants ? 'declined' : !runs ? 'paused' : 'none', ...(fresh ? { day: 'writing' } : {}) };
+  ctx.db.update('posts', id, { reject_json: rejected });
+  audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo, day: fresh ? 'writing' : null }) });
   const draftLeft = left ? ` ${DRAFT_LEFT}` : '';
-  if (!redo) {
-    const why = post.sample ? 'נדחה. הסיבה נשמרה.' : !wants ? 'נדחה, והפוסט ירד. הסיבה נשמרה, ולא נכתב פוסט במקומו.' : !q.ok ? `נדחה, והפוסט ירד. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.` : 'נדחה. הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.';
-    return { ok: true, message: `${why}${draftLeft}` };
+  const result = (message, job) => {
+    const r = { ok: true, message: `${message}${draftLeft}` };
+    if (job) Object.defineProperty(r, 'job', { value: job });
+    return r;
+  };
+  if (redo) {
+    // Started here, not awaited: redoPost holds the redo (its first drafting row) before it first waits.
+    const job = redoPost(engine, loadPost(ctx.db, id), { reason: code, note: said }).catch((e) => {
+      ctx.log?.(`redo ${id}: ${e.stack || e.message}`);
+      return { ok: false, why: e.message };
+    });
+    const after = q.usage.redos.left - 1;
+    return result(`נדחה. פוסט חלופי נכתב עכשיו ויגיע לאישור בעוד כמה דקות. ${after === 0 ? 'זו ההחלפה האחרונה של החודש.' : after === 1 ? 'נשארה עוד החלפה אחת החודש.' : `נשארו עוד ${after} החלפות החודש.`}`, job);
   }
-  // Started here, not awaited: redoPost holds the redo (its first drafting row) before it first waits.
-  const job = redoPost(engine, loadPost(ctx.db, id), { reason: code, note: said }).catch((e) => {
-    ctx.log?.(`redo ${id}: ${e.stack || e.message}`);
-    return { ok: false, why: e.message };
-  });
-  const after = q.usage.redos.left - 1;
-  const result = { ok: true, message: `נדחה. פוסט חלופי נכתב עכשיו ויגיע לאישור בעוד כמה דקות. ${after === 0 ? 'זו ההחלפה האחרונה של החודש.' : after === 1 ? 'נשארה עוד החלפה אחת החודש.' : `נשארו עוד ${after} החלפות החודש.`}${draftLeft}` };
-  Object.defineProperty(result, 'job', { value: job });
-  return result;
+  if (fresh) {
+    // The same: refillSlot holds the day's place before it first waits.
+    const job = refillSlot(engine, pack, slot, { declined: id });
+    return result(!wants ? 'נדחה, והסיבה נשמרה. פוסט אחר לאותו יום נכתב עכשיו ויגיע לאישור בעוד כמה דקות.' : `נדחה. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז במקום לכתוב אותו מחדש נכתב עכשיו פוסט אחר לאותו יום. הוא יגיע לאישור בעוד כמה דקות.`, job);
+  }
+  if (post.sample) return result('נדחה. הסיבה נשמרה.');
+  if (!runs) return result('נדחה. הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.');
+  if (q.full === 'posts') return result(`נדחה, והפוסט ירד. כל ${q.usage.suggested.limit} הפוסטים של החודש כבר נכתבו, אז לא נכתב פוסט במקומו.`);
+  // The day is over (or the post had none): nothing would be seen in time.
+  return result(!wants ? 'נדחה, והפוסט ירד. הסיבה נשמרה.' : `נדחה, והפוסט ירד. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.`);
 }
 
 /** The owner deleted a post's old TikTok drafts in the app: the reminder on the post goes away. */
@@ -427,15 +453,15 @@ export async function removeSlide(ctx, user, { id, idx }) {
   return redrawn(ctx, id, post, 'השקף הוסר והשקפים צוירו מחדש.');
 }
 
-/** The operator sets an account's month: suggested slideshows and redos. An empty field is the default (40, 10). */
+/** The operator sets an account's month: the plan's posts and redos. An empty field is the default (40, 10). */
 export function setQuota(ctx, user, { id }, form) {
   operatorOnly(user);
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
   const r = setPlan(ctx.db, id, { suggested: form.suggested, redos: form.redos });
   if (r.problems?.includes('workspace')) throw new ActionError('החבילה של חשבון של לקוח נקבעת במנוי שלו ב-accounts, ומשותפת לכל החשבונות שלו. כאן משנים רק את החשבונות שלנו.', 409);
-  if (r.problems) throw new ActionError(`לא נשמר. הצעות והחלפות הן מספר שלם עד ${MAX_PLAN.suggested}.`, 422);
+  if (r.problems) throw new ActionError(`לא נשמר. פוסטים והחלפות הם מספר שלם עד ${MAX_PLAN.suggested}.`, 422);
   audit(ctx.db, { actor: user.name, action: 'quota', accountId: id, detail: { suggested: r.suggested, redos: r.redos } });
-  return { ok: true, message: `נשמר: ${r.suggested} הצעות ו-${r.redos} החלפות בחודש.` };
+  return { ok: true, message: `נשמר: ${r.suggested} פוסטים ו-${r.redos} החלפות בחודש.` };
 }
 
 export function setMode(ctx, user, { id }, form) {

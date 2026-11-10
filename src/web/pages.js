@@ -8,7 +8,7 @@ import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
-import { DEFAULT_PLAN, MAX_PLAN, PLAN_HE, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
+import { DEFAULT_PLAN, DRAFTS_PER_DAY, MAX_PLAN, PLAN_HE, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { TIKTOK_LINE, connectPanel, tiktokModePanel } from './connect.js';
 import { schedulePanel, timeSelect } from './schedule.js';
 import { connectLine } from '../publish/hold.js';
@@ -36,16 +36,18 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
 /**
  * The rejection form: a reason (each one steers a replacement, src/pipeline/redo.js) and the customer's own words, then
  * the customer's choice (the owner, 2026-11-08: "not every rejection should trigger a redo. user chooses it"): "לדחות"
- * only takes the post down, "לדחות ולכתוב אחר" also writes a replacement and uses one of the month's redos. A sample, or
- * a month with no redos left, has only the first. `left` is the month's redos left, when the page knows it.
+ * takes the post down and a new post comes for the same day (the owner, 2026-11-09: "there cant be a day without
+ * posts", src/autonomy/every-day.js); "לדחות ולכתוב מחדש" writes this post again their way instead, and uses one of
+ * the month's redos. A sample, or a month with no redos left, has only the first. `left` is the month's redos left,
+ * when the page knows it.
  */
 function rejectForm(ctx, post, { ajax = null, left = null } = {}) {
   const canRedo = !post.sample && left !== 0;
-  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? '<p class="muted small m0">ההחלפות של החודש נוצלו, אז דחייה רק מורידה את הפוסט.</p>' : '') : `<p class="muted small m0">פוסט חלופי נכתב לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
+  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? '<p class="muted small m0">ההחלפות של החודש נוצלו. אחרי דחייה מגיע פוסט אחר לאותו יום.</p>' : '') : `<p class="muted small m0">אחרי דחייה מגיע פוסט אחר לאותו יום. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
   return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
 <label class="f">למה לדחות?<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
 <input type="text" name="note" placeholder="מה לשנות, במילים שלכם (לא חובה)" maxlength="300">
-${tail}<div class="rejectacts"><button class="btn danger" type="submit" name="redo" value="0">לדחות</button>${canRedo ? '<button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב אחר</button>' : ''}</div></form>`;
+${tail}<div class="rejectacts"><button class="btn danger" type="submit" name="redo" value="0">לדחות</button>${canRedo ? '<button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב מחדש</button>' : ''}</div></form>`;
 }
 
 /** What a post counted as in the customer's month (src/budget/quota.js). */
@@ -83,7 +85,10 @@ function redoBanners(d) {
   if (r?.redo === 'writing') out.push(`<div class="banner info">${icon('clock')}<div><b>פוסט חלופי נכתב עכשיו</b><p>הוא יגיע לאישור בעוד כמה דקות.</p></div></div>`);
   if (r?.redo === 'queued' && d.replacement) out.push(`<div class="banner info">${icon('check')}<div><b>נכתב פוסט חלופי</b><p><a href="/post/${esc(d.replacement.id)}">${esc(d.replacement.hook || 'לפוסט החלופי')}</a></p></div></div>`);
   if (r?.redo === 'failed') out.push(`<div class="banner warn">${icon('alert')}<div><b>הפוסט החלופי לא נכתב</b><p>הבדיקות שלנו עצרו את מה שנכתב במקומו, ולכן ההחלפה לא ירדה מהמכסה.</p></div></div>`);
-  if (r?.redo === 'none') out.push(`<div class="banner info">${icon('alert')}<div><b>לא נכתב פוסט חלופי</b><p>ההחלפות של החודש נוצלו כשהפוסט נדחה.</p></div></div>`);
+  if (r?.redo === 'none' && !r.day) out.push(`<div class="banner info">${icon('alert')}<div><b>לא נכתב פוסט חלופי</b><p>ההחלפות של החודש נוצלו כשהפוסט נדחה.</p></div></div>`);
+  // A new post for the same day (src/autonomy/every-day.js), when this one was declined without a redo.
+  if (r?.day === 'writing') out.push(`<div class="banner info">${icon('clock')}<div><b>פוסט אחר לאותו יום נכתב עכשיו</b><p>הוא יגיע לאישור בעוד כמה דקות.</p></div></div>`);
+  if (r?.day === 'queued' && d.dayPost) out.push(`<div class="banner info">${icon('check')}<div><b>נכתב פוסט אחר לאותו יום</b><p><a href="/post/${esc(d.dayPost.id)}">${esc(d.dayPost.hook || 'לפוסט החדש')}</a></p></div></div>`);
   return out.join('');
 }
 const STEP_HE = {
@@ -390,15 +395,16 @@ ${factsBlock(ctx, post)}
 // Home is the overview, like a shop's: four numbers, what needs you, one line per account. The posts themselves,
 // slides, captions and facts, are on Posts: the owner asked for a home page that is not a whole book.
 
-/** The banners that stop the engine: the kill switch, a paused account, an account whose month's suggestions are used up. */
+/** The banners that stop the engine: the kill switch, a paused account, an account that got every post of its month. */
 function stopBanners(ctx, d) {
   const out = [];
   if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${ctx.operator ? postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } }) : ''}</div>`);
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${withSupport(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
-    else if (g.quota && g.quota.suggested.used >= g.quota.suggested.limit) out.push(g.quota.shared
-      ? `<div class="banner info">${icon('alert')}<div><b>נוצלו כל ${g.quota.suggested.limit} ההצעות של החודש, לכל החשבונות שלכם יחד.</b><p>פוסטים חדשים ייכתבו מתחילת החודש הבא.</p></div></div>`
-      : `<div class="banner info">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} ניצל את ${g.quota.suggested.limit} ההצעות של החודש.</b><p>פוסטים חדשים ייכתבו בו מתחילת החודש הבא.</p></div></div>`);
+    // The plan counts the posts the customer got (src/budget/quota.js): all of them is the month kept, said as such.
+    else if (g.quota && g.quota.suggested.limit && g.quota.suggested.used >= g.quota.suggested.limit) out.push(g.quota.shared
+      ? `<div class="banner info">${icon('check')}<div><b>קיבלתם את כל ${g.quota.suggested.limit} הפוסטים של החודש, לכל החשבונות שלכם יחד.</b><p>הפוסטים הבאים ייכתבו מתחילת החודש הבא.</p></div></div>`
+      : `<div class="banner info">${icon('check')}<div><b>${esc(g.pack.meta.displayName)} קיבל את כל ${g.quota.suggested.limit} הפוסטים של החודש.</b><p>הפוסטים הבאים ייכתבו בו מתחילת החודש הבא.</p></div></div>`);
     // Nothing connected where the posts go (src/publish/hold.js): what is held, and the way to connect.
     if (g.unconnected?.length) {
       const held = g.held?.length || 0;
@@ -534,7 +540,7 @@ export function allPage(ctx, d) {
   const others = needsYou(d, 100, ctx).rows.filter((r) => !r.acc);
   const accounts = `<div class="acctab" role="table" aria-label="היום בכל חשבון">
 <div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
-${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.mode || 'approve'][0])} · ${g.quota ? `${g.quota.suggested.used}/${g.quota.suggested.limit} הצעות` : ''}</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
+${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.mode || 'approve'][0])} · ${g.quota ? `פורסמו ${g.quota.suggested.out}/${g.quota.suggested.limit}` : ''}</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
 </div>`;
   const row = (p, g) => {
     const cover = p.media?.tiktok?.length ? `<img class="thumb" src="${media(p, 'tiktok', 0)}" alt="" width="36" height="64" loading="lazy" decoding="async">` : '<span class="thumb"></span>';
@@ -823,19 +829,36 @@ ${foot}
 }
 
 /**
- * The month on the account page: the suggestions and the redos used of the plan, each with its meter (orange from 75%,
- * red from 90%, as the header's ring), and what happens when the suggestions run out. A month the workspace's accounts
- * share is said to be theirs together, with what this account used of it. What it cost is the operator's.
+ * The month on the account page, as the plan counts it (src/budget/quota.js: the posts the customer got; the owner,
+ * 2026-11-09: "because we promise 40 videos a month, there cant be a day without posts"): how many of the plan's posts
+ * are out, how many more are approved and wait for their time, and the redos used, each with its meter. A declined
+ * post is not among them. A month the workspace's accounts share is said to be theirs together, with what this
+ * account got of it. What it cost is the operator's.
  */
 function monthPanel(ctx, q, mine, spend) {
   const s = q.suggested;
   const r = q.redos;
-  const meter = (x, label) => `<meter min="0" max="${x.limit || 1}" low="${(x.limit || 1) * 0.75}" high="${(x.limit || 1) * 0.9}" optimum="0" value="${Math.min(x.used, x.limit || 1)}" aria-label="${label}"></meter>`;
-  const line = (label, x) => `<div class="mrow"><span>${label}</span><span class="num"><b>${x.used}</b> מתוך ${x.limit}</span></div>${meter(x, label)}`;
-  const own = q.shared && q.accounts?.[mine] ? `<p class="muted small m6">לכל החשבונות שלכם יחד. בחשבון הזה ${q.accounts[mine].suggested === 1 ? 'הצעה אחת' : `${q.accounts[mine].suggested} הצעות`} החודש.</p>` : '';
+  const meter = (value, limit, label) => `<meter min="0" max="${limit || 1}" value="${Math.min(value, limit || 1)}" aria-label="${label}"></meter>`;
+  const line = (label, value, limit) => `<div class="mrow"><span>${label}</span><span class="num"><b>${value}</b> מתוך ${limit}</span></div>${meter(value, limit, label)}`;
   return `<section class="panel acct-month"><header><h3>החודש</h3></header>
-${line('הצעות שנוצלו', s)}${line('החלפות שנוצלו', r)}${own}${s.held + r.held ? `<p class="muted small m6">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${s.used >= s.limit ? '<p class="small m6"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}
+${line('פורסמו', s.out, s.limit)}${monthNotes(q, mine, 'm6')}${line('החלפות שנוצלו', r.used, r.limit)}
 ${ctx.costs ? `<div class="mrow cost"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}</section>`;
+}
+
+/**
+ * The lines under a month's count: the approved posts still to go out, a shared month's own share, what is being
+ * written now, and a month whose posts the customer all got. `m` is the margin class of the page they are on.
+ */
+function monthNotes(q, mine, m) {
+  const s = q.suggested;
+  const toGo = s.used - s.out;
+  const own = q.shared && mine && q.accounts?.[mine] ? `<p class="muted small ${m}">לכל החשבונות שלכם יחד. בחשבון הזה ${q.accounts[mine].suggested === 1 ? 'פוסט אחד' : `${q.accounts[mine].suggested} פוסטים`} החודש.</p>` : '';
+  return [
+    toGo > 0 ? `<p class="muted small ${m}">${toGo === 1 ? 'ועוד פוסט מאושר שמחכה לשעה שלו.' : `ועוד ${toGo} פוסטים מאושרים שמחכים לשעה שלהם.`}</p>` : '',
+    own,
+    s.held ? `<p class="muted small ${m}">עוד ${s.held} בכתיבה עכשיו.</p>` : '',
+    s.limit && s.used >= s.limit ? `<p class="small ${m}"><span class="chip ok">כל הפוסטים של החודש אצלכם</span> הפוסטים הבאים ייכתבו מתחילת החודש הבא.</p>` : '',
+  ].join('');
 }
 
 /** The last 7 days: how many went out and their views, then a bar a day, the count over it, today's the last. */
@@ -888,20 +911,23 @@ function stylePanel(ctx, pack, style) {
 }
 
 /**
- * An account's month: "X of 40 used, Y of 10 redos", and what happens when the suggestions run out. A month the
- * workspace's accounts share is said to be theirs together, with what this account used of it (`mine`, its id).
+ * An account's month on Settings: "פורסמו X מתוך 40 · Y מתוך 10 החלפות", the plan's posts the customer got
+ * (src/budget/quota.js), then the same notes as the account page. A month the workspace's accounts share is said to be
+ * theirs together, with what this account got of it (`mine`, its id).
  */
 function quotaRow(q, mine = null) {
   const s = q.suggested;
   const r = q.redos;
-  const full = s.used >= s.limit;
-  const own = q.shared && mine && q.accounts?.[mine] ? `<p class="muted small m4">לכל החשבונות שלכם יחד. בחשבון הזה ${q.accounts[mine].suggested === 1 ? 'הצעה אחת' : `${q.accounts[mine].suggested} הצעות`} החודש.</p>` : '';
-  return `<div><div class="row"><span>החודש</span> <b class="num">נוצלו ${s.used} מתוך ${s.limit} הצעות · ${r.used} מתוך ${r.limit} החלפות</b></div>${own}<meter min="0" max="${s.limit || 1}" low="${(s.limit || 1) * 0.75}" high="${(s.limit || 1) * 0.9}" optimum="0" value="${Math.min(s.used, s.limit || 1)}"></meter>${s.held + r.held ? `<p class="muted small m4">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${full ? '<p class="small m4"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}</div>`;
+  return `<div><div class="row"><span>החודש</span> <b class="num">פורסמו ${s.out} מתוך ${s.limit} · ${r.used} מתוך ${r.limit} החלפות</b></div><meter min="0" max="${s.limit || 1}" value="${Math.min(s.out, s.limit || 1)}" aria-label="פורסמו החודש"></meter>${monthNotes(q, mine, 'm4')}</div>`;
 }
 
+/** A count of posts and of redos, as a sentence says it: "פוסט אחד", "3 פוסטים". */
+const postsHe = (n) => (n === 1 ? 'פוסט אחד' : `${n} פוסטים`);
+const redosHe = (n) => (n === 1 ? 'החלפה אחת' : `${n} החלפות`);
+
 /**
- * The customer's plan on Settings: what a month gives (the suggestions, the redos, the small changes that are free) and
- * what is used of it. A workspace's accounts share one month (src/budget/quota.js): it is shown once, with what each
+ * The customer's plan on Settings: what a month gives (the posts, the redos, the small changes that are free) and what
+ * they got of it. A workspace's accounts share one month (src/budget/quota.js): it is shown once, with what each
  * account used of it. Never money: what the posts cost is the operator's (costsPanel).
  */
 function planPanel(plans) {
@@ -913,16 +939,16 @@ function planPanel(plans) {
   if (one) {
     const { suggested: s, redos: r } = u;
     const name = PLAN_HE[u.plan.name];
-    gives = `${name ? `אתם ${name.replace(/^ה/, 'ב')}. ` : ''}כל חודש מגיעות אליכם ${s.limit} הצעות לפוסטים, ו-${r.limit} החלפות לפוסטים שדחיתם.${plans.length > 1 ? ' הן משותפות לכל החשבונות שלכם, וחשבון נוסף מתחלק באותן הצעות.' : ''}`;
-    const each = plans.length > 1 ? `<ul class="factlist m6">${plans.map(({ pack }) => `<li>${accDot(pack.id)} ${esc(pack.meta.displayName)} <span class="muted small">${u.accounts?.[pack.id]?.suggested ?? 0} הצעות · ${u.accounts?.[pack.id]?.redos ?? 0} החלפות</span></li>`).join('')}</ul>` : '';
+    gives = `${name ? `אתם ${name.replace(/^ה/, 'ב')}. ` : ''}כל חודש מגיעים אליכם ${s.limit} פוסטים, ואפשר לבקש ${r.limit} פעמים שפוסט שדחיתם ייכתב מחדש.${plans.length > 1 ? ' הפוסטים משותפים לכל החשבונות שלכם, וחשבון נוסף מתחלק באותם פוסטים.' : ''}`;
+    const each = plans.length > 1 ? `<ul class="factlist m6">${plans.map(({ pack }) => `<li>${accDot(pack.id)} ${esc(pack.meta.displayName)} <span class="muted small">${postsHe(u.accounts?.[pack.id]?.suggested ?? 0)} · ${redosHe(u.accounts?.[pack.id]?.redos ?? 0)}</span></li>`).join('')}</ul>` : '';
     rows = `${quotaRow(u)}${each}`;
   } else {
     const same = plans.every(({ usage: x }) => x.suggested.limit === u.suggested.limit && x.redos.limit === u.redos.limit);
-    gives = same ? `כל חודש מגיעות אליכם ${u.suggested.limit} הצעות לפוסטים, ו-${u.redos.limit} החלפות לפוסטים שדחיתם.` : 'לכל חשבון יש מספר משלו של הצעות לפוסטים ושל החלפות לפוסטים שדחיתם.';
+    gives = same ? `כל חודש מגיעים אליכם ${u.suggested.limit} פוסטים, ואפשר לבקש ${u.redos.limit} פעמים שפוסט שדחיתם ייכתב מחדש.` : 'לכל חשבון יש מספר משלו של פוסטים בחודש ושל פוסטים שאפשר לבקש שייכתבו מחדש.';
     rows = plans.map(({ pack, usage: x }) => `${plans.length > 1 ? `<h3 class="lbl">${accDot(pack.id)} ${esc(pack.meta.displayName)}</h3>` : ''}${quotaRow(x)}`).join('');
   }
   return `<section class="panel" id="plan"><header><h2>החבילה החודשית</h2><span class="end muted small">מתחדשת בתחילת כל חודש</span></header>
-<p class="muted">${gives} הצעה נספרת כשהפוסט מגיע אליכם לאישור, גם אם תדחו אותו. דחייה עם סיבה כותבת פוסט חלופי, וזו החלפה. פוסט שהבדיקות שלנו עצרו לא נספר.</p>
+<p class="muted">${gives} פוסט נספר רק כשאישרתם אותו. פוסט שדחיתם לא נספר, ובמקומו מגיע פוסט אחר לאותו יום. אם ביקשתם שייכתב מחדש לפי הסיבה, זו החלפה. פוסט שלא אישרתם עד סוף היום שלו לא עולה ולא נספר, וגם פוסט שהבדיקות שלנו עצרו לא נספר.</p>
 <p class="muted">שינויים קטנים לא נספרים בכלל: עריכת הטקסט, תמונה אחרת מאלה שכבר נמצאו לפוסט, או שקף שמורידים.</p>
 ${rows}</section>`;
 }
@@ -1245,7 +1271,8 @@ function publisherHe({ wants, via }) {
 
 /**
  * The month's cost, for the operator to read: every account's total, and in developer mode what each account's post
- * costs. Nothing caps it; each account's plan (40 suggestions, 10 redos) is the limit (src/budget/quota.js).
+ * costs. Nothing caps it; each account's plan (40 posts the customer got, 10 redos) is the limit (src/budget/quota.js), and
+ * DRAFTS_PER_DAY the guard against a loop.
  */
 export function costsPanel(ctx, d, { dev = false } = {}) {
   const rows = d.costs
@@ -1253,7 +1280,7 @@ export function costsPanel(ctx, d, { dev = false } = {}) {
     .join('');
   return `<section class="panel" id="costs"><header><h2>עלות החודש</h2><span class="end muted small ltr">${esc(d.month)}</span></header>
 <div class="row spread"><span>כל החשבונות</span><b class="num">${usd(d.spend.usd)}</b></div>
-<p class="muted small">אין תקרת הוצאה. כל לקוח מקבל את החבילה שלו בחודש (${DEFAULT_PLAN.suggested} הצעות ו-${DEFAULT_PLAN.redos} החלפות בחבילה המלאה), משותפת לכל החשבונות שלו, וזה מה שעוצר את הכתיבה. הסכום כאן רק לידיעה.</p>
+<p class="muted small">אין תקרת הוצאה. כל לקוח מקבל את החבילה שלו בחודש (${DEFAULT_PLAN.suggested} פוסטים שאישר ו-${DEFAULT_PLAN.redos} החלפות בחבילה המלאה), משותפת לכל החשבונות שלו, וזה מה שעוצר את הכתיבה. חוץ מזה יש רק שמירה שלנו מפני לולאה: עד ${DRAFTS_PER_DAY} פוסטים נכתבים לחשבון ביום, ועל חשבון שמגיע לזה מקבלים התראה. הסכום כאן רק לידיעה.</p>
 ${dev ? `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>החודש</th><th>לפוסט, 30 יום</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">לפוסט: כל הקריאות של 30 הימים האחרונים, גם של פוסטים שהבדיקות עצרו, חלקי הפוסטים שנכתבו. מופיע מהפוסט הרביעי.</p>` : ''}</section>`;
 }
@@ -1345,10 +1372,10 @@ function ledgerTable(rows, month) {
       const now = u.month === month;
       // A month the workspace's accounts share: this account's count, then the workspace's of its plan.
       const mine = (k, part) => (u.shared ? `${u.accounts[pack.id]?.[k] ?? 0} <span class="muted small">(${part.used}/${part.limit} ללקוח)</span>` : `${part.used}/${part.limit}`);
-      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="הצעות">${mine('suggested', u.suggested)}</td><td class="n" data-k="החלפות">${mine('redos', u.redos)}</td><td class="n" data-k="עלות">${usd(l.total)}</td>` : `<td class="n" data-k="הצעות">${by.suggestion?.posts ?? 0}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}<td class="n" data-k="Zernio">${z ? usd(z.usd) : '–'}</td>${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
+      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="פוסטים">${mine('suggested', u.suggested)}</td><td class="n" data-k="החלפות">${mine('redos', u.redos)}</td><td class="n" data-k="עלות">${usd(l.total)}</td>` : `<td class="n" data-k="פוסטים">${l.got}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}<td class="n" data-k="Zernio">${z ? usd(z.usd) : '–'}</td>${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
     })
     .join('');
-  return `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>הצעות</th><th>החלפות</th><th>עלות</th><th>Zernio</th>${LEDGER_COLS.map(([, he]) => `<th>${esc(he)}</th>`).join('')}<th>אחר</th><th>לפוסט שהגיע</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>פוסטים</th><th>החלפות</th><th>עלות</th><th>Zernio</th>${LEDGER_COLS.map(([, he]) => `<th>${esc(he)}</th>`).join('')}<th>אחר</th><th>לפוסט שהגיע</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /**
@@ -1360,20 +1387,20 @@ export function quotasPanel(ctx, q) {
   const forms = q.accounts
     .map(({ pack, usage: u }) => {
       // A customer's month is their workspace's plan, from accounts: changed there (the subscription's plan), not here.
-      if (u.plan.scope === 'workspace') return `<p class="mt12"><b>${accDot(pack.id)} ${esc(pack.meta.displayName)}</b> <span class="muted small">החבילה של הלקוח (סביבת עבודה ${esc(u.plan.workspaceId)}) מגיעה מ-accounts: ${esc(PLAN_HE[u.plan.name] || u.plan.name)}, ${u.plan.suggested} הצעות ו-${u.plan.redos} החלפות בחודש${u.shared ? ', משותפות לכל החשבונות של הלקוח' : ''}. משנים אותה במנוי שלו ב-accounts.</span></p>`;
+      if (u.plan.scope === 'workspace') return `<p class="mt12"><b>${accDot(pack.id)} ${esc(pack.meta.displayName)}</b> <span class="muted small">החבילה של הלקוח (סביבת עבודה ${esc(u.plan.workspaceId)}) מגיעה מ-accounts: ${esc(PLAN_HE[u.plan.name] || u.plan.name)}, ${u.plan.suggested} פוסטים ו-${u.plan.redos} החלפות בחודש${u.shared ? ', משותפים לכל החשבונות של הלקוח' : ''}. משנים אותה במנוי שלו ב-accounts.</span></p>`;
       const set = u.plan.set;
       const val = (on, v) => (on ? ` value="${esc(v)}"` : '');
       return `<form method="post" action="/accounts/${esc(pack.id)}/quota" class="formgrid mt12">${csrfField(ctx)}<b>${accDot(pack.id)} ${esc(pack.meta.displayName)}</b>
-<label class="f">הצעות בחודש<input type="number" name="suggested" min="0" max="${MAX_PLAN.suggested}" step="1" placeholder="${DEFAULT_PLAN.suggested}"${val(set.suggested, u.plan.suggested)}></label>
+<label class="f">פוסטים בחודש<input type="number" name="suggested" min="0" max="${MAX_PLAN.suggested}" step="1" placeholder="${DEFAULT_PLAN.suggested}"${val(set.suggested, u.plan.suggested)}></label>
 <label class="f">החלפות בחודש<input type="number" name="redos" min="0" max="${MAX_PLAN.redos}" step="1" placeholder="${DEFAULT_PLAN.redos}"${val(set.redos, u.plan.redos)}></label>
 <button class="btn" type="submit">שמירה</button></form>`;
     })
     .join('');
   return `<section class="panel" id="quotas"><header><h2>מכסות ועלות לפי לקוח</h2><span class="end muted small ltr">${esc(month)}</span></header>
-<p class="muted small m0">הצעה היא פוסט שעבר את כל הבדיקות והגיע ללקוח, גם אם דחה אותו או שפג תוקפו. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים. בעמודת Zernio: כמה Zernio גובה על הפרופיל של החשבון, לפי החשבונית שלו. זה מנוי, והוא מתעדכן פעם ביום.</p>
+<p class="muted small m0">פוסטים: מה שהלקוח קיבל מתוך החבילה, כלומר פוסטים שאישר (או שהמנוע אישר, בחשבונות שלנו). פוסט שדחה או שפג תוקפו לא נספר לו, ואחר נכתב לאותו יום. הצעות: כל פוסט שעבר את הבדיקות והגיע ללקוח, ומה הוא עלה. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים. בעמודת Zernio: כמה Zernio גובה על הפרופיל של החשבון, לפי החשבונית שלו. זה מנוי, והוא מתעדכן פעם ביום.</p>
 ${ledgerTable(q.accounts, month)}
 ${before.length ? `<details class="mt12"><summary class="muted">החודשים הקודמים</summary>${before.map((m) => `<h3 class="lbl ltr">${esc(m)}</h3>${ledgerTable(q.accounts, m)}`).join('')}</details>` : ''}
-<details class="mt12"><summary class="muted">לשנות מכסה</summary><p class="muted small">מכסה משנים כאן רק לחשבונות שלנו, שאינם בסביבת עבודה של לקוח. שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} הצעות ו-${DEFAULT_PLAN.redos} החלפות בחודש. חשבון שניצל את ההצעות שלו לא נכתב עד תחילת החודש הבא, או עד שמעלים לו את המכסה.</p>${forms}</details></section>`;
+<details class="mt12"><summary class="muted">לשנות מכסה</summary><p class="muted small">מכסה משנים כאן רק לחשבונות שלנו, שאינם בסביבת עבודה של לקוח. שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} פוסטים ו-${DEFAULT_PLAN.redos} החלפות בחודש. חשבון שקיבל את כל הפוסטים שלו לא נכתב עד תחילת החודש הבא, או עד שמעלים לו את המכסה.</p>${forms}</details></section>`;
 }
 
 /** A row of a list of links, as in iOS Settings: an icon, the words and the chevron. */

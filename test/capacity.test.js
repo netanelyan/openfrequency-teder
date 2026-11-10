@@ -63,7 +63,8 @@ let n = 0;
 const post = (db, account, patch = {}) => {
   const at = new Date(OCT).toISOString();
   const id = `cap${++n}`;
-  db.insert('posts', { id, account_id: account, status: 'queued', quota_kind: 'suggestion', quota_month: '2026-10', created_at: at, updated_at: at, ...patch });
+  // Out: what the plan counts is the posts the customer got (src/budget/quota.js).
+  db.insert('posts', { id, account_id: account, status: 'published', quota_kind: 'suggestion', quota_month: '2026-10', created_at: at, updated_at: at, ...patch });
   return id;
 };
 
@@ -149,7 +150,8 @@ test("a workspace's accounts share one month of its plan; the operator's own acc
     paidWorkspaces(db, [1], { plan: { name: 'small', slideshows: 15, redos: 4 } });
     for (let i = 0; i < 9; i++) post(db, 'alpha');
     for (let i = 0; i < 5; i++) post(db, 'bravo');
-    post(db, 'bravo', { quota_kind: 'redo' });
+    // A redo the customer declined: one of the month's redos, and none of its posts.
+    post(db, 'bravo', { quota_kind: 'redo', status: 'rejected' });
     post(db, 'loose');
     const a = usage(db, 'alpha');
     const b = usage(db, 'bravo');
@@ -160,13 +162,13 @@ test("a workspace's accounts share one month of its plan; the operator's own acc
     assert.deepEqual([a.plan.scope, a.plan.name, a.plan.workspaceId], ['workspace', 'small', 1]);
     const l = usage(db, 'loose');
     assert.deepEqual([l.suggested.used, l.suggested.limit, l.shared, l.plan.scope], [1, 40, false, 'account']);
-    assert.deepEqual(monthsOf(db, ['alpha', 'bravo', 'loose']), { used: 15, limit: 55 }, 'the workspace once, and the loose account');
+    assert.deepEqual(monthsOf(db, ['alpha', 'bravo', 'loose']), { used: 15, out: 15, limit: 55 }, 'the workspace once, and the loose account');
 
-    // One more suggestion, from either account, uses the month up for both.
+    // One more post, from either account, uses the month up for both.
     assert.equal(room(db, 'bravo').ok, true);
     post(db, 'bravo');
     assert.equal(room(db, 'alpha').ok, false);
-    assert.match(room(db, 'alpha').why, /used up \(15 of 15\)/);
+    assert.match(room(db, 'alpha').why, /all taken \(15 got, of 15\)/);
 
     // Each running account's schedule is thinned to its share of the month; the loose one to its own.
     db.run("UPDATE accounts SET status = 'active' WHERE id IN ('alpha', 'bravo')");
@@ -194,13 +196,13 @@ test("the customer's Settings shows the month once, with each account's count; t
     const w = forWorkspace(ctx, 1);
     const pc = { csrf: 'x', user: { name: 'owner' }, operator: false, workspace: { id: 1, name: 'W' }, links: {} };
     const settings = settingsPage(pc, settingsData(w));
-    assert.match(settings, /אתם בחבילה הקטנה\. כל חודש מגיעות אליכם 15 הצעות לפוסטים, ו-4 החלפות לפוסטים שדחיתם\. הן משותפות לכל החשבונות שלכם/);
-    assert.equal((settings.match(/נוצלו 4 מתוך 15 הצעות/g) || []).length, 1, 'the month once');
-    assert.match(settings, /3 הצעות · 0 החלפות/);
-    assert.match(settings, /1 הצעות · 0 החלפות/);
+    assert.match(settings, /אתם בחבילה הקטנה\. כל חודש מגיעים אליכם 15 פוסטים, ואפשר לבקש 4 פעמים שפוסט שדחיתם ייכתב מחדש\. הפוסטים משותפים לכל החשבונות שלכם/);
+    assert.equal((settings.match(/פורסמו 4 מתוך 15 · 0 מתוך 4 החלפות/g) || []).length, 1, 'the month once');
+    assert.match(settings, /3 פוסטים · 0 החלפות/);
+    assert.match(settings, /פוסט אחד · 0 החלפות/);
     const accounts = accountsPage(pc, accountRows(w).map((r) => ({ ...r, week: week(w, r.pack.id), style: null })));
-    assert.match(accounts, /לכל החשבונות שלכם יחד\. בחשבון הזה 3 הצעות החודש\./);
-    assert.match(accounts, /לכל החשבונות שלכם יחד\. בחשבון הזה הצעה אחת החודש\./);
+    assert.match(accounts, /לכל החשבונות שלכם יחד\. בחשבון הזה 3 פוסטים החודש\./);
+    assert.match(accounts, /לכל החשבונות שלכם יחד\. בחשבון הזה פוסט אחד החודש\./);
   } finally {
     cleanup();
   }

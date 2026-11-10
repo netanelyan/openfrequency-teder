@@ -5,7 +5,8 @@ import { mediaDir, packsDir } from '../core/paths.js';
 import { step, settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { postSpend } from '../budget/ledger.js';
-import { quotaMonth, room } from '../budget/quota.js';
+import { DRAFTS_PER_DAY, draftsToday, quotaMonth, room } from '../budget/quota.js';
+import { alertOperator } from '../notify/operator.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
@@ -74,8 +75,11 @@ import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 //
 // THE CUSTOMER'S MONTH (src/budget/quota.js). A post that is not a sample is
 // weighed against the account's quota before anything is spent: a QuotaError, and
-// no post, when the month's suggestions (or for a redo, its redos) are used up. A
-// queued post is marked a suggestion or a redo, a blocked one a retry: ours.
+// no post, when the month's posts are all taken (or for a redo, its redos are used up). A
+// queued post is marked a suggestion or a redo, a blocked one a retry: ours. And the
+// day's drafts of the account are weighed against DRAFTS_PER_DAY, our guard against a
+// loop (a declined day is drafted again as often as it is declined: src/autonomy/every-day.js):
+// a DraftCapError, no post, and the operator told, once a day.
 
 export class PausedError extends Error {
   constructor(message) {
@@ -91,6 +95,18 @@ export class QuotaError extends PausedError {
     super(message);
     this.name = 'QuotaError';
     this.code = 'quota';
+  }
+}
+
+/**
+ * The account drafted DRAFTS_PER_DAY posts today: nothing more until tomorrow. Ours, never said to the customer as a
+ * limit; the operator is told (src/notify/operator.js), once a day an account.
+ */
+export class DraftCapError extends PausedError {
+  constructor(message) {
+    super(message);
+    this.name = 'DraftCapError';
+    this.code = 'draft_cap';
   }
 }
 
@@ -1070,6 +1086,12 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   if (!sample) {
     const q = room(db, pack.id, { redo: Boolean(redoOf) });
     if (!q.ok) throw new QuotaError(q.why);
+    const today = draftsToday(db, pack.id);
+    if (today >= DRAFTS_PER_DAY) {
+      // Thrown, never inserted after: the alert's wait cannot let another draft past the count.
+      await alertOperator(ctx, `draft-cap:${pack.id}`, { title: `Teder: ${pack.meta.displayName} drafted ${today} posts today`, body: `the most a day is ${DRAFTS_PER_DAY}, so nothing more is drafted for it until tomorrow. Declined over and over, or blocked over and over: look at its posts.` }, { t: now(), every: 20 * 3_600_000 }).catch((e) => ctx.log?.(`alert: ${e.message}`));
+      throw new DraftCapError(`${pack.id}: ${today} posts drafted today, the most a day is ${DRAFTS_PER_DAY}`);
+    }
   }
   const postId = newId('p');
   const at = nowIso();

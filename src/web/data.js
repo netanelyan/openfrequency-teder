@@ -357,6 +357,8 @@ export const postFull = (ctx, id) => {
     // The post it replaced, the one that replaced it, and the customer's month (redos left).
     redoOf: post.redo_of ? ctx.db.get('SELECT id, hook, reason FROM posts WHERE id = ?', post.redo_of) : null,
     replacement: post.reject?.replacement ? ctx.db.get('SELECT id, hook, status FROM posts WHERE id = ?', post.reject.replacement) : null,
+    // The new post for the same day, when it was declined without a redo (src/autonomy/every-day.js).
+    dayPost: post.reject?.dayPost ? ctx.db.get('SELECT id, hook, status FROM posts WHERE id = ?', post.reject.dayPost) : null,
     quota: usage(ctx.db, post.account_id),
   };
 };

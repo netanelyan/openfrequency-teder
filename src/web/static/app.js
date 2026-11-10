@@ -109,7 +109,7 @@
     if (btn && btn.dataset.armed !== '1') return;
     e.preventDefault();
     // The button pressed is the one that spins, and its own name and value go with the form (a rejection's "לדחות" or
-    // "לדחות ולכתוב אחר").
+    // "לדחות ולכתוב מחדש").
     const submit = e.submitter || form.querySelector('button[type=submit]');
     submit?.setAttribute('aria-busy', 'true');
     try {

@@ -213,11 +213,16 @@ test("the ready-made sources by niche are the operator's: a customer's Sources p
   assert.match(await (await get('/sources?account=bravo', fake.session(operator()).cookie)).text(), list, "the operator's, on B's account");
 });
 
-test("A's month is A's: the suggestions in A's header are its own account's, and no page shows A the money", async () => {
-  const [used, limit] = /הצעות החודש: (\d+) מתוך (\d+)/.exec(await (await get('/', A.cookie)).text()).slice(1).map(Number);
-  const own = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = 'alpha' AND quota_kind = 'suggestion'").n;
-  assert.ok(own > 0, 'A has a suggestion this month');
-  assert.equal(used, own, "A's header counts A's suggestions, none of B's or the loose account's");
+test("A's month is A's: the posts in A's header are its own account's, and no page shows A the money", async () => {
+  // The header counts the posts out (src/budget/quota.js): one of A's is sent, to see that it counts A's alone.
+  const out = ctx.db.get("SELECT id FROM posts WHERE account_id = 'alpha' AND quota_kind = 'suggestion' LIMIT 1").id;
+  const was = ctx.db.get('SELECT status, published_at FROM posts WHERE id = ?', out);
+  ctx.db.update('posts', out, { status: 'published', published_at: new Date().toISOString() });
+  const [used, limit] = /פורסמו (\d+) מתוך (\d+) החודש/.exec(await (await get('/', A.cookie)).text()).slice(1).map(Number);
+  const own = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = 'alpha' AND quota_kind = 'suggestion' AND status = 'published'").n;
+  ctx.db.update('posts', out, was);
+  assert.ok(own > 0, 'A has a post out this month');
+  assert.equal(used, own, "A's header counts A's posts, none of B's or the loose account's");
   assert.equal(limit, 40, 'at the default plan');
   for (const p of ['/', '/accounts', '/settings', `/post/${A.post}`]) {
     const body = await (await get(p, A.cookie)).text();
