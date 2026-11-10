@@ -250,7 +250,8 @@ test('rivals are typed in by hand per account: refused when malformed, shown, up
 
 test("the Settings page shows the operator what the month cost, with no cap to set; each account's cost per post is developer mode's", async () => {
   const cookie = await loginOperator();
-  const html = await (await get('/settings', cookie)).text();
+  assert.doesNotMatch(await (await get('/settings', cookie)).text(), /id="costs"|id="quotas"/, 'what it cost us is for developer mode only');
+  const html = await (await get('/settings', `${cookie}; of_dev=1`)).text();
   assert.match(html, /id="costs"/);
   assert.match(html, /אין תקרת הוצאה/);
   for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'OF_BUDGET_MONTHLY_USD', 'action="/settings/budget"', 'name="cap"']) assert.ok(!html.includes(s), s);

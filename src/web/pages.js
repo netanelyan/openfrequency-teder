@@ -453,8 +453,8 @@ function summaryPanel(ctx, d) {
   const rows = d.summaryRows || [];
   const name = (id) => d.groups.find((g) => g.pack.id === id)?.pack.meta.displayName || id;
   const table = rows.length
-    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th>${ctx.operator ? '<th>עלות</th>' : ''}</tr></thead><tbody>${rows
-        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td>${ctx.operator ? `<td class="num">${usd(r.data.spend)}</td>` : ''}</tr>`)
+    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th>${ctx.costs ? '<th>עלות</th>' : ''}</tr></thead><tbody>${rows
+        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td>${ctx.costs ? `<td class="num">${usd(r.data.spend)}</td>` : ''}</tr>`)
         .join('')}</tbody></table>`
     : `<p class="lede">${esc(d.summary.text).replace(/\n/g, '<br>')}</p>`;
   return `<details class="panel home-panel"><summary><h2 class="inline">סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}</h2></summary>${table}</details>`;
@@ -747,7 +747,7 @@ ${ctx.operator ? `<dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'cla
 ${scores.length ? `<dt>ציון הכי גבוה</dt><dd><span class="num ltr">${Math.max(...scores)}/10</span></dd>` : ''}
 ${(post.checks?.rewrites || []).length ? `<dt>שכתובים</dt><dd>${post.checks.rewrites.length}</dd>` : ''}
 ${post.quota_kind ? `<dt>במכסה</dt><dd>${esc(QUOTA_KIND_HE[post.quota_kind] || post.quota_kind)}</dd>` : ''}
-${ctx.operator ? `<dt>עלות</dt><dd>${usd(post.cost_usd, ctx.dev ? 4 : 2)}${ctx.dev && post.cost_estimated ? ' <span class="muted small">הערכה, בלי מפתח API</span>' : ''}</dd>` : ''}
+${ctx.costs ? `<dt>עלות</dt><dd>${usd(post.cost_usd, ctx.dev ? 4 : 2)}${ctx.dev && post.cost_estimated ? ' <span class="muted small">הערכה, בלי מפתח API</span>' : ''}</dd>` : ''}
 ${post.kind && post.kind !== 'list' ? `<dt>סוג</dt><dd>${esc(KIND_HE[post.kind] || post.kind)} · ${post.grp === 'entertaining' ? 'בידור' : 'מספרים'}</dd>` : ''}
 ${post.hook_pattern ? `<dt>תבנית השער</dt><dd><span class="ltr">${esc(post.hook_pattern)}</span></dd>` : ''}
 ${post.data?.cta?.text && !post.data?.closing ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
@@ -835,7 +835,7 @@ function monthPanel(ctx, q, mine, spend) {
   const own = q.shared && q.accounts?.[mine] ? `<p class="muted small m6">לכל החשבונות שלכם יחד. בחשבון הזה ${q.accounts[mine].suggested === 1 ? 'הצעה אחת' : `${q.accounts[mine].suggested} הצעות`} החודש.</p>` : '';
   return `<section class="panel acct-month"><header><h3>החודש</h3></header>
 ${line('הצעות שנוצלו', s)}${line('החלפות שנוצלו', r)}${own}${s.held + r.held ? `<p class="muted small m6">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${s.used >= s.limit ? '<p class="small m6"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}
-${ctx.operator ? `<div class="mrow cost"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}</section>`;
+${ctx.costs ? `<div class="mrow cost"><span>עלות החודש</span><b class="num">${usd(spend)}</b></div>` : ''}</section>`;
 }
 
 /** The last 7 days: how many went out and their views, then a bar a day, the count over it, today's the last. */
@@ -1293,8 +1293,8 @@ ${acct ? fold('design', 'עיצוב המצגות', designPanel(acct.pack, acct.s
 ${acct ? fold('promo', PROMO_TITLE, promoPanel(ctx, acct.pack, { draft: acct.promoDraft })) : ''}
 ${acct ? fold('logo', LOGO_TITLE, logoPanel(ctx, acct.pack)) : ''}
 ${d.schedule ? fold('schedule', 'מתי מפרסמים', schedulePanel(ctx, d.schedule)) : ''}
-${ctx.operator ? fold('costs', 'עלות החודש', costsPanel(ctx, d, { dev })) : fold('plan', 'החבילה החודשית', planPanel(d.plans))}
-${d.quotas ? fold('quotas', 'מכסות ועלות לפי לקוח', quotasPanel(ctx, d.quotas)) : ''}
+${ctx.costs ? fold('costs', 'עלות החודש', costsPanel(ctx, d, { dev })) : fold('plan', 'החבילה החודשית', planPanel(d.plans))}
+${d.quotas && ctx.costs ? fold('quotas', 'מכסות ועלות לפי לקוח', quotasPanel(ctx, d.quotas)) : ''}
 ${fold('push', 'התראות', `<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
 <p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
 <p class="muted small">באייפון ההתראות עובדות רק כשפותחים את תדר מהאייקון במסך הבית. <a href="#install">איך מוסיפים את האייקון</a></p>

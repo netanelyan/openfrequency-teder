@@ -634,7 +634,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
         // `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: installOf(req.headers['user-agent'], jar) };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && user.operator && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: installOf(req.headers['user-agent'], jar) };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);

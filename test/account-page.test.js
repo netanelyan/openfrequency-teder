@@ -155,7 +155,10 @@ test("the operator's own account: approval chosen, TikTok chosen, the month's co
   const html = await (await get('/accounts?account=second', cookie)).text();
   assert.match(html, /id="acc-second"/);
   assert.match(html, /<form method="post" action="\/accounts\/second\/mode" data-autosubmit>[^]*?name="mode" value="auto"/, 'the selector, which sends itself (app.js data-autosubmit)');
-  assert.match(html, /<div class="mrow cost"><span>עלות החודש<\/span><b class="num"><span class="num ltr">\$0\.00<\/span><\/b><\/div>/);
+  // What it cost us is developer mode's only (the owner, 2026-11-09: "they dont have to see how much it cost us").
+  assert.doesNotMatch(html, /עלות החודש/);
+  const dev = await (await get('/accounts?account=second', `${cookie}; of_dev=1`)).text();
+  assert.match(dev, /<div class="mrow cost"><span>עלות החודש<\/span><b class="num"><span class="num ltr">\$0\.00<\/span><\/b><\/div>/);
   assert.match(html, /<dt>פרסום<\/dt><dd>טיקטוק: /);
   assert.match(html, /<section class="panel acct-tiktok"><header><h3>איך פוסטים עולים לטיקטוק<\/h3><\/header><form method="post" action="\/accounts\/second\/tiktok">[^]*?value="direct"/);
   assert.doesNotMatch(html, /אחרי הכיבוי/, "the line under the switch is the customer's");
