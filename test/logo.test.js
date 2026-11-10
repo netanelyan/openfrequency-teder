@@ -417,19 +417,21 @@ test("in a browser, Settings' logo panel on a phone and a desk: the logo on its 
         await page.goto(`${base}/settings#logo-demo`);
         await page.waitForFunction(() => document.documentElement.classList.contains('js') && document.querySelector('[data-logo-tile] img')?.complete);
         await page.waitForTimeout(100);
+        // The rules are in the page's pixels; a desk draws the page at 90% (style.css --z), so distances are divided by it.
         const got = await page.evaluate(() => {
+          const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
           const panel = document.getElementById('logo-demo').getBoundingClientRect();
           const tile = document.querySelector('#logo-demo .logo-tile');
           const btns = [...document.querySelectorAll('#logo-demo .logo-acts .btn')].map((b) => b.getBoundingClientRect());
           const stage = document.querySelector('#logo-demo .logo-stage').getBoundingClientRect();
-          return { panel: panel.toJSON(), stage: stage.toJSON(), btns: btns.map((b) => b.toJSON()), dark: tile.classList.contains('dark'), sideways: document.documentElement.scrollWidth > window.innerWidth, file: getComputedStyle(document.querySelector('#logo-demo .logo-file')).clipPath };
+          return { panel: panel.toJSON(), stage: stage.toJSON(), btns: btns.map((b) => b.toJSON()), dark: tile.classList.contains('dark'), z, sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth, file: getComputedStyle(document.querySelector('#logo-demo .logo-file')).clipPath };
         });
         assert.equal(got.dark, dark, `${width}: ${dark ? 'a light logo on a dark tile' : 'a dark logo on a white tile'}`);
         assert.equal(got.btns.length, 2, `${width}: the two buttons, the file field hidden behind the first (${got.file})`);
         const [a, b] = got.btns;
-        const apart = a.top === b.top ? Math.abs((a.left < b.left ? b.left - a.right : a.left - b.right)) : b.top - a.bottom;
+        const apart = Math.round((a.top === b.top ? Math.abs((a.left < b.left ? b.left - a.right : a.left - b.right)) : b.top - a.bottom) / got.z);
         assert.ok(apart >= 8, `${width}: the buttons are ${apart}px apart`);
-        assert.ok(a.top - got.stage.bottom >= 12, `${width}: ${a.top - got.stage.bottom}px between the logo and the buttons`);
+        assert.ok(Math.round((a.top - got.stage.bottom) / got.z) >= 12, `${width}: ${Math.round((a.top - got.stage.bottom) / got.z)}px between the logo and the buttons`);
         for (const r of [got.stage, a, b]) assert.ok(r.left >= got.panel.left && r.right <= got.panel.right, `${width}: inside the panel`);
         assert.equal(got.sideways, false, `${width}: no sideways scroll`);
         await context.close();

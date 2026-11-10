@@ -67,7 +67,11 @@
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; min-height: 100%; background-color: var(--bg); background-image: var(--wall); background-repeat: no-repeat; background-size: 100% 100%; }
-body { margin: 0; min-height: 100vh; color: var(--ink); font: 400 17px/1.6 var(--font); -webkit-font-smoothing: antialiased; }
+/* A desk shows the page at 90%, as the dashboard and the public website (the owner, 2026-11-09: "all of the websites
+   look better on 90% zoom. make it the default"); --z undoes it where a length is the screen's. A phone keeps 100%. */
+:root { --z: 1; }
+@media (min-width: 1000px) { :root { --z: 0.9; } html { zoom: 0.9; } }
+body { margin: 0; min-height: calc(100vh / var(--z)); color: var(--ink); font: 400 17px/1.6 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--link); }
 bdi { unicode-bidi: isolate; }
 img { max-width: 100%; }

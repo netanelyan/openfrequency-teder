@@ -312,8 +312,10 @@ test('in a real browser, on a phone and a desk, light and dark: the reminder fit
             await context.addCookies([{ name: 'of_session', value: sid, url: base }, ...(theme === 'dark' ? [{ name: 'of-theme', value: 'dark', url: base }] : [])]);
             const page = await context.newPage();
             await page.goto(`${base}${p}`, { waitUntil: 'domcontentloaded' });
+            // In the page's pixels: a desk draws the page at 90% (style.css --z), and the screen's are divided by it.
             const m = await page.evaluate(() => {
-              const box = (el) => el.getBoundingClientRect();
+              const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+              const box = (el) => (({ left, right, top, bottom, height }) => ({ left: Math.round(left / z), right: Math.round(right / z), top: Math.round(top / z), bottom: Math.round(bottom / z), height: Math.round(height / z) }))(el.getBoundingClientRect());
               const b = document.getElementById('pay');
               const words = box(b.querySelector(':scope > div'));
               const btn = box(b.querySelector('.btn'));

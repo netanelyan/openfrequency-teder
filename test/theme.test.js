@@ -360,7 +360,9 @@ test('in a real browser, the switch is in the bar: on a phone between the month\
       const m = await page.evaluate(() => {
         const box = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
         const [wrap, spend, theme, logout] = ['.top .wrap', '.top .spend', '.top .theme', '.top .logout'].map(box);
-        const gap = (a, b) => Math.round(Math.max(b.left - a.right, a.left - b.right, b.top - a.bottom, a.top - b.bottom));
+        // In the page's pixels: a desk draws the page at 90% (style.css --z).
+        const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+        const gap = (a, b) => Math.round(Math.max(b.left - a.right, a.left - b.right, b.top - a.bottom, a.top - b.bottom) / z);
         return { shown: getComputedStyle(document.querySelector('.top .theme')).visibility === 'visible', spend: gap(spend, theme), logout: gap(theme, logout), row: Math.abs(theme.top - logout.top) < 2 && theme.right <= logout.left, column: theme.top >= spend.bottom && logout.top >= theme.bottom, inside: theme.left >= wrap.left && theme.right <= wrap.right && theme.bottom <= wrap.bottom };
       });
       const at = side ? 'a desk, the side bar folded' : 'a desk';

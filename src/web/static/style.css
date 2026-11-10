@@ -140,13 +140,20 @@
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 html, body { margin: 0; }
+/* A desk shows the pages at 90% (the owner, 2026-11-09: "all of the websites look better on 90% zoom. make it the
+   default"), as Toran does, in both looks (style-pro.css only overrides this file). A phone keeps 100%: its text is
+   already as small as it should be. --z undoes the zoom where a length is the screen's (a zoomed 100vh is 90% of the
+   screen), so a full-height page divides by it; the side bar stands on its top and bottom insets, which the zoom
+   leaves at the screen's edges. */
+:root { --z: 1; }
+@media (min-width: 1000px) { :root { --z: 0.9; } html { zoom: 0.9; } }
 body {
   background: var(--bg);
   color: var(--ink);
   font: 400 14px/1.47 var(--text);
   direction: rtl;
   text-align: right;
-  min-height: 100vh;
+  min-height: calc(100vh / var(--z));
   padding-bottom: calc(var(--tab) + 24px + env(safe-area-inset-bottom));
   -webkit-font-smoothing: antialiased;
 }
@@ -236,7 +243,7 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 /* The account switcher: the account the site shows, beside the logo on a phone and under it on a desk. It opens
    the list of accounts, each with what waits in it; a dot on the closed switcher says something waits elsewhere. */
 .acctswitch { position: relative; min-width: 0; }
-.acctswitch > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; min-height: 40px; max-width: 46vw; padding: 0 10px 0 12px; border-radius: 999px; background: var(--fill); }
+.acctswitch > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; min-height: 40px; max-width: calc(46vw / var(--z)); padding: 0 10px 0 12px; border-radius: 999px; background: var(--fill); }
 .acctswitch > summary::-webkit-details-marker { display: none; }
 .acctswitch > summary:hover { background: var(--fill-2); }
 /* The leading column: an account's dot or the plus, in the box a section's icon takes, so every row starts alike. */
@@ -911,7 +918,7 @@ body.readonly main form[method="post"] { display: none; }
 
 /* ------------------------------------------------------------ the gate: one column on a plain page, as Apple's sign-in (the login is accounts' now) */
 
-body.login { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+body.login { min-height: calc(100vh / var(--z)); display: grid; place-items: center; padding: 24px; }
 .login .card { width: min(400px, 100%); border-radius: 26px; padding: 36px 28px 28px; overflow: visible; display: grid; gap: 16px; }
 .login .hero { display: grid; justify-items: center; gap: 16px; margin-bottom: 4px; }
 .login .hero .mark { width: 72px; height: 72px; }
@@ -1454,7 +1461,7 @@ html.a-still .btn[aria-busy='true']::after { animation: spin 2.4s linear infinit
 .a11y-btn svg circle { fill: currentColor; stroke: none; }
 .a11y-btn[aria-expanded='true'] { color: var(--accent); }
 .a11y-btn:focus-visible { border-radius: 50%; }
-.a11y-p { position: absolute; bottom: 60px; inset-inline-end: 0; display: grid; gap: 8px; width: min(280px, calc(100vw - 32px)); padding: 16px; border-radius: var(--r); background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); text-align: start; }
+.a11y-p { position: absolute; bottom: 60px; inset-inline-end: 0; display: grid; gap: 8px; width: min(280px, calc(100vw / var(--z) - 32px)); padding: 16px; border-radius: var(--r); background: var(--bar-float); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge); color: var(--ink); text-align: start; }
 .a11y-p h2 { margin: 0 0 4px; font: 600 17px/1.3 var(--display); }
 .a11y-p [data-a] { min-height: 44px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: var(--r-m); background: transparent; color: var(--ink); font: 400 15px/1.3 var(--text); text-align: start; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .a11y-p [data-a]:focus-visible { border-radius: var(--r-m); }

@@ -188,7 +188,10 @@ test('in a real browser, at 1440, 390 and 360, light and dark: buttons apart, no
     browser = await chromium.launch();
     // Every button 8px or more from every other, side by side or one over the other; every line of text, button and
     // icon in a card 8px or more inside it; no word on a tile cut short; the page as wide as the screen.
+    // The rules are in the page's pixels; on a desk the page is drawn at 90% (demo.css --z), so each distance measured
+    // on the screen is divided by the zoom.
     const measure = () => {
+      const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
       const shown = (el) => {
         const r = el.getBoundingClientRect();
         const cs = getComputedStyle(el);
@@ -206,7 +209,7 @@ test('in a real browser, at 1440, 390 and 360, light and dark: buttons apart, no
         for (let j = i + 1; j < buttons.length; j++) {
           const [a, b] = [page(buttons[i]), page(buttons[j])];
           const gap = Math.max(b.l - a.r, a.l - b.r, b.t - a.b, a.t - b.b);
-          if (gap < 8) close.push(`${what(buttons[i])} and ${what(buttons[j])}: ${Math.round(gap)}px`);
+          if (Math.round(gap / z) < 8) close.push(`${what(buttons[i])} and ${what(buttons[j])}: ${Math.round(gap)}px`);
         }
       }
       const edges = [];
@@ -223,7 +226,7 @@ test('in a real browser, at 1440, 390 and 360, light and dark: buttons apart, no
         for (const el of card.querySelectorAll('a.go, svg, .tabs, .logo, .initial')) if (shown(el) && !el.closest('.d-strip')) parts.push([el.getBoundingClientRect(), what(el)]);
         for (const [r, part] of parts) {
           const inset = Math.min(r.left - c.left, c.right - r.right, r.top - c.top, c.bottom - r.bottom);
-          if (inset < 8) edges.push(`${part} is ${Math.round(inset)}px from the edge of ${what(card)}`);
+          if (Math.round(inset / z) < 8) edges.push(`${part} is ${Math.round(inset / z)}px from the edge of ${what(card)}`);
         }
       }
       const cut = [...document.querySelectorAll('.stats dt, .stats dd')].filter((el) => el.scrollWidth > el.clientWidth + 1).map(what);
