@@ -4,6 +4,7 @@ import { now } from '../core/clock.js';
 import { ActionError } from './actions.js';
 import { internalRefusal, running } from './demos.js';
 import { buildLeadDemo, markLeadSent } from './leads.js';
+import { accountsLinks } from './accounts.js';
 
 // One store, both products: Toran's lead page asks Teder about the same store (the owner, 2026-11-08: "i want the admin
 // lead page to be connected. i want to be able to build only toran or only teder for a page, or both. i want to be able
@@ -50,8 +51,12 @@ function findLead(db, toranId, domain) {
   return (toranId && db.get('SELECT * FROM leads WHERE toran_id = ? AND opted_out_at IS NULL', toranId)) || (d && db.get('SELECT * FROM leads WHERE domain = ? AND opted_out_at IS NULL', d)) || null;
 }
 
-/** The lead as Toran's page shows it. */
-export function leadState(ctx, lead, { origin }) {
+/**
+ * The lead as Toran's page shows it. `origin` is Teder's public address, for the demo's public page; `admin` is where the
+ * operator opens the demo and the lead in Teder, accounts' /admin/teder (accounts' docs/admin-split.md: Teder's own site
+ * shows the product only), Teder's own address when not given.
+ */
+export function leadState(ctx, lead, { origin, admin = origin }) {
   if (!lead) return null;
   const demo = lead.demo_id ? ctx.db.get('SELECT id, status, slug, error FROM demos WHERE id = ?', lead.demo_id) : null;
   const pageUrl = demo && demo.status === 'approved' && demo.slug ? `${origin}/s/${demo.slug}` : null;
@@ -63,9 +68,9 @@ export function leadState(ctx, lead, { origin }) {
     reminderDue: Boolean(lead.sent_at && !lead.reminder_sent_at && ['sent', 'opened'].includes(lead.stage) && reminderReady(lead.sent_at, now())),
     whatsapp: lead.whatsapp || null,
     demo: demo
-      ? { id: demo.id, status: demo.status, building: ['new', 'building'].includes(demo.status) && running.has(demo.id), pageUrl, error: demo.status === 'failed' ? String(demo.error || '').slice(0, 300) || null : null, reviewUrl: `${origin}/demos/${demo.id}` }
+      ? { id: demo.id, status: demo.status, building: ['new', 'building'].includes(demo.status) && running.has(demo.id), pageUrl, error: demo.status === 'failed' ? String(demo.error || '').slice(0, 300) || null : null, reviewUrl: `${admin}/demos/${demo.id}` }
       : null,
-    leadUrl: `${origin}/leads?tab=${lead.stage === 'demo_ready' ? 'ready' : lead.stage === 'new' ? 'new' : lead.stage}#lead-${lead.id}`,
+    leadUrl: `${admin}/leads?tab=${lead.stage === 'demo_ready' ? 'ready' : lead.stage === 'new' ? 'new' : lead.stage}#lead-${lead.id}`,
   };
 }
 
@@ -73,13 +78,14 @@ export function leadState(ctx, lead, { origin }) {
 export async function leadsInternal(ctx, req, env, action, query, { origin }) {
   const refused = internalRefusal(req, env);
   if (refused) return refused;
+  const admin = `${accountsLinks(env).admin}/teder`;
   if (action === 'state') {
     if (req.method !== 'GET') return [405, { error: 'method_not_allowed' }];
     const toran = idOf(query.get('toran'));
     const domain = query.get('domain') || '';
     if (toran === undefined || (!toran && !domainKey(domain))) return [400, { error: 'bad_request' }];
     refreshStages(ctx);
-    return [200, { ok: true, lead: leadState(ctx, findLead(ctx.db, toran, domain), { origin }) }];
+    return [200, { ok: true, lead: leadState(ctx, findLead(ctx.db, toran, domain), { origin, admin }) }];
   }
   if (action === 'list') {
     // Every lead at once, for the shared lead dashboard on accounts' /admin (the owner, 2026-11-08: "make the shared
@@ -88,7 +94,7 @@ export async function leadsInternal(ctx, req, env, action, query, { origin }) {
     if (req.method !== 'GET') return [405, { error: 'method_not_allowed' }];
     refreshStages(ctx);
     const rows = ctx.db.all('SELECT * FROM leads WHERE opted_out_at IS NULL ORDER BY id DESC LIMIT 2000');
-    return [200, { ok: true, leads: rows.map((l) => ({ ...leadState(ctx, l, { origin }), toranId: l.toran_id || null, domain: l.domain, name: l.name || null })) }];
+    return [200, { ok: true, leads: rows.map((l) => ({ ...leadState(ctx, l, { origin, admin }), toranId: l.toran_id || null, domain: l.domain, name: l.name || null })) }];
   }
   if (req.method !== 'POST') return [405, { error: 'method_not_allowed' }];
   const b = await readBody(req);
@@ -104,9 +110,9 @@ export async function leadsInternal(ctx, req, env, action, query, { origin }) {
     try {
       const out = buildLeadDemo(ctx, byOf(b.by), lead);
       refreshStages(ctx);
-      return [200, { ok: true, message: out.message, lead: leadState(ctx, ctx.db.get('SELECT * FROM leads WHERE id = ?', lead.id), { origin }) }];
+      return [200, { ok: true, message: out.message, lead: leadState(ctx, ctx.db.get('SELECT * FROM leads WHERE id = ?', lead.id), { origin, admin }) }];
     } catch (e) {
-      if (e instanceof ActionError) return [200, { ok: false, error: e.message, lead: leadState(ctx, lead, { origin }) }];
+      if (e instanceof ActionError) return [200, { ok: false, error: e.message, lead: leadState(ctx, lead, { origin, admin }) }];
       throw e;
     }
   }
@@ -118,7 +124,7 @@ export async function leadsInternal(ctx, req, env, action, query, { origin }) {
     if (!lead) return [200, { ok: false, error: 'אין לתדר ליד כזה.' }];
     try {
       const out = markLeadSent(ctx, byOf(b.by), lead, b.stage, 'whatsapp', { from: 'toran' });
-      return [200, { ok: true, message: out.message, lead: leadState(ctx, ctx.db.get('SELECT * FROM leads WHERE id = ?', lead.id), { origin }) }];
+      return [200, { ok: true, message: out.message, lead: leadState(ctx, ctx.db.get('SELECT * FROM leads WHERE id = ?', lead.id), { origin, admin }) }];
     } catch (e) {
       if (e instanceof ActionError) return [200, { ok: false, error: e.message }];
       throw e;

@@ -817,12 +817,14 @@ meter + .mrow { margin-top: 20px; }
 /* An empty state with a panel under it, in one column (Rivals): apart, as two panels are, not touching. */
 .empty + .panel { margin-top: 20px; }
 @media (min-width: 1000px) { .cols { grid-template-columns: 1.15fr 0.85fr; align-items: start; } .cols.even { grid-template-columns: 1fr 1fr; } }
-/* Settings: one flow of panels, two columns on a desk, each panel kept whole, so neither side runs long while the other
-   is short (the owner, 2026-10-31: "many blocks go on top of each other on the right side"). */
-.set-cols { column-gap: 20px; }
+/* Settings: one column in the middle, on a desk as on a phone, each panel whole, as Toran's Settings (the owner,
+   2026-11-10: "Toran and teder dashboards should be consistent"; on Toran's two columns, 2026-11-09: "the same problem
+   that was on teder. starts with 2 colums, continues with 1"). Two flowing columns (2026-10-31: "many blocks go on top
+   of each other on the right side") still ended uneven; one column has nothing to balance. docs/design-pro.md. */
+.set-cols { max-width: 760px; margin-inline: auto; }
 .set-cols > * { break-inside: avoid; margin: 0 0 20px; }
 .set-cols > .panel + .panel { margin-top: 0; }
-@media (min-width: 1000px) { .set-cols { columns: 2; } }
+.head:has(+ .set-cols) { max-width: 760px; margin-inline: auto; }
 
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* a wide table scrolls inside its tile instead of spilling out of it */

@@ -158,7 +158,8 @@ test("a store Teder does not have yet: lead null; Toran's build adds it and buil
   const built = await (await state({ toran: String(STORE.id) })).json();
   assert.equal(built.lead.demo.status, 'approved');
   assert.equal(built.lead.demo.building, false);
-  assert.equal(built.lead.demo.reviewUrl, `https://teder.openfrequency.co.il/demos/${lead.demo_id}`);
+  // The operator opens it on accounts' /admin/teder: Teder's own site shows the product only (accounts' docs/admin-split.md).
+  assert.equal(built.lead.demo.reviewUrl, `https://accounts.openfrequency.co.il/admin/teder/demos/${lead.demo_id}`);
 });
 
 test('approved: the state says demo_ready with its page; marking first sends it to "sent", once; the reminder only when it is due', async () => {
@@ -167,7 +168,7 @@ test('approved: the state says demo_ready with its page; marking first sends it 
   sameShape(ready, route('/internal/leads/state').answers[0].body, route('/internal/leads/state').answers[0].nullable);
   assert.equal(ready.lead.stage, 'demo_ready');
   assert.match(ready.lead.demo.pageUrl, /^https:\/\/teder\.openfrequency\.co\.il\/s\/[\w-]+$/);
-  assert.equal(ready.lead.leadUrl, `https://teder.openfrequency.co.il/leads?tab=ready#lead-${lead.id}`);
+  assert.equal(ready.lead.leadUrl, `https://accounts.openfrequency.co.il/admin/teder/leads?tab=ready#lead-${lead.id}`);
   // Found by the domain alone too (www. left out).
   assert.equal((await (await state({ domain: `www.${STORE.domain}` })).json()).lead.id, lead.id);
   // The whole list, for the shared lead dashboard on accounts' /admin: the same lead, with Toran's id and its domain;

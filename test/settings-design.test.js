@@ -12,7 +12,9 @@ import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.
 // the way to the page that shows the last one in every design (the owner, 2026-10-31: "also choosing the design of the
 // slideshow. format A-E", "סוגי המצגות should be in settings", "i did not find the /styles page. make it more
 // accessible"). A new account's setup leads there too once it has a sample, and a pick comes back to where it began.
-// Settings' panels flow in two columns on a desk ("many blocks go on top of each other on the right side").
+// Settings' panels are one column in the middle, on a desk as on a phone, as Toran's (2026-11-10: "Toran and teder
+// dashboards should be consistent"; before, two flowing columns, 2026-10-31: "many blocks go on top of each other on the
+// right side").
 
 let home;
 let db;
@@ -90,11 +92,11 @@ test('a new account\'s setup shows the design once it has a sample, and the pick
   assert.equal(pick.headers.get('location'), '/new/o-smp');
 });
 
-test('in a browser, Settings\' panels sit in two columns on a desk and in one on a phone, nothing sideways', async () => {
+test('in a browser, Settings\' panels sit in one column on a desk and on a phone, nothing sideways', async () => {
   const { sid } = fake.session(customer(1));
   const browser = await chromium.launch();
   try {
-    for (const [width, cols] of [[1440, 2], [390, 1]]) {
+    for (const [width, cols] of [[1440, 1], [390, 1]]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
       await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
       const page = await context.newPage();

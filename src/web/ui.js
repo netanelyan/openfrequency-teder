@@ -131,7 +131,7 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2.5-6 4.5-6 7 0s4.5 6 7 0 4-6 6 0"/></symbol>
 <symbol id="i-today" viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M5.5 5h13L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z"/></symbol>
 <symbol id="i-accounts" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.6 3 2.3 3.5 5.2"/></symbol>
-<symbol id="i-results" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+<symbol id="i-results" viewBox="0 0 24 24"><path d="M6 20V10M12 20V4M18 20v-7M3 20h18"/></symbol>
 <symbol id="i-sources" viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h7M9 10.5h5"/></symbol>
 <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -162,14 +162,17 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 </defs></svg>`;
 
 // Six sections, the same on a phone (the tab bar) and on a desk (the side bar): no More tab. Home is the overview,
-// Posts the cards to approve. A new account starts from Accounts, and signing out lives in Settings. The operator has
-// a seventh, the leads (src/web/leads.js), before Settings, where the stores' demos are; nobody else sees it.
+// Posts the cards to approve. A new account starts from Accounts, and signing out lives in Settings. The order is
+// Toran's (docs/design-pro.md, "The two desks side by side"; the owner, 2026-11-10: "Toran and teder dashboards should
+// be consistent"): היום, then the product's work (the posts, where they come from, the account), then the results, then
+// the settings. The operator has a seventh, the leads (src/web/leads.js), before Settings, where the stores' demos are;
+// they see it only on accounts' /admin/teder (accounts' docs/admin-split.md), never on Teder's own site.
 export const NAV = [
   ['/', 'היום', 'today', 'today'],
   ['/posts', 'פוסטים', 'posts', 'text'],
+  ['/sources', 'מקורות', 'sources', 'sources'],
   ['/accounts', 'חשבון', 'accounts', 'accounts'],
   ['/results', 'תוצאות', 'results', 'results'],
-  ['/sources', 'מקורות', 'sources', 'sources'],
   ['/leads', 'לידים', 'leads', 'inbox', { operator: true }],
   ['/settings', 'הגדרות', 'settings', 'settings'],
 ];
@@ -222,6 +225,16 @@ export function viewAsBanner(ctx) {
 }
 
 /**
+ * The way back to the admin dashboard, on every page of Teder's under accounts' /admin/teder (ctx.admin, accounts'
+ * /admin; docs/admin-split.md there): those are every workspace's pages, and the owner reaches them from there. As
+ * Toran's (its ui.ts adminBar). The address is accounts' own, absolute, so the prefix never goes in front of it.
+ */
+export function adminBar(ctx) {
+  if (!ctx.admin) return '';
+  return `<div class="banner info adminbar" role="note">${icon('shield')}<div><b>כאן רואים את תדר של כל הלקוחות.</b></div><a class="btn sm" href="${esc(ctx.admin)}">חזרה ללוח הניהול</a></div>`;
+}
+
+/**
  * The reminder to pay for the next month (src/billing/entitlement.js payReminder), each state's two lines: the last
  * week paid for, calm, and the days of grace after it, in the warning's colour. The day is Israel's, of accounts' own
  * instant; its year only when it is not this year's.
@@ -248,6 +261,16 @@ export function payBanner(ctx) {
   return `<div class="banner ${due ? 'warn' : 'info'} pay" id="pay">${icon(due ? 'alert' : 'clock')}<div><b>${esc(he.title(when))}</b><p>${esc(he.text(when))}</p></div><a class="btn sm${due ? ' primary' : ''}" href="${esc(ctx.links.setup)}">${esc(PAY_HE.button)}</a></div>`;
 }
 
+/**
+ * What makes a page the app a phone keeps: on Teder's own site only. Under accounts' /admin/teder (ctx.admin) a saved
+ * icon would open accounts (the manifest's start_url is the site's root), so those pages offer none, as Toran's under
+ * /admin/toran (accounts' docs/admin-split.md).
+ */
+const APP_META = `<meta name="apple-mobile-web-app-title" content="תדר">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+`;
+
 /** The page around a body. ctx: { title, active, csrf, quota: { used, out, limit }, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
@@ -271,17 +294,13 @@ ${htmlOpen(ctx.theme, ctx.side === 'mini' ? 'side-mini' : '')}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 ${themeMeta(ctx.theme)}
-<meta name="apple-mobile-web-app-title" content="תדר">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<title>${esc(ctx.title)} · תדר</title>
+${ctx.admin ? '' : APP_META}<title>${esc(ctx.title)} · תדר</title>
 ${SHARE_META}
 <link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
 <link rel="stylesheet" href="/static/accounts.css?v=${ctx.v || 1}">
 <link rel="icon" href="/static/icon.svg?v=${ctx.v || 1}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-180.png?v=${ctx.v || 1}">
-<link rel="manifest" href="/static/manifest.webmanifest">
-</head>
+${ctx.admin ? '' : '<link rel="manifest" href="/static/manifest.webmanifest">\n'}</head>
 <body${ctx.readOnly ? ' class="readonly"' : ''}>
 ${SPRITE}
 <header class="top"><div class="wrap">
@@ -296,7 +315,7 @@ ${SPRITE}
   </div>
 </div></header>
 <main class="wrap" id="main">
-${viewAsBanner(ctx)}
+${adminBar(ctx)}${viewAsBanner(ctx)}
 ${payBanner(ctx)}
 ${body}
 <footer class="foot">${ofMark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>

@@ -112,13 +112,13 @@ test('a new account: the sources step shows the formats with the defaults ticked
   assert.equal(file.rotate, 'turns');
 });
 
-test('a card a row on a phone, two in a column of Settings on a desk, each with its drawn example, and nothing scrolls sideways', async () => {
+test('a card a row on a phone, three in the one column of Settings on a desk, each with its drawn example, and nothing scrolls sideways', async () => {
   // A card a row on a phone since each has its example beside its words (2026-11-06, src/web/examples.js): two to a
-  // row left the words a word wide.
+  // row left the words a word wide. On a desk Settings is one column of 760px (as Toran's, 2026-11-10), three to a row.
   const { sid } = fake.session(customer(1));
   const browser = await chromium.launch();
   try {
-    for (const [width, perRow] of [[390, 1], [360, 1], [1440, 2]]) {
+    for (const [width, perRow] of [[390, 1], [360, 1], [1440, 3]]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
       await context.addCookies([{ name: 'of_session', value: sid, url: base }]);
       const page = await context.newPage();

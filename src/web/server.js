@@ -8,7 +8,7 @@ import { now } from '../core/clock.js';
 import { addDays, israelDate } from '../schedule/israel.js';
 import { audit } from '../core/store.js';
 import { cookies, csrfFor, csrfOk, isHttps, sessionSecret } from './auth.js';
-import { accountsClient, accountsLinks, refusal, sessionIdFrom } from './accounts.js';
+import { accountsClient, accountsLinks, ADMIN, operatorFrom, refusal, sessionIdFrom } from './accounts.js';
 import { forWorkspace, owns } from './workspace.js';
 import * as data from './data.js';
 import * as pages from './pages.js';
@@ -81,8 +81,49 @@ const V = Date.now().toString(36);
 
 const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
+// The operator's pages live on accounts' /admin (accounts' docs/admin-split.md; the owner, 2026-11-10: "Everything else,
+// leads etc should be in other places. The admin dashboard is for that. Toran and teder should stay toran and teder, even
+// for admins"): accounts proxies /admin/teder/... here with X-OF-Admin-Prefix and a signed X-OF-Operator, as it does
+// /admin/toran/... to Toran. Teder answers as if the prefix were its root, then puts it back on every path it hands the
+// browser: links, forms, sources, the polls' addresses, redirects, JSON redirects and the CSS's fonts. Its cookies live
+// on accounts' host there, under td_* names and the prefix's path (adminCookies), so they never meet accounts' own.
+const BASE = new WeakMap();
+
+/** A body served under the admin prefix, its root-relative paths moved under it. */
+export function underBase(text, type, base) {
+  if (/html/.test(type)) return text.replace(/(\s(?:href|action|src|formaction|data-poll|data-href)=["'])\/(?!\/)/g, `$1${base}/`).replace(/<html(\s|>)/, `<html data-base="${base}"$1`);
+  if (/json/.test(type)) return text.replace(/("(?:redirect|go|href)":")\/(?!\/)/g, `$1${base}/`);
+  if (/css/.test(type)) return text.replace(/url\((['"]?)\/(?!\/)/g, `url($1${base}/`);
+  return text;
+}
+/** Teder's Set-Cookie under the prefix: of_x becomes td_x, for the prefix's path only. */
+export function adminCookies(value, base) {
+  const one = (c) => String(c).replace(/^of_/, 'td_').replace(/;\s*Path=\/[^;]*/i, `; Path=${base}`);
+  return Array.isArray(value) ? value.map(one) : one(value);
+}
+/** The browser's cookies under the prefix, as Teder names them: td_x is read as of_x; of-theme as it is; nothing else. */
+export function adminJar(jar) {
+  const out = {};
+  for (const [k, v] of Object.entries(jar)) {
+    if (k.startsWith('td_')) out[`of_${k.slice(3)}`] = v;
+    else if (k === 'of-theme') out[k] = v;
+  }
+  return out;
+}
+/** A response's headers under the prefix: its location and its cookies. */
+function atBase(res, headers) {
+  const base = BASE.get(res);
+  if (!base) return headers;
+  const out = { ...headers };
+  if (typeof out.location === 'string' && out.location.startsWith('/') && !out.location.startsWith('//')) out.location = `${base}${out.location}`;
+  if (out['set-cookie']) out['set-cookie'] = adminCookies(out['set-cookie'], base);
+  return out;
+}
+
 function send(req, res, status, body, type = 'text/html; charset=utf-8', extra = {}) {
-  const headers = { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'same-origin', 'content-security-policy': CSP, ...extra };
+  const headers = atBase(res, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'same-origin', 'content-security-policy': CSP, ...extra });
+  const base = BASE.get(res);
+  if (base && /html|json|css/.test(type)) body = underBase(Buffer.isBuffer(body) ? body.toString('utf8') : String(body ?? ''), type, base);
   let buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body ?? ''));
   if (buf.length > 1024 && /gzip/.test(String(req.headers['accept-encoding'] || '')) && /text|json|javascript|svg|font/.test(type)) {
     buf = gzipSync(buf);
@@ -94,7 +135,7 @@ function send(req, res, status, body, type = 'text/html; charset=utf-8', extra =
 }
 const json = (req, res, status, obj, extra) => send(req, res, status, JSON.stringify(obj), 'application/json; charset=utf-8', extra);
 const redirect = (res, to, extra = {}) => {
-  res.writeHead(303, { location: to, 'cache-control': 'no-store', ...extra });
+  res.writeHead(303, atBase(res, { location: to, 'cache-control': 'no-store', ...extra }));
   res.end();
 };
 
@@ -214,11 +255,18 @@ export function localPath(v) {
   return /^\/(?![\/\\])/.test(s) && s.length <= 2000 && !/[\u0000-\u001f\u007f]/.test(s) ? s : '/';
 }
 
-/** Where "back" goes on an error page: the page the browser came from, on this site, or home. */
-function backOf(req, host) {
+/**
+ * Where "back" goes: the page the browser came from, on this site, or home. Under accounts' /admin/teder the page is
+ * accounts' address with the prefix: the path under it (the prefix goes back on as the answer leaves, BASE).
+ * `search`: with the page's query.
+ */
+function backOf(req, host, { search = true } = {}) {
   try {
     const ref = req.headers.referer ? new URL(req.headers.referer) : null;
-    return ref && ref.host === host ? ref.pathname + ref.search : '/';
+    if (!ref) return '/';
+    const q = search ? ref.search : '';
+    if (BASE.has(req)) return ref.pathname === ADMIN || ref.pathname.startsWith(`${ADMIN}/`) ? localPath((ref.pathname.slice(ADMIN.length) || '/') + q) : '/';
+    return ref.host === host ? ref.pathname + q : '/';
   } catch {
     return '/';
   }
@@ -255,7 +303,15 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
   const look = lookOf(env);
   const publicHost = String(env.PUBLIC_HOST || '').trim().toLowerCase() || null;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
-  const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
+  // accounts' own origin: its /admin/teder pages post from there (the CSRF token is checked as for every form).
+  const adminOrigin = (() => {
+    try {
+      return new URL(links.home).origin;
+    } catch {
+      return null;
+    }
+  })();
+  const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : []), ...(adminOrigin ? [adminOrigin] : [])]);
 
   // Whether the browser is signed in to OpenFrequency: a session accounts vouches for, or one it knows and refuses
   // here (another product's customer, a closed workspace). No session cookie never asks accounts; an answer that
@@ -340,11 +396,21 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (!hosts.has(host)) return send(req, res, 421, 'wrong host', 'text/plain; charset=utf-8');
       const secure = isHttps(req);
       if (publicHost && host === publicHost && !secure) return send(req, res, 403, 'HTTPS only', 'text/plain; charset=utf-8');
-      const url = new URL(req.url, `http://${host}`);
+      let url = new URL(req.url, `http://${host}`);
+      // Under accounts' /admin (its proxy, from this machine): the prefix comes off, and goes back on the way out (BASE).
+      const viaAdmin = req.headers['x-of-admin-prefix'] === ADMIN && (url.pathname === ADMIN || url.pathname.startsWith(`${ADMIN}/`)) && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(String(req.socket?.remoteAddress));
+      if (viaAdmin) {
+        BASE.set(req, ADMIN);
+        BASE.set(res, ADMIN);
+        url = new URL(`${url.pathname.slice(ADMIN.length) || '/'}${url.search}`, url);
+      }
       const p = decodeURIComponent(url.pathname);
+      // Under the prefix only the operator's pages: never the machine-to-machine routes, the assistant's API, a slide
+      // behind a signed link, the connect links and returns, the public demo pages or the service worker.
+      if (viaAdmin && (isAssistantPath(p) || /^\/(internal|m|connect|s)(\/|$)/.test(p) || /^\/new\/[\w-]+\/connect\//.test(p) || p === '/sw.js')) return send(req, res, 404, 'not here', 'text/plain; charset=utf-8');
       // ---- the WhatsApp assistant: answers only straight from this machine, signed (src/assistant/api.js)
       if (isAssistantPath(p)) return await assistant(req, res, url);
-      const jar = cookies(req);
+      const jar = viaAdmin ? adminJar(cookies(req)) : cookies(req);
       // Light or dark, as this browser chose on any OpenFrequency site (ui.js themeOf): every page below arrives in it.
       const theme = themeOf(jar);
 
@@ -457,8 +523,15 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // up to a minute old; anything else (every POST) asks afresh, so no change acts on a session that has ended.
       const ajax = req.headers['x-of-ajax'] === '1';
       const reading = req.method === 'GET' || req.method === 'HEAD';
-      const sid = sessionIdFrom(jar, { https: secure });
-      const answer = await who.whoIs(sid, { live: !reading });
+      // Under /admin/teder, accounts vouches for the operator with a signed statement instead of their cookie
+      // (accounts.js operatorFrom); the CSRF token then comes from its ses, the same for one accounts session.
+      const vouched = viaAdmin ? operatorFrom(req.headers['x-of-operator'], env) : null;
+      if (viaAdmin && !vouched) {
+        const back = `${links.admin}/login?next=${encodeURIComponent(`${ADMIN}${url.pathname === '/' ? '/' : url.pathname}${url.search}`)}`;
+        return reading ? redirect(res, back) : json(req, res, 401, { ok: false, message: 'צריך להיכנס שוב.', login: back });
+      }
+      const sid = vouched ? `operator:${vouched.ses}` : sessionIdFrom(jar, { https: secure });
+      const answer = vouched ? { status: 200, body: vouched.session } : await who.whoIs(sid, { live: !reading });
       if (answer.status !== 200) {
         const kind = refusal(answer.status, answer.body?.error);
         // Back to this page after the login: its full address, under the public name when it came through the proxy.
@@ -472,13 +545,35 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // The operator is the superadmin outside view-as: every workspace. In view-as the superadmin is in the
       // workspace viewed, read-only, like everyone with a workspace.
       const operator = a.role === 'superadmin' && !a.workspace;
-      const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
+      // Teder's own site shows the product, to the operator too (the owner, 2026-11-10: "Make teder and toran of
+      // natikyan153@gmail.com regular, just like a customer's. Everything else, leads etc should be in other places. The
+      // admin dashboard is for that. Toran and teder should stay toran and teder, even for admins"; accounts'
+      // docs/admin-split.md). accounts puts the superadmin in their own workspace here (OF_OPERATOR_WORKSPACE), as its
+      // owner, so every page below is a customer's. Without one there is nothing of the product to show: Today is a short
+      // page pointing to /admin, and any other address (an operator page from an old bookmark, an email, an alert) goes
+      // to the same page under /admin/teder. On a laptop (no PUBLIC_HOST) the operator still sees everything here, for
+      // development and the tests. `own`: the superadmin outside view-as on the public name, in a workspace or not.
+      const own = !viaAdmin && a.user.superadmin === true && !a.viewAs && Boolean(publicHost) && host === publicHost;
+      const atAdmin = `${links.admin}/teder${p === '/' ? '/' : url.pathname}${url.search}`;
+      if (own && operator) {
+        if (reading && p === '/') return send(req, res, 200, pages.gatePage({ v: V, kind: 'operator', links, theme }));
+        if (reading) return redirect(res, atAdmin);
+        return json(req, res, 409, { ok: false, message: pages.GATE.operator.title, redirect: atAdmin });
+      }
+      if (viaAdmin && !operator) return send(req, res, 404, 'not here', 'text/plain; charset=utf-8');
+      // The operator's own pages (src/web/demos.js, src/web/leads.js) from the public name: there, under /admin/teder.
+      if (own && reading && /^\/(demos|leads)(\/|$)/.test(p)) return redirect(res, atAdmin);
+      // Developer mode (seven taps on Settings' version line) and its diagnostics: the operator's, and the superadmin's
+      // in their own workspace too (the owner's words above: "unless developer mode is on").
+      const superadmin = a.user.superadmin === true && !a.viewAs;
+      const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, superadmin, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
       // The paywall: a customer whose workspace has not paid sees where to read how to pay, not the product, except the
       // new-account flow up to its samples (SETUP_OPEN), and the paywall shows those samples once there are some. With
       // no answer to go by (accounts has not answered for a day, or never), the page says the check failed rather than
       // ask them to pay, and nothing is open. The operator viewing as the customer (read-only) sees what is there. One of
       // the company's own workspaces is not a customer's, and accounts is not asked about it (src/billing/own.js).
-      const ent = !operator && !user.viewAs && a.workspace && customerWorkspace(a.workspace.id) ? await paid.check(a.workspace.id) : null;
+      // The superadmin in their own workspace (accounts' OF_OPERATOR_WORKSPACE) is never asked to pay either, as on Toran.
+      const ent = !operator && !user.viewAs && !user.superadmin && a.workspace && customerWorkspace(a.workspace.id) ? await paid.check(a.workspace.id) : null;
       const unpaid = Boolean(ent && !ent.allowed && ent.known);
       const csrf = csrfFor(sid, secret);
       // "בדקו שוב" on the paywall (the owner's audit, 2026-11-02, Teder item 3): a plain form, CSRF and Origin checked like
@@ -536,7 +631,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // Developer mode: the settings a developer reads (the server's keys, engine and log), the operator's alone,
         // opened from the version line and kept on this browser.
         if (p === '/settings/dev') {
-          if (!user.operator) return ajax ? json(req, res, 403, { ok: false, message: 'את זה משנה רק מי שמפעיל את תדר' }) : redirect(res, '/settings');
+          if (!user.operator && !user.superadmin) return ajax ? json(req, res, 403, { ok: false, message: 'את זה משנה רק מי שמפעיל את תדר' }) : redirect(res, '/settings');
           const on = form.on === '1';
           const cookie = `of_dev=${on ? '1' : ''}; Path=/; Max-Age=${on ? 31536000 : 0}; SameSite=Strict; HttpOnly${secure ? '; Secure' : ''}`;
           if (on) audit(ctx.db, { actor: user.email, action: 'dev_mode' });
@@ -546,7 +641,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
           const to = c.pack(String(form.to || ''));
           if (!to) return ajax ? json(req, res, 404, { ok: false, message: 'אין חשבון כזה' }) : redirect(res, '/');
           // Back to the same page of the other account; a post belongs to the account it was, so its page goes home.
-          const ref = req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/';
+          const ref = backOf(req, host, { search: false });
           return redirect(res, /^\/post\//.test(ref) ? '/' : ref, { 'set-cookie': acctCookie(to.id) });
         }
         for (const [method, re, fn] of ROUTES) {
@@ -556,7 +651,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             const r = await fn(c, user, m, form);
             if (ajax) return json(req, res, 200, r);
             if (r.go) return send(req, res, 200, goPage(r.go, { name: r.goName, v: V, theme }), 'text/html; charset=utf-8', { 'referrer-policy': 'no-referrer' });
-            const back = r.redirect || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname + new URL(req.headers.referer).search : '/');
+            const back = r.redirect || backOf(req, host);
             return redirect(res, back, { 'set-cookie': flash(r.message) });
           } catch (e) {
             if (!(e instanceof act.ActionError)) throw e;
@@ -577,7 +672,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             // An error may name the page its form is on (`back`, a path here), so a form refused without the page's script
             // comes back to itself, whatever the browser sent as its referer (src/web/onboarding.js, the closing slide).
             const home = typeof e.back === 'string' && /^\/(?!\/)/.test(e.back) ? e.back : null;
-            return redirect(res, home || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/'), { 'set-cookie': flash(e.message) });
+            return redirect(res, home || backOf(req, host, { search: false }), { 'set-cookie': flash(e.message) });
           }
         }
         return ajax ? json(req, res, 404, { ok: false, message: 'אין פעולה כזו' }) : send(req, res, 404, pages.errorPage({ kind: 'no_action', back: backOf(req, host), v: V, theme }));
@@ -635,7 +730,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
         // `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && user.operator && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && user.operator, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: installOf(req.headers['user-agent'], jar) };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && (user.operator || user.superadmin) && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && (user.operator || user.superadmin), superadmin: user.superadmin, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: viaAdmin ? null : installOf(req.headers['user-agent'], jar), admin: viaAdmin ? links.admin : null };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
@@ -658,7 +753,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {
         const d = data.postFull(c, pm[1]);
-        return d ? page(pages.postPage(pc, d)) : page(pages.notFoundPage(pc), 404);
+        // Another workspace's post, opened by the operator from the public name (an alert, a bookmark): under /admin/teder.
+        return d ? page(pages.postPage(pc, d)) : own ? redirect(res, atAdmin) : page(pages.notFoundPage(pc), 404);
       }
       // The look is locked against the same customer's other accounts (no two alike), so the style reads the engine's packs.
       if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(c, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));

@@ -54,7 +54,9 @@
     b.setAttribute('aria-expanded', String(!mini));
     b.setAttribute('aria-label', mini ? 'להרחיב את סרגל הצד' : 'לכווץ את סרגל הצד');
     b.title = mini ? 'להרחיב' : 'לכווץ';
-    document.cookie = `of_side=${mini ? 'mini' : 'full'}; Path=/; Max-Age=31536000; SameSite=Strict`;
+    // Under accounts' /admin/teder (data-base) the cookie is Teder's there: td_side, for that path (server.js adminJar).
+    const at = document.documentElement.dataset.base || '';
+    document.cookie = `${at ? 'td_side' : 'of_side'}=${mini ? 'mini' : 'full'}; Path=${at || '/'}; Max-Age=31536000; SameSite=Strict`;
   });
 
   // The navigation bar lifts once the page scrolls under it.

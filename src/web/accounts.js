@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 // Who is signed in: openfrequency-accounts answers, Teder has no login of its own.
 //
@@ -19,6 +19,8 @@ import { createHash } from 'node:crypto';
 // 5xx, an unexpected shape) means not signed in. Fail closed.
 
 export const PRODUCT = 'teder';
+/** Where the operator's Teder pages live: on accounts' site, which proxies them here (server.js; accounts' docs/admin-split.md). */
+export const ADMIN = '/admin/teder';
 export const COOKIE = { https: '__Secure-of_session', http: 'of_session' };
 export const CACHE_MS = 60_000;
 const MAX_CACHED = 2000;
@@ -142,4 +144,44 @@ export function refusal(status, error) {
   if (status === 403 && error === 'workspace_disabled') return 'closed';
   if (status === 403 && error === 'product_disabled') return 'not_in_plan';
   return 'error';
+}
+
+/**
+ * The operator, as accounts' /admin/teder proxy vouches for them (openfrequency-accounts src/web/admin-teder.js; the same
+ * statement Toran takes under /admin/toran, docs/contracts/admin-toran-operator.json). accounts never forwards the
+ * superadmin's session cookie; it signs, for each proxied request:
+ *
+ *   X-OF-Operator: <payload>.<signature>
+ *     payload    base64url of JSON { id, email, name, ses, exp }: the superadmin's id, email and name; ses, 32 base64url
+ *                characters, the same for every request of one accounts session (the CSRF tokens are derived from it);
+ *                exp, milliseconds since 1970, 60 seconds after signing
+ *     signature  base64url of HMAC-SHA256 of the payload's characters, keyed with OF_INTERNAL_TOKEN
+ *
+ * Taken only under the admin prefix from a loopback socket (server.js viaAdmin), with a token of 32 characters or more,
+ * a signature compared in constant time, and exp in the future and at most OPERATOR_TTL_MS ahead. Returns the session it
+ * stands for (the operator's: no workspace, every product) and its ses, or null.
+ */
+export const OPERATOR_TTL_MS = 120_000;
+export function operatorFrom(header, env = process.env, t = Date.now()) {
+  const token = String(env.OF_INTERNAL_TOKEN || '').trim();
+  const v = String(header || '');
+  if (token.length < MIN_TOKEN || !v || v.length > 4096) return null;
+  const dot = v.indexOf('.');
+  if (dot < 1 || v.indexOf('.', dot + 1) !== -1) return null;
+  const body = v.slice(0, dot);
+  const want = Buffer.from(createHmac('sha256', token).update(body).digest('base64url'));
+  const got = Buffer.from(v.slice(dot + 1));
+  if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
+  let claim;
+  try {
+    claim = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+  const exp = Number(claim?.exp);
+  if (!Number.isFinite(exp) || exp <= t || exp > t + OPERATOR_TTL_MS) return null;
+  if (!Number.isInteger(claim.id) || typeof claim.email !== 'string' || !/^[^\s@]+@[^\s@]+$/.test(claim.email)) return null;
+  if (typeof claim.ses !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(claim.ses)) return null;
+  const name = typeof claim.name === 'string' && claim.name ? claim.name.slice(0, 120) : null;
+  return { session: { user: { id: claim.id, email: claim.email, name, superadmin: true }, workspace: null, role: 'superadmin', products: [PRODUCT], readOnly: false, viewAs: null }, ses: claim.ses };
 }
