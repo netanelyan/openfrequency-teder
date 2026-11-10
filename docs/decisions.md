@@ -3086,10 +3086,12 @@ was one of the customer's 40 gone.
   day; asking for it to be written again is a redo; one not approved by the end of its day does not go out and does not
   count. The operator's table counts the posts the customer got too, beside the ledger's cost of every post offered.
 
-**Still open, for the owner.** The public website and the contract say "40 מצגות מוצעות בחודש, ועד 10 החלפות"
-(openfrequency-web sections.mjs, the FAQ). Counting what the customer got is more than that promise, never less, so
-nothing there is wrong; the words could say it now ("40 מצגות שאישרתם בחודש"). Not changed here: the contract's words
-are the owner's.
+**The public website.** Its FAQ said a declined slideshow is only taken down once the redos are used up; that is no
+longer so, and openfrequency-web's branch web-every-day says what happens now (to be published with this, not before).
+Still open, for the owner: the price cards, Teder's demo page (src/web/demos.js) and the contracts say "40 מצגות
+מוצעות בחודש, ועד 10 החלפות". Counting what the customer approved is more than that promise, never less, so nothing
+there is wrong; the words could say it now ("40 מצגות שאישרתם בחודש"). Not changed: the contracts' words are the
+owner's.
 
 Tests: test/every-day.test.js (ten declines in a row on one day and the eleventh waits, the customer's choice of a redo
 kept; declines and expired posts eat none of the 40, and what the pages say; the runner's second chance after a pause,
