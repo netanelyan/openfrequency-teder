@@ -7,6 +7,7 @@ import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
+import { SLIDE_MAX } from '../pipeline/build.js';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_PLAN, DRAFTS_PER_DAY, MAX_PLAN, PLAN_HE, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { TIKTOK_LINE, connectPanel, tiktokModePanel } from './connect.js';
@@ -711,7 +712,9 @@ ${problems.length ? `<div class="problems"><b>השינוי לא נשמר, הבד
 ${items
   .map((s, i) => {
     const val = values ? { title: values[`title_${i}`], body: values[`body_${i}`] } : s;
-    return `<fieldset><legend>שקף ${i + 1}</legend><label class="f">כותרת<input type="text" name="title_${i}" value="${esc(val.title)}" maxlength="80"></label><label class="f">טקסט<textarea name="body_${i}" maxlength="300">${esc(val.body)}</textarea></label></fieldset>`;
+    // As long as the checks take (src/pipeline/build.js checkPost: a title of 70, a text of 260): the form let in 80
+    // and 300, so a long line was typed and then refused.
+    return `<fieldset><legend>שקף ${i + 1}</legend><label class="f">כותרת<input type="text" name="title_${i}" value="${esc(val.title)}" maxlength="${SLIDE_MAX.title}"></label><label class="f">טקסט<textarea name="body_${i}" maxlength="${SLIDE_MAX.body}">${esc(val.body)}</textarea></label></fieldset>`;
   })
   .join('')}
 <label class="f">${post.caption_ig ? 'כיתוב לטיקטוק' : 'כיתוב'}<textarea name="caption" maxlength="${post.caption_ig ? 900 : 400}">${esc(v.caption)}</textarea></label>

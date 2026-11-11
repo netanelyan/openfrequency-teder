@@ -13,7 +13,7 @@ import { forWorkspace, owns } from './workspace.js';
 import * as data from './data.js';
 import * as pages from './pages.js';
 import * as act from './actions.js';
-import { beforePaying, onboardingRoutes } from './onboarding.js';
+import { beforePaying, hasAccount, onboardingRoutes } from './onboarding.js';
 import { writeNowRoutes } from './write-now.js';
 import { deeperPanel, deeperRoutes } from './deeper.js';
 import { previewFile, stylesRoutes } from './styles.js';
@@ -563,7 +563,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // Developer mode (seven taps on Settings' version line) and its diagnostics: the operator's, and the superadmin's
       // in their own workspace too (the owner's words above: "unless developer mode is on").
       const superadmin = a.user.superadmin === true && !a.viewAs;
-      const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, superadmin, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
+      // `asCustomer`: the operator on Teder's own name, who sees a customer's screens: the actions answer them in a
+      // customer's words too, and keep the engine's English for the operator's own pages (src/web/actions.js ours).
+      const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, superadmin, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null, asCustomer };
       // The paywall: a customer whose workspace has not paid sees where to read how to pay, not the product, except the
       // new-account flow up to its samples (SETUP_OPEN), and the paywall shows those samples once there are some. With
       // no answer to go by (accounts has not answered for a day, or never), the page says the check failed rather than
@@ -609,6 +611,23 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         current = pack;
         if (jar.of_acct !== pack.id) setCookies.push(acctCookie(pack.id));
       };
+      // The reminder to pay for the next month, at the top of every page (ui.js payBanner): a customer's alone, from the
+      // answer the paywall just read (ent; none for the operator, view-as and our own workspaces).
+      const pay = payReminder(ent, now());
+      // May this workspace open another account? Not a customer's that has its one (src/web/onboarding.js hasAccount): the
+      // switcher, the account page and More then offer none (the audit, 2026-11-12: each led to a refusal).
+      const newAccount = user.operator || !hasAccount(c.db, user.workspace?.id ?? null);
+      /**
+       * What a page is drawn with, seen from the account `pack`: its header (the switcher, the month's count), the toast,
+       * the reminder to pay. Here, before the POST block, because a form its checks refused is drawn again as its page,
+       * with the problems and what was typed (below). It used to read the header and the toast from consts declared after
+       * that block, so every refused edit, source, fact, topic, rival or sound ended on "משהו השתבש אצלנו" (the audit,
+       * 2026-11-12: "ReferenceError: Cannot access 'h' before initialization").
+       * The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
+       * `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
+       * `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
+       */
+      const pageCtx = (pack, flashMsg = null) => ({ csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...data.header(data.scoped(c, pack)), flash: flashMsg, links, operator: user.operator && !asCustomer, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && (user.operator || user.superadmin) && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && (user.operator || user.superadmin), superadmin: user.superadmin, unpaid, pay, newAccount, pushLater: jar.of_push === 'later', origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: viaAdmin ? null : installOf(req.headers['user-agent'], jar), admin: viaAdmin ? links.admin : null });
 
       if (req.method === 'POST') {
         const origin = req.headers.origin;
@@ -654,18 +673,20 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
             if (!(e instanceof act.ActionError)) throw e;
             if (ajax) return json(req, res, e.status, { ok: false, message: e.message, problems: e.problems || [] });
             // A form that failed its checks comes back with the problems and what was typed, on an account of this
-            // workspace (a form naming another one gets the redirect below).
+            // workspace (a form naming another one gets the redirect below), seen from that account.
             const cur = c.pack(String(form.account || '')) || c.packs[0] || null;
             const again = (html) => send(req, res, e.status, html);
+            const problems = e.problems?.length ? e.problems : [e.message];
             if (/\/edit$/.test(p)) {
               const d = data.postFull(c, m[1]);
-              if (d) return again(pages.postPage({ ...pageCtx(), csrf }, d, { problems: e.problems || [e.message], values: e.values }));
+              if (d) return again(pages.postPage(pageCtx(d.pack), d, { problems, values: e.values }));
             }
-            if (cur && p === '/sources/add') return again(pages.sourcesPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, sources: data.sourcesFor(c, cur.id), deeper: sourcesDeeper({ ...pageCtx(), csrf }, c, cur), form, problems: e.problems || [e.message] }));
-            if (cur && p === '/facts/add') return again(pages.factsPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, topics: data.factsFor(c, cur), ...factDates(), form, problems: e.problems || [e.message] }));
-            if (cur && p === '/sounds/save') return again(pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
-            if (cur && p === '/topics/add') return again(pages.topicsPage({ ...pageCtx(), csrf }, { ...data.topicsFor(c, cur), form, problems: e.problems || [e.message] }));
-            if (cur && p === '/rivals/save') return again(pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
+            const pc = cur ? pageCtx(cur) : null;
+            if (cur && p === '/sources/add') return again(pages.sourcesPage(pc, { packs: [cur], current: cur, sources: data.sourcesFor(c, cur.id), deeper: sourcesDeeper(pc, c, cur), form, problems }));
+            if (cur && p === '/facts/add') return again(pages.factsPage(pc, { packs: [cur], current: cur, topics: data.factsFor(c, cur), ...factDates(), form, problems }));
+            if (cur && p === '/sounds/save') return again(pages.soundsPage(pc, { ...data.soundsFor(c, cur), packs: [cur], form, problems }));
+            if (cur && p === '/topics/add') return again(pages.topicsPage(pc, { ...data.topicsFor(c, cur), form, problems }));
+            if (cur && p === '/rivals/save') return again(pages.rivalsPage(pc, { ...data.rivalsFor(c, cur), packs: [cur], form, problems }));
             // An error may name the page its form is on (`back`, a path here), so a form refused without the page's script
             // comes back to itself, whatever the browser sent as its referer (src/web/onboarding.js, the closing slide).
             const home = typeof e.back === 'string' && /^\/(?!\/)/.test(e.back) ? e.back : null;
@@ -716,20 +737,10 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (opened) switchTo(c.pack(c.db.get('SELECT account_id FROM posts WHERE id = ?', opened[1])?.account_id));
       // What the pages read: the context seen from the account shown.
       const sc = data.scoped(c, current);
-      const h = data.header(sc);
       const flashMsg = jar.of_flash ? jar.of_flash : null;
       if (flashMsg) setCookies.push('of_flash=; Path=/; Max-Age=0; SameSite=Strict');
       const clearFlash = setCookies.length ? { 'set-cookie': setCookies } : {};
-      // The reminder to pay for the next month, at the top of every page (ui.js payBanner): a customer's alone, from the
-      // answer the paywall just read (ent; none for the operator, view-as and our own workspaces).
-      const pay = payReminder(ent, now());
-      function pageCtx() {
-        // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
-        // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
-        // `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator && !asCustomer, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && (user.operator || user.superadmin) && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && (user.operator || user.superadmin), superadmin: user.superadmin, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: viaAdmin ? null : installOf(req.headers['user-agent'], jar), admin: viaAdmin ? links.admin : null };
-      }
-      const pc = pageCtx();
+      const pc = pageCtx(current, flashMsg);
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
 
       // Home, with the block of work in progress (src/web/progress.js): the workspace's new-account setups, the posts

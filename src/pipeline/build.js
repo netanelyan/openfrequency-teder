@@ -387,6 +387,9 @@ export function gateDraft(format, draft, facts, { allow = [] } = {}) {
 const HEBREW = /[א-ת]/;
 const LATIN = /[A-Za-z]/;
 
+/** The most a content slide's title and text may hold: the checks below, and the edit form's fields (src/web/pages.js). */
+export const SLIDE_MAX = { title: 70, body: 260 };
+
 /** Voice, rules, the kind's shape and the fact gate over a whole post. Returns { problems, gate }. */
 export function checkPost(ctx, pack, draft, facts, format = null) {
   const problems = [];
@@ -430,8 +433,8 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     const kw = draft.keywords || [];
     if (kw.length < 2 || !kw.some((k) => HEBREW.test(k)) || !kw.some((k) => LATIN.test(k))) problems.push({ where: 'keywords', code: 'keywords', msg: 'keywords need at least one in Hebrew and one in English letters' });
     for (const s of content) {
-      if (String(s.title || '').length > 70) problems.push({ where: `slide ${draft.slides.indexOf(s)} title`, code: 'length', msg: 'the title is over 70 characters' });
-      if (String(s.body || '').length > 260) problems.push({ where: `slide ${draft.slides.indexOf(s)} text`, code: 'length', msg: 'the text is over 260 characters' });
+      if (String(s.title || '').length > SLIDE_MAX.title) problems.push({ where: `slide ${draft.slides.indexOf(s)} title`, code: 'length', msg: `the title is over ${SLIDE_MAX.title} characters` });
+      if (String(s.body || '').length > SLIDE_MAX.body) problems.push({ where: `slide ${draft.slides.indexOf(s)} text`, code: 'length', msg: `the text is over ${SLIDE_MAX.body} characters` });
     }
     // Pictures as much as words: with the cover (which always has one), at least half the slides carry a visual.
     const allowed = visualsOf(pack);
