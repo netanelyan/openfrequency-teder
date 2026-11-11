@@ -241,6 +241,7 @@ const casesFor = () => {
     ['/posts/approve-all', { ids: B.post }],
     [`/post/${B.post}/unapprove`],
     [`/post/${B.post}/reject`, { reason: 'A rejects B' }],
+    [`/post/${B.post}/delete`, { reason: 'A deletes B' }],
     [`/post/${B.post}/edit`, { hook: 'A was here', sub: '', caption: 'A was here' }],
     [`/post/${B.post}/slide/1/photo`, { image: 'none' }],
     [`/post/${B.post}/slide/1/remove`],

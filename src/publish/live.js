@@ -78,5 +78,8 @@ export function diskOnly(publish) {
   return parts.length > 0 && parts.every((r) => r.via === 'dry' && !r.demo);
 }
 
-/** A post's state as a page shows it: 'written' for a published post that was only written to disk, else its status. */
-export const shownStatus = (post) => (post?.status === 'published' && diskOnly(post.publish ?? post.publish_json) ? 'written' : post?.status);
+/**
+ * A post's state as a page shows it: 'written' for a published post that was only written to disk; 'deleted' for a
+ * scheduled post its owner deleted (src/web/actions.js deletePost: a rejection, said as a deletion); else its status.
+ */
+export const shownStatus = (post) => (post?.status === 'published' && diskOnly(post.publish ?? post.publish_json) ? 'written' : post?.status === 'rejected' && post.reject?.deleted ? 'deleted' : post?.status);

@@ -363,6 +363,8 @@ export const STATUS_HE = {
   // Published, but only written to disk: nothing of it left the server (src/publish/live.js shownStatus).
   written: ['לא נשלח', 'warn'],
   rejected: ['נדחה', 'ghost'],
+  // Rejected, from the schedule: the owner deleted it before it went out (src/publish/live.js shownStatus).
+  deleted: ['נמחק', 'ghost'],
   blocked: ['נעצר בבדיקות', 'bad'],
   failed: ['לא עלה', 'bad'],
   held: ['מחכה לחיבור', 'warn'],

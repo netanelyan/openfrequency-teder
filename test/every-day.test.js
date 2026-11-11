@@ -11,7 +11,8 @@ import { getSetting, setSetting } from '../src/core/store.js';
 import { DRAFTS_PER_DAY, draftsToday, monthsOf, usage } from '../src/budget/quota.js';
 import { tick } from '../src/autonomy/runner.js';
 import { dayOpen, declinedSlots, REFILL_AGAIN_MS, refillDeclined, slotCovered } from '../src/autonomy/every-day.js';
-import { approve, reject } from '../src/web/actions.js';
+import { approve, deletePost, reject } from '../src/web/actions.js';
+import { heldReason, releaseHeld } from '../src/publish/hold.js';
 import { israelDate, israelInstant } from '../src/schedule/israel.js';
 import { postFull, settingsData } from '../src/web/data.js';
 import { postPage, settingsPage } from '../src/web/pages.js';
@@ -255,6 +256,70 @@ test('the guard: DRAFTS_PER_DAY drafts an account a day, then nothing and the op
     const report = await refillDeclined(ctx, {}, { t: next });
     assert.equal(report.refilled?.[0]?.status, 'queued', JSON.stringify(report.refilled));
     assert.equal(loadPost(ctx.db, report.refilled[0].post).slot_at, SLOT);
+  } finally {
+    cleanup();
+  }
+});
+
+// The owner, 2026-11-11: "let someone change his mind and delete a scheduled post" (src/web/actions.js deletePost):
+// a rejection said as a deletion, so the day still gets its post.
+
+test('a scheduled post deleted gives its day another post as a rejection does, gives its place in the month back, and the runner never sends it', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    // Approval mode, so that an approved post due inside the account's window would go out at the tick (as above).
+    ctx.db.run("UPDATE accounts SET mode = 'approve' WHERE id = 'demo'");
+    setSetting(ctx.db, 'generateAt', '23:00');
+    setSetting(ctx.db, 'feedbackAt', '22:00');
+    const slot = israelInstant('2026-10-13', '19:00').toISOString();
+    setNow(OCT);
+    const first = await buildPost(ctx, { pack, slotAt: slot });
+    assert.equal(first.status, 'queued', first.reason);
+    await approve(ctx, customer, { id: first.postId }).job;
+    assert.equal(usage(ctx.db, 'demo').suggested.used, 1, 'approved, it is one of their 40');
+    const r = deletePost(ctx, customer, { id: first.postId }, { reason: 'topic', note: 'התחרטתי', redo: '0' });
+    assert.match(r.message, /^הפוסט נמחק ולא ייצא\. פוסט אחר לאותו יום נכתב עכשיו ויגיע לאישור בעוד כמה דקות\./);
+    const done = await r.job;
+    assert.equal(done.ok, true, done.why);
+    const day = loadPost(ctx.db, done.postId);
+    assert.deepEqual([day.status, day.slot_at], ['queued', slot]);
+    const gone = loadPost(ctx.db, first.postId);
+    assert.deepEqual([gone.status, gone.reject.deleted, gone.reject.day], ['rejected', true, 'queued']);
+    assert.equal(gone.reason, 'הנושא לא מתאים: התחרטתי');
+    const u = usage(ctx.db, 'demo');
+    assert.deepEqual([u.suggested.used, u.suggested.waiting], [0, 1], 'the deleted one gave its place back to the one waiting');
+    assert.equal(ctx.db.get("SELECT body FROM notifications WHERE kind = 'refill'").body, 'במקום הפוסט שמחקתם, לאותו יום.');
+    assert.match(postPage({ csrf: 'x' }, postFull(ctx, first.postId)), /נכתב פוסט אחר לאותו יום/);
+    // Its hour, inside the window: nothing goes out. The deleted one is not approved, and the new one waits for them.
+    const t = israelInstant('2026-10-13', '19:01').getTime();
+    setNow(t);
+    const report = await tick(ctx, { t });
+    assert.deepEqual(report.published, [], JSON.stringify(report.errors));
+    assert.equal(loadPost(ctx.db, first.postId).status, 'rejected');
+  } finally {
+    cleanup();
+  }
+});
+
+test('a post held for a connection is deleted the same way, with the redo the customer asked for, and the connection never brings it back', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    setNow(OCT);
+    const first = await buildPost(ctx, { pack, slotAt: SLOT });
+    assert.equal(first.status, 'queued', first.reason);
+    ctx.db.update('posts', first.postId, { status: 'held', reason: heldReason(['tiktok']), approved_by: 'customer', approved_at: new Date(OCT).toISOString() });
+    const r = deletePost(ctx, customer, { id: first.postId }, { reason: 'photo', redo: '1' });
+    assert.match(r.message, /^הפוסט נמחק ולא ייצא\. פוסט חלופי נכתב עכשיו ויגיע לאישור בעוד כמה דקות\. (נשארו עוד \d+ החלפות|נשארה עוד החלפה אחת|זו ההחלפה האחרונה)/);
+    await r.job;
+    const gone = loadPost(ctx.db, first.postId);
+    assert.deepEqual([gone.status, gone.reason, gone.reject.deleted], ['rejected', 'התמונות לא מתאימות', true]);
+    // Connected now (in the tests nothing is ever missing): every held post would be approved again. This one is not held.
+    assert.deepEqual(releaseHeld(ctx.db, pack, { t: OCT + 60_000 }), []);
+    assert.equal(loadPost(ctx.db, first.postId).status, 'rejected');
   } finally {
     cleanup();
   }

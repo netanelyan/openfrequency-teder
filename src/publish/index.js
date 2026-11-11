@@ -577,6 +577,11 @@ export async function sendDraft(ctx, postId, { t = now() } = {}) {
   saveTiktok(tk);
   step(db, postId, 'tiktok', 'ok', { flow: 'draft', via });
   audit(db, { action: 'tiktok_draft', accountId: pack.id, postId, detail: { via } });
+  // Taken back while it was on its way, a moment after the approval (deleted, rejected or sent back to waiting; the
+  // owner, 2026-11-11: "let someone change his mind and delete a scheduled post"): the draft is in the app's inbox all
+  // the same, so it is kept as an old one for the owner to delete there, as one taken back after it landed is (retireDraft).
+  const after = loadPost(db, postId);
+  if (after && !['approved', 'publishing'].includes(after.status)) retireDraft(db, after);
   return { state: 'drafted', via };
 }
 

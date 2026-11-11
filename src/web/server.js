@@ -343,6 +343,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/posts\/approve-all$/, (c, u, m, f) => act.approveAll(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/unapprove$/, (c, u, m) => act.unapprove(c, u, { id: m[1] })],
     ['POST', /^\/post\/([\w-]+)\/reject$/, (c, u, m, f) => act.reject(c, u, { id: m[1] }, f)],
+    ['POST', /^\/post\/([\w-]+)\/delete$/, (c, u, m, f) => act.deletePost(c, u, { id: m[1] }, f)],
     ['POST', /^\/post\/([\w-]+)\/edit$/, (c, u, m, f) => act.edit(c, u, { id: m[1] }, f)],
     ['POST', /^\/post\/([\w-]+)\/slide\/(\d+)\/photo$/, (c, u, m, f) => act.swapPhoto(c, u, { id: m[1], idx: m[2] }, f)],
     ['POST', /^\/post\/([\w-]+)\/slide\/(\d+)\/remove$/, (c, u, m) => act.removeSlide(c, u, { id: m[1], idx: m[2] })],
