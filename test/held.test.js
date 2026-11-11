@@ -7,7 +7,7 @@ import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { publishPost, sendDraft } from '../src/publish/index.js';
 import { heldReason, needsConnection, releaseHeld, unconnectedPlatforms } from '../src/publish/hold.js';
-import { connectErrorHe, publishErrorHe } from '../src/publish/errors.js';
+import { connectErrorHe, publishErrorHe, retryingHe } from '../src/publish/errors.js';
 import { ZernioError } from '../src/publish/zernio.js';
 import { publishErrorStreak } from '../src/autonomy/rails.js';
 import { tick } from '../src/autonomy/runner.js';
@@ -167,10 +167,19 @@ test('a failure the customer reads is Hebrew; the publisher\'s own words stay in
   const id = await approvedPost(TUE('12:40'));
   pack().meta.zernio = { ...(pack().meta.zernio || {}), tiktokMode: 'direct' };
   try {
+    // A 5xx may be a post Zernio made anyway: it goes again by itself with its key, and says so in Hebrew.
     Z.fail = { status: 500, body: { error: { message: 'Internal upstream failure from TikTok API', code: 'upstream_error' } } };
-    const r = await publishPost(ctx, id, { t: TUE('12:45') });
+    let r = await publishPost(ctx, id, { t: TUE('12:45') });
     assert.equal(r.ok, false);
-    const p = loadPost(db, id);
+    let p = loadPost(db, id);
+    assert.equal(p.status, 'approved');
+    assert.equal(p.reason, retryingHe('tiktok'));
+    assert.doesNotMatch(p.reason, /[A-Za-z]/);
+    // A refusal Zernio answered: failed, in Hebrew.
+    Z.fail = { status: 422, body: { error: { message: 'Internal upstream failure from TikTok API', code: 'upstream_error' } } };
+    r = await publishPost(ctx, id, { t: TUE('12:46') });
+    assert.equal(r.ok, false);
+    p = loadPost(db, id);
     assert.equal(p.status, 'failed');
     assert.match(p.reason, /המצגת לא עלתה לטיקטוק/);
     assert.doesNotMatch(p.reason, /[A-Za-z]/);

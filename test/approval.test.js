@@ -6,10 +6,10 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost, loadPost } from '../src/pipeline/build.js';
 import { idempotencyKeyOf, publishPost, reminderNotice, AI_LABEL_HE, tiktokMode, tiktokModeFor } from '../src/publish/index.js';
-import { publishZernio, ZernioError } from '../src/publish/zernio.js';
+import { CREATE_MS, publishZernio, ZernioError } from '../src/publish/zernio.js';
 import { reslotOverdue, OVERDUE_REASON } from '../src/publish/hold.js';
 import { watchDrafts } from '../src/publish/draft.js';
-import { STUCK_REASON, publishErrorHe } from '../src/publish/errors.js';
+import { STUCK_REASON, publishErrorHe, retryingHe } from '../src/publish/errors.js';
 import { approvedByPerson, autonomyMode, mayResume, pauseAccount } from '../src/autonomy/rails.js';
 import { stuckPublishing, tick } from '../src/autonomy/runner.js';
 import { usage } from '../src/budget/quota.js';
@@ -242,7 +242,8 @@ test('a customer cannot choose digest, auto or direct TikTok; the operator can, 
 /* ------------------------------------------------------------------ TED-01, TED-08, TED-09 */
 
 test('a failed post is listed, sent again for the platform that did not go out, and never twice', async () => {
-  Z.fail.tiktok = { status: 500, body: { error: { message: 'upstream exploded' } } };
+  // A refusal Zernio answered: a 5xx or a lost answer is sent again by itself with its key, and is not this test.
+  Z.fail.tiktok = { status: 422, body: { error: { message: 'upstream exploded' } } };
   // Instagram first: the post's platforms in that order, so Instagram is out when TikTok fails.
   pack().meta.platforms = ['instagram', 'tiktok'];
   pack().meta.zernio.tiktokMode = 'direct';
@@ -316,23 +317,58 @@ test('a part Zernio had taken is asked about before anything is sent again', asy
   }
 });
 
-test("every Zernio create carries its key: a send whose answer was lost goes again with the same key, and not past Zernio's 24 hours", async () => {
+test("every Zernio create carries its key: a send whose answer was lost goes again by itself with the same key, and not past Zernio's 24 hours", async () => {
   pack().meta.zernio.tiktokMode = 'direct';
   pack().meta.platforms = ['tiktok'];
   const id = await post('approved');
-  // The first send: Zernio never answered (a timeout), after the part was marked as being sent.
+  // The first send: Zernio never answered (a timeout), after the part was marked as being sent. It may be out (the
+  // owner's Instagram, 2026-11-11: two posts shown "לא עלה" were on the profile), so it is not a failure: the next
+  // tick sends it again.
   Z.fail.tiktok = { status: 504, body: { error: 'gateway timeout' } };
   await publishPost(ctx, id, { t: TUE('12:45') });
   let p = loadPost(db, id);
-  assert.equal(p.status, 'failed');
+  assert.equal(p.status, 'approved');
+  assert.equal(p.reason, retryingHe('tiktok'));
   assert.equal(p.publish.tiktok.sendingAt, new Date(TUE('12:45')).toISOString());
   assert.equal(creates()[0].key, idempotencyKeyOf(id, 'tiktok', 1));
+  // The key's first request still processing at Zernio: wait, again with the same key.
+  Z.fail.tiktok = { status: 409, body: { error: { code: 'idempotency_conflict', message: 'still processing' } } };
+  await publishPost(ctx, id, { t: TUE('12:46') });
+  assert.equal(loadPost(db, id).status, 'approved');
   // Within the day: the same key, so a post Zernio made the first time is returned, not made again.
   delete Z.fail.tiktok;
-  db.run("UPDATE posts SET status = 'approved' WHERE id = ?", id);
-  await publishPost(ctx, id, { t: TUE('13:30') });
-  assert.equal(creates()[1].key, idempotencyKeyOf(id, 'tiktok', 1));
+  await publishPost(ctx, id, { t: TUE('12:47') });
+  assert.deepEqual(creates().map((c) => c.key), [1, 2, 3].map(() => idempotencyKeyOf(id, 'tiktok', 1)));
   assert.equal(loadPost(db, id).status, 'published');
+  assert.equal(loadPost(db, id).reason, null);
+
+  // Three tries and still no answer: a person looks, and the retry button sends it with the same key.
+  const slow = await post('approved');
+  Z.fail.tiktok = { status: 504, body: { error: 'gateway timeout' } };
+  for (const m of ['12:45', '12:46', '12:47']) await publishPost(ctx, slow, { t: TUE(m) });
+  assert.equal(loadPost(db, slow).status, 'failed');
+  assert.match(loadPost(db, slow).reason, /לא עלתה לטיקטוק/);
+  delete Z.fail.tiktok;
+  db.run("UPDATE posts SET status = 'approved' WHERE id = ?", slow);
+  await publishPost(ctx, slow, { t: TUE('13:30') });
+  assert.equal(creates().at(-1).key, idempotencyKeyOf(slow, 'tiktok', 1));
+  assert.equal(loadPost(db, slow).status, 'published');
+
+  // A refusal Zernio answered (a 4xx) is not sent again by itself.
+  const refused = await post('approved');
+  Z.fail.tiktok = { status: 400, body: { error: 'bad request' } };
+  await publishPost(ctx, refused, { t: TUE('12:45') });
+  assert.equal(loadPost(db, refused).status, 'failed');
+  delete Z.fail.tiktok;
+
+  // The same slides already on the account (Zernio's 409 with the post it has): that post, not a failure.
+  const twin = await post('approved');
+  Z.states['zp-twin'] = 'published';
+  Z.fail.tiktok = { status: 409, body: { error: 'This exact content is already scheduled, publishing, or was posted to this account within the last 24 hours.', details: { existingPostId: 'zp-twin', platform: 'tiktok' } } };
+  await publishPost(ctx, twin, { t: TUE('12:45') });
+  assert.equal(loadPost(db, twin).status, 'published');
+  assert.equal(loadPost(db, twin).publish.tiktok.zernioId, 'zp-twin');
+  delete Z.fail.tiktok;
 
   // A send cut off more than 23 hours ago: Zernio no longer knows its key, and it is not sent again.
   const old = await post('approved');
@@ -350,6 +386,16 @@ test('a status read that fails after Zernio took the post keeps its id, still pr
   assert.equal(r.pending, true);
   assert.match(r.zernioId, /^zp/);
   assert.ok(r.pollError);
+});
+
+test('a create waits as long as Zernio publishes in it, and one cut off is sent again only when it carried its key', async () => {
+  // publishNow publishes inside the request: an 8-slide carousel took about 90 seconds (2026-11-11).
+  assert.ok(CREATE_MS >= 120_000);
+  const hang = Z.handle;
+  Z.handle = (url, init = {}) => (new URL(url).pathname === '/api/v1/posts' ? new Promise((_, no) => init.signal?.addEventListener('abort', () => no(init.signal.reason))) : hang(url, init));
+  const send = (key) => publishZernio({ platform: 'instagram', accountId: 'z-instagram', caption: 'c', imageUrls: ['https://a/1'], idempotencyKey: key }, { pollMs: 1, createMs: 30 });
+  await assert.rejects(send('teder:p:instagram:1'), (e) => e instanceof ZernioError && e.code === 'network' && e.retryable === true);
+  await assert.rejects(send(null), (e) => e instanceof ZernioError && e.code === 'network' && e.retryable === false);
 });
 
 test('a send cut off in the middle is found, and says to check before trying again (TED-08)', async () => {

@@ -8,6 +8,12 @@ const nameOf = (platform) => NAME[platform] || 'הפלטפורמה';
 /** Said on a post that was cut off mid-send (src/autonomy/runner.js): it may be out, so a person looks before trying again. */
 export const STUCK_REASON = 'השליחה נקטעה באמצע, ולא ברור אם המצגת עלתה. בדקו בפרופיל לפני שמנסים שוב.';
 
+/**
+ * Said while a send whose answer did not come back is sent again by itself with the same key (src/publish/zernio.js
+ * ZernioError.retryable): it may be out already, and the next try brings back that post rather than a second one.
+ */
+export const retryingHe = (platform) => `${nameOf(platform)} עוד לא אישר שהמצגת עלתה. בודקים שוב בעוד דקה, והיא לא תעלה פעמיים.`;
+
 /** Said when the fact gate stops a post at its send: the details (which fact, why) are in the post's steps. */
 export const FACT_CHECK_HE = 'בדיקת העובדות עצרה את המצגת לפני השליחה: עובדה בה כבר לא תואמת למקור שלה, או שהמקור הוסר. המצגת לא תעלה.';
 

@@ -39,7 +39,7 @@ const auth = () => ({ authorization: `Bearer ${String(process.env.ZERNIO_API_KEY
 export const zernioConfigured = () => isSet('ZERNIO_API_KEY');
 
 export class ZernioError extends Error {
-  constructor(message, { step, code = null, status = null, category = null, zernioId = null } = {}) {
+  constructor(message, { step, code = null, status = null, category = null, zernioId = null, retryable = false } = {}) {
     super(message);
     this.name = 'ZernioError';
     this.step = step;
@@ -48,6 +48,9 @@ export class ZernioError extends Error {
     this.category = category;
     // The post Zernio had taken when it failed: a retry asks Zernio about it before it creates another.
     this.zernioId = zernioId;
+    // Sent again by itself at a later tick (src/publish/index.js): only a create that carried its key, so the same
+    // key comes back with the post it made, never a second one.
+    this.retryable = retryable;
   }
 }
 
@@ -109,10 +112,24 @@ function partOf(post, platform) {
 }
 
 /**
+ * How long a create may take. publishNow publishes inside the request ("A post published immediately comes back with
+ * platformPostUrl in the response", docs.zernio.com/posts/create-post): an Instagram carousel of 8 slides took about
+ * 90 seconds on 2026-11-11, and two posts the 30 seconds before then cut off went out anyway, shown "לא עלה".
+ */
+export const CREATE_MS = 150_000;
+
+/**
+ * A create that may have made the post, sent again with its key: a cut-off answer or a 5xx (Zernio keeps the post a
+ * timeout saved, docs.zernio.com/guides/idempotency), or the key's first request still processing (409
+ * idempotency_conflict).
+ */
+const resendable = (e, key) => Boolean(key) && (e.code === 'network' || e.status >= 500 || (e.status === 409 && e.code === 'idempotency_conflict'));
+
+/**
  * Create one post on one platform and wait for it, up to timeoutMs. A TikTok post that goes straight to the profile
  * needs `consented`: a person approved this post (src/autonomy/rails.js approvedByPerson). Without it nothing is sent.
  */
-export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true, sound = null, asDraft = false, consented = false, idempotencyKey = null }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
+export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true, sound = null, asDraft = false, consented = false, idempotencyKey = null }, { pollMs = 5000, timeoutMs = 180_000, createMs = CREATE_MS } = {}) {
   if (!zernioConfigured()) throw new ZernioError('ZERNIO_API_KEY is not set', { step: 'config', code: 'not_configured' });
   if (platform === 'tiktok' && !(asDraft || (aiLabel && aiAsDraft)) && !consented) throw new ZernioError('a TikTok post goes straight to the profile only when a person approved it', { step: 'config', code: 'no_consent' });
   if (!accountId) throw new ZernioError(`no Zernio ${platform} account id in pack.json`, { step: 'config', code: 'no_account' });
@@ -125,9 +142,13 @@ export async function publishZernio({ platform, accountId, caption, imageUrls, p
     // Zernio's Idempotency-Key (docs.zernio.com/guides/idempotency): a create sent again with the same key within 24
     // hours "creates nothing and returns the original post". A send whose answer was lost is sent again with its key,
     // so it is made once (src/publish/index.js idempotencyKeyOf).
-    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound, asDraft }), { headers: { ...auth(), ...(idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).slice(0, 255) } : {}) }, timeoutMs: 30_000 });
+    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound, asDraft }), { headers: { ...auth(), ...(idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).slice(0, 255) } : {}) }, timeoutMs: createMs });
   } catch (e) {
-    throw new ZernioError(e.message, { step: 'create', code: e.code, status: e.status, category: e.body?.error?.errorCategory || null });
+    // The same content already on this account in the last day (Zernio counts only what is scheduled, publishing or
+    // published): that post is this one, read below like any other, not a failure.
+    const existing = e.status === 409 && e.body?.details?.existingPostId;
+    if (!existing) throw new ZernioError(e.message, { step: 'create', code: e.code, status: e.status, category: e.body?.error?.errorCategory || null, retryable: resendable(e, idempotencyKey) });
+    created = { post: { _id: String(existing) } };
   }
   const id = created?.post?._id;
   if (!id) throw new ZernioError('Zernio accepted the post but returned no id', { step: 'create', code: 'no_id' });

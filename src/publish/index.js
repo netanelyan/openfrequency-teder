@@ -23,7 +23,7 @@ import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInst
 import { zernioAccountId } from './connect.js';
 import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
 import { heldReason, needsConnection } from './hold.js';
-import { CLOSING_HE, FACT_CHECK_HE, publishErrorHe } from './errors.js';
+import { CLOSING_HE, FACT_CHECK_HE, publishErrorHe, retryingHe } from './errors.js';
 import { storedClosingProblems } from '../pipeline/closing.js';
 import { mediaOf } from '../core/platforms.js';
 
@@ -442,7 +442,9 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   // again at a later tick, a few times. Instagram publishes only at media_publish
   // and every retry first asks whether the last container went out, so a retry
   // cannot post twice. A Zernio error is never retried blind: a lost answer to a
-  // create can be a post that exists.
+  // create can be a post that exists. Only a create sent with its key is sent
+  // again by itself (ZernioError.retryable), with that same key, which brings back
+  // the post it made.
   const retry = Boolean(failed) && attempts < MAX_ATTEMPTS && (isThrottle(failed) || failed.retryable === true);
   const ok = !failed;
   // Draft-now: the slot's only TikTok act is one reminder, sent with the rest of the post; late if the server was down
@@ -460,7 +462,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   const status = ok ? (anyOut ? 'published' : 'drafted') : retry ? 'approved' : 'failed';
   db.update('posts', postId, {
     status,
-    reason: ok ? null : `${retry ? 'ננסה שוב: ' : ''}${publishErrorHe(failed, failedOn)}`,
+    reason: ok ? null : retry && failed.name === 'ZernioError' ? retryingHe(failedOn) : `${retry ? 'ננסה שוב: ' : ''}${publishErrorHe(failed, failedOn)}`,
     publish_json: { ...results, ...(retry ? { _attempts: attempts } : {}) },
     // When it went out; a draft's, when it was sent to the app. A failed post with a part out keeps when that was: it
     // counts toward the month, and one with nothing out does not (src/budget/quota.js).
