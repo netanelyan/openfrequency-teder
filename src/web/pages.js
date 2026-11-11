@@ -40,15 +40,28 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
  * posts", src/autonomy/every-day.js); "לדחות ולכתוב מחדש" writes this post again their way instead, and uses one of
  * the month's redos. A sample, or a month with no redos left, has only the first. `left` is the month's redos left,
  * when the page knows it.
+ *
+ * A scheduled post (DELETABLE) gets the same form as a deletion (the owner, 2026-11-11: "let someone change his mind and
+ * delete a scheduled post"): "למחוק" and "למחוק ולכתוב מחדש", to /post/<id>/delete (src/web/actions.js deletePost).
  */
 function rejectForm(ctx, post, { ajax = null, left = null } = {}) {
+  const w = DELETABLE.includes(post.status) ? DELETE_WORDS : REJECT_WORDS;
   const canRedo = !post.sample && left !== 0;
-  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? '<p class="muted small m0">ההחלפות של החודש נוצלו. אחרי דחייה מגיע פוסט אחר לאותו יום.</p>' : '') : `<p class="muted small m0">אחרי דחייה מגיע פוסט אחר לאותו יום. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
-  return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
-<label class="f">למה לדחות?<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
+  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? `<p class="muted small m0">ההחלפות של החודש נוצלו. ${w.after} מגיע פוסט אחר לאותו יום.</p>` : '') : `<p class="muted small m0">${w.after} מגיע פוסט אחר לאותו יום. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
+  return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/${w.path}"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
+<label class="f">${w.ask}<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
 <input type="text" name="note" placeholder="מה לשנות, במילים שלכם (לא חובה)" maxlength="300">
-${tail}<div class="rejectacts"><button class="btn danger" type="submit" name="redo" value="0">לדחות</button>${canRedo ? '<button class="btn" type="submit" name="redo" value="1">לדחות ולכתוב מחדש</button>' : ''}</div></form>`;
+${tail}<div class="rejectacts"><button class="btn danger" type="submit" name="redo" value="0">${w.go}</button>${canRedo ? `<button class="btn" type="submit" name="redo" value="1">${w.go} ולכתוב מחדש</button>` : ''}</div></form>`;
 }
+const REJECT_WORDS = { path: 'reject', ask: 'למה לדחות?', go: 'לדחות', after: 'אחרי דחייה' };
+const DELETE_WORDS = { path: 'delete', ask: 'למה למחוק?', go: 'למחוק', after: 'אחרי המחיקה' };
+
+/**
+ * A scheduled post's way out, on its page: apart from the bar and its main button, small and red, and it opens the
+ * reason form as a deletion (rejectForm).
+ */
+const deleteRow = (ctx, post, left) => `<div class="actions p0x pt10"><button class="btn sm ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}למחוק את הפוסט</button></div>
+${rejectForm(ctx, post, { left })}`;
 
 /** What a post counted as in the customer's month (src/budget/quota.js). */
 const QUOTA_KIND_HE = { suggestion: 'הצעה', redo: 'החלפה', retry: 'לא נספר, הבדיקות שלנו עצרו אותו' };
@@ -85,7 +98,7 @@ function redoBanners(d) {
   if (r?.redo === 'writing') out.push(`<div class="banner info">${icon('clock')}<div><b>פוסט חלופי נכתב עכשיו</b><p>הוא יגיע לאישור בעוד כמה דקות.</p></div></div>`);
   if (r?.redo === 'queued' && d.replacement) out.push(`<div class="banner info">${icon('check')}<div><b>נכתב פוסט חלופי</b><p><a href="/post/${esc(d.replacement.id)}">${esc(d.replacement.hook || 'לפוסט החלופי')}</a></p></div></div>`);
   if (r?.redo === 'failed') out.push(`<div class="banner warn">${icon('alert')}<div><b>הפוסט החלופי לא נכתב</b><p>הבדיקות שלנו עצרו את מה שנכתב במקומו, ולכן ההחלפה לא ירדה מהמכסה.</p></div></div>`);
-  if (r?.redo === 'none' && !r.day) out.push(`<div class="banner info">${icon('alert')}<div><b>לא נכתב פוסט חלופי</b><p>ההחלפות של החודש נוצלו כשהפוסט נדחה.</p></div></div>`);
+  if (r?.redo === 'none' && !r.day) out.push(`<div class="banner info">${icon('alert')}<div><b>לא נכתב פוסט חלופי</b><p>ההחלפות של החודש נוצלו כשהפוסט ${r.deleted ? 'נמחק' : 'נדחה'}.</p></div></div>`);
   // A new post for the same day (src/autonomy/every-day.js), when this one was declined without a redo.
   if (r?.day === 'writing') out.push(`<div class="banner info">${icon('clock')}<div><b>פוסט אחר לאותו יום נכתב עכשיו</b><p>הוא יגיע לאישור בעוד כמה דקות.</p></div></div>`);
   if (r?.day === 'queued' && d.dayPost) out.push(`<div class="banner info">${icon('check')}<div><b>נכתב פוסט אחר לאותו יום</b><p><a href="/post/${esc(d.dayPost.id)}">${esc(d.dayPost.hook || 'לפוסט החדש')}</a></p></div></div>`);
@@ -173,7 +186,7 @@ const ROLE_NAME = {
 const PLATFORM_DELETE = { deleted: 'נמחק אוטומטית', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
 const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
 const AUDIT_HE = {
-  login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
+  login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', delete_post: 'מחיקת פוסט מתוזמן', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
   takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', assistant_prefs: 'הגדרות וואטסאפ', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
@@ -223,6 +236,8 @@ export const building = (post) => post.status === 'drafting' || (!post.slides?.l
 
 /** The statuses whose text can still be changed (the rule src/web/actions.js edit() enforces). */
 export const EDITABLE = ['queued', 'approved', 'sample'];
+/** The statuses of a scheduled post that can still be deleted, before it goes out (the rule src/web/actions.js deletePost enforces). */
+export const DELETABLE = ['approved', 'held'];
 
 /** A time, with its date when it is not today's. */
 const atHe = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
@@ -383,8 +398,9 @@ ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישו
 ${EDITABLE.includes(post.status) && !ctx.unpaid ? `<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}לערוך</a>` : ''}
 ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button>` : ''}
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
+${DELETABLE.includes(post.status) ? `<button class="btn ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}מחיקה</button>` : ''}
 </div>
-${decide ? rejectForm(ctx, post, { ajax: 'remove' }) : ''}
+${decide || DELETABLE.includes(post.status) ? rejectForm(ctx, post, { ajax: 'remove' }) : ''}
 ${captionDetails(post, pack?.meta?.platforms || [])}
 ${factsBlock(ctx, post)}
 </article>`;
@@ -740,6 +756,8 @@ ${post.caption || post.caption_ig ? fold('caption', 'הטקסט שעולה עם 
 ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
 ${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}
 ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
+${post.status === 'held' ? `<div class="actionbar"><a class="btn primary" href="/accounts?account=${esc(post.account_id)}#connect-${esc(post.account_id)}">לחבר</a></div>` : ''}
+${DELETABLE.includes(post.status) ? deleteRow(ctx, post, d.quota && !post.sample ? d.quota.redos.left : null) : ''}
 ${post.status === 'failed' ? `<div class="actionbar">${retryButton(ctx, post, { cls: 'btn primary' })}</div><p class="muted small">שולחים רק לאן שהמצגת עוד לא עלתה. מה שכבר עלה לא נשלח שוב.</p>` : ''}
 ${EDITABLE.includes(post.status) && d.photos ? fold('light', 'שינויים קטנים', lightPanel(ctx, d)) : ''}
 ${EDITABLE.includes(post.status) ? edit : ''}

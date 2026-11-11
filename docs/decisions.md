@@ -3123,3 +3123,40 @@ UNVERIFIED with a real Zernio connect: that Zernio keeps the `b` parameter on th
 `s` (it appends its own to whatever query the address has), and that the browser keeps the toast's cookie set on that
 cross-site return (SameSite=Strict on a top-level navigation). If the toast does not show, the page still says it
 worked, and the panel shows the account connected.
+
+## A scheduled post can be deleted (2026-11-11)
+
+The owner: "teder: let somone change his mind and delete a scheduled post."
+
+**What it was.** A post approved for its hour had "לפרסם עכשיו" and "ביטול אישור" on its page, and nothing else: to
+take it off the schedule the owner sent it back to waiting and then rejected it, in two steps. A post held for a
+connection (src/publish/hold.js) had no button at all, and went out by itself once TikTok or Instagram was connected.
+
+**What it is.** A scheduled post (approved for its hour, or held for a connection) has "למחוק את הפוסט" on its page:
+small, red and apart from the bar, so the main button stays the one that leads ("לפרסם עכשיו" on an approved post, and
+"לחבר" on a held one, which had none). It opens the rejection's form as a deletion, "למה למחוק?" with the same
+reasons, and the same choice the owner made on 2026-11-08 and 2026-11-09: "למחוק" gets a new post for the same day,
+"למחוק ולכתוב מחדש" writes this one again their way and uses one of the month's redos. It is a rejection said as a
+deletion (src/web/actions.js deletePost, POST /post/<id>/delete): the post is rejected, with `deleted` in its
+reject_json, so it gives its place in the month back and its day gets another post exactly as a rejected one's does
+(src/autonomy/every-day.js). The answer starts "הפוסט נמחק ולא ייצא." and goes on with what comes instead, in the
+rejection's own words; the post's page says "נמחק" on its chip, and the notification of the new post says "במקום
+הפוסט שמחקתם". "ביטול אישור" stays, the other way back: to waiting for approval.
+
+- *It cannot go out after it.* The runner sends only approved posts, and publishPost refuses any other (not_approved),
+  so a deletion before the hour is final. The web server and the runner are one process (deploy/openfrequency.service,
+  scripts/web.js --runner), and publishPost marks a post 'publishing' before its first wait, so a deletion lands
+  before a send starts or is refused while it runs: "הפוסט עולה ממש עכשיו, אז כבר אי אפשר למחוק אותו." A post that is
+  out is not this button's (a takedown is), nor is one in the TikTok inbox after its hour ("drafted"): it is the
+  owner's in the app.
+- *A TikTok draft.* One already in the app is kept as an old draft, as when an approval is taken back, and the answer
+  says to delete it there. One still on its way (deleted a moment after the approval, when the draft-now draft has just
+  left) used to land on the post as its own draft, unsaid: now a draft that lands on a post no longer approved is kept as
+  an old draft too (src/publish/index.js sendDraft), for a rejection or a cancelled approval as well, and the deletion's
+  answer says it is on its way and to delete it in the app when it comes.
+
+Tests: test/draft-now.test.js (a deletion after the draft went: the answer, the old draft, publishPost refusing at the
+hour, the page's "נמחק"; a deletion while the draft is on its way; the refusals; the page's and the card's buttons and
+form, approved and held), test/every-day.test.js (the day gets another post and the month its place back, and the tick
+at the hour sends nothing; a held post deleted with a redo, never released by a connection), test/workspaces.test.js
+(the route, refused for another workspace's post).

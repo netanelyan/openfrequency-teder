@@ -123,7 +123,9 @@ export async function refillSlot(ctx, pack, slotAt, { declined = null } = {}) {
   }
   noteDay(db, declined, { day: 'queued', dayPost: res.postId });
   audit(db, { action: 'day_refilled', accountId: pack.id, postId: res.postId, detail: { slotAt, declined } });
-  await notify(ctx, { accountId: pack.id, postId: res.postId, kind: 'refill', title: 'פוסט חדש מחכה לאישור', body: 'במקום הפוסט שדחיתם, לאותו יום.', url: `/post/${res.postId}` }).catch((e) => ctx.log?.(`notify: ${e.message}`));
+  // A post deleted from the schedule (src/web/actions.js deletePost) is said as deleted.
+  const deleted = Boolean(declined && j(db.get('SELECT reject_json FROM posts WHERE id = ?', declined)?.reject_json, {})?.deleted);
+  await notify(ctx, { accountId: pack.id, postId: res.postId, kind: 'refill', title: 'פוסט חדש מחכה לאישור', body: `במקום הפוסט ש${deleted ? 'מחקתם' : 'דחיתם'}, לאותו יום.`, url: `/post/${res.postId}` }).catch((e) => ctx.log?.(`notify: ${e.message}`));
   return { ok: true, postId: res.postId, status: res.status, why: null };
 }
 

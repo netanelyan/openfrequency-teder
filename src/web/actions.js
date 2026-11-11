@@ -171,6 +171,37 @@ export function unapprove(ctx, user, { id }) {
 export function reject(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
   if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לדחות פוסט במצב "${post.status}"`);
+  return decline(ctx, user, post, form);
+}
+
+/** What a deletion says first, whatever comes instead (deletePost). */
+const DELETED_HE = 'הפוסט נמחק ולא ייצא.';
+/** A deleted post's TikTok draft still on its way to the app: it lands in the inbox all the same (sendDraft keeps it as an old draft). */
+const DRAFT_COMING = 'הטיוטה של הפוסט שנמחק בדרך לאפליקציה של טיקטוק: כשתגיע, מחקו אותה שם.';
+
+/**
+ * Delete a scheduled post. The owner, 2026-11-11: "let someone change his mind and delete a scheduled post". Until
+ * then a post approved for its hour could only be sent back to waiting ("ביטול אישור") and then rejected, in two
+ * steps, and one held for a connection (src/publish/hold.js) not at all: it went out by itself once TikTok or
+ * Instagram was connected. Now one form takes either down before it goes out.
+ *
+ * It is a rejection said as a deletion: the same reason form, the same choice of what comes instead, and the day
+ * still gets its post (reject above). "ביטול אישור" stays the other way back, to waiting for approval. A post that is
+ * going out right now is not stopped halfway (publishPost marks it 'publishing' before it sends anything, and refuses
+ * a post that is not approved), and one that is out is not this button's: a takedown is.
+ */
+export function deletePost(ctx, user, { id }, form) {
+  const post = mustPost(ctx, id);
+  if (post.status === 'publishing') throw new ActionError('הפוסט עולה ממש עכשיו, אז כבר אי אפשר למחוק אותו.', 409);
+  if (!['approved', 'held'].includes(post.status)) throw new ActionError(post.status === 'queued' ? 'הפוסט עוד מחכה לאישור. אם הוא לא מתאים, אפשר לדחות אותו.' : 'אפשר למחוק רק פוסט מתוזמן שעוד לא עלה.');
+  return decline(ctx, user, post, form, { deleting: true });
+}
+
+/** reject and deletePost, once the post is known to be the session's and in a state to come down. */
+function decline(ctx, user, post, form, { deleting = false } = {}) {
+  const { id } = post;
+  // A draft-now draft on its way to the app as this comes (approved a moment ago): it is not on the post yet.
+  const coming = Boolean(post.publish?.tiktok?.uploading);
   // A reason that is not one of the form's (an older page) is kept as the customer's words, under "something else".
   const given = String(form.reason || '').trim();
   const code = REDO_REASONS.includes(given) ? given : 'other';
@@ -187,12 +218,14 @@ export function reject(ctx, user, { id }, form) {
   const redo = wants && runs && q.ok;
   const slot = post.sample ? null : daySlotOf(ctx.db, post);
   const fresh = !redo && runs && q.full !== 'posts' && Boolean(slot) && dayOpen(slot);
-  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : !wants ? 'declined' : !runs ? 'paused' : 'none', ...(fresh ? { day: 'writing' } : {}) };
+  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : !wants ? 'declined' : !runs ? 'paused' : 'none', ...(fresh ? { day: 'writing' } : {}), ...(deleting ? { deleted: true } : {}) };
   ctx.db.update('posts', id, { reject_json: rejected });
-  audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo, day: fresh ? 'writing' : null }) });
-  const draftLeft = left ? ` ${DRAFT_LEFT}` : '';
-  const result = (message, job) => {
-    const r = { ok: true, message: `${message}${draftLeft}` };
+  audit(ctx.db, { actor: user.name, action: deleting ? 'delete_post' : 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo, day: fresh ? 'writing' : null, ...(deleting ? { was: post.status } : {}) }) });
+  const draftLeft = left ? ` ${DRAFT_LEFT}` : deleting && coming ? ` ${DRAFT_COMING}` : '';
+  // A rejection says "נדחה" its own ways; a deletion says once that the post will not go out, then the same news of
+  // what comes instead.
+  const result = (declined, tail = '', job = null) => {
+    const r = { ok: true, message: `${deleting ? DELETED_HE : declined}${tail ? ` ${tail}` : ''}${draftLeft}` };
     if (job) Object.defineProperty(r, 'job', { value: job });
     return r;
   };
@@ -203,18 +236,20 @@ export function reject(ctx, user, { id }, form) {
       return { ok: false, why: e.message };
     });
     const after = q.usage.redos.left - 1;
-    return result(`נדחה. פוסט חלופי נכתב עכשיו ויגיע לאישור בעוד כמה דקות. ${after === 0 ? 'זו ההחלפה האחרונה של החודש.' : after === 1 ? 'נשארה עוד החלפה אחת החודש.' : `נשארו עוד ${after} החלפות החודש.`}`, job);
+    return result('נדחה.', `פוסט חלופי נכתב עכשיו ויגיע לאישור בעוד כמה דקות. ${after === 0 ? 'זו ההחלפה האחרונה של החודש.' : after === 1 ? 'נשארה עוד החלפה אחת החודש.' : `נשארו עוד ${after} החלפות החודש.`}`, job);
   }
   if (fresh) {
     // The same: refillSlot holds the day's place before it first waits.
     const job = refillSlot(engine, pack, slot, { declined: id });
-    return result(!wants ? 'נדחה, והסיבה נשמרה. פוסט אחר לאותו יום נכתב עכשיו ויגיע לאישור בעוד כמה דקות.' : `נדחה. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז במקום לכתוב אותו מחדש נכתב עכשיו פוסט אחר לאותו יום. הוא יגיע לאישור בעוד כמה דקות.`, job);
+    return !wants
+      ? result('נדחה, והסיבה נשמרה.', 'פוסט אחר לאותו יום נכתב עכשיו ויגיע לאישור בעוד כמה דקות.', job)
+      : result('נדחה.', `כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז במקום לכתוב אותו מחדש נכתב עכשיו פוסט אחר לאותו יום. הוא יגיע לאישור בעוד כמה דקות.`, job);
   }
   if (post.sample) return result('נדחה. הסיבה נשמרה.');
-  if (!runs) return result('נדחה. הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.');
-  if (q.full === 'posts') return result(`נדחה, והפוסט ירד. כל ${q.usage.suggested.limit} הפוסטים של החודש כבר נכתבו, אז לא נכתב פוסט במקומו.`);
+  if (!runs) return result('נדחה.', 'הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.');
+  if (q.full === 'posts') return result('נדחה, והפוסט ירד.', `כל ${q.usage.suggested.limit} הפוסטים של החודש כבר נכתבו, אז לא נכתב פוסט במקומו.`);
   // The day is over (or the post had none): nothing would be seen in time.
-  return result(!wants ? 'נדחה, והפוסט ירד. הסיבה נשמרה.' : `נדחה, והפוסט ירד. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.`);
+  return !wants ? result('נדחה, והפוסט ירד. הסיבה נשמרה.') : result('נדחה, והפוסט ירד.', `כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.`);
 }
 
 /** The owner deleted a post's old TikTok drafts in the app: the reminder on the post goes away. */
