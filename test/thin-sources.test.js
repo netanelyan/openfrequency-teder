@@ -149,7 +149,7 @@ test("the model's facts keep what an encyclopedia agrees on: no figures but year
   assert.match(p.system, /הסיפור של וויקס/, 'not a subject posted lately');
 });
 
-test('sources too thin to write from: the post is written from the model\'s own facts, labelled "לא ממקור, כדאי לבדוק", and never named as a source', async () => {
+test('sources too thin to write from: the post is written from the model\'s own facts, labelled general knowledge with no source, and never named as a source', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
@@ -173,6 +173,10 @@ test('sources too thin to write from: the post is written from the model\'s own 
     assert.doesNotMatch(drawn, /ידע כללי/);
     const card = postCard({ csrf: 'x', operator: false }, post, pack);
     assert.match(card, new RegExp(UNSOURCED_HE));
+    // The slide's corner and the card's line agree, and neither says the facts have a source (the audit, 2026-11-12).
+    assert.match(card, /<span class="has">ידע כללי<\/span>/);
+    assert.doesNotMatch(card, /כל אחת עם מקור|עובדה אחת, עם מקור|לא ממקור/);
+    assert.match(card, /<span class="warnc">.*ידע כללי, בלי מקור\. כדאי לבדוק לפני שמאשרים/);
     assert.doesNotMatch(card, /<a [^>]*>ידע כללי/, 'not shown as a source to open');
     assert.ok(!card.includes('href="model:'), 'no link to a page that does not exist');
     // The source is the account's to remove, and then it is never used.

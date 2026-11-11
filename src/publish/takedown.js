@@ -79,14 +79,15 @@ export async function recordTakedown(ctx, { postId, platform = null, claimant = 
     post_id: postId, account_id: post.account_id, platform, claimant: String(claimant).slice(0, 200), notice: String(notice).slice(0, 4000),
     received_at: at, recorded_by: by, deleted_json: deleted, created_at: nowIso(),
   });
-  db.update('posts', postId, { status: 'taken_down', reason: `הודעת הסרה${claimant ? ` מ-${claimant}` : ''}: ${String(notice).slice(0, 160)}`, updated_at: nowIso() });
+  // "מאת", not "מ-" before a name in Hebrew letters ("הודעת הסרה מ-משרד עו"ד" read wrong; the audit, 2026-11-12).
+  db.update('posts', postId, { status: 'taken_down', reason: `הודעת הסרה${claimant ? ` מאת ${claimant}` : ''}: ${String(notice).slice(0, 160)}`, updated_at: nowIso() });
   step(db, postId, 'takedown', 'info', { takedown: id, platform, deleted });
   audit(db, { actor: by, action: 'takedown', accountId: post.account_id, postId, detail: { id, platform, deleted } });
   const since = new Date(t - WINDOW_DAYS * DAY).toISOString();
   const n = db.get('SELECT COUNT(*) AS n FROM takedowns WHERE account_id = ? AND received_at >= ?', post.account_id, since).n;
   let paused = false;
   if (n >= PAUSE_AFTER) {
-    pauseAccount(db, post.account_id, 'takedowns', `${n} הודעות הסרה ב-${WINDOW_DAYS} ימים: החשבון עוצר עד שתבדקו`, by);
+    pauseAccount(db, post.account_id, 'takedowns', `${n} הודעות הסרה ב-${WINDOW_DAYS} הימים האחרונים, אז החשבון עוצר עד שתבדקו ותפעילו אותו מחדש.`, by);
     paused = true;
   }
   return { id, deleted, paused, count: n };

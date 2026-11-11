@@ -11,6 +11,7 @@ import path from 'node:path';
 import { now } from '../core/clock.js';
 import { assetsDir } from '../core/paths.js';
 import { THEME_COLOR, THEME_COOKIE } from './static/theme.js';
+import { CLOSING_HE } from '../publish/errors.js';
 
 // What a link to Teder shows when it is sent on WhatsApp or Facebook: Teder's picture and line from the website,
 // openfrequency-web's og/teder.png.
@@ -356,8 +357,10 @@ export const MODE_HE = { approve: ['אישור', 'כל פוסט מחכה לך'],
 export const STATUS_HE = {
   drafting: ['בכתיבה', ''],
   queued: ['מחכה לאישור', 'sig'],
-  approved: ['אושר', 'ok'],
-  publishing: ['עולה עכשיו', 'ok'],
+  // Waiting for its hour, and on its way: blue, as what waits is; green is for what went out (the owner's colours:
+  // published green, blocked red, waiting blue).
+  approved: ['אושר', 'sig'],
+  publishing: ['עולה עכשיו', 'sig'],
   drafted: ['בטיוטות של טיקטוק', 'sig'],
   published: ['פורסם', 'ok'],
   // Published, but only written to disk: nothing of it left the server (src/publish/live.js shownStatus).
@@ -378,11 +381,23 @@ const REASON_HE = {
   failed: 'המצגת לא עלתה. שמרנו את הפרטים, ואפשר לנסות שוב.',
 };
 
+/** A customer's own words on a post (a decline's reason and note, a takedown notice they recorded): theirs, in any letters. */
+const THEIRS = ['rejected', 'taken_down'];
+/** What a blocked post says to a customer in its own words: the closing slide's and the fact check's, which say what to do. */
+const BLOCKED_SAID = [CLOSING_HE, 'בדיקת העובדות עצרה את המצגת'];
+
 /**
  * A post's reason as the page shows it: the operator reads it as it was stored; a customer reads it in Hebrew, and a
  * reason with English in it (raw text from the engine, kept in the post's steps) is said by its post's status instead.
+ * A post our checks stopped while it was written says so in one line: what stopped it ("אין תמונה מורשית של X",
+ * "נשמע כמו בוט (7/10) גם אחרי שכתוב") is ours (the audit, 2026-11-12). What the customer wrote is never replaced:
+ * a decline in English, or a notice an English firm sent, read "משהו השתבש אצלנו".
  */
-export const reasonHe = (ctx, status, reason) => (!reason || ctx.operator || !/[A-Za-z]{4,}/.test(reason) ? reason : REASON_HE[status] || 'משהו השתבש אצלנו עם המצגת הזו. כתבו לנו ונבדוק.');
+export const reasonHe = (ctx, status, reason) => {
+  if (!reason || ctx.operator || THEIRS.includes(status)) return reason;
+  if (status === 'blocked' && !BLOCKED_SAID.some((k) => String(reason).startsWith(k))) return REASON_HE.blocked;
+  return /[A-Za-z]{4,}/.test(reason) ? REASON_HE[status] || 'משהו השתבש אצלנו עם המצגת הזו. כתבו לנו ונבדוק.' : reason;
+};
 
 export const statusChip = (s) => {
   const [he, cls] = STATUS_HE[s] || [s, ''];

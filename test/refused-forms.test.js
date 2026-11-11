@@ -7,7 +7,7 @@ import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
 import { closeBrowser } from '../src/render/render.js';
 import { addDays, israelDate } from '../src/schedule/israel.js';
-import { customer, fakeAccounts, listenFree, opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, listenFree, opened, operator, tempHome } from './helpers.js';
 
 // A form its checks refuse, sent as a browser without the page's script sends it (a plain POST, no x-of-ajax): the
 // page comes back, 422, with the problems and what the customer typed, never "משהו השתבש אצלנו". The audit of
@@ -104,4 +104,48 @@ test('a refused source, fact, topic, rival and sound each come back as their pag
   const sound = await refused(await plain('/sounds/save', cookie, { _csrf, account: 'demo', name: '', artist: 'הלהקה של השכונה', link: '' }), 'a sound');
   assert.ok(sound.includes('value="הלהקה של השכונה"'), 'the artist as it was typed');
   assert.match(sound, /שם הסאונד/);
+});
+
+test("a refused edit says each problem's place and what to do in Hebrew; the operator on their own pages keeps the checks' words", async () => {
+  const { problemHe, problemsHe } = await import('../src/web/problems.js');
+  assert.equal(problemHe({ where: 'cover', code: 'voice:register', msg: 'an exclamation mark' }), 'שקף הפתיחה: יש סימן קריאה. מורידים אותו.');
+  assert.equal(problemHe({ where: 'slide 2 title', code: 'length', msg: 'the title is over 70 characters' }), 'שקף 2, הכותרת: הכותרת ארוכה מ-70 תווים.');
+  assert.equal(problemHe({ where: 'facts', code: 'verify', msg: 'slide 3: the number 12 is not in the quotes it cites' }), 'שקף 3: המספר 12 לא מופיע בציטוט מהמקור. מוחקים אותו, או כותבים מספר שמופיע שם.');
+  assert.equal(problemHe({ where: 'hashtags', code: 'caption', msg: '6 hashtags: 5 at most' }), 'ההאשטגים: יש 6 האשטגים, ואפשר עד 5.');
+  assert.equal(problemHe({ where: 'caption', code: 'caption', msg: 'the TikTok caption is 40 characters: it needs 80 or more' }, { igCaption: true }), 'הכיתוב לטיקטוק: הכיתוב קצר מדי. יש בו 40 תווים, וצריך לפחות 80.');
+  assert.equal(problemHe({ where: 'cover', code: 'voice:phrase', msg: 'an ad phrase: "הזדמנות של פעם בחיים"' }), 'שקף הפתיחה: יש ביטוי שנשמע כמו מודעה או כמו מכונה: "הזדמנות של פעם בחיים". כדאי לנסח אחרת.');
+  // Anything without a line of its own: one general line at its place, and the same line once.
+  const odd = problemsHe([{ where: 'cover', code: 'overlay', msg: 'one line of text: at least 3 on a slide' }, { where: 'cover', code: 'overlay', msg: 'another thing the overlay check says' }]);
+  assert.deepEqual(odd, ['שקף הפתיחה: יש כאן ניסוח שהבדיקות שלנו לא מקבלות. נסו לנסח אחרת, ואם זה חוזר, כתבו לנו.']);
+
+  const cookie = login();
+  const _csrf = await csrfOf(cookie);
+  const html = await refused(await plain(`/post/${postId}/edit`, cookie, { _csrf, hook: '5 דברים שקובעים אם הבזיליקום במרפסת ישרוד', sub: '', caption: 'בזיליקום הוא צמח של קיץ.', body_0: 'בזיליקום צריך לפחות 12 שעות שמש ישירה ביום.' }), 'the edit');
+  const listed = /<div class="problems">([\s\S]*?)<\/div>/.exec(html)[1];
+  assert.match(listed, /שקף 1: המספר 12 לא מופיע בציטוט מהמקור/);
+  assert.doesNotMatch(listed.replace(/<[^>]+>/g, ''), /[A-Za-z]{4,}/, 'no English in the problems a customer reads');
+
+  // The operator, here on a laptop's address (their own pages), reads what the checks said.
+  const op = fake.session(operator()).cookie;
+  const opCsrf = await csrfOf(op);
+  const res = await fetch(`${base}/post/${postId}/edit`, { method: 'POST', redirect: 'manual', headers: { cookie: op, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: new URLSearchParams({ _csrf: opCsrf, hook: '5 דברים שקובעים אם הבזיליקום במרפסת ישרוד', sub: '', caption: 'בזיליקום הוא צמח של קיץ.', body_0: 'בזיליקום צריך לפחות 12 שעות שמש ישירה ביום.' }).toString() });
+  assert.match((await res.json()).problems.join(' '), /number 12 is not in the quotes/);
+});
+
+test('a post that moved on meanwhile is refused in words, never by its status code', async () => {
+  const cookie = login();
+  const _csrf = await csrfOf(cookie);
+  const ajax = (p, body) => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: new URLSearchParams(body).toString() });
+  ctx.db.update('posts', postId, { status: 'published', published_at: new Date().toISOString() });
+  try {
+    const approve = await (await ajax(`/post/${postId}/approve`, { _csrf })).json();
+    assert.equal(approve.message, 'אי אפשר לאשר את הפוסט הזה. המצב שלו עכשיו: פורסם.');
+    const reject = await (await ajax(`/post/${postId}/reject`, { _csrf, reason: 'other' })).json();
+    assert.equal(reject.message, 'אי אפשר לדחות את הפוסט הזה. המצב שלו עכשיו: פורסם.');
+    const edit = await (await ajax(`/post/${postId}/edit`, { _csrf, hook: 'x' })).json();
+    assert.equal(edit.message, 'אי אפשר לערוך את הפוסט הזה. המצב שלו עכשיו: פורסם.');
+    for (const m of [approve.message, reject.message, edit.message]) assert.doesNotMatch(m, /"published"|[A-Za-z]{4,}/);
+  } finally {
+    ctx.db.update('posts', postId, { status: 'queued', published_at: null });
+  }
 });

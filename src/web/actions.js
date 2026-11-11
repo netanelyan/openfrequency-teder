@@ -17,7 +17,8 @@ import { CLOSING_HE } from '../publish/errors.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { rulesFor } from '../schedule/choice.js';
-import { timeHe } from './ui.js';
+import { STATUS_HE, timeHe } from './ui.js';
+import { moreThanFactsHe, problemsHe } from './problems.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
 import { removeRival, saveRival } from '../pipeline/rivals.js';
@@ -45,6 +46,18 @@ export class ActionError extends Error {
     Object.assign(this, extra);
   }
 }
+
+/**
+ * Whether this person reads the engine's own words (the checks' English, a publisher's error): the operator on their
+ * own pages. Everyone else, the operator on Teder's own name among them (server.js asCustomer), reads Hebrew (the
+ * audit, 2026-11-12: customers read "cover: an exclamation mark" and 'אי אפשר לאשר פוסט במצב "approved"').
+ */
+const ours = (user) => Boolean(user?.operator) && !user.asCustomer;
+
+/** A post's state in the words of its chip (ui.js STATUS_HE), for a refusal that says where it stands now. */
+const stateHe = (status) => STATUS_HE[status]?.[0] || 'אחר';
+/** Said when a post moved on meanwhile (another tab, a double tap, the runner): what cannot be done, and its state now. */
+const notNow = (verb, status) => `אי אפשר ${verb} את הפוסט הזה. המצב שלו עכשיו: ${stateHe(status)}.`;
 
 // A post of another workspace is "not found", the same answer as one that never was (src/web/workspace.js).
 const mustPost = (ctx, id) => {
@@ -81,7 +94,7 @@ const DRAFT_LEFT = 'הטיוטה הקודמת כבר בתיבת הטיוטות �
 
 export function approve(ctx, user, { id }) {
   const post = mustPost(ctx, id);
-  if (post.status !== 'queued') throw new ActionError(`אי אפשר לאשר פוסט במצב "${post.status}"`);
+  if (post.status !== 'queued') throw new ActionError(post.status === 'approved' ? 'הפוסט הזה כבר אושר.' : notNow('לאשר', post.status));
   const pack = ctx.pack(post.account_id);
   // A post whose closing slide fails its check is never approved: it could not go out, so it is blocked here and said
   // (the owner, 2026-11-02: a slideshow without one, or whose closing slide doesn't mention the promo, "doesn't go out").
@@ -170,7 +183,7 @@ export function unapprove(ctx, user, { id }) {
  */
 export function reject(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
-  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לדחות פוסט במצב "${post.status}"`);
+  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(post.status === 'rejected' ? 'הפוסט הזה כבר נדחה.' : notNow('לדחות', post.status));
   return decline(ctx, user, post, form);
 }
 
@@ -266,7 +279,7 @@ export function oldDraftsDeleted(ctx, user, { id }) {
  * Said when a post was sent and every part of it went to disk (PUBLISH_MODE not live, or no Zernio key: src/publish/live.js):
  * never "published". The operator reads why; the customer that it did not go out.
  */
-const writtenHe = (user) => (user.operator ? 'נכתב לדיסק בפרסום יבש, ושום דבר לא נשלח לרשתות.' : 'המצגת לא נשלחה. הפרסום אצלנו כבוי כרגע, אז שמרנו אותה ולא שלחנו אותה לרשתות.');
+const writtenHe = (user) => (ours(user) ? 'נכתב לדיסק בפרסום יבש, ושום דבר לא נשלח לרשתות.' : 'המצגת לא נשלחה. הפרסום אצלנו כבוי כרגע, אז שמרנו אותה ולא שלחנו אותה לרשתות.');
 
 export async function publishNow(ctx, user, { id }) {
   const post = mustPost(ctx, id);
@@ -281,7 +294,7 @@ export async function publishNow(ctx, user, { id }) {
   } catch (e) {
     // The publisher's own words go to the log; the customer reads them in Hebrew (src/publish/errors.js).
     console.error(`[publish-now] ${id}: ${e?.message || e}`);
-    throw new ActionError(user.operator ? `לא פורסם: ${e.message}` : publishErrorHe(e));
+    throw new ActionError(ours(user) ? `לא פורסם: ${e.message}` : publishErrorHe(e));
   }
 }
 
@@ -307,7 +320,7 @@ export async function retryPublish(ctx, user, { id }) {
     // Refused before anything was sent: back where it was, with the reason in Hebrew. A failed fact check has blocked it.
     if (loadPost(ctx.db, id)?.status === 'approved') ctx.db.update('posts', id, { status: 'failed', reason: publishErrorHe(e), updated_at: nowIso() });
     console.error(`[publish-again] ${id}: ${e?.message || e}`);
-    throw new ActionError(user.operator ? `לא נשלח: ${e.message}` : publishErrorHe(e));
+    throw new ActionError(ours(user) ? `לא נשלח: ${e.message}` : publishErrorHe(e));
   }
 }
 
@@ -319,7 +332,7 @@ export async function retryPublish(ctx, user, { id }) {
  */
 export async function edit(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
-  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לערוך פוסט במצב "${post.status}"`);
+  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(notNow('לערוך', post.status));
   const pack = ctx.pack(post.account_id);
   const clean = (s, max) => String(s ?? '').replace(/\r/g, '').trim().slice(0, max);
   const format = formatOfPost(ctx.db, pack, post);
@@ -341,8 +354,9 @@ export async function edit(ctx, user, { id }, form) {
   // Checked as the engine checks a draft: against every account on the server, not only this workspace's.
   const engine = engineOf(ctx);
   const { problems, gate } = checkPost({ ...engine, packs: engine.packs }, pack, draft, post.facts, format);
-  if (problems.length) throw new ActionError('הבדיקות עצרו את השינוי', 422, { problems: problems.map((p) => `${p.where}: ${p.msg}`), values: { ...form } });
-  await factCheckChanged(ctx, { post, pack, draft, form });
+  // The operator reads the checks' own words; a customer each one's place and what to do (src/web/problems.js).
+  if (problems.length) throw new ActionError('הבדיקות עצרו את השינוי', 422, { problems: ours(user) ? problems.map((p) => `${p.where}: ${p.msg}`) : problemsHe(problems, { igCaption: Boolean(post.caption_ig) }), values: { ...form } });
+  await factCheckChanged(ctx, { post, pack, draft, form, user });
 
   const { files, look } = await drawAgain(engine, { post, pack, format, draft: withImages(draft, post), token: gate.token });
 
@@ -369,9 +383,9 @@ export async function edit(ctx, user, { id }, form) {
   });
   // A draft sent before the edit is the old text: it stays in the app for the owner to delete, and the new one goes.
   if (post.status === 'approved' && retireDraft(ctx.db, loadPost(ctx.db, id))) {
-    return draftBeside(ctx, id, { ok: true, message: `נשמר ועבר את הבדיקות. השקפים רונדרו מחדש, וטיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
+    return draftBeside(ctx, id, { ok: true, message: `נשמר. השקפים צוירו מחדש, וטיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
   }
-  return { ok: true, message: 'נשמר ועבר את הבדיקות. השקפים רונדרו מחדש.', redirect: `/post/${id}` };
+  return { ok: true, message: 'נשמר. השקפים צוירו מחדש.', redirect: `/post/${id}` };
 }
 
 /**
@@ -394,7 +408,7 @@ export function editChecksToday(db, workspaceId, t = now()) {
  * refused, as the engine's own would be; how much it sounds like a bot is the customer's call. Offline the reviewer
  * is the code's and costs nothing. A check that fails stops the edit: nothing is saved unchecked.
  */
-async function factCheckChanged(ctx, { post, pack, draft, form }) {
+async function factCheckChanged(ctx, { post, pack, draft, form, user = null }) {
   const before = new Map(textsOf(postDraft(post)).map((t) => [t.where, String(t.text || '')]));
   const changed = textsOf(draft).filter((t) => before.get(t.where) !== String(t.text || ''));
   if (!changed.length) return;
@@ -410,7 +424,7 @@ async function factCheckChanged(ctx, { post, pack, draft, form }) {
     ctx.db.update('posts', post.id, { cost_usd: postSpend(ctx.db, post.id).usd });
   }
   const bad = review.reviews.map((r, i) => ({ ...r, where: changed[i].where })).filter((r) => r.factProblem);
-  if (bad.length) throw new ActionError('בדיקת העובדות עצרה את השינוי', 422, { problems: bad.map((r) => `${r.where}: ${r.factProblem}`), values: { ...form } });
+  if (bad.length) throw new ActionError('בדיקת העובדות עצרה את השינוי', 422, { problems: ours(user) ? bad.map((r) => `${r.where}: ${r.factProblem}`) : [...new Set(bad.map((r) => moreThanFactsHe(r.where, { igCaption: Boolean(post.caption_ig) })))], values: { ...form } });
 }
 
 /** Each slide's rendered files, as the post's media now has them. */
@@ -427,7 +441,7 @@ function redrawn(ctx, id, post, message) {
 
 const lightPost = (ctx, id) => {
   const post = mustPost(ctx, id);
-  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לערוך פוסט במצב "${post.status}"`);
+  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(notNow('לערוך', post.status));
   const pack = ctx.pack(post.account_id);
   return { post, pack, format: formatOfPost(ctx.db, pack, post) };
 };
@@ -474,7 +488,7 @@ export async function removeSlide(ctx, user, { id, idx }) {
   const engine = engineOf(ctx);
   const { problems, gate } = checkPost({ ...engine, packs: engine.packs }, pack, draft, post.facts, format);
   const hard = problems.filter((p) => p.code !== 'shape');
-  if (hard.length) throw new ActionError(`השקף לא הוסר: ${hard.slice(0, 2).map((p) => `${p.where}: ${p.msg}`).join(' · ')}`, 422);
+  if (hard.length) throw new ActionError(ours(user) ? `השקף לא הוסר: ${hard.slice(0, 2).map((p) => `${p.where}: ${p.msg}`).join(' · ')}` : `השקף לא הוסר. ${problemsHe(hard.slice(0, 2), { igCaption: Boolean(post.caption_ig) }).join(' ')}`, 422);
   const { files, look } = await drawAgain(engine, { post, pack, format, draft, token: gate.token });
   ctx.db.tx(() => {
     ctx.db.run('DELETE FROM slides WHERE post_id = ? AND idx = ?', id, i);
@@ -749,8 +763,17 @@ export async function takedown(ctx, user, { id }, form) {
 export function takedownDeleted(ctx, user, { id }, form) {
   const platform = ['tiktok', 'instagram', 'facebook'].includes(form.platform) ? form.platform : null;
   if (!platform) throw new ActionError('איזו פלטפורמה?');
-  const row = ctx.db.get('SELECT account_id FROM takedowns WHERE id = ?', Number(id));
+  const row = ctx.db.get('SELECT account_id, deleted_json FROM takedowns WHERE id = ?', Number(id));
   if (!row || !owns(ctx, row.account_id)) throw new ActionError('אין הודעה כזו', 404);
+  // A second press (a reload, another tab) is answered in words: it toasted "nothing to confirm on tiktok".
+  let state = null;
+  try {
+    state = JSON.parse(row.deleted_json || '{}')?.[platform]?.state || null;
+  } catch {
+    /* an unreadable row: confirmDeleted below says so */
+  }
+  if (state === 'deleted_by_hand' || state === 'deleted') return { ok: true, message: 'זה כבר סומן כנמחק.' };
+  if (state !== 'by_hand') throw new ActionError('בפלטפורמה הזו אין מה לסמן.');
   try {
     confirmDeleted(ctx.db, { id: Number(id), platform, by: user.name });
   } catch (e) {

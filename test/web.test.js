@@ -94,8 +94,12 @@ test('every page is Hebrew, right to left, and escapes what it shows (hard rule 
   assert.equal(fav.headers.get('content-type'), 'image/png');
 });
 
-test('results lead with what the published posts did; the formats and the blocks wait behind a button each', async () => {
-  const cookie = await login();
+test('results lead with what the published posts did; the formats and the blocks wait behind a button each, for the operator', async () => {
+  // A customer reads what their posts did: how the engine learns and what our checks stop are ours (the audit, 2026-11-12).
+  const mine = await (await get('/results', await login())).text();
+  assert.match(mine, /<div class="kpi lead"><span class="l">צפיות<\/span>/, 'views lead');
+  assert.doesNotMatch(mine, /id="formats"|id="blocks-fold"|data-mfold="feedback"|YOUTUBE_API_KEY|מה חוסם פוסטים/);
+  const cookie = await loginOperator();
   const html = await (await get('/results', cookie)).text();
   assert.match(html, /<div class="kpi lead"><span class="l">צפיות<\/span>/, 'views lead');
   assert.ok(html.indexOf('class="kpi lead"') < html.indexOf('<details class="more" id="formats">'), 'the formats come after the numbers');
@@ -143,7 +147,9 @@ test('an edit that invents a number is refused and nothing is saved', async () =
   const res = await post(`/post/${postId}/edit`, cookie, { _csrf: csrf, hook: 'בזיליקום במרפסת: 5 דברים שקובעים אם הוא ישרוד', sub: '', title_0: 'שמש', body_0: 'בזיליקום צריך לפחות 12 שעות שמש ישירה ביום.', caption: 'כיתוב קצר ופשוט לבדיקה.' });
   assert.equal(res.status, 422);
   const out = await res.json();
-  assert.match(out.problems.join(' '), /number 12/);
+  // The customer reads where and what to do in Hebrew (src/web/problems.js), never the checks' English.
+  assert.match(out.problems.join(' '), /שקף 1: המספר 12 לא מופיע בציטוט מהמקור/);
+  assert.doesNotMatch(out.problems.join(' '), /[A-Za-z]{4,}/);
   assert.equal(ctx.db.get('SELECT body FROM slides WHERE post_id = ? AND idx = 1', postId).body, before);
 });
 

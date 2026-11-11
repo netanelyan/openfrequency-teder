@@ -1,6 +1,6 @@
 import { a11yLink, accDot, csrfField, dayHe, esc, fold, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
-import { STUCK_REASON } from '../publish/errors.js';
+import { STUCK_REASON, publishErrorHe } from '../publish/errors.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
 import { CATALOG } from '../sources/catalog.js';
 import { KINDS, MIX } from '../formats/kinds.js';
@@ -69,6 +69,12 @@ const QUOTA_KIND_HE = { suggestion: 'הצעה', redo: 'החלפה', retry: 'לא
 
 const PROVIDER_HE = { pexels: 'Pexels', unsplash: 'Unsplash', commons: 'ויקישיתוף', openverse: 'Openverse', pack: 'מהחשבון', rendered: 'מצויר' };
 
+/**
+ * A photograph on the light edits' list: its own words (an alt text, the search that found it) are the search's English,
+ * so a customer reads "תמונה 1", "תמונה 2" (the audit, 2026-11-12: "a cup of coffee on a table · Pexels").
+ */
+const photoName = (ctx, img, n) => (ctx.operator || ctx.dev ? String(img.alt || img.query || `תמונה ${img.id}`).slice(0, 60) : `תמונה ${n + 1}`);
+
 /** Light edits on a post's page: another of its own photographs on a slide, or a slide removed. Drawn again only. */
 function lightPanel(ctx, d) {
   const { post } = d;
@@ -77,7 +83,7 @@ function lightPanel(ctx, d) {
     .map((s, i) => {
       const name = s.kind === 'cover' ? 'שער' : s.kind === 'closer' ? 'שקף סיום' : `שקף ${i}`;
       const photo = d.photos.length
-        ? `<form method="post" action="/post/${esc(post.id)}/slide/${i}/photo" class="inline">${csrfField(ctx)}<label class="f">תמונה<select name="image"><option value="none"${s.image_id ? '' : ' selected'}>בלי תמונה</option>${d.photos.map((img) => `<option value="${img.id}"${img.id === s.image_id ? ' selected' : ''}>${esc(String(img.alt || img.query || `תמונה ${img.id}`).slice(0, 60))} · ${esc(PROVIDER_HE[img.provider] || img.provider)}</option>`).join('')}</select></label><button class="btn sm" type="submit">להחליף</button></form>`
+        ? `<form method="post" action="/post/${esc(post.id)}/slide/${i}/photo" class="inline">${csrfField(ctx)}<label class="f">תמונה<select name="image"><option value="none"${s.image_id ? '' : ' selected'}>בלי תמונה</option>${d.photos.map((img, n) => `<option value="${img.id}"${img.id === s.image_id ? ' selected' : ''}>${esc(photoName(ctx, img, n))} · ${esc(PROVIDER_HE[img.provider] || img.provider)}</option>`).join('')}</select></label><button class="btn sm" type="submit">להחליף</button></form>`
         : '';
       const remove = s.kind === 'item' && items > 1 ? postButton(ctx, `/post/${post.id}/slide/${i}/remove`, 'להוריד את השקף', { cls: 'btn sm ghost', confirm: 'לחצו שוב כדי להוריד את השקף' }) : '';
       if (!photo && !remove) return '';
@@ -106,9 +112,11 @@ function redoBanners(d) {
   return out.join('');
 }
 const STEP_HE = {
-  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'השקף האחרון', feedback: 'המשוב של הבוקר', repair: 'תיקון אחרי הבדיקות', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
-  image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
+  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', closing: 'השקף האחרון', feedback: 'המשוב של הבוקר', repair: 'תיקון אחרי הבדיקות', redraft: 'כתיבה מחדש', rewrite: 'ניסוח מחדש', review: 'בדיקת הסגנון', verify: 'בדיקת העובדות',
+  image: 'תמונה', render: 'ציור השקפים', queue: 'נשלח לאישור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
   whatsapp: 'מוואטסאפ',
+  // Steps the pipeline added later, which printed as their codes (the audit, 2026-11-12: "mode", "model_facts", "art").
+  model_facts: 'עובדות כלליות, בלי מקור', details: 'פרטים מהמקורות', plan: 'תכנון הפוסט', closer: 'השורה בשקף האחרון', art: 'בחירת התמונות', photos: 'חיפוש תמונות', mode: 'סוג העיצוב', visual: 'בדיקת העיצוב', tiktok: 'טיוטה בטיקטוק',
 };
 /** Whose line the closing slide carries (src/pipeline/closing.js), in the post's trace. */
 const CLOSING_HE = {
@@ -186,6 +194,45 @@ const ROLE_NAME = {
 };
 const PLATFORM_DELETE = { deleted: 'נמחק אוטומטית', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
 const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
+
+/** Where to delete a post by hand after a notice, platform by platform. */
+const DELETE_WHERE_HE = { tiktok: 'מוחקים אותו באפליקציה של טיקטוק', instagram: 'מוחקים אותו באפליקציה של אינסטגרם', facebook: 'מוחקים אותו בעמוד הפייסבוק' };
+/**
+ * What a platform's line under a notice says (src/publish/takedown.js keeps the publisher's English in `why`, for the
+ * operator): a customer reads what to do there, in Hebrew. A delete of ours that was refused (Meta's, Zernio's) says so.
+ */
+function takedownWhy(ctx, pl, x) {
+  if (ctx.operator || ctx.dev) return x.why ? `<div class="muted small">${esc(x.why)}</div>` : '';
+  if (x.state !== 'by_hand') return '';
+  const where = DELETE_WHERE_HE[pl] || 'מוחקים אותו באפליקציה';
+  const line = /did not (delete|take it down)/i.test(x.why || '') ? `לא הצלחנו למחוק אותו בעצמנו. ${where} ולוחצים כאן "מחקתי ידנית".` : pl === 'tiktok' ? `בטיקטוק אי אפשר למחוק פוסט מבחוץ. ${where} ולוחצים כאן "מחקתי ידנית".` : `${where} ולוחצים כאן "מחקתי ידנית".`;
+  return `<div class="muted small">${esc(line)}</div>`;
+}
+
+/** Said beside a photograph the screen could not clear (src/images/safety.js: its reason is the model's English). */
+const IMAGE_LOOK_HE = 'לא בטוח מה רואים בתמונה. כדאי להסתכל עליה לפני שמאשרים.';
+/** A photograph's credit, as a person writes one: "צילום: Ron Lach, Pexels". Its licence's code is the operator's. */
+function imageCredit(img) {
+  if (img.ai_generated) return 'תמונה שנוצרה ב-AI';
+  if (img.provider === 'rendered') return 'איור של תדר';
+  if (img.provider === 'pack') return 'תמונה מהחשבון';
+  const from = PROVIDER_HE[img.provider] || '';
+  return `צילום: ${[img.author, from].filter(Boolean).join(', ') || 'מאגר תמונות'}`;
+}
+
+/** How a post was made, for a customer: when it was written and how its facts were checked, in a sentence or two. */
+function madeHe(post) {
+  const items = post.slides.filter((s) => s.kind === 'item');
+  const used = post.facts.filter((f) => f.verified && items.some((s) => s.factKeys.includes(f.key)));
+  const general = used.filter((f) => f.unsourced).length;
+  const sourced = used.length - general;
+  const out = [`נכתב ב-${stamp(post.created_at)}.`];
+  const checked = sourced ? `${sourced === 1 ? 'עובדה אחת נבדקה' : `${sourced} עובדות נבדקו`} מול המקורות, מילה במילה` : '';
+  const known = general ? (sourced ? `${general === 1 ? 'ועובדה אחת היא' : `ו-${general} עובדות הן`} ידע כללי, בלי מקור` : `${general === 1 ? 'העובדה בו היא' : `כל ${general} העובדות בו הן`} ידע כללי, בלי מקור`) : '';
+  if (checked || known) out.push(`${[checked, known].filter(Boolean).join(', ')}.`);
+  if (post.checks?.edited) out.push('נערך אחרי שנכתב, ועבר שוב את הבדיקות.');
+  return out.join(' ');
+}
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', delete_post: 'מחיקת פוסט מתוזמן', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
@@ -267,12 +314,19 @@ const buildingCard = (post) => `<article class="card acc acc-${esc(post.account_
  */
 const tiktokMock = (handle, caption) => `<span class="tt" aria-hidden="true"><span class="tt-safe"></span><span class="tt-tabs"><i>עוקבים</i><b>בשבילך</b></span><span class="tt-col"><i class="av"></i><i></i><i></i><i></i><i></i><i class="disc"></i></span><span class="tt-dots"><i class="on"></i><i></i><i></i><i></i></span><span class="tt-cap"><b>${esc(handle ? `@${handle}` : '')}</b><span>${esc(String(caption || '').split('\n')[0].slice(0, 90))}</span></span><span class="tt-bar"></span></span>`;
 
-/** The corner of a slide with facts: how many sources it cites, or that its facts are not from one (src/sources/model.js). */
+/**
+ * The corner of a slide with facts: how many sources it cites (sources, not facts: two facts from one source are "מקור
+ * אחד"), or that its facts are general knowledge (src/sources/model.js). It said "לא ממקור" on every slide of such a
+ * post while the card's own line said "כל אחת עם מקור" (the audit, 2026-11-12): both now say what is true.
+ */
 function hasLine(post, s) {
-  const sourced = s.factKeys.filter((key) => !post.facts?.find((f) => f.key === key)?.unsourced).length;
-  if (!sourced) return '<span class="has">לא ממקור</span>';
-  return `<span class="has">${sourced === 1 ? 'מקור אחד' : `${sourced} מקורות`}</span>`;
+  const facts = s.factKeys.map((key) => post.facts?.find((f) => f.key === key)).filter(Boolean);
+  const sources = new Set(facts.filter((f) => !f.unsourced).map((f) => f.source_id ?? f.source_name));
+  if (!sources.size) return facts.length ? `<span class="has">${esc(GENERAL_HE)}</span>` : '';
+  return `<span class="has">${sources.size === 1 ? 'מקור אחד' : `${sources.size} מקורות`}</span>`;
 }
+/** A slide's corner when its facts are general knowledge. */
+const GENERAL_HE = 'ידע כללי';
 
 function strip(post, platform = 'tiktok', { mock = null } = {}) {
   const files = post.media?.[platform] || [];
@@ -298,13 +352,23 @@ const factCount = (post) => {
 
 /**
  * Where a fact comes from, under its quote: the page it was saved from and whether its source is approved. A fact from
- * the model's general knowledge (src/sources/model.js) has no page: it says so, "לא ממקור, כדאי לבדוק", and is never
+ * the model's general knowledge (src/sources/model.js) has no page: it says so, "בלי מקור, כדאי לבדוק", and is never
  * shown as an approved source's.
  */
 const factWhere = (f) =>
   f.unsourced
     ? `<div class="where"><span class="muted">${esc(MODEL_NAME)}</span><span class="chip warn">${esc(UNSOURCED_HE)}</span></div>`
-    : `<div class="where"><a href="${esc(f.doc_url)}" target="_blank" rel="noopener noreferrer">${esc(f.source_name)} ${icon('ext')}</a><span class="muted">נשמר ${esc(stamp(f.doc_fetched_at))}</span>${f.source_status === 'approved' ? '<span class="chip ok">מקור מאושר</span>' : `<span class="chip bad">מקור ${esc(f.source_status)}</span>`}</div>`;
+    : `<div class="where"><a href="${esc(f.doc_url)}" target="_blank" rel="noopener noreferrer">${esc(f.source_name)} ${icon('ext')}</a><span class="muted">נשמר ${esc(stamp(f.doc_fetched_at))}</span>${sourceChip(f.source_status)}</div>`;
+/** A fact's source, by its state on the Sources page, in words (it printed "מקור pending" and "מקור removed"). */
+const SOURCE_STATE_HE = { approved: ['מקור מאושר', 'ok'], pending: ['מקור שעוד לא אישרתם', 'warn'], removed: ['מקור שהוסר', 'bad'] };
+const sourceChip = (status) => {
+  const [he, cls] = SOURCE_STATE_HE[status] || ['מקור שלא בשימוש', 'bad'];
+  return `<span class="chip ${cls}">${esc(he)}</span>`;
+};
+/** What a customer reads for a fact the check against its source refused: the check's own English is ours. */
+const UNVERIFIED_HE = 'העובדה הזו לא עברה את הבדיקה מול המקור, ולכן היא לא תעלה.';
+/** A row of a data source as it was stored ("month: 1 | name: ינואר | avg_high_c: 18"): its field names are ours to read. */
+const DATA_ROW = /^[A-Za-z_][\w-]*: [^|]*(?: \| [A-Za-z_][\w-]*: [^|]*)+$/;
 
 /** Where the facts come from, slide by slide. A customer sees it only when there is a fact to show. */
 function factsBlock(ctx, post, { open = false } = {}) {
@@ -317,12 +381,13 @@ function factsBlock(ctx, post, { open = false } = {}) {
 <ol class="factlist">${items
     .map((s, i) => {
       const facts = s.factKeys.map((key) => post.facts.find((f) => f.key === key)).filter(Boolean);
-      return `<li id="s-${post.id}-${i + 1}"><div class="slide-n">שקף ${i + 1}${ROLE_NAME[s.role] ? ` (${ROLE_NAME[s.role]})` : ''}: ${esc(s.title)}${s.data?.a || s.data?.b ? ` <span class="muted num">${esc(s.data.a)} · ${esc(s.data.b)}</span>` : ''}</div>${facts.length ? '' : '<div class="muted small">אין בו עובדה משלו (דעה, מיתוס או בדיחה), וכל מספר בו מצוטט</div>'}${facts
+      // The slide's role in its kind ("בנייה", "התפנית") is the writer's word: the operator's to read.
+      return `<li id="s-${post.id}-${i + 1}"><div class="slide-n">שקף ${i + 1}${ROLE_NAME[s.role] && (ctx.operator || ctx.dev) ? ` (${ROLE_NAME[s.role]})` : ''}: ${esc(s.title)}${s.data?.a || s.data?.b ? ` <span class="muted num">${esc(s.data.a)} · ${esc(s.data.b)}</span>` : ''}</div>${facts.length ? '' : '<div class="muted small">אין בו עובדה משלו (דעה, מיתוס או בדיחה), וכל מספר בו מצוטט</div>'}${facts
         .map(
           (f) => `<details class="fact"><summary>${f.verified ? `<span class="ok">${icon('check')}</span>` : `<span class="no">${icon('x')}</span>`}<span>${esc(f.claim)}</span></summary>
-<div class="src"><blockquote class="q" dir="auto">${esc(f.quote)}</blockquote>
+<div class="src">${DATA_ROW.test(String(f.quote || '')) && !(ctx.operator || ctx.dev) ? '' : `<blockquote class="q" dir="auto">${esc(f.quote)}</blockquote>`}
 ${factWhere(f)}
-${f.error ? `<div class="muted">${esc(f.error)}</div>` : ''}</div></details>`
+${f.error ? `<div class="muted">${esc(ctx.operator || ctx.dev ? f.error : UNVERIFIED_HE)}</div>` : ''}</div></details>`
         )
         .join('')}</li>`;
     })
@@ -352,14 +417,31 @@ function captionBlock(post, platforms = []) {
   return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${tiktok}${tags}</p><p class="caption"><span class="chip ghost">${ig}</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}${captionActionHtml(post, 'instagram')}</p>`;
 }
 
-/** What the checks found, in one quiet line: the facts and their sources, the bot score, an AI image. */
-function trustLine(post) {
+/**
+ * The facts' line when some of them are general knowledge (src/sources/model.js): how many, in the warning's colour,
+ * and to look before approving. "כל אחת עם מקור" is said only when every one has a source.
+ */
+function generalLine(n, general) {
+  const all = general === n ? (n === 1 ? 'העובדה בפוסט היא ידע כללי' : `כל ${n} העובדות בפוסט הן ידע כללי`) : `${n} עובדות, ${general === 1 ? 'ואחת מהן' : `ו-${general} מהן`} ידע כללי`;
+  return `${all}, בלי מקור. כדאי לבדוק לפני שמאשרים`;
+}
+
+/**
+ * What the checks found, in one quiet line: the facts and their sources, an AI image. How much the writing sounds like
+ * a bot is a score for us (the operator, developer mode): to a customer it said their post might sound like one.
+ */
+function trustLine(post, ctx = {}) {
   const items = post.slides.filter((s) => s.kind === 'item');
   const used = post.facts.filter((f) => items.some((s) => s.factKeys.includes(f.key)));
   const unverified = used.filter((f) => !f.verified).length;
+  const general = used.filter((f) => f.verified && f.unsourced).length;
   const bits = [];
-  if (used.length) bits.push(unverified ? `<span class="badc">${icon('x')}${unverified} עובדות לא אומתו</span>` : `<span class="good">${icon('shield')}${used.length === 1 ? 'עובדה אחת, עם מקור' : `${used.length} עובדות, כל אחת עם מקור`}</span>`);
-  if (post.review_score != null) bits.push(`<span class="${post.review_score >= 4 ? 'warnc' : ''}" title="ציון של בודק ${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין'}: 0 אדם, 10 בוט">${icon('spark')}נשמע כמו בוט <span class="num ltr">${post.review_score}/10</span></span>`);
+  if (used.length) {
+    if (unverified) bits.push(`<span class="badc">${icon('x')}${unverified === 1 ? 'עובדה אחת לא אומתה' : `${unverified} עובדות לא אומתו`}</span>`);
+    else if (general) bits.push(`<span class="warnc">${icon('alert')}${generalLine(used.length, general)}</span>`);
+    else bits.push(`<span class="good">${icon('shield')}${used.length === 1 ? 'עובדה אחת, עם מקור' : `${used.length} עובדות, כל אחת עם מקור`}</span>`);
+  }
+  if (post.review_score != null && (ctx.operator || ctx.dev)) bits.push(`<span class="${post.review_score >= 4 ? 'warnc' : ''}" title="ציון של בודק ${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין'}: 0 אדם, 10 בוט">${icon('spark')}נשמע כמו בוט <span class="num ltr">${post.review_score}/10</span></span>`);
   if (post.ai_label) bits.push(`<span class="warnc">${icon('alert')}תמונת AI: באינסטגרם נוסיף שורה שאומרת את זה, ובטיקטוק מסמנים אותה באפליקציה לפני הפרסום</span>`);
   return bits.length ? `<div class="trust">${bits.join('')}</div>` : '';
 }
@@ -393,7 +475,7 @@ export function postCard(ctx, post, pack) {
 <h3 class="hook">${esc(post.hook)}</h3>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${strip(post)}
-${trustLine(post)}
+${trustLine(post, ctx)}
 <div class="actions">
 ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary', ajax: 'remove' }) : ''}
 ${EDITABLE.includes(post.status) && !ctx.unpaid ? `<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}לערוך</a>` : ''}
@@ -454,7 +536,8 @@ export function needsYou(d, max = 6, ctx = {}) {
     }
   }
   for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
-  for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `צריך לבדוק את התמונה בעין${im.screen?.why ? `: ${im.screen.why}` : ''}` });
+  // The screen's reason is the model's English: the operator reads it, a customer that a photograph waits for a look.
+  for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: ctx.operator ? `צריך לבדוק את התמונה בעין${im.screen?.why ? `: ${im.screen.why}` : ''}` : 'צריך להסתכל על תמונה בפוסט' });
   for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: postSub(ctx, g.pack, p, { name: true }), short: whenHe(p) });
   return { rows: rows.slice(0, max), more: Math.max(0, rows.length - max), total: rows.length };
 }
@@ -623,16 +706,33 @@ ${written.length ? `<section class="panel home-panel" id="written"><header><h2>�
 
 /* ------------------------------------------------------------ one post */
 
+/**
+ * The TikTok draft's banner on its post, by where it stands, as a sentence (it was "טיקטוק: בטיוטות של טיקטוק", a colon
+ * heading with the word twice). The states after "waiting" are a draft-fallback's, the company's own accounts'.
+ */
+const TIKTOK_BANNER_HE = {
+  drafted: 'הטיוטה בתיבת הטיוטות בטיקטוק',
+  waiting: 'הגיעה השעה לפרסם בטיקטוק',
+  mine: 'פרסמתם בטיקטוק',
+  sending: 'מפרסמים בטיקטוק אוטומטית',
+  fallback: 'בטיקטוק המצגת פורסמה אוטומטית',
+  duplicate: 'בטיקטוק המצגת פורסמה פעמיים',
+  failed: 'הפרסום האוטומטי בטיקטוק נכשל',
+  stopped: 'בטיקטוק המצגת נעצרה בבדיקה',
+};
+
 /** On a post's page: where its TikTok draft stands, and drafts of it left in the app for the owner to delete. */
 function tiktokDraftBanners(ctx, post) {
   const out = [];
   const tk = post.publish?.tiktok;
   if (tk?.flow) {
-    const [he] = FLOW_HE[flowState(tk.flow)] || [tk.flow.state];
-    const note = tk.flow.state === 'waiting' ? draftNote(tk.flow, post.slot_at || tk.flow.slotAt, timeHe) : tk.flow.error || '';
-    out.push(`<div class="banner info">${icon('clock')}<div><b>טיקטוק: ${esc(he)}</b>${note ? `<p>${esc(note)}</p>` : ''}</div></div>`);
+    const st = flowState(tk.flow);
+    const note = tk.flow.state === 'waiting' ? draftNote(tk.flow, post.slot_at || tk.flow.slotAt, timeHe) : ctx.operator || ctx.dev ? tk.flow.error || '' : '';
+    out.push(`<div class="banner info">${icon('clock')}<div><b>${esc(TIKTOK_BANNER_HE[st] || FLOW_HE[st]?.[0] || st)}</b>${note ? `<p>${esc(note)}</p>` : ''}</div></div>`);
   } else if (tk?.uploading) out.push(`<div class="banner info">${icon('clock')}<div><b>הטיוטה בדרך לאפליקציה של טיקטוק</b></div></div>`);
-  else if (tk?.error && post.status === 'approved') out.push(`<div class="banner warn">${icon('alert')}<div><b>הטיוטה לא הגיעה לטיקטוק</b><p>${esc(tk.error)}</p><p>${(Number(tk.tries) || 0) < 3 ? 'עוד ניסיון בדקות הקרובות, ולכל המאוחר בשעה של הפוסט.' : 'עוד ניסיון אחד בשעה של הפוסט.'}</p></div></div>`);
+  // What went wrong, in Hebrew for a customer (src/publish/errors.js): Zernio's own words ("Zernio 502: upstream TikTok
+  // API timeout") are the operator's to read.
+  else if (tk?.error && post.status === 'approved') out.push(`<div class="banner warn">${icon('alert')}<div><b>הטיוטה לא הגיעה לטיקטוק</b><p>${esc(ctx.operator || ctx.dev ? tk.error : publishErrorHe({ code: tk.code, message: tk.error }, 'tiktok'))}</p><p>${(Number(tk.tries) || 0) < 3 ? 'עוד ניסיון בדקות הקרובות, ולכל המאוחר בשעה של הפוסט.' : 'עוד ניסיון אחד בשעה של הפוסט.'}</p></div></div>`);
   const old = post.publish?.oldDrafts || [];
   if (old.length) out.push(`<div class="banner warn">${icon('alert')}<div><b>${old.length === 1 ? 'טיוטה ישנה של הפוסט הזה נמצאת' : `${old.length} טיוטות ישנות של הפוסט הזה נמצאות`} בתיבת הטיוטות של טיקטוק</b><p>מחקו ${old.length === 1 ? 'אותה' : 'אותן'} באפליקציה, כדי ש${old.length === 1 ? 'היא לא תפורסם' : 'הן לא יפורסמו'} בטעות.</p></div>${postButton(ctx, `/post/${post.id}/old-drafts-deleted`, 'מחקתי', { cls: 'btn sm' })}</div>`);
   return out.join('');
@@ -705,10 +805,10 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
     .join('');
   const scores = post.checks?.scores || [];
   const edit = `<details class="panel edit" id="edit"${problems.length || values ? ' open' : ''}><summary><h2 class="inline">עריכת הטקסט</h2></summary>
-${problems.length ? `<div class="problems"><b>השינוי לא נשמר, הבדיקות עצרו אותו:</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
-<p class="muted small">כל עריכה עוברת שוב את בדיקות הקול, הכללים ושער העובדות, וטקסט ששונה עובר גם בדיקת עובדות. אחר כך השקפים מרונדרים מחדש. מספר שלא נמצא בציטוט לא יעבור, ועריכה לא נספרת כהחלפה.</p>
+${problems.length ? `<div class="problems"><b>השינוי לא נשמר, הבדיקות עצרו אותו:</b><ul>${problems.map((p) => `<li>${withSupport(p)}</li>`).join('')}</ul></div>` : ''}
+<p class="muted small">אחרי השמירה תדר בודק שוב את הטקסט ואת העובדות, ומצייר את השקפים מחדש. מספר שלא מופיע בציטוט מהמקור לא יעבור. עריכה לא נספרת כהחלפה.</p>
 <form method="post" action="/post/${esc(post.id)}/edit" class="formgrid">${csrfField(ctx)}
-<fieldset><legend>שער</legend><label class="f">כותרת<input type="text" name="hook" value="${esc(v.hook)}" maxlength="90"></label><label class="f">שורה שנייה<input type="text" name="sub" value="${esc(v.sub || '')}" maxlength="120"></label></fieldset>
+<fieldset><legend>שקף הפתיחה</legend><label class="f">כותרת<input type="text" name="hook" value="${esc(v.hook)}" maxlength="90"></label><label class="f">שורה שנייה<input type="text" name="sub" value="${esc(v.sub || '')}" maxlength="120"></label></fieldset>
 ${items
   .map((s, i) => {
     const val = values ? { title: values[`title_${i}`], body: values[`body_${i}`] } : s;
@@ -720,7 +820,7 @@ ${items
 <label class="f">${post.caption_ig ? 'כיתוב לטיקטוק' : 'כיתוב'}<textarea name="caption" maxlength="${post.caption_ig ? 900 : 400}">${esc(v.caption)}</textarea></label>
 ${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכותרת נכנסת לפניו)<textarea name="caption_short" maxlength="260">${esc(values ? values.caption_short : post.data?.captionShort || '')}</textarea></label>` : ''}
 ${post.data?.closing ? `<p class="muted small m0">בסוף הכיתוב אנחנו מוסיפים לבד לאן השקף האחרון שולח${post.caption_ig ? ', ובאינסטגרם ובפייסבוק גם את הקישור' : ''}. לא צריך לכתוב את זה כאן.</p>` : ''}
-<div><button class="btn primary" type="submit">${icon('check')}לשמור ולרנדר מחדש</button></div></form></details>`;
+<div><button class="btn primary" type="submit">${icon('check')}לשמור</button></div></form></details>`;
   const screen = d.image ? (() => {
     try {
       return JSON.parse(d.image.safety_json || 'null');
@@ -732,16 +832,33 @@ ${post.data?.closing ? `<p class="muted small m0">בסוף הכיתוב אנחנ
   const tds = d.takedowns || [];
   // Only written to disk (src/publish/live.js): nothing of it is on a platform, so nothing to take down there.
   const written = shownStatus(post) === 'written';
-  const takedownPanel = (['published', 'taken_down', 'publishing'].includes(post.status) && !written) || tds.length
-    ? `<section class="panel"><header><h2>הודעות הסרה</h2></header>
-${tds.map((t) => `<div class="banner bad">${icon('alert')}<div><b>${esc(stamp(t.received_at))}${t.claimant ? ` · ${esc(t.claimant)}` : ''}</b><p dir="auto">${esc(t.notice.slice(0, 300))}</p><ul class="factlist">${Object.entries(t.deleted).map(([pl, x]) => `<li>${esc(PLATFORM_HE[pl] || pl)}: <b>${esc(PLATFORM_DELETE[x.state] || x.state)}</b>${x.why ? `<div class="muted small">${esc(x.why)}</div>` : ''}${x.state === 'by_hand' ? postButton(ctx, `/takedowns/${t.id}/deleted`, 'מחקתי ידנית', { cls: 'btn sm', fields: { platform: pl } }) : ''}</li>`).join('')}</ul></div></div>`).join('')}
-${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert')}התקבלה הודעת הסרה על הפוסט הזה</summary><form method="post" action="/post/${esc(post.id)}/takedown" class="formgrid">${csrfField(ctx)}
-<p class="muted small">הפוסט יורד מיד: באינסטגרם ובפייסבוק הוא נמחק לבד כשאפשר, ובטיקטוק צריך למחוק אותו ידנית באפליקציה. הודעה שנייה תוך 90 יום משהה את החשבון.</p>
+  // Takedown notices (src/publish/takedown.js), in two parts (the audit, 2026-11-12, P1-3 and P1-4): the notices
+  // recorded, each platform's state and what to do there, at the top, since a post to delete by hand is the page's one
+  // thing to do; and the form to record one, folded at the page's end. Its line is the question it is ("קיבלתם הודעת
+  // הסרה?"): on every published post it read "התקבלה הודעת הסרה על הפוסט הזה", as if one had come.
+  const notices = tds.length
+    ? `<section class="panel" id="takedowns"><header><h2>הודעות הסרה</h2></header>
+${tds.map((t) => `<div class="banner bad">${icon('alert')}<div><b>${esc(stamp(t.received_at))}${t.claimant ? ` · ${esc(t.claimant)}` : ''}</b><p dir="auto">${esc(t.notice.slice(0, 300))}</p><ul class="factlist">${Object.entries(t.deleted).map(([pl, x]) => `<li>${esc(PLATFORM_HE[pl] || pl)}: <b>${esc(PLATFORM_DELETE[x.state] || x.state)}</b>${takedownWhy(ctx, pl, x)}${x.state === 'by_hand' ? postButton(ctx, `/takedowns/${t.id}/deleted`, 'מחקתי ידנית', { cls: 'btn sm', fields: { platform: pl } }) : ''}</li>`).join('')}</ul></div></div>`).join('')}</section>`
+    : '';
+  const takedownForm = ['published', 'publishing'].includes(post.status) && !written
+    ? `<details class="panel takedown" id="takedown"><summary class="muted">${icon('alert')}קיבלתם הודעת הסרה על הפוסט הזה?</summary><form method="post" action="/post/${esc(post.id)}/takedown" class="formgrid">${csrfField(ctx)}
+<p class="muted small">רושמים כאן הודעה שקיבלתם, למשל על זכויות יוצרים, והפוסט יורד מיד. בעמוד הפייסבוק אנחנו מוחקים אותו בעצמנו. בטיקטוק ובאינסטגרם מוחקים אותו באפליקציה, ואחר כך מסמנים כאן שמחקתם. הודעה שנייה בתוך 90 יום עוצרת את החשבון.</p>
 <label class="f">פלטפורמה<select name="platform"><option value="">בכולן</option><option value="tiktok">טיקטוק</option><option value="instagram">אינסטגרם</option><option value="facebook">פייסבוק</option></select></label>
 <label class="f">ממי<input type="text" name="claimant" maxlength="200"></label>
 <label class="f">נוסח ההודעה<textarea name="notice" maxlength="4000" required></textarea></label>
-<div><button class="btn danger" type="submit">לרשום ולהוריד את הפוסט</button></div></form></details>` : ''}</section>`
+<div><button class="btn danger" type="submit">לרשום ולהוריד את הפוסט</button></div></form></details>`
     : '';
+  // What a customer can act on in the checks: the photograph (its credit, and a look when the screen could not clear it)
+  // and the numbers. The rest (the fact gate's token, the bot score, the cover's template, the search words, the plan's
+  // kind) is the operator's, in developer mode (the audit, 2026-11-12, P1-7: "תבנית השער top-five", "pexels, Pexels License").
+  const imageRows = d.image
+    ? `<dt>תמונה</dt><dd>${esc(imageCredit(d.image))}${d.image.source_url ? ` · <a href="${esc(d.image.source_url)}" target="_blank" rel="noopener noreferrer">מקור ${icon('ext')}</a>` : ''}</dd>${imageHold ? `<dt>בדיקת התמונה</dt><dd><span class="chip warn">מחכה שתסתכלו עליה</span><div class="muted small">${esc(IMAGE_LOOK_HE)}</div>${postButton(ctx, `/post/${post.id}/image-ok`, 'הסתכלתי: אין דם, פציעה או סימן מים', { cls: 'btn sm' })}</dd>` : ''}`
+    : '';
+  const metricRows = d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.platform] || m.platform)}</dt><dd class="num">${k(m.views)} צפיות · ${k(m.likes)} לייקים · ${k(m.shares)} שיתופים${m.saves != null ? ` · ${k(m.saves)} שמירות` : ''}</dd>`).join('');
+  const theirChecks = imageRows || metricRows ? `<section class="panel"><header><h2>${imageRows && metricRows ? 'התמונה והתוצאות' : imageRows ? 'התמונה' : 'תוצאות'}</h2></header><dl class="kv">${imageRows}${metricRows}</dl></section>` : '';
+  // How it was made: every step, with what each found, for the operator and in developer mode; a customer reads when it
+  // was written and how its facts were checked (P1-1: the steps' own names, "mode", "model_facts", "דרך zernio", printed raw).
+  const how = ctx.operator || ctx.dev ? `<section class="panel"><header><h2>איך הפוסט נוצר</h2></header><ol class="trace">${trace}</ol></section>` : `<section class="panel"><header><h2>איך הפוסט נוצר</h2></header><p class="muted m0">${esc(madeHe(post))}</p></section>`;
 
   const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(shownStatus(post))}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${withSupport(reasonHe(ctx, post.status, post.reason))}</b></div></div>` : ''}
@@ -749,11 +866,12 @@ ${redoBanners(d)}
 ${written ? writtenBanner(ctx, post) : tiktokDraftBanners(ctx, post)}
 <div class="cols">
 <div>
+${notices}
 <section class="card acc acc-${esc(post.account_id)} post${slidesShown ? '' : ' stopped'}"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${post.media?.tiktok?.length ? `<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}` : ''}
 ${post.media?.instagram?.length ? fold('instagram', 'איך זה נראה באינסטגרם', `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}`, { inCard: true, one: false }) : ''}
-${trustLine(post)}
+${trustLine(post, ctx)}
 ${post.caption || post.caption_ig ? fold('caption', 'הטקסט שעולה עם המצגת', `<div class="capwrap">${captionBlock(post, pack?.meta?.platforms || [])}</div>`, { inCard: true, one: false }) : ''}
 </section>
 ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
@@ -768,7 +886,7 @@ ${EDITABLE.includes(post.status) ? edit : ''}
 <div>
 ${fold('details', 'העובדות והבדיקות', `${topicPanel(d.topic)}
 ${facts ? `<section class="panel">${facts}</section>` : ''}
-<section class="panel"><header><h2>בדיקות</h2></header>
+${ctx.operator || ctx.dev ? `<section class="panel"><header><h2>בדיקות</h2></header>
 <dl class="kv"><dt>שער העובדות</dt><dd>${post.checks?.token ? '<span class="chip ok">עבר</span>' : '<span class="chip">לא הגיע</span>'}</dd>
 ${ctx.operator ? `<dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין (בלי מפתח API)'}</dd>` : ''}
 ${scores.length ? `<dt>ציון הכי גבוה</dt><dd><span class="num ltr">${Math.max(...scores)}/10</span></dd>` : ''}
@@ -781,11 +899,11 @@ ${post.data?.cta?.text && !post.data?.closing ? `<dt>קריאה לפעולה</dt
 ${post.data?.keywords?.length ? `<dt>מילות חיפוש</dt><dd>${post.data.keywords.map((x) => `<bdi>${esc(x)}</bdi>`).join(' · ')}</dd>` : ''}
 ${d.image ? `<dt>תמונה</dt><dd>${esc(d.image.provider)} · ${esc(d.image.license)}${d.image.author ? ` · ${esc(d.image.author)}` : ''}${d.image.source_url ? ` · <a href="${esc(d.image.source_url)}" target="_blank" rel="noopener noreferrer">מקור ${icon('ext')}</a>` : ''}${d.image.ai_generated ? ' · <span class="chip warn">AI</span>' : ''}</dd>
 <dt>בדיקת התמונה</dt><dd>${d.image.safety === 'ok' || d.image.reviewed_at ? `<span class="chip ok">${d.image.reviewed_at ? `נבדקה על ידי ${esc(d.image.reviewed_by)}` : 'עברה'}</span>` : d.image.safety ? `<span class="chip warn">מחכה לבדיקה בעין</span>` : '<span class="chip ghost">לא נבדקה</span>'}${screen?.why ? `<div class="muted small" dir="auto">${esc(screen.why)}</div>` : ''}${imageHold ? postButton(ctx, `/post/${post.id}/image-ok`, 'הסתכלתי: אין דם, פציעה או סימן מים', { cls: 'btn sm' }) : ''}</dd>` : ''}
-${d.metrics.length ? d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.platform] || m.platform)}</dt><dd class="num">${k(m.views)} צפיות · ${k(m.likes)} לייקים · ${k(m.shares)} שיתופים${m.saves != null ? ` · ${k(m.saves)} שמירות` : ''}</dd>`).join('') : ''}
-</dl></section>
-${takedownPanel}
-<section class="panel"><header><h2>איך הפוסט נוצר</h2></header><ol class="trace">${trace}</ol></section>`, { one: false })}
-</div></div>`;
+${metricRows}
+</dl></section>` : theirChecks}
+${how}`, { one: false })}
+</div></div>
+${takedownForm}`;
   return layout({ ...ctx, title: post.hook || 'פוסט', active: 'posts' }, body);
 }
 
@@ -1094,7 +1212,11 @@ ${test.result ? `<p>${test.result.winner ? `<b>${esc(test.result.winner)} ניצ
 }
 
 export function resultsPage(ctx, d) {
-  // What the published posts did leads. The formats, and what the checks stopped, wait behind a button each.
+  // What the published posts did leads. The formats, and what the checks stopped, wait behind a button each: the
+  // operator's and developer mode's, with the morning's feedback. They are how the engine learns and what our checks
+  // stop (a block rate, "קול: שארית של מודל", hook templates with their {placeholders}): a customer read them as their
+  // own results (the audit, 2026-11-12, P1-10).
+  const ours = Boolean(ctx.operator || ctx.dev);
   const sum = (p, f) => PLATFORM_LIST.reduce((a, pl) => a + (p.metrics[pl]?.[f] || 0), 0);
   const measured = d.posts.filter((p) => Object.keys(p.metrics).length);
   const total = (f) => measured.reduce((a, p) => a + sum(p, f), 0);
@@ -1140,7 +1262,7 @@ ${d.formats
       .join('')}</tbody></table></section>`
   )
   .join('')}
-<section class="panel"><header><h2>פורמטים שעובדים עכשיו</h2><span class="end muted small">שורטס ביוטיוב, עם המספרים של יוטיוב עצמו</span></header>${d.trends.length ? `<ul class="factlist">${d.trends.map((x) => `<li>${accDot(x.account_id)} ${x.status === 'kept' ? '<span class="chip ok">נכנס לניסיון</span>' : '<span class="chip ghost">נדחה</span>'} <a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${k(x.views)} צפיות ${icon('ext')}</a>${x.card?.hookShape ? ` <b>${esc(x.card.hookShape)}</b>` : ''}<div class="muted small">${esc(x.why || x.card?.why || '')}</div></li>`).join('')}</ul>` : '<p class="muted">עוד לא נבדק. עם YOUTUBE_API_KEY המנוע מחפש פעם בשבוע שורטס שעובדים בנישה של כל חשבון, לומד מהם את הפורמט בלבד, ומכניס אותו לניסיון.</p>'}</section>`;
+<section class="panel"><header><h2>פורמטים שעובדים עכשיו</h2><span class="end muted small">שורטס ביוטיוב, עם המספרים של יוטיוב עצמו</span></header>${d.trends.length ? `<ul class="factlist">${d.trends.map((x) => `<li>${accDot(x.account_id)} ${x.status === 'kept' ? '<span class="chip ok">נכנס לניסיון</span>' : '<span class="chip ghost">נדחה</span>'} <a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${k(x.views)} צפיות ${icon('ext')}</a>${x.card?.hookShape ? ` <b>${esc(x.card.hookShape)}</b>` : ''}<div class="muted small">${esc(x.why || x.card?.why || '')}</div></li>`).join('')}</ul>` : `<p class="muted">עוד לא נבדק. פעם בשבוע תדר מחפש שורטס שעובדים בתחום של החשבון, ולומד מהם רק את המבנה.${ctx.dev ? ' בלי YOUTUBE_API_KEY בשרת החיפוש הזה לא רץ.' : ''}</p>`}</section>`;
   const blocks = blocksPanel(d.blocks);
   const more = (id, ic, label, inner) => `<details class="more" id="${id}"><summary class="btn sm">${icon(ic)}${label}</summary><div class="more-in">${inner}</div></details>`;
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
@@ -1149,9 +1271,9 @@ ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמ
 ${kpis}
 ${measured.length ? fold('charts', 'גרפים', `<div class="cols even charts"><section class="panel"><header><h2>צפיות לפי יום הפרסום</h2></header>${viewsChart(measured)}</section><section class="panel"><header><h2>מול החציון</h2></header>${d.scored.length ? relChart(d.scored) : '<p class="muted">עוד אין פוסט עם ציון: הציון נקבע 72 שעות אחרי הפרסום.</p>'}</section></div>`, { one: false, cls: 'res-charts' }) : ''}
 ${posts}
-${fold('feedback', 'המשוב של הבוקר', feedbackPanels(d.feedback || []), { one: false, cls: 'res-feedback' })}
+${ours ? fold('feedback', 'המשוב של הבוקר', feedbackPanels(d.feedback || []), { one: false, cls: 'res-feedback' }) : ''}
 ${styleTestPanels(d.styleTests || [])}
-<div class="mores">${more('formats', 'results', 'פורמטים', formats)}${blocks ? more('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>
+${ours ? `<div class="mores">${more('formats', 'results', 'פורמטים', formats)}${blocks ? more('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>` : ''}
 </div>`;
   return layout({ ...ctx, title: 'תוצאות', active: 'results' }, body);
 }

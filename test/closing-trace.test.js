@@ -14,10 +14,11 @@ import { postFull } from '../src/web/data.js';
 import { postPage } from '../src/web/pages.js';
 import { opened, tempHome } from './helpers.js';
 
-// A customer's post page never shows the closing slide's checks in the English they are written in for the writer and
-// the operator ("closing: the closing slide has no line: write one short line that ..."): one plain Hebrew line says what
-// happened, and the operator still reads the English. The writer is stubbed: the demo's recorded answers, with the
-// closing line and the repairs set here.
+// A post page never shows the closing slide's checks in the English they are written in for the writer and the operator
+// ("closing: the closing slide has no line: write one short line that ..."), except to the operator on their own pages.
+// Since the audit of 2026-11-12 the steps themselves are developer mode's (the superadmin on Teder's own name): there one
+// plain Hebrew line says what happened. A customer reads no steps, only when the post was written and how its facts
+// were checked. The writer is stubbed: the demo's recorded answers, with the closing line and the repairs set here.
 
 after(() => closeBrowser());
 afterEach(() => setNow(null));
@@ -26,7 +27,14 @@ const PRODUCT = { name: 'עציץ ושמש', promise: 'צמחי בית ועצי�
 const GOOD = 'לחדר בלי חלון יש אצלנו זמיוקולקס בעציץ קרמיקה';
 const BANNED = 'הזמיוקולקס בעציץ קרמיקה הכי טוב, רק היום';
 const customer = { csrf: 'x' };
+const developer = { csrf: 'x', dev: true };
 const operator = { csrf: 'x', operator: true };
+
+/** A customer's page: no steps, one line on how the post was made, in Hebrew. */
+function noSteps(page) {
+  assert.equal(traceOf(page).steps.length, 0, 'a customer reads no steps');
+  assert.match(page, /<h2>איך הפוסט נוצר<\/h2><\/header><p class="muted m0">נכתב ב-/);
+}
 
 const contextFor = (home) => {
   const db = new Db(path.join(home, 'data.db'));
@@ -77,7 +85,8 @@ test('a draft whose closing line the check stopped: the customer reads it in Heb
       const res = await buildPost({ ...ctx, llm: writer(ctx, { line, repairs: [GOOD] }) }, { pack: ctx.pack('demo'), formatKey: 'plant-story', docKey: 'pothos-story', sample: true });
       assert.equal(res.status, 'sample', `${what}: ${res.reason}`);
       const d = postFull(ctx, res.postId);
-      const mine = traceOf(postPage(customer, d));
+      noSteps(postPage(customer, d));
+      const mine = traceOf(postPage(developer, d));
       const slides = mine.steps.find((s) => s.name === 'כתיבת שקפים');
       assert.equal(slides.status, 'failed', what);
       assert.doesNotMatch(mine.html, CLOSING_EN, `${what}: no English of the closing check on the customer's page`);
@@ -103,7 +112,8 @@ test('a post the closing check blocked, while written or before a send: Hebrew f
     assert.equal(res.status, 'blocked');
     const d = postFull(ctx, res.postId);
     const page = postPage(customer, d);
-    const mine = traceOf(page);
+    noSteps(page);
+    const mine = traceOf(postPage(developer, d));
     assert.doesNotMatch(mine.html, CLOSING_EN);
     // No count without its noun, and no row for the format's call to action, which a post with a closing slide never shows.
     assert.doesNotMatch(page, /נפסלו/);
@@ -132,7 +142,8 @@ test('a post the closing check blocked, while written or before a send: Hebrew f
     assert.equal(loadPost(ctx.db, res.postId).status, 'blocked');
     const d = postFull(ctx, res.postId);
     const page = postPage(customer, d);
-    const mine = traceOf(page);
+    noSteps(page);
+    const mine = traceOf(postPage(developer, d));
     assert.doesNotMatch(mine.html, CLOSING_EN);
     const stopped = mine.steps.filter((x) => x.name === 'השקף האחרון').at(-1);
     assert.equal(stopped.status, 'failed');

@@ -16,8 +16,10 @@ import { askJson } from '../llm/index.js';
 // document like any other: the outline plans from it, every quote is checked against it word for word, every number on
 // a slide must be in the quotes. What it is not is a source anyone checked, and nothing pretends it is:
 //
-//   - the post's card says "לא ממקור, כדאי לבדוק" beside each such fact, where it says where its facts come from
-//     (src/web/pages.js factsBlock), and the slide draws no "מקור:" line for it (build.js sourceLabel);
+//   - the post's card says "ידע כללי" in the corner of each slide that stands on such facts, "בלי מקור, כדאי לבדוק"
+//     beside each of them where it says where its facts come from (src/web/pages.js factsBlock), and its line of
+//     facts, in the warning's colour, how many are general knowledge (trustLine); the slide draws no "מקור:" line for
+//     it (build.js sourceLabel). The card used to say "כל אחת עם מקור" of them (the audit, 2026-11-12, P1-5);
 //   - a post that stands on one waits for a person's approval in every mode: a customer's always does
 //     (src/autonomy/rails.js), and the company's own accounts in digest or auto are held too (src/autonomy/runner.js);
 //   - the prompt asks for facts an encyclopedia states the same way and for none of what a model invents best
@@ -30,10 +32,15 @@ import { askJson } from '../llm/index.js';
 
 /** The model source's key in an account's sources. */
 export const MODEL_KEY = 'model-knowledge';
-/** Its name, as the Sources page shows it. */
-export const MODEL_NAME = 'ידע כללי של המודל';
+/** Its name, as the Sources page and a post's facts show it ("המודל" is a word for us: the audit, 2026-11-12). */
+export const MODEL_NAME = 'ידע כללי';
 /** What a fact from it is labelled, wherever a post says where its facts come from. */
-export const UNSOURCED_HE = 'לא ממקור, כדאי לבדוק';
+export const UNSOURCED_HE = 'בלי מקור, כדאי לבדוק';
+/**
+ * Why it is there, as the Sources page says it. Kept with the source when it is made, and said from here for one made
+ * before (its stored words named "המודל").
+ */
+export const MODEL_WHY = 'עובדות כלליות שתדר מכיר בעצמו, בלי נתונים, מחירים ותאריכים מדויקים. הן משמשות רק כשבמקורות אין מספיק, ואף אחד לא בדק אותן מול מקור, ולכן פוסט שנשען עליהן מסומן "כדאי לבדוק".';
 /** Its address: not a page anyone can open, so it never passes for one. */
 const MODEL_URL = 'model:general-knowledge';
 /** The fewest facts a page from the model must keep, after stableFacts, to be worth an outline. */
@@ -59,7 +66,7 @@ export function modelSource(db, accountId) {
   const at = nowIso();
   db.insert('sources', {
     account_id: accountId, key: MODEL_KEY, type: 'api', url: MODEL_URL, name: MODEL_NAME, lang: 'he', status: 'approved', origin: 'discovered', approved_at: at, created_at: at,
-    why: 'עובדות שהמודל מכיר בעצמו, לשימוש רק כשהמקורות דלים. אף אחד לא בדק אותן מול מקור, ולכן כל פוסט שנשען עליהן מחכה לאישור.',
+    why: MODEL_WHY,
     config_json: { api: { kind: 'model' } },
   });
   return db.get('SELECT * FROM sources WHERE account_id = ? AND key = ?', accountId, MODEL_KEY);
