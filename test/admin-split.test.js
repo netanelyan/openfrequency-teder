@@ -131,14 +131,29 @@ test("on Teder's own name the superadmin is in their workspace as its owner: the
   assert.doesNotMatch((await onName('/settings', customer(1))).body, /data-devtap/);
 });
 
-test("on Teder's own name the superadmin with no workspace there gets a page pointing to /admin, and any other address goes there", async () => {
+test("on Teder's own name the superadmin with no workspace there has every account on a customer's screens, and the operator's pages go to /admin", async () => {
+  // The owner, 2026-11-11: "i wanted to have the same data but just see it like a customer".
   const home_ = await onName('/', operator());
   assert.equal(home_.status, 200);
-  assert.match(home_.body, /הניהול של תדר נמצא בלוח הניהול/);
-  assert.match(home_.body, /<a class="btn primary" href="https:\/\/accounts\.test\/admin\/teder\/">ללוח הניהול<\/a>/);
-  for (const p of ['/all', '/leads', '/settings']) {
+  assert.doesNotMatch(home_.body, /הניהול של תדר נמצא בלוח הניהול/);
+  assert.equal(navOf(home_.body), navOf((await onName('/', customer(1))).body), "the same nav as a customer's");
+  assert.doesNotMatch(navOf(home_.body), /\/leads|\/demos/);
+  // The accounts the operator had, the workspace's among them, and nothing of every workspace's health on /all.
+  const all = await onName('/all', operator());
+  assert.equal(all.status, 200);
+  assert.doesNotMatch(all.body, /id="health"|id="not-live"|רק למפעיל/);
+  // On a laptop the operator's /all still has them.
+  assert.match((await raw('/all', { host: `127.0.0.1:${port}`, cookie: fake.session(operator()).cookie })).body, /id="health"/);
+  // Settings: no server-wide panel, and developer mode one tap-run away.
+  const s = await onName('/settings', operator());
+  assert.equal(s.status, 200);
+  assert.doesNotMatch(s.body, /עצירת חירום|מתי נכתבים הפוסטים|דמואים לחנויות/);
+  assert.match(s.body, /class="ver" data-devtap/);
+  // Every page of the product opens.
+  for (const p of ['/posts', '/accounts', '/results', '/sources', '/facts', '/topics', '/sounds', '/rivals', '/more', '/new']) assert.ok([200, 303].includes((await onName(p, operator())).status), p);
+  for (const p of ['/demos', '/leads', '/leads?tab=new']) {
     const r = await onName(p, operator());
     assert.equal(r.status, 303, p);
-    assert.equal(r.headers.location, `https://accounts.test/admin/teder${p}`);
+    assert.equal(r.headers.location, `https://accounts.test/admin/teder${p}`, p);
   }
 });

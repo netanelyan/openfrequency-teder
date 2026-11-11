@@ -548,18 +548,14 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       // Teder's own site shows the product, to the operator too (the owner, 2026-11-10: "Make teder and toran of
       // natikyan153@gmail.com regular, just like a customer's. Everything else, leads etc should be in other places. The
       // admin dashboard is for that. Toran and teder should stay toran and teder, even for admins"; accounts'
-      // docs/admin-split.md). accounts puts the superadmin in their own workspace here (OF_OPERATOR_WORKSPACE), as its
-      // owner, so every page below is a customer's. Without one there is nothing of the product to show: Today is a short
-      // page pointing to /admin, and any other address (an operator page from an old bookmark, an email, an alert) goes
-      // to the same page under /admin/teder. On a laptop (no PUBLIC_HOST) the operator still sees everything here, for
-      // development and the tests. `own`: the superadmin outside view-as on the public name, in a workspace or not.
+      // docs/admin-split.md). The operator there (`asCustomer`) keeps what they had, every account, on a customer's screens:
+      // the customer's nav and pages, nothing of the operator's (2026-11-11: "i wanted to have the same data but just see
+      // it like a customer"). What they may do is still the operator's. The operator's pages (an old bookmark, an email,
+      // an alert) go to the same page under /admin/teder. On a laptop (no PUBLIC_HOST) the operator still sees everything
+      // here, for development and the tests. `own`: the superadmin outside view-as on the public name.
       const own = !viaAdmin && a.user.superadmin === true && !a.viewAs && Boolean(publicHost) && host === publicHost;
+      const asCustomer = own && operator;
       const atAdmin = `${links.admin}/teder${p === '/' ? '/' : url.pathname}${url.search}`;
-      if (own && operator) {
-        if (reading && p === '/') return send(req, res, 200, pages.gatePage({ v: V, kind: 'operator', links, theme }));
-        if (reading) return redirect(res, atAdmin);
-        return json(req, res, 409, { ok: false, message: pages.GATE.operator.title, redirect: atAdmin });
-      }
       if (viaAdmin && !operator) return send(req, res, 404, 'not here', 'text/plain; charset=utf-8');
       // The operator's own pages (src/web/demos.js, src/web/leads.js) from the public name: there, under /admin/teder.
       if (own && reading && /^\/(demos|leads)(\/|$)/.test(p)) return redirect(res, atAdmin);
@@ -730,7 +726,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         // `unpaid`: the workspace has not paid, so its pages (the new-account flow, SETUP_OPEN) offer nothing that is the paywall's.
         // `origin`: where the stores' demo pages are, as /leads hands their address on (the public name, else this one).
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && (user.operator || user.superadmin) && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && (user.operator || user.superadmin), superadmin: user.superadmin, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: viaAdmin ? null : installOf(req.headers['user-agent'], jar), admin: viaAdmin ? links.admin : null };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator && !asCustomer, readOnly: user.readOnly, viewAs: user.viewAs, costs: Boolean(jar.of_dev === '1' && (user.operator || user.superadmin) && !user.viewAs), workspace: user.workspace, dev: jar.of_dev === '1' && (user.operator || user.superadmin), superadmin: user.superadmin, unpaid, pay, origin: publicHost ? `https://${publicHost}` : `http://${host}`, install: viaAdmin ? null : installOf(req.headers['user-agent'], jar), admin: viaAdmin ? links.admin : null };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
@@ -746,8 +742,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         // The operator also sees every workspace's health (src/web/health.js): payment, failures, connections, drafts;
         // and, in red at the top, that posts are only written to disk while PUBLISH_MODE or ZERNIO_API_KEY says so
         // (src/publish/live.js), read from this process's environment.
-        const health = healthFor(c, user);
-        const off = user.operator ? notLive(env) : [];
+        const health = asCustomer ? null : healthFor(c, user);
+        const off = user.operator && !asCustomer ? notLive(env) : [];
         return page(pages.allPage(pc, { ...data.today(c), healthHtml: health ? healthPanel(health.rows, health.alerts) : '', notLiveHtml: off.length ? pages.notLiveBanner(off, env) : '' }));
       }
       const pm = /^\/post\/([\w-]+)$/.exec(p);

@@ -1428,9 +1428,6 @@ export const GATE = {
   // The paywall (src/billing/entitlement.js): signed in, but the workspace has not paid for Teder. How to pay is
   // accounts' to say (its /setup page), whichever way it takes payment, so this says only what is true either way.
   unpaid: { title: 'תדר מחכה לתשלום', text: 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
-  // The superadmin on Teder's own site with no workspace of their own there (accounts' docs/admin-split.md): the site shows
-  // a workspace as its owner sees it, and the operator's pages (the demos, the leads, every account) are on /admin.
-  operator: { title: 'הניהול של תדר נמצא בלוח הניהול', text: 'כאן רואים את תדר כמו שלקוח רואה אותו, בחשבון של OpenFrequency. החשבון הזה עוד לא הוגדר, או שתדר לא פתוח בו. הדמואים, הלידים וכל החשבונות נמצאים בלוח הניהול.' },
 };
 
 /** The owner's line for a customer whose samples are ready and who has not paid yet (2026-11-02, the audit's item 2). */
@@ -1487,14 +1484,12 @@ export function gatePage({ kind, links, v = 1, theme = 'light', setup = null, re
         ? `<a class="btn primary" href="${esc(before.href)}">${before.started ? 'להמשיך בהקמת החשבון' : 'להקים את החשבון'}</a><a class="btn" href="${esc(links.setup)}">איך משלמים</a>${again}<a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'unpaid'
         ? `<a class="btn primary" href="${esc(links.setup)}">איך משלמים</a>${again}<a class="btn" href="${esc(links.logout)}">יציאה</a>`
-      : kind === 'operator'
-        ? `<a class="btn primary" href="${esc(`${links.admin}/teder/`)}">ללוח הניהול</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
       : kind === 'not_in_plan'
         ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
         : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;
   const title = ready ? READY_LINE : g.title;
   // Before the setup is done nothing is wrong: the title is said plainly, not in the red box of a refusal.
-  const head = before || kind === 'operator' ? `<h1>${esc(title)}</h1>` : `<h1 class="err" role="alert">${esc(g.title)}</h1>`;
+  const head = before ? `<h1>${esc(title)}</h1>` : `<h1 class="err" role="alert">${esc(g.title)}</h1>`;
   const body = ready
     ? `<ul class="paysamples" aria-label="פוסטים לדוגמה">${ready.samples.map((s) => `<li><img src="${esc(s.src)}" alt="${esc(s.alt)}" width="270" height="480" decoding="async"></li>`).join('')}</ul>
 <p class="small"><a href="${esc(ready.href)}#samples">${esc(BEFORE_PAY_HE.all)}</a></p>
