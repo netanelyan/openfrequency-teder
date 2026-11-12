@@ -115,6 +115,8 @@ export function deleteWorkspace(ctx, workspaceId, { log = ctx.log } = {}) {
       db.run("DELETE FROM settings WHERE key LIKE ? ESCAPE '\\' OR key LIKE ? ESCAPE '\\'", `%:${like}`, `%:${like}:%`);
     }
     db.run("DELETE FROM settings WHERE key = ?", `stopped:${workspaceId}`);
+    // The month's AI cost record (src/billing/ai-share.js), and its two alerts, which name the accounts.
+    db.run('DELETE FROM settings WHERE key = ? OR key LIKE ? OR key LIKE ?', `ai-share:${workspaceId}`, `alert:ai-share-30:${workspaceId}:%`, `alert:ai-share-50:${workspaceId}:%`);
     // Our books keep what happened, never who it was or what it said: the person and the details go.
     db.run(`UPDATE audit SET actor = CASE WHEN actor IN ('engine', 'accounts') OR actor LIKE 'engine:%' THEN actor ELSE 'deleted' END, detail_json = NULL WHERE account_id IN ${inIds}`, ...ids);
     if (names.length) {

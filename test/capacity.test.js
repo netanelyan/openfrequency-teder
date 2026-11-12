@@ -106,7 +106,7 @@ test("the plan accounts gives is kept with its answer, and a malformed one is th
 });
 
 test("every answer in accounts' entitlement contract is read as the contract says: a 200 for Teder acted on by `allowed` alone, with its plan and grace kept; a 404 is no; anything else is accounts not answering", async () => {
-  // A copy of openfrequency-accounts' docs/contracts/entitlement.json (accounts commit 447bb34): the two must agree.
+  // A copy of openfrequency-accounts' docs/contracts/entitlement.json (accounts commit 93af8a1, monthlyIls): the two must agree.
   const contract = JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'contracts', 'entitlement.json'), 'utf8'));
   const answers = contract.routes[0].answers;
   assert.ok(answers.some((a) => a.body.access === 'due'), 'the contract has the grace answer');
@@ -125,6 +125,8 @@ test("every answer in accounts' entitlement contract is read as the contract say
         const kept = lastKnown(db, ws);
         assert.deepEqual(kept.plan, { name: a.body.plan.name, slideshows: a.body.plan.slideshows, redos: a.body.plan.redos }, a.case);
         assert.equal(kept.graceUntil, a.body.graceUntil, a.case);
+        // What a month costs the workspace before VAT (since 2026-11-11): the base its AI cost is weighed against.
+        assert.equal(kept.monthlyIls, a.body.monthlyIls, a.case);
       } else if (a.status === 200) {
         assert.equal(got.source, 'unknown', `${a.case}: another product's answer is not Teder's`);
       } else if (a.status === 404) {

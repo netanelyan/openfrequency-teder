@@ -78,7 +78,7 @@ export async function writeScenes(ctx, seed = {}, { block = [] } = {}) {
   if (ctx.llm?.kind !== 'claude' || !seed.niche) return { scenes: fallback.slice(0, SCENES.max), by: 'fallback' };
   try {
     const { data } = await askJson(ctx, {
-      task: 'scenes', role: 'judge', effort: 'low', maxTokens: 1000, expectOut: 120, tag: 'onboarding', schema: SCENES_SCHEMA,
+      task: 'scenes', role: 'scout', effort: 'low', maxTokens: 1000, expectOut: 120, tag: 'onboarding', schema: SCENES_SCHEMA,
       system: `You name the scenes a Hebrew social account's slides stand on when a slide has no photograph of its own: ${SCENES.min} to ${SCENES.max} short English photo searches (two to five words, lowercase) for the places and things of the account's niche, as a free stock library would answer them ("football stadium at night", "boxing gloves", "kitchen counter", "laptop on a desk"). No one in them: never a person, a player, a fan, a crowd, hands or a face. Never a name (no person, club, brand, product or named place), never a logo, a sign, text, a screen, a jersey or a kit. Each one different, each one a real photograph a library has many of. Return { scenes }.`,
       user: `Account: ${seed.displayName || ''}. Niche: ${seed.niche}${seed.nicheEn ? ` (${seed.nicheEn})` : ''}. Audience: ${seed.audience || ''}. Topics: ${(seed.topics || []).join(', ') || 'none'}.`,
     });

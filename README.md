@@ -642,10 +642,13 @@ within 90 days pauses the account. Every photo is screened before use: words in 
 description, deep red, and with a live key a vision model; what none of them clears
 waits for a person.
 
-## The plan, not a budget
+## The plan, and one line of money
 
-There is no money cap. Every account (a page) gets **40 slideshows a month and 10
-redos**, and that plan is the only limit (`src/budget/quota.js`). A slideshow counts
+Every customer (a workspace) gets the **slideshows and redos of its plan** a month, 40
+and 10 on the full plan, shared by its accounts (`src/budget/quota.js`), and that plan
+bounds the drafting. Over it there is one money line, per paying customer: when what
+its AI cost this month reaches 30% of what it pays a month, the operator hears it, and
+at 50% its AI stops until the next month (below). A slideshow counts
 when it reaches the customer for approval, whatever they do with it; a redo is a
 replacement written for a post they rejected with a reason; a post our checks stopped
 is ours and is not counted. When an account's 40 are used, nothing more is drafted for
@@ -657,18 +660,33 @@ Settings, never a sum of money.
   the outline (`maxDocs`), one slide draft with one redraft, two repair rounds
   (`REPAIR_ATTEMPTS`), two rewrite passes for what the review flags, and a replacement
   our checks stop tried twice at most (`REDO_ATTEMPTS`). The day's slots are drafted
-  once a day: a stopped post waits for the next day's generation, never a loop. At the
-  measured $0.15 a post made (stopped attempts included) a full month of 50 is about
-  $7.50 an account ([docs/costs.md](docs/costs.md)).
+  once a day: a stopped post waits for the next day's generation, never a loop. At about
+  $0.33 a post made (stopped attempts included) and twice that for a redo, which goes
+  at once rather than in the day's batch, a full month of 40 and 10 is about $20 a
+  customer ([docs/costs.md](docs/costs.md)).
 - **One door.** Every model call goes through `src/llm/index.js`, and only
   `src/llm/claude.js` imports the SDK. After each call its real cost from the usage
   block is recorded in the ledger (`src/budget/ledger.js`): for the operator's
   Settings (the month's cost, each account's cost by what it went to, the cost per
-  post in developer mode), never to refuse a call.
-- **Cheap by design.** Drafting on Claude Sonnet through the Message Batches API a day
-  ahead, the account's voice and rules as a cached prefix, documents narrowed to
-  their content, one redraft at most, a rewrite only for what the review flags.
-- **The stops that remain** are not about money: the kill switch per account and the
+  post in developer mode), and for the 30/50 rule.
+- **Smart first, within $0.50 a slideshow** (the owner, 2026-11-11: "make sure toran
+  and teder ai are smart. even if a slideshow gets to 0.5$"). Claude Opus 5.5 writes,
+  rewrites and reviews, finds and scores a new account's sources; Sonnet scores the
+  day's topics; Haiku screens each photograph. About $0.33 a slideshow made, its
+  stopped attempts included, at the Message Batches price the day's posts go at
+  ([docs/costs.md](docs/costs.md)); the account's voice and rules a cached prefix,
+  documents narrowed to their content, one redraft at most, a rewrite only for what
+  the checks or the review flag.
+- **The 30/50 rule** (`src/billing/ai-share.js`). Everything the ledger recorded this
+  Israel month for a workspace's accounts, in shekels at `USD_ILS` (3.17 by default),
+  against what accounts says a month costs it before VAT (`monthlyIls`). At 30% the
+  operator hears it (the log, `/all`, their WhatsApp through Toran), once a month; at
+  50% nothing new is drafted for it, no redo, no sample, no step of a new account, no
+  light edit's check, until the next month, while what is approved still goes out, and
+  the customer reads one calm line on Today. The operator can let it go on for the rest
+  of the month in Settings (developer mode), audited. The company's own workspaces are
+  never weighed.
+- **The other stops** are not about money: the kill switch per account and the
   global one, a platform strike, a streak of publish errors, repeated takedowns.
 
 Zernio is billed per connected account, and its share per account is in the

@@ -543,10 +543,33 @@ says which keys are set without showing them.
   line, `[alert] Toran did not take <key>: <why>`, and nothing else: the alert is already in the log and the table, it is
   not tried again, and the runner goes on. Only a service on this machine is ever asked.
 - **What to do.** docs/first-customer.md, section by section.
+- **A customer's AI cost** (next section) has two alerts of its own, keys `ai-share-30:<workspace>:<month>` and
+  `ai-share-50:<workspace>:<month>`, in Hebrew, once a month each.
 - **Needed now?** The command is, before the first customer: UNVERIFIED that it is installed on the VPS
   (`ls -l /usr/local/bin/of-alert && systemctl cat of-alert@.service`). The WhatsApp way needs nothing set here (Teder
   and Toran already share `OF_INTERNAL_TOKEN`), only Toran's `TORAN_ALERT_WA` and the approved template; check with
   `journalctl -u openfrequency | grep 'Toran did not take'`, which stays empty while Toran takes them.
+
+### A customer's AI cost: 30% alerts, 50% stops (2026-11-11)
+
+- **What it is.** The owner: "just make sure there is a cap where if ai costs of an account reach 30% of the payment of
+  the customer, we get alerted. them on 50% it stops." For each customer (workspace): everything the spend ledger
+  recorded this Israel month for its accounts, in shekels at `USD_ILS` (3.17 unless set), against what a month costs
+  it before VAT (accounts' `monthlyIls`: its price, or the plan's list price when it is complimentary or 0 ₪). The
+  company's own workspaces (`OF_OWN_WORKSPACES`) are never weighed (src/billing/ai-share.js).
+- **At 30%** you hear it once that month, on WhatsApp and in the alerts under /all: "תדר: עלות ה-AI של לקוח הגיעה
+  ל-31% ממה שהוא משלם", with the workspace and its accounts, the month, the cost in ₪ and in dollars, and what it pays.
+- **At 50%** its AI stops until the 1st of the next month, and you hear that once too ("תדר: עצרתי את ה-AI של לקוח,
+  ..."): nothing new is drafted for its accounts, no redo, no sample, no step of a new account's setup, no light
+  edit's text check (a photo swap or a removed slide still work), and posts already approved still go out. The
+  customer reads one line on Today, Posts and /all: "כרגע לא נכתבות מצגות חדשות, ואנחנו כבר מטפלים בזה. מה שכבר
+  אישרתם עולה בזמן, כרגיל." No cost and no share are ever shown to them.
+- **To let it go on** for the rest of the month: Settings in developer mode (under /admin/teder), "עלות ה-AI מול
+  התשלום", the button "לפתוח עד סוף החודש" beside the customer. It is audited (`ai_stop_lifted`, with who and the share
+  then), and the next month starts with no alert, no stop and no lift. A customer that moves to a dearer plan
+  mid-month weighs against the new price at once.
+- **What to check.** `journalctl -u openfrequency | grep ai-share` for each line said, and the panel for where every
+  customer stands. A normal month is far below 30%: about $20 for a full plan of 40 and 10, 65 ₪ of 790 (docs/costs.md).
 
 ### /healthz and /readyz
 

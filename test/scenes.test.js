@@ -102,7 +102,8 @@ test("a new account's theme has scenes, written by the model in one small call",
     const call = model.asked.find((r) => r.task === 'scenes');
     assert.ok(call, 'one call for the scenes');
     assert.equal(model.asked.filter((r) => r.task === 'scenes').length, 1);
-    assert.equal(call.role, 'judge');
+    // The scout's since 2026-11-11 (src/llm/index.js): once an account, and every slide without a photograph stands on it.
+    assert.equal(call.role, 'scout');
     assert.equal(call.effort, 'low');
     assert.equal(call.tag, 'onboarding');
     assert.deepEqual(call.schema.required, ['scenes']);

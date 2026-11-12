@@ -3,9 +3,11 @@ import { monthKey, now, nowIso } from '../core/clock.js';
 import { BATCH_FACTOR, MODEL_RATES } from './pricing.js';
 
 // What every paid call cost, recorded after it: for the operator (Settings, the ledger by customer), for the cost per
-// post (docs/costs.md), and for nothing else. Nothing here refuses a call. There is no money cap: a customer's month is
-// a plan of posts (src/budget/quota.js, 40 suggestions and 10 redos), and that plan is what bounds the spend
-// (docs/decisions.md, "The budget is gone, the plan is the limit").
+// post (docs/costs.md), and for the one money line over a customer's month. Nothing here refuses a call. A customer's
+// month is a plan of posts (src/budget/quota.js, 40 suggestions and 10 redos), and that plan bounds the spend; over it,
+// what this ledger recorded this month for a workspace's accounts is weighed against what the workspace pays: 30%
+// alerts the operator, 50% stops its AI until the next month (src/billing/ai-share.js; the owner, 2026-11-11, and
+// docs/decisions.md, "A cap on a customer's AI cost: 30% alerts, 50% stops").
 //
 // Claude is priced from the usage block the API returned, at the published rates in pricing.js. A model that is not
 // there, and an estimate for a recorded answer, are priced at the dearest rate there is, so a cost is overstated rather

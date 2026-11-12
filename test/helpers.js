@@ -185,13 +185,14 @@ export async function fakeAccounts() {
       if (a && typeof a === 'object' && a.status) return out(a.status, a.body);
       const access = typeof a === 'string' ? a : a.access || 'paid';
       // As accounts answers (its docs/contracts/entitlement.json): paidThrough the last millisecond of an Israel day, in
-      // UTC; `due` is the grace after a paid period, still allowed; Teder's answers carry the plan. The days are counted
+      // UTC; `due` is the grace after a paid period, still allowed; Teder's answers carry the plan and what a month costs
+      // before VAT (monthlyIls, the full plan's 790 ₪ at its list price). The days are counted
       // from the day the test runs, a month paid ahead and the grace to the end of the day after tomorrow, so a page of a
       // test is never in the last week paid for (the reminder to pay, test/pay-reminder.test.js) by the calendar alone.
       const paid = ['paid', 'comp', 'due'].includes(access);
       const product = url.searchParams.get('product');
       const today = israelDate(Date.now());
-      return out(200, { workspace: ws, product, enabled: access !== 'off', access, allowed: paid, paidThrough: paid ? dayEnd(addDays(today, access === 'due' ? -1 : 30)) : null, cancelAt: null, graceUntil: access === 'due' ? dayEnd(addDays(today, 2)) : null, ...(product === 'teder' ? { plan: { name: 'full', slideshows: 40, redos: 10 } } : {}), ...(typeof a === 'object' ? a : {}) });
+      return out(200, { workspace: ws, product, enabled: access !== 'off', access, allowed: paid, paidThrough: paid ? dayEnd(addDays(today, access === 'due' ? -1 : 30)) : null, cancelAt: null, graceUntil: access === 'due' ? dayEnd(addDays(today, 2)) : null, ...(product === 'teder' ? { plan: { name: 'full', slideshows: 40, redos: 10 }, monthlyIls: 790 } : {}), ...(typeof a === 'object' ? a : {}) });
     }
     if (url.pathname === '/internal/notify') {
       if (req.method !== 'POST') return out(405, { error: 'method' });

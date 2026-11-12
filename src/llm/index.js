@@ -3,32 +3,47 @@ import path from 'node:path';
 import { isSet } from '../core/env.js';
 import { ensureDir, ofHome } from '../core/paths.js';
 import { apiEquivalent, claudeCost, MODEL_RATES, record, WORST } from '../budget/ledger.js';
+import { accountAiPaused, AiPausedError, PAUSED_HE } from '../billing/ai-share.js';
 import { ClaudeError, claudeClient, requestParams } from './claude.js';
 import { cliClient, systemText } from './cli.js';
 import { recordedClient } from './recorded.js';
 
-// One entry point for every model call, and what each one cost recorded after it.
-// Nothing here refuses a call for money: there is no cap (docs/decisions.md, "The
-// budget is gone, the plan is the limit").
+// One entry point for every model call, and what each one cost recorded after it. It refuses one kind of call for
+// money: any call for a customer's account whose workspace's AI cost this month reached half of what it pays (the owner,
+// 2026-11-11: "just make sure there is a cap where if ai costs of an account reach 30% of the payment of the customer, we
+// get alerted. them on 50% it stops"; src/billing/ai-share.js), until the next month or until the operator lifts it.
+// The runner and the jobs skip such an account before they get here; this is the backstop.
 //
-// Which model does which job (docs/costs.md has the measurements behind it):
-//   draft    the outline and the slides: Claude Sonnet 5.5
-//   rewrite  a text the reviewer flagged, rewritten: Claude Sonnet 5.5
-//   review   "does this sound like a bot, does it say more than its facts":
-//            Claude Sonnet 5.5. Measured on the same drafts, Haiku scored
-//            nearly every text 1 and found no fact problems, where Sonnet and
-//            Opus both flagged the same stock lines and the same unsupported
-//            claims. The review is the only check of the sentence around a
-//            quoted number, so it gets the model that can do it; Opus found
-//            nothing Sonnet missed, at twice the price.
-//   judge    sorting and scoring: sources in onboarding, a trend's format: Claude Haiku 5.5
-// Each is overridable in .env, because the right split is a question for the
-// numbers, not for code.
+// Which model does which job. The owner, 2026-11-11: "also make sure toran and teder ai are smart. even if a slideshow
+// gets to 0.5$". Quality first, within $0.50 a slideshow made, its stopped attempts and rewrites included: on the calls
+// recorded on 2026-10-28, priced at pricing.js, about $0.33 a slideshow made at the batch price the day's posts go at
+// ($0.42 counting every stopped attempt as a whole one), against $0.17 ($0.21) on the Sonnet split before, and the day's
+// topics add two to five cents. docs/costs.md, "Opus writes (2026-11-11)", has the method and each call's share.
+//   draft    the outline, the research details, the slides, the art direction, the closing line, a fact from the model's
+//            own knowledge; a new account's voice and setup writing; a store's demo: Claude Opus 5.5
+//   rewrite  a text the checks or the reviewer flagged, written again: Claude Opus 5.5, the writer's model
+//   review   "does this sound like a bot, does it say more than its facts", and a light edit's fact check: Claude Opus
+//            5.5. On Sonnet drafts (2026-10-13), Haiku scored nearly every text 1 and found no fact problem, and Opus
+//            found nothing Sonnet missed at twice the price, so Sonnet reviewed. Now the reviewer reads Opus's writing and
+//            each flag it raises buys an Opus rewrite, or blocks a post we pay to draft again; two Sonnet runs on nearly
+//            the same drafts disagreed on most slide titles. It is the only check of the sentence around a quoted number,
+//            and on Opus it adds about two cents a slideshow made
+//   scout    a new account's sources (its niche's sites named, searched wider, scored) and its scenes: Claude Opus 5.5.
+//            About ten cents, once an account, and every post after stands on what it chose
+//   rank     the day's topics scored, with the angle each post is written on, and a photograph searched again: Claude
+//            Sonnet 5.5. Daily, so not Opus; the angle becomes the post's subject, so not Haiku
+//   judge    each photograph's screen (safe, and does it show what its slide says) and a trend's format: Claude Haiku
+//            5.5. Ten to twenty screens an attempt: on Sonnet they alone would be about $0.22 a slideshow made, so Haiku
+//            stays, at medium effort, with room to think through the screen's rules (src/images/safety.js)
+// Each is overridable in .env (MODEL_DRAFT, MODEL_REWRITE, MODEL_REVIEW, MODEL_SCOUT, MODEL_RANK, MODEL_JUDGE), because
+// the right split is a question for the numbers, not for code.
 
 export const ROLES = {
-  draft: () => process.env.MODEL_DRAFT || 'claude-sonnet-5-5',
-  rewrite: () => process.env.MODEL_REWRITE || process.env.MODEL_DRAFT || 'claude-sonnet-5-5',
-  review: () => process.env.MODEL_REVIEW || 'claude-sonnet-5-5',
+  draft: () => process.env.MODEL_DRAFT || 'claude-opus-5-5',
+  rewrite: () => process.env.MODEL_REWRITE || process.env.MODEL_DRAFT || 'claude-opus-5-5',
+  review: () => process.env.MODEL_REVIEW || 'claude-opus-5-5',
+  scout: () => process.env.MODEL_SCOUT || 'claude-opus-5-5',
+  rank: () => process.env.MODEL_RANK || 'claude-sonnet-5-5',
   judge: () => process.env.MODEL_JUDGE || 'claude-haiku-5-5',
 };
 
@@ -129,6 +144,9 @@ const textOf = (system) => (Array.isArray(system) ? system.map((b) => b?.text ||
  * flagged as an estimate.
  */
 export async function askJson(ctx, req) {
+  // The 30/50 rule's backstop: no call for an account whose workspace's AI is stopped this month, whatever asked for it.
+  const account = ctx.pack?.id ?? null;
+  if (account && ctx.db && accountAiPaused(ctx.db, account)) throw new AiPausedError(PAUSED_HE.title);
   const model = req.model || ROLES[req.role || 'draft']();
   const params = requestParams({ ...req, model });
   if (ctx.llm.backend === 'claude-cli') return askCli(ctx, req, { model, params });

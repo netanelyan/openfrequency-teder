@@ -57,7 +57,7 @@ export async function writeClosing(ctx, { pack, draft, outline, facts = [], post
   try {
     res = await askJson(ctx, {
       task: 'closing', role: 'draft', system: CLOSER_SYSTEM, user: closerUser({ pack, draft, outline, lesson }), schema: CLOSER_SCHEMA,
-      effort: 'medium', maxTokens: 2000, meta: { postId }, tag: 'closing',
+      effort: 'medium', maxTokens: 4000, meta: { postId }, tag: 'closing',
     });
   } catch (e) {
     ctx.log?.(`closing: ${e.message}`);

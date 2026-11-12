@@ -1,42 +1,135 @@
-# Costs: a plan per account, no cap
+# Costs: a plan per customer, and one line of money
 
-2026-10-13, updated 2026-10-24. What the engine costs to run, what each service
-gives for free, what every phase 2 change did to the cost of a post, and what a
-month costs now.
+2026-10-13, updated 2026-11-11. What the engine costs to run, what each service
+gives for free, what every change did to the cost of a post, and what a month costs
+now.
 
-**There is no money cap since 2026-10-24.** The owner: "teder should remove its
-budget, each page gets 40 videos a month with 10 redos." Every account (a page) gets
-40 slideshows and 10 redos a month (`src/budget/quota.js`), and that plan is what
-bounds the spend. What each call costs is still recorded, for the operator to read
-(Settings: the month's cost, each account's cost by what it went to, the cost per
-post in developer mode), and nothing refuses a call for money
-([decisions.md](decisions.md), *The budget is gone, the plan is the limit*).
+**One money line since 2026-11-11.** The owner: "also make sure toran and teder ai are
+smart. even if a slideshow gets to 0.5$, and even if toran costs 1.5x themselves. just
+make sure there is a cap where if ai costs of an account reach 30% of the payment of
+the customer, we get alerted. them on 50% it stops." Each customer (a workspace) gets
+its plan's slideshows and redos a month (`src/budget/quota.js`), and that plan bounds
+the drafting. Over it, everything the ledger recorded this month for the workspace's
+accounts is weighed against what it pays a month before VAT: at 30% the operator hears
+it, at 50% its AI stops until the next month (`src/billing/ai-share.js`;
+[decisions.md](decisions.md), *A cap on a customer's AI cost: 30% alerts, 50% stops*).
+From 2026-10-24 until then nothing refused a call for money (*The budget is gone, the
+plan is the limit*). What each call costs is recorded, for the operator to read
+(Settings in developer mode: the month's cost, each account's cost by what it went to,
+the cost per post, each customer's share of what they pay).
+
+## Opus writes (2026-11-11)
+
+The same day the owner asked for the AI to be smart first, within $0.50 a slideshow.
+The writing moved from Claude Sonnet 5.5 to Claude Opus 5.5 (`src/llm/index.js` says
+why for each role, and each is overridable in `.env`):
+
+| Role | Its calls | Model before | Model now | Effort |
+|---|---|---|---|---|
+| draft | outline, details (research), slides, art direction, the closing line, a fact from the model's own knowledge; a new account's voice and setup writing; a store's demo | Sonnet 5.5 | **Opus 5.5** | as before: medium for the writing, low for the details and the art direction |
+| rewrite | a repair of a text a check refused, a rewrite of what the review flagged | Sonnet 5.5 | **Opus 5.5** | medium |
+| review | the bot score and the fact check of every text, and a light edit's fact check | Sonnet 5.5 | **Opus 5.5** | low |
+| scout (new) | a new account's sources: the niche's sites named, searched wider, scored; its scenes; the niche in English | Haiku 5.5 | **Opus 5.5** | low |
+| rank (new) | the day's topics scored, with the angle each post is written on; a photograph searched again | Haiku 5.5 | **Sonnet 5.5** | low |
+| judge | each photograph's screen; a trend's format | Haiku 5.5 | Haiku 5.5 | the screen **medium** (was low), with 3,000 tokens of room (was 1,500) |
+
+The review on Opus, though on Sonnet drafts (2026-10-13, below) Opus found nothing
+Sonnet missed at twice the price: the reviewer now reads Opus's writing, each flag it
+raises buys an Opus rewrite or blocks a post we then pay to draft again, and two Sonnet
+runs on nearly the same drafts disagreed on most slide titles. The screens stay on
+Haiku: ten to twenty an attempt, on Sonnet they alone would be about $0.22 a slideshow
+made. Room to think: the slides may answer in 12,000 tokens (was 8,000; Sonnet's came
+to 5,080), a repair in 6,000 (was 4,000), the closing line in 4,000 (was 2,000), since
+an answer cut off at the cap is billed and thrown away.
+
+### How the estimate is made
+
+Nothing was spent to measure it (the owner's rule: nothing Claude Code can do goes on
+the key), and Opus's own thinking was not measured.
+
+- **The calls of one attempt** are the two whole posts the Claude Code CLI recorded on
+  2026-10-28 in the dry runs of two of our own accounts (their databases in
+  `$OF_HOME/data`, `spend.usage_json`:
+  each call's real tokens in and out, thinking included, and the share of its prompt
+  that is the cached prefix): outline, details, two slide drafts, one or two repairs,
+  the review twice, one or two rewrites, 9 and 15 photograph screens. To them, the steps
+  added on 2026-11-08 that they predate, from their prompts: the art direction (about
+  2,400 tokens in, 700 out), the closing line (2,500 and 600), four screens of the
+  closing's background, 300 tokens more on the slides, and one photograph searched
+  again (1,500 and 400).
+- **Priced** at `src/budget/pricing.js`, read again from the pricing page on 2026-11-11
+  (every rate as there: Opus 5.5 $4 and $20 a million tokens, cache reads $0.20; Sonnet
+  5.5 $2 and $10, $0.10; Haiku 5.5 $0.10 and $0.50), at each role's model now, the
+  prefix read from the cache, at the Message Batches price the day's posts go at, and
+  at the direct price (twice that) that a redo, a declined day's new post and a sample
+  go at. The same token counts on Opus as on Sonnet; the screen's output half again as
+  long for its medium effort.
+- **Per slideshow made**, the stopped attempts included, as the section *The full
+  pipeline, measured* counts it: on 2026-10-14, 147 attempts made 79 posts (1.86
+  attempts a post), and the average attempt cost $0.079, 78.5% of a whole attempt of
+  the same calls ($0.1006 for the 2026-10-28 calls before the 2026-11-08 steps): an
+  attempt our checks stop early pays for less of it. So a slideshow made is about 1.46
+  whole attempts (*expected*), 1.86 at most (*every attempt whole*). None of what a
+  stronger writer may save (fewer redrafts, repairs and stopped posts) is counted.
+
+### The numbers
+
+| | Sonnet split (to 2026-11-10) | Opus writes (from 2026-11-11) |
+|---|---|---|
+| One whole attempt, batch | $0.113 | $0.223 |
+| **A slideshow made, batch** (the day's posts) | **$0.165** ($0.211 every attempt whole) | **$0.326** ($0.415) |
+| A slideshow made, direct (a redo, a declined day's new post, a sample) | $0.331 ($0.421) | $0.651 ($0.830) |
+| If Opus thinks half again as much as Sonnet did | | $0.439 batch ($0.559), $0.878 direct |
+
+What a whole attempt's $0.223 goes to (batch): slides 23%, outline 18%, repairs 13%,
+details, review and rewrites 11% each, art direction, the closing line and the screens
+4% each, a photograph searched again 1%.
+
+Beside the slideshows: the day's topics, on Sonnet, $0.03 a day an account for 10
+candidates and $0.06 for 30 (under a cent on Haiku), two to five cents a slideshow at
+40 a month; a new account's search for sources, about $0.14 once on Opus, Brave
+included ($0.03 before).
+
+**Within $0.50 a slideshow?** At the batch price, $0.33 expected and $0.42 at most;
+$0.44 if Opus thinks half again as much, and $0.56 only if that and every attempt
+whole. A redo and a declined day's new post go at once, at twice that, so a full
+month's mix of 40 slideshows and 10 redos averages about $0.40 a slideshow. The first
+weeks' ledger says which case is true (developer mode's cost per post on Settings). If
+it goes past $0.50: `MODEL_REVIEW=claude-sonnet-5-5` takes about two cents off a
+slideshow made, `MODEL_REWRITE=claude-sonnet-5-5` about four.
 
 ## The month now
 
-At the measured **$0.15 a post made** (the stopped attempts paid for included, the
-section [The full pipeline, measured on real token counts](#the-full-pipeline-measured-on-real-token-counts-2026-10-14)):
+| | Posts a month | AI cost a month | Of what it pays |
+|---|---|---|---|
+| A full plan, all of it (40 slideshows in the day's batches, 10 redos at once, the topics) | 50 | **about $20** | about 65 ₪ of 790 ₪, 8% |
+| A small plan, all of it (15 and 4) | 19 | about $8.50 | about 27 ₪ of 490 ₪, 5.5% |
+| Where the 30% alert comes, full plan / small plan | | $74.80 / $46.40 | 237 ₪ / 147 ₪ |
+| Where the stop comes, full plan / small plan | | $124.60 / $77.30 | 395 ₪ / 245 ₪ |
 
-| | Posts a month | AI cost a month |
-|---|---|---|
-| One account, its whole plan (40 slideshows and 10 redos) | 50 | **about $7.50** ($5.75 at the best first round's $0.115, $10 at the worst's $0.20) |
-| One account, the slideshows only | 40 | about $6 |
-| Three accounts, every plan used | 150 | about $22.50 |
+At 3.17 ₪ a dollar (`USD_ILS`, the Bank of Israel's rate on 2026-11-11). A normal month
+is far below the first line. What reaches it is a month that drafts far more than its
+plan pays for: posts declined and drafted again one after another (each a direct post,
+up to `DRAFTS_PER_DAY` an account a day), round after round of samples, searches again.
+Plus Zernio, per connected account ([below](#zernio-per-connected-account)), which is
+not AI and is not weighed. A post our checks stop is not counted against the plan but
+is paid for: that is inside the cost of a slideshow made. The day's slots are drafted
+once a day, so a stopped post waits for the next day's generation rather than being
+tried again in a loop, and inside a post the calls are bounded (at most 6 documents per
+format offered to the outline, one redraft, two repair rounds, two rewrite passes, a
+replacement tried twice at most).
 
-Plus Zernio, per connected account ([below](#zernio-per-connected-account)), and
-fractions of a cent for onboarding (Brave) and trends (Haiku). A post our checks stop
-is not counted against the plan but is paid for: that is inside the $0.15. The day's
-slots are drafted once a day, so a stopped post waits for the next day's generation
-rather than being tried again in a loop, and inside a post the calls are bounded (at
-most 6 documents per format offered to the outline, one redraft, two repair rounds,
-two rewrite passes, a replacement tried twice at most).
+On Sonnet (2026-10-24 to 2026-11-10) the same full plan came to about $7.50 at the
+measured $0.15 a post made, and three accounts using every plan to about $22.50.
 
 ## More AI for better posts (2026-11-08)
 
 The owner, on an Airbnb post that opened on its founder's headshot, with fragments for slides and a weak closing
 slide: "involve AI in setting up the page and creating slideshows, even if it X3 the cost of a slideshow". The ceiling
-is three times $0.15, **$0.45 a post**. What each new step adds, estimated from its prompt and answer at Sonnet's
-prices ($3 in, $15 out a million tokens; half that through the Message Batches API, as the day's posts go):
+is three times $0.15, **$0.45 a post** ($0.50 since 2026-11-11, above). What each new step adds, estimated from its
+prompt and answer at $3 in and $15 out a million tokens (half that through the Message Batches API, as the day's posts
+go); Sonnet 5.5's rates are $2 and $10 (`src/budget/pricing.js`), so these overstate it by half, and the section above
+prices them right:
 
 | Step | Model | Tokens (in / out) | A post, direct | A post, batch |
 |---|---|---|---|---|
@@ -74,6 +167,14 @@ A sample's price: the measured $0.079 a try (section below, 147 tries) is at the
 Message Batches price; the samples are direct calls, which cost twice that, **about
 $0.16 a try** ($0.15 to $0.17). At the measured pass rate (79 of 147, 54%) five
 samples take about nine tries, so a round normally uses all nine of SAMPLE_ATTEMPTS.
+
+**Since 2026-11-11, $7.** The writing is on Opus (*Opus writes*, above), and a sample is
+written as any slideshow is, at the direct price: about $0.35 a try, $3.15 a round of
+nine; the search for sources about $0.14 (Opus scores them), the account about $0.08.
+One normal setup is about $3.40, and the cap keeps what it was for: one normal setup,
+one more full round, and about $0.50 for searching again, $7 (`UNPAID_SETUP_USD`;
+`OF_UNPAID_SETUP_USD=3.5` on the server brings back the old number, about one round).
+The rest of this section is the cap as it was set on 2026-11-02, on Sonnet.
 
 **The cap: $3.50 a workspace** while it has not paid (`src/billing/setup-cap.js`
 UNPAID_SETUP_USD, `OF_UNPAID_SETUP_USD` to change it). That is one normal setup and
@@ -202,6 +303,10 @@ outline $0.007 to $0.011, slides $0.005 to $0.008, review $0.003 to $0.005, a
 rewrite $0.005 to $0.007. The full table is in `private/cost-compare/summary.md`.
 
 ### Where Opus was needed: nowhere. Where Haiku was not enough: the review.
+
+As measured on 2026-10-13, on Sonnet drafts. Since 2026-11-11 Opus writes and reviews
+(*Opus writes*, above): the owner asked for the AI to be smart first, within $0.50 a
+slideshow.
 
 - **Drafting on Sonnet.** Opus verified every fact it quoted; Sonnet lost one
   topic by putting release dates into claims whose quotes lacked them. One
