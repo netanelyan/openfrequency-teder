@@ -169,11 +169,12 @@ test('the next post\'s closing line follows the change: the writer is told, the 
     assert.deepEqual(closingRecheck(post, pack), [], 'and it passes the check before any send');
     assert.equal(c.actions.instagram.text, 'באתר atzitz.example/zz-plant');
     assert.equal(c.actions.tiktok.text, 'הלינק בביו');
-    // The trace says what the loop chose and why, in plain Hebrew, on the post's page.
+    // The trace says what the loop chose and why, in plain Hebrew, on the post's page in developer mode (the steps are
+    // its since the audit of 2026-11-12).
     const fb = stepOf(db, res.postId, 'feedback');
     assert.deepEqual([fb.closing.line, fb.closing.keep], [LOSER, false]);
     assert.equal(stepOf(db, res.postId, 'closing').lesson, 'change');
-    const page = postPage({ csrf: 'x' }, postFull(ctx, res.postId));
+    const page = postPage({ csrf: 'x', dev: true }, postFull(ctx, res.postId));
     assert.match(page, /<b>המשוב של הבוקר<\/b>/);
     assert.ok(page.includes(`יותר אנשים מהרגיל ראו את המצגת &quot;השער של pB&quot;, אבל פחות מהם עשו לייק, הגיבו, שיתפו או שמרו. השורה בשקף האחרון שלה הייתה &quot;${LOSER}&quot;, אז כאן בחרנו לכתוב אותה אחרת.`), 'why, and what we chose');
     assert.ok(page.includes(BOXES.hl.todo));
@@ -205,7 +206,7 @@ test('when the writer cannot get it right, the promo\'s own words follow the loo
       assert.deepEqual([post.data.closing.line, post.data.closing.by], [want, 'safe'], `${box}: the promo's own words, as the loop chose`);
       assert.deepEqual(closingRecheck(post, pack), []);
       assert.match(w.calls.slides[0], keep ? /keeps its way: one sentence that ties this post's own topic to "זמיוקולקס בעציץ קרמיקה" as that one did/ : /written another way/);
-      const page = postPage({ csrf: 'x' }, postFull(ctx, res.postId));
+      const page = postPage({ csrf: 'x', dev: true }, postFull(ctx, res.postId));
       assert.ok(page.includes(keep ? 'אז כאן בחרנו לכתוב אותה באותה דרך, על הנושא של המצגת הזו.' : 'אז כאן בחרנו לכתוב אותה אחרת.'), box);
       // Without the lesson the slide would have taken the promo's first line.
       const { closingSlide } = await import('../src/pipeline/closing.js');

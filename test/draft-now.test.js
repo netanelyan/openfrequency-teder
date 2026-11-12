@@ -110,7 +110,8 @@ test('no draft on Shabbat or for a paused account (hard rule 9 and the rails): i
     const { ctx, db, id } = await queued(home, at('2026-10-18', '12:45'));
     setNow(at('2026-10-17', '10:00'));
     const r = approve(ctx, owner, { id });
-    assert.match(r.message, /הטיוטה תישלח לטיקטוק כש.+ייגמר/);
+    // "אחרי השבת", not "כששבת ייגמר" (the wrong gender; the audit, 2026-11-12, P2-19).
+    assert.match(r.message, /הטיוטה תישלח לטיקטוק אחרי השבת\./);
     const held = await r.job;
     assert.equal(held.state, 'held');
     assert.equal(held.code, 'shabbat');

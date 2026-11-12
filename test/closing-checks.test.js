@@ -145,8 +145,9 @@ test('a closing line that is missing, names neither the product nor the store, o
       const [cl] = stepsOf(ctx.db, res.postId, 'closing');
       assert.equal(cl.by, 'repair');
       assert.match(cl.broke.join(' '), rule, `${what}: the trace keeps what the writer's line broke`);
-      // The owner reads it on the post's page: the closing slide's step, whose line it is now, and the line.
-      const page = postPage({ csrf: 'x' }, postFull(ctx, res.postId));
+      // The owner reads it on the post's page, in developer mode (the steps are its since the audit of 2026-11-12): the
+      // closing slide's step, whose line it is now, and the line.
+      const page = postPage({ csrf: 'x', dev: true }, postFull(ctx, res.postId));
       assert.match(page, /השקף האחרון[\s\S]*הבדיקה עצרה את השורה הראשונה, וזו נכתבה בתיקון/);
       assert.ok(page.includes(GOOD), 'and the line itself');
     } finally {
@@ -166,7 +167,7 @@ test('a repair that fails twice ends on the promo\'s own words; with none that p
     const [cl] = stepsOf(s.ctx.db, s.res.postId, 'closing');
     assert.equal(cl.by, 'safe');
     assert.equal(cl.repairs, 2);
-    assert.match(postPage({ csrf: 'x' }, postFull(s.ctx, s.res.postId)), /הבדיקה עצרה את השורה גם אחרי התיקונים, ובמקומה שורה מהפרטים של החשבון/);
+    assert.match(postPage({ csrf: 'x', dev: true }, postFull(s.ctx, s.res.postId)), /הבדיקה עצרה את השורה גם אחרי התיקונים, ובמקומה שורה מהפרטים של החשבון/);
   } finally {
     s.cleanup();
   }
@@ -240,10 +241,11 @@ test('a stored post whose closing slide is missing or broken goes out on no path
         assert.equal(p.reason, CLOSING_HE, `${how}, ${where}: the reason in Hebrew`);
         assert.ok(!p.publish?.tiktok && !p.publish?.instagram, `${how}, ${where}: nothing sent`);
         assert.ok(stepsOf(db, id, 'closing').some((s) => s.status === 'failed' && s.problems?.length), `${how}, ${where}: the trace says what failed`);
-        // A customer reads the reason on the post's page, in Hebrew, and the trace's step says the closing slide stopped it.
+        // A customer reads the reason on the post's page, in Hebrew; in developer mode the trace's step says the closing
+        // slide stopped it.
         const page = postPage({ csrf: 'x' }, postFull(ctx, id));
         assert.ok(page.includes(CLOSING_HE), `${how}, ${where}: the page says why`);
-        assert.match(page, /השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה/);
+        assert.match(postPage({ csrf: 'x', dev: true }, postFull(ctx, id)), /השקף האחרון לא עבר את הבדיקה, ולכן המצגת לא תעלה/);
       };
       // Approve, on an account whose TikTok draft goes at the approval.
       setNow(tuesday('09:00'));
