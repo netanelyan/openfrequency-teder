@@ -171,8 +171,11 @@ test('Today asks for notifications while no device of a TikTok account gets them
   // Any day of the week, Shabbat too: the toast below is not about the day of rest. Paid, as a workspace that approves is.
   setSetting(ctx.db, 'schedule:demo', { shabbat: true, holidays: true });
   paidWorkspaces(ctx.db, [1]);
-  const page = (c = {}) => todayPage({ csrf: 'x', quota: { out: 0, limit: 40 }, ...c }, { ...today(ctx), progressHtml: '' });
+  // The demo publishes to disk: the page is drawn as a server whose TikTok drafts go out would draw it.
+  const live = (d) => ({ ...d, groups: d.groups.map((g) => ({ ...g, publishers: [{ platform: 'tiktok', wants: 'zernio', via: 'zernio' }] })) });
+  const page = (c = {}, on = true) => todayPage({ csrf: 'x', quota: { out: 0, limit: 40 }, ...c }, (on ? live : (x) => x)({ ...today(ctx), progressHtml: '' }));
   assert.match(page(), /id="push-ask"[\s\S]*data-push-enable/);
+  assert.doesNotMatch(page({}, false), /id="push-ask"/, 'with publishing off nothing waits in TikTok: nothing to be reminded of');
   assert.doesNotMatch(page({ pushLater: true }), /id="push-ask"/, 'put away for 30 days');
   assert.doesNotMatch(page({ readOnly: true }), /id="push-ask"/);
   // With no device that gets notifications, an approval says when to publish, and promises no reminder.

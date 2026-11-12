@@ -593,7 +593,9 @@ function summaryPanel(ctx, d) {
  */
 function pushAsk(ctx, d) {
   if (ctx.readOnly || ctx.pushLater || !d.push || d.push.on) return '';
-  if (!d.groups.some((g) => g.pack.meta.platforms.includes('tiktok'))) return '';
+  // Only where TikTok's drafts really go out (src/publish/index.js publisherFor): with publishing off nothing waits in
+  // TikTok, and the card would say it does.
+  if (!d.groups.some((g) => g.pack.meta.platforms.includes('tiktok') && (g.publishers || []).some((x) => x.platform === 'tiktok' && x.via !== 'dry'))) return '';
   return `<section class="panel install pushask" id="push-ask" data-pushask aria-labelledby="push-ask-h"><header><span class="install-mark">${tederMark()}</span><div><h2 id="push-ask-h">התראה כשמגיעה השעה לפרסם בטיקטוק</h2><p class="small muted m0">כל מצגת שאישרתם מגיעה לטיוטות בטיקטוק. כדי שלא תפספסו את השעה לפרסם אותה, תדר יכול לשלוח התראה למכשיר הזה.</p></div><button class="x" type="button" data-pushask-close aria-label="לא עכשיו">${icon('x')}</button></header>
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push.key)}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn primary" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form></section>`;
 }
