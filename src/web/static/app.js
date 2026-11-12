@@ -167,6 +167,13 @@
     }
   });
 
+  // Today's ask for notifications (src/web/pages.js pushAsk): its x puts it away in this browser for 30 days.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-pushask-close]')) return;
+    document.cookie = 'of_push=later; Path=/; Max-Age=2592000; SameSite=Lax';
+    e.target.closest('[data-pushask]')?.remove();
+  });
+
   // This device's own state: a device already subscribed is offered the off button instead.
   const pushOn = document.querySelector('form[data-push]');
   const pushOff = document.querySelector('form[data-push-off]');

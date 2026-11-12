@@ -60,8 +60,8 @@ function nowOut(db, post, t) {
 /** What a TikTok draft post is now, in the owner's words. */
 export const FLOW_HE = {
   drafted: ['בטיוטות של טיקטוק', 'ghost'],
-  waiting: ['טיוטה מחכה לך', 'sig'],
-  mine: ['פורסם על ידך', 'ok'],
+  waiting: ['טיוטה מחכה לכם', 'sig'],
+  mine: ['פרסמתם', 'ok'],
   sending: ['מפרסם אוטומטית', 'warn'],
   fallback: ['פורסם אוטומטית', 'warn'],
   duplicate: ['פורסם פעמיים', 'bad'],
@@ -76,7 +76,8 @@ export const flowState = (flow) => (flow?.mode === 'now' && flow.state === 'wait
 export function draftNote(flow, slotAt, timeOf) {
   const sound = flow.sound ? `סאונד: ${flow.sound.name} · ${flow.sound.artist}` : 'בלי סאונד מהרשימה';
   if (flow.mode !== 'now') return `${sound} · עולה אוטומטית ב-${timeOf(new Date(Date.parse(slotAt) + FALLBACK_MIN * MINUTE).toISOString())}`;
-  return flow.remindedAt ? `${sound} · השעה הגיעה: פרסמו מהטיוטות` : `${sound} · תזכורת ב-${timeOf(slotAt)}`;
+  // The hour to publish it, which Today and a push say when it comes (src/web/connect.js TIKTOK_LINE).
+  return flow.remindedAt ? `${sound} · השעה הגיעה: פרסמו מהטיוטות` : `${sound} · לפרסם ב-${timeOf(slotAt)}`;
 }
 
 const save = (db, postId, results) => db.update('posts', postId, { publish_json: results, updated_at: nowIso() });

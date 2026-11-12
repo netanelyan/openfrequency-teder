@@ -141,7 +141,10 @@ export function today(ctx, t = now()) {
     : [];
   // The overall summary's text names every account on the server: a workspace gets its own rows, or no summary.
   const summary = ctx.workspaceId == null ? overall : summaryRows.length ? { ...overall, text: '' } : null;
-  return { day, groups, summary, summaryRows, attention: attention(ctx) };
+  // Whether a device of the workspace gets notifications, and the key a browser subscribes with: Today asks for one
+  // while none does (src/web/pages.js pushAsk).
+  const subs = ctx.workspaceId == null ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n;
+  return { day, groups, summary, summaryRows, attention: attention(ctx), push: { on: subs > 0, key: vapid(ctx.db).publicKey } };
 }
 
 /** The last 7 Israel days for one account: posts published per day (none only written to disk), and reach where it is known. */

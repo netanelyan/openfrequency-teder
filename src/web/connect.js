@@ -87,7 +87,7 @@ export function requirements(d) {
   if (open.length) lines.push('בחיבור מאשרים את Zernio, השירות שמפרסם בשבילנו.');
   if (open.includes('tiktok')) {
     lines.push('בטיקטוק נכנסים עם החשבון שאליו המצגות יעלו, ומאשרים את ההרשאות במסך של טיקטוק.');
-    if (d.mode === 'draft-now') lines.push('המצגות מגיעות לטיוטות בטיקטוק בכוונה, כדי שתבחרו סאונד פופולרי ותפרסמו משם. כשמגיעה השעה, תדר מזכיר לכם.');
+    if (d.mode === 'draft-now') lines.push('המצגות מגיעות לטיוטות בטיקטוק בכוונה, כדי שתבחרו סאונד פופולרי ותפרסמו משם. כשמגיעה השעה, הטיוטה מופיעה בדף היום, ובמכשיר שהפעלתם בו התראות מגיעה גם התראה.');
   }
   if (open.includes('facebook')) {
     const others = d.platforms.map((s) => s.platform).filter((p) => p !== 'facebook');
@@ -141,8 +141,13 @@ ${d.configured ? requirements(d) : ''}<ul class="factlist nets">${rows}</ul><p c
  * drafts (src/publish/index.js tiktokMode): they read that in one line, with no choice to make. The operator chooses
  * for the company's own accounts, and sees a customer's as fixed. A panel of the account page's grid (pages.js).
  */
-/** How a customer's slideshows reach TikTok: always as drafts (src/publish/draft.js). */
-export const TIKTOK_LINE = 'המצגות מגיעות לטיוטות בטיקטוק. בוחרים שם סאונד פופולרי ומפרסמים מהאפליקציה, ותדר מזכיר לכם כשמגיעה השעה.';
+/**
+ * How a customer's slideshows reach TikTok: always as drafts (src/publish/draft.js), and what reminds them at the hour:
+ * the draft on Today, and a push to a device that turned notifications on (Settings, and the ask on Today). It said
+ * "תדר מזכיר לכם" while a customer who never turned push on got nothing outside the dashboard (the audit, 2026-11-12,
+ * P1-19). There is no email for it (accounts' /internal/notify takes five kinds) and Teder is not on WhatsApp.
+ */
+export const TIKTOK_LINE = 'המצגות מגיעות לטיוטות בטיקטוק. בוחרים שם סאונד פופולרי ומפרסמים מהאפליקציה. כשמגיעה השעה, הטיוטה מופיעה בדף היום, ובמכשיר שהפעלתם בו התראות מגיעה גם התראה.';
 
 export function tiktokModePanel(ctx, d) {
   if (!d.pack.meta.platforms.includes('tiktok')) return '';

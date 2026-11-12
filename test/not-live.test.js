@@ -241,7 +241,7 @@ test('a post written to disk is never called published on a customer page: its p
     html = await page('/', cookie);
     assert.match(html, /<a class="kpi lead" href="\/posts#written"><span class="l">פורסמו היום<\/span><span class="v num">0<\/span><span class="s">מצגת אחת של היום לא נשלחה לרשתות<\/span><\/a>/);
     assert.doesNotMatch(html, published);
-    assert.doesNotMatch(html, /טיוטות בטיקטוק|טיוטה מחכה לך|טיוטה בטיקטוק/, 'and no TikTok draft to publish: it was written to disk too');
+    assert.doesNotMatch(html, /טיוטות בטיקטוק|טיוטה מחכה לכם|טיוטה בטיקטוק/, 'and no TikTok draft to publish: it was written to disk too');
 
     // Posts: not among what was published today, but in a list of its own that says why.
     html = await page('/posts', cookie);

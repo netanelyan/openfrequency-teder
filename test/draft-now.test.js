@@ -65,7 +65,8 @@ test('approved: the TikTok draft goes at once, nobody is notified; at the slot o
     const { ctx, db, id } = await queued(home, slot);
     setNow(at('2026-10-13', '09:00'));
     const r = approve(ctx, owner, { id });
-    assert.match(r.message, /הטיוטה נשלחת לטיקטוק\. תזכורת תגיע ב-12:45/);
+    // No device gets notifications here: the toast says when to publish it, and promises no reminder (the audit, P1-19).
+    assert.match(r.message, /הטיוטה נשלחת לטיקטוק, ומפרסמים אותה מהאפליקציה ב-12:45\./);
     assert.equal(JSON.parse(JSON.stringify(r)).job, undefined, 'the send is not sent to the browser');
     assert.equal((await r.job).state, 'drafted');
     let post = loadPost(db, id);
@@ -163,7 +164,7 @@ test('approval taken back after the draft went: the owner is told to delete it i
     assert.equal((await approve(ctx, owner, { id }).job).state, 'drafted', 'a new approval, a new draft');
     post = loadPost(db, id);
     assert.equal(post.publish.oldDrafts.length, 1);
-    assert.match(postPage({ csrf: 'x' }, { post, pack, steps: [], metrics: [], takedowns: [] }), /<b>הטיוטה בתיבת הטיוטות בטיקטוק<\/b>[\s\S]*תזכורת ב-12:45/);
+    assert.match(postPage({ csrf: 'x' }, { post, pack, steps: [], metrics: [], takedowns: [] }), /<b>הטיוטה בתיבת הטיוטות בטיקטוק<\/b>[\s\S]*לפרסם ב-12:45/);
     oldDraftsDeleted(ctx, owner, { id });
     assert.equal(loadPost(db, id).publish.oldDrafts, undefined);
 

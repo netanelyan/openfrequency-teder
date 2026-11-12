@@ -572,6 +572,20 @@ function summaryPanel(ctx, d) {
   return `<details class="panel home-panel"><summary><h2 class="inline">סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}</h2></summary>${table}</details>`;
 }
 
+/**
+ * The ask to turn notifications on, on Today, while a TikTok account's workspace has no device that gets them: the
+ * draft waits in TikTok, and a push at its hour is the one reminder outside the dashboard (the audit, 2026-11-12, P1-19:
+ * it was a folded part of Settings, off by default, while the account page promised "תדר מזכיר לכם"). One button, the
+ * one Settings has (static/app.js data-push-enable); its x puts it away for this browser for 30 days (the cookie
+ * of_push). A view-only session asks nothing.
+ */
+function pushAsk(ctx, d) {
+  if (ctx.readOnly || ctx.pushLater || !d.push || d.push.on) return '';
+  if (!d.groups.some((g) => g.pack.meta.platforms.includes('tiktok'))) return '';
+  return `<section class="panel install pushask" id="push-ask" data-pushask aria-labelledby="push-ask-h"><header><span class="install-mark">${tederMark()}</span><div><h2 id="push-ask-h">התראה כשמגיעה השעה לפרסם בטיקטוק</h2><p class="small muted m0">כל מצגת שאישרתם מגיעה לטיוטות בטיקטוק. כדי שלא תפספסו את השעה לפרסם אותה, תדר יכול לשלוח התראה למכשיר הזה.</p></div><button class="x" type="button" data-pushask-close aria-label="לא עכשיו">${icon('x')}</button></header>
+<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push.key)}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn primary" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form></section>`;
+}
+
 /** Today's TikTok drafts, each with where it stands: waiting for you, published by you, by the fallback, twice. */
 function tiktokPanel(d) {
   const rows = d.groups.flatMap((g) => (g.drafts || []).map((x) => ({ ...x, g })));
@@ -634,6 +648,7 @@ ${d.progressHtml || ''}
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.</p>'}
 </section>
+${pushAsk(ctx, d)}
 ${installCard(ctx.install)}
 ${tiktokPanel(d)}
 ${d.summary ? summaryPanel(ctx, d) : ''}`;
@@ -1503,7 +1518,7 @@ ${d.schedule ? fold('schedule', 'מתי מפרסמים', schedulePanel(ctx, d.sc
 ${ctx.costs ? fold('costs', 'עלות החודש', costsPanel(ctx, d, { dev })) : fold('plan', 'החבילה החודשית', planPanel(d.plans))}
 ${d.quotas && ctx.costs ? fold('quotas', 'מכסות ועלות לפי לקוח', quotasPanel(ctx, d.quotas)) : ''}
 ${fold('push', 'התראות', `<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
-<p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
+<p class="muted">${acct?.pack.meta.platforms.includes('tiktok') ? 'תדר שולח התראה כשמגיעה השעה לפרסם טיוטה בטיקטוק, כשטיוטה לא הגיעה לשם, וכשפוסט שביקשתם במקום אחר מחכה לאישור.' : 'תדר שולח התראה כשפוסט שביקשתם במקום אחר מחכה לאישור.'} ההתראה מגיעה רק למכשירים שהפעלתם בהם התראות.</p>
 <p class="muted small">באייפון ההתראות עובדות רק כשפותחים את תדר מהאייקון במסך הבית. <a href="#install">איך מוסיפים את האייקון</a></p>
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
@@ -1819,7 +1834,7 @@ export function soundsPage(ctx, { packs, current, sounds, mode, recent, limits, 
   const fewer = sounds.length < limits.min ? `<p class="small"><span class="chip warn">${sounds.length ? `עוד ${limits.min - sounds.length}` : `${limits.min} לפחות`}</span> כל טיוטה מקבלת סאונד שלא היה ב-${limits.recent} הטיוטות האחרונות, אז כדאי שיהיו כמה.</p>` : '';
   const body = `<div class="head"><h1>סאונדים</h1><span class="sub">לטיוטות בטיקטוק</span></div>
 ${tabs}
-<p class="lede">את הסאונדים הוויראליים של טיקטוק אי אפשר להוסיף לפוסט מבחוץ, אז ${mode === 'direct' ? 'כשהחשבון במצב טיוטה כל פוסט בטיקטוק יוצא כטיוטה' : 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. כל טיוטה מקבלת סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. ${mode === 'draft-fallback' ? 'אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.' : 'הטיוטה נשלחת ברגע שאתם מאשרים, ובשעה של הפוסט מגיעה תזכורת עם הסאונד.'}</p>
+<p class="lede">את הסאונדים הוויראליים של טיקטוק אי אפשר להוסיף לפוסט מבחוץ, אז ${mode === 'direct' ? 'כשהחשבון במצב טיוטה כל פוסט בטיקטוק יוצא כטיוטה' : 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. לכל טיוטה תדר מציע סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. ${mode === 'draft-fallback' ? 'אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.' : 'הטיוטה נשלחת ברגע שאתם מאשרים. בשעה של הפוסט היא מופיעה בדף היום עם הסאונד, ובמכשיר שהפעלתם בו התראות מגיעה גם התראה.'}</p>
 ${mode === 'direct' ? '<p class="small"><span class="chip ghost">החשבון במצב ישיר</span> הרשימה נשמרת, ותשמש כשהחשבון יעבור למצב טיוטה.</p>' : ''}
 ${fewer}
 <div class="cols"><div>${list}</div>

@@ -10,7 +10,7 @@ import { closeBrowser } from '../src/render/render.js';
 import { postFull, results } from '../src/web/data.js';
 import { postCard, postPage, resultsPage } from '../src/web/pages.js';
 import { reasonHe } from '../src/web/ui.js';
-import { opened, tempHome } from './helpers.js';
+import { opened, paidWorkspaces, tempHome } from './helpers.js';
 
 // What a customer reads on a post, from the audit of 2026-11-12 (P1-1 to P1-8): no step codes, vendors, licences,
 // reviewer names or publishers' errors, a takedown form that asks rather than says one came, and every platform's line
@@ -161,4 +161,33 @@ test('money and plan wording: the paywall and the grace say the connections go 3
   assert.doesNotMatch(small, /פוסט אחד במקום שניים/);
   // The full plan's 40 over the same days: every day still gets one.
   assert.match(panel({ all: 51, days: 27, plan: 40, whole: 40 }), /ולכן בחלק מהימים ייצא פוסט אחד במקום שניים\./);
+});
+
+test('Today asks for notifications while no device of a TikTok account gets them; an approval promises a notification only where one comes', async () => {
+  const { todayPage } = await import('../src/web/pages.js');
+  const { today } = await import('../src/web/data.js');
+  const { approve } = await import('../src/web/actions.js');
+  const { setSetting } = await import('../src/core/store.js');
+  // Any day of the week, Shabbat too: the toast below is not about the day of rest. Paid, as a workspace that approves is.
+  setSetting(ctx.db, 'schedule:demo', { shabbat: true, holidays: true });
+  paidWorkspaces(ctx.db, [1]);
+  const page = (c = {}) => todayPage({ csrf: 'x', quota: { out: 0, limit: 40 }, ...c }, { ...today(ctx), progressHtml: '' });
+  assert.match(page(), /id="push-ask"[\s\S]*data-push-enable/);
+  assert.doesNotMatch(page({ pushLater: true }), /id="push-ask"/, 'put away for 30 days');
+  assert.doesNotMatch(page({ readOnly: true }), /id="push-ask"/);
+  // With no device that gets notifications, an approval says when to publish, and promises no reminder.
+  const again = () => ctx.db.update('posts', postId, { status: 'queued', publish_json: null, approved_at: null, approved_by: null, slot_at: new Date(Date.now() + 3 * 3_600_000).toISOString() });
+  again();
+  let r = approve(ctx, { id: 1, name: 'owner' }, { id: postId });
+  await r.job;
+  assert.match(r.message, /^אושר\. הטיוטה נשלחת לטיקטוק, ומפרסמים אותה מהאפליקציה ב-/);
+  assert.doesNotMatch(r.message, /תזכורת|התראה|כששבת/);
+  ctx.db.run("INSERT INTO push_subs (endpoint, user_id, workspace_id, created_at) VALUES ('https://push.example.test/one', 1, 1, ?)", new Date().toISOString());
+  assert.doesNotMatch(page(), /id="push-ask"/, 'a device gets them: nothing to ask');
+  again();
+  r = approve(ctx, { id: 1, name: 'owner' }, { id: postId });
+  await r.job;
+  assert.match(r.message, /תגיע התראה לפרסם אותה\.$/);
+  ctx.db.run('DELETE FROM push_subs');
+  ctx.db.run("DELETE FROM settings WHERE key = 'schedule:demo'");
 });

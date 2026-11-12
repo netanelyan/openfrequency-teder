@@ -132,7 +132,7 @@ test('nothing connected: approved posts wait, untried, and never pause the accou
   const acc = await (await fetch(`${base}/accounts?account=alpha`, { headers: { cookie } })).text();
   assert.match(acc, /אינסטגרם מתחבר רק כחשבון מקצועי, עסקי או יוצר/);
   assert.match(acc, /המצגות מגיעות לטיוטות בטיקטוק בכוונה, כדי שתבחרו סאונד פופולרי ותפרסמו משם/);
-  assert.match(acc, /תדר מזכיר לכם/);
+  assert.match(acc, /כשמגיעה השעה, הטיוטה מופיעה בדף היום, ובמכשיר שהפעלתם בו התראות מגיעה גם התראה/);
 
   // Still nothing connected: the runner leaves them.
   assert.deepEqual(releaseHeld(db, pack(), { t: TUE('12:50') }), []);

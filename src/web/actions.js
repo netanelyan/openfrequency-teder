@@ -17,7 +17,11 @@ import { CLOSING_HE } from '../publish/errors.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { rulesFor } from '../schedule/choice.js';
-import { STATUS_HE, timeHe } from './ui.js';
+import { STATUS_HE, dayHe, shortDate, timeHe } from './ui.js';
+// Whether a TikTok draft can go now, for what the approval says (canRun is imported once more under its own name: the
+// import above it is the cost rule's to change).
+import { canRun as canSend } from '../autonomy/rails.js';
+import { needsConnection } from '../publish/hold.js';
 import { moreThanFactsHe, problemsHe } from './problems.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
@@ -92,6 +96,26 @@ function draftBeside(ctx, id, result) {
 
 const DRAFT_LEFT = 'הטיוטה הקודמת כבר בתיבת הטיוטות של טיקטוק: מחקו אותה באפליקציה.';
 
+/** A time as a toast says it: the hour today, the date and the hour another day. */
+const whenHe = (t) => (dayHe(t) === dayHe(now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
+/** Does any device of this workspace (the operator's: any) get Teder's notifications? */
+const pushOn = (ctx) => (ctx.workspaceId == null ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n) > 0;
+
+/**
+ * What an approval says about its TikTok draft, as far as it is true (the audit, 2026-11-12, P1-19 and P2-19): it said
+ * "הטיוטה נשלחת לטיקטוק. תזכורת תגיע ב-19:40" when TikTok was not connected, the account was paused or a picture waited,
+ * gave another day's slot no date, promised a reminder to a customer with no device that gets one, and "כששבת ייגמר".
+ */
+function draftSaid(ctx, pack, post) {
+  const rest = restAt(now(), rulesFor(ctx.db, pack));
+  if (needsConnection(ctx.db, pack, 'tiktok')) return 'אושר. הטיוטה תישלח לטיקטוק אחרי שתחברו אותו בדף החשבון.';
+  if (!canSend(ctx.db, pack.id).ok) return 'אושר. הטיוטה תישלח לטיקטוק כשהחשבון יחזור לפעול.';
+  if (waitingImages(ctx.db, post).length) return 'אושר. לפני שהטיוטה נשלחת לטיקטוק, צריך להסתכל על תמונה בפוסט.';
+  if (rest) return `אושר. הטיוטה תישלח לטיקטוק אחרי ${rest === 'שבת' ? 'השבת' : 'החג'}.`;
+  if (!post.slot_at) return 'אושר. הטיוטה נשלחת לטיקטוק.';
+  return pushOn(ctx) ? `אושר. הטיוטה נשלחת לטיקטוק, וב-${whenHe(post.slot_at)} תגיע התראה לפרסם אותה.` : `אושר. הטיוטה נשלחת לטיקטוק, ומפרסמים אותה מהאפליקציה ב-${whenHe(post.slot_at)}.`;
+}
+
 export function approve(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   if (post.status !== 'queued') throw new ActionError(post.status === 'approved' ? 'הפוסט הזה כבר אושר.' : notNow('לאשר', post.status));
@@ -106,9 +130,7 @@ export function approve(ctx, user, { id }) {
   ctx.db.update('posts', id, { status: 'approved', approved_at: nowIso(), approved_by: user.name, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id, detail: via(user) });
   if (pack && tiktokModeFor(ctx.db, pack, loadPost(ctx.db, id)) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
-    const rest = restAt(now(), rulesFor(ctx.db, pack));
-    const at = post.slot_at ? ` תזכורת תגיע ב-${timeHe(post.slot_at)}.` : '';
-    return draftBeside(ctx, id, { ok: true, message: rest ? `אושר. הטיוטה תישלח לטיקטוק כש${rest} ייגמר.${at}` : `אושר. הטיוטה נשלחת לטיקטוק.${at}` });
+    return draftBeside(ctx, id, { ok: true, message: draftSaid(ctx, pack, loadPost(ctx.db, id)) });
   }
   return { ok: true, message: post.slot_at ? 'אושר. ייצא בשעה שלו.' : 'אושר.' };
 }
@@ -148,9 +170,9 @@ export function approveAll(ctx, user, params, form) {
   const skipped = ids.length - done - stopped;
   // Each account keeps Shabbat or not by its own choice: the drafts wait if any of theirs does.
   const rest = [...drafting].map((a) => ctx.pack(a)).filter(Boolean).map((p) => restAt(now(), rulesFor(ctx.db, p))).find(Boolean) || null;
-  const next = jobs.length ? (rest ? ` הטיוטות יישלחו לטיקטוק כש${rest} ייגמר.` : ' הטיוטות נשלחות לטיקטוק.') : ' כל פוסט ייצא בשעה שלו.';
+  const next = jobs.length ? (rest ? ` הטיוטות יישלחו לטיקטוק אחרי ${rest === 'שבת' ? 'השבת' : 'החג'}.` : ' הטיוטות נשלחות לטיקטוק.') : ' כל פוסט ייצא בשעה שלו.';
   const held = stopped ? ` ${stopped === 1 ? 'מצגת אחת לא אושרה, כי השקף האחרון שלה' : `${stopped} מצגות לא אושרו, כי השקף האחרון שלהן`} חסר או לא מפנה למה שכתוב עכשיו בהגדרות.` : '';
-  const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped} כבר לא חיכו)` : ''}.${next}${held}` };
+  const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped === 1 ? 'אחד כבר לא חיכה' : `${skipped} כבר לא חיכו`})` : ''}.${next}${held}` };
   Object.defineProperty(result, 'job', { value: Promise.all(jobs) });
   return result;
 }
