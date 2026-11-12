@@ -193,7 +193,8 @@ test('a failure the customer reads is Hebrew; the publisher\'s own words stay in
 test('the words: every known error and the general one are Hebrew, with what to do next', () => {
   const cases = [
     [new ZernioError('x', { code: 'no_account' }), 'tiktok', /לא מחובר/],
-    [new ZernioError('x', { code: 'not_configured' }), 'tiktok', /לא זמין/],
+    // Ours to fix, said without "בשרת הזה" (the audit's copy notes, 2026-11-12); the operator is alerted when it stops a post.
+    [new ZernioError('x', { code: 'not_configured' }), 'tiktok', /הפרסום עוד לא פתוח אצלנו/],
     [new ZernioError('x', { code: 'card_images' }), 'instagram', /עד 10 תמונות/],
     [new ZernioError('token expired', { status: 401 }), 'instagram', /מחברים אותו מחדש/],
     [new ZernioError('x', { category: 'user_content', code: 'user_content' }), 'tiktok', /הכללים שלו/],
