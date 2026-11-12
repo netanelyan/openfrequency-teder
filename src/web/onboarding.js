@@ -844,24 +844,33 @@ const SAMPLES_HE = {
   paused: PAUSED_HE.setup,
 };
 
-/** The samples' outcome, said with what helps. `more` is sampleRoom's answer: whether another round may be asked for. */
-function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
+/**
+ * The samples' outcome, said with what helps: { html, own }. `own`: the banner says itself what the bar under it would
+ * (its "לנסות שוב", or how many rounds are left), so the bar does not say it again (the audit, 2026-11-12: two buttons
+ * for one action on one screen). `more` is sampleRoom's answer: whether another round may be asked for; `good`, the
+ * samples that passed, this round's and the ones before.
+ */
+function samplesSaid(pc, r, pack, { busy, more = { ok: true }, good = 0 }) {
+  const none = { html: '', own: false };
   const s = r.found.samples;
   const failed = busy ? null : s ? s.failure : r.found.samplesFailed ? 'error' : null;
-  if (!failed) return '';
+  if (!failed) return none;
   // At the setup's cap before paying, the page says what opens after activating instead (activateBanner).
-  if (more.why === 'cap') return '';
+  if (more.why === 'cap') return none;
+  // Enough passed, with the rounds before: the page says they are ready (goLiveBanner, activateBanner), and a round that
+  // made too few is not said beside it (the audit, 2026-11-12: "ready" and "not enough good posts yet" together).
+  if (good >= SAMPLE_ENOUGH) return none;
   const made = s?.made || 0;
   const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
   // The workspace's AI is stopped this month (src/billing/ai-share.js): its own calm line, once, and no button.
-  if (failed === 'paused' || more.why === 'paused') return `<div class="banner info">${icon('clock')}<div><b>${esc(kept)}${esc(PAUSED_HE.setup)}</b></div></div>`;
+  if (failed === 'paused' || more.why === 'paused') return { html: `<div class="banner info">${icon('clock')}<div><b>${esc(kept)}${esc(PAUSED_HE.setup)}</b></div></div>`, own: more.why === 'paused' };
   // A customer is not sent to fix it (the owner, 2026-11-07: "make sure no real customer goes trough that"): the round
   // already looked for new sources itself and the operator was told; they read that it is being looked at, with one
   // button to try again. The operator reads what stopped it, with the way to the sources.
   const toSources = pc.operator && failed !== 'error' && pack ? `<a class="btn sm" href="/sources?account=${esc(encodeURIComponent(pack.id))}">לבחור מקורות</a>` : '';
   const again = more.ok ? postButton(pc, `/new/${r.id}/samples`, 'לנסות שוב', { cls: 'btn sm primary' }) : '';
   const said = pc.operator ? SAMPLES_HE[failed] || SAMPLES_HE.error : failed === 'error' ? SAMPLES_HE.error : s?.heals ? SAMPLES_HE.customerSearched : SAMPLES_HE.customer;
-  return `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(said)}</b>${more.ok ? '' : `<p>${withSupport(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`;
+  return { html: `<div class="banner warn">${icon('alert')}<div><b>${esc(kept)}${esc(said)}</b>${more.ok ? '' : `<p>${withSupport(ROUNDS_HE[more.why])}</p>`}</div><div class="actions p0">${toSources}${again}</div></div>`, own: true };
 }
 
 function detailPage(ctx, pc, r) {
@@ -959,11 +968,12 @@ ${formatsPanel}${ops}</div>`
   // The samples lead the page (the owner, 2026-10-31: "why are the slideshows at the end of the page? make them at the
   // top"): how many passed and the buttons that act on them, the progress while more are written, the cards; then the
   // account, its networks and its days and times.
+  const said = samplesSaid(pc, r, pack, { busy, more, good });
   return layout(
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
-    `<div class="setup">${head}${activate}${golive}${samplesSaid(pc, r, pack, { busy, more })}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
+    `<div class="setup">${head}${activate}${golive}${said.html}${pack && r.setup.promoUnfinished && !pack.meta.promo ? promoLater(pack, { locked }) : ''}
 <section class="samples" id="samples" aria-label="פוסטים לדוגמה"><div class="samplebar"><p class="muted small m0">${samplesLine(good)}</p>
-<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
+<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותבים פוסטים לדוגמה</span>` : said.own ? '' : more.ok ? postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' }) : more.why === 'cap' ? '' : `<span class="muted small">${withSupport(ROUNDS_HE[more.why])}</span>`}
 ${pc.dev && !golive && !reviewed && r.status !== 'live' && pack ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר בלי דוגמאות`, { cls: 'btn sm', confirm: 'לחצו שוב כדי להעלות לאוויר בלי דוגמאות' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div></div>
 ${wait ? wait.box : ''}

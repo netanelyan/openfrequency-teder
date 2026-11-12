@@ -594,12 +594,27 @@ test('samples: an error is tried once more by itself; refused ones are followed 
 
   // Three errors in a row: stopped, said, two good ones kept.
   const p2 = await atSamples('o-s4', 'samples.four');
-  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'throw', 'throw', 'throw']), retryMs: 0 };
+  // One list of calls for both of its rounds: the stand-in names each sample by its call's number.
+  const s4 = [];
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'ok', 'throw', 'throw', 'throw'], s4), retryMs: 0 };
   await runSamples('o-s4');
   ctx.log = () => {};
   assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", p2).n, 2, 'the good ones are kept');
   const html = await (await get('/new/o-s4', fake.session(customer(wsOf.get('o-s4'))).cookie)).text();
   assert.match(html, /2 פוסטים לדוגמה מוכנים, והם כאן למטה\. משהו נתקע אצלנו באמצע הכתיבה\. אפשר לנסות שוב\./);
+  // One way to try again on the screen: the banner's "לנסות שוב", and no button for the same in the bar under it (the
+  // audit, 2026-11-12).
+  assert.equal((html.match(/action="\/new\/o-s4\/samples"/g) || []).length, 1, 'one button for one action');
+  assert.doesNotMatch(html, /עוד פוסטים לדוגמה/);
+  // A second round that adds one and stops the same way: three passed with the first round's, so the page says they are
+  // ready, and this round's "something stuck" is not said beside it (the audit, 2026-11-12).
+  ctx.samplesOpts = { deeper: noNewSources, read: async () => ({ docs: 9, sources: 1, failed: [] }), build: builder(['ok', 'throw', 'throw', 'throw'], s4), retryMs: 0 };
+  await runSamples('o-s4');
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", p2).n, 3);
+  assert.equal(JSON.parse(db.get("SELECT candidates_json FROM onboarding WHERE id = 'o-s4'").candidates_json).samples.failure, 'error', 'the round itself stopped');
+  const ready = await (await get('/new/o-s4', fake.session(customer(wsOf.get('o-s4'))).cookie)).text();
+  assert.match(ready, /id="(golive|activate)"/, 'the samples are ready');
+  assert.doesNotMatch(ready, /משהו נתקע אצלנו|עוד לא יצאו מספיק|banner warn/);
 
   // Three of five is enough: no warning.
   await atSamples('o-s5', 'samples.five');
