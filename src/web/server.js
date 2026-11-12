@@ -498,8 +498,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         return json(req, res, status, body);
       }
       // Toran's lead page asks about the same store here, builds its Teder demo and marks it sent when one message carried
-      // both demos (src/web/leads-internal.js): the same checks.
-      const li = /^\/internal\/leads\/(state|list|demo|mark)$/.exec(p);
+      // both demos, moves the lead and works its demo for the shared lead dashboard (src/web/leads-internal.js): the
+      // same checks.
+      const li = /^\/internal\/leads\/(state|list|demo|mark|stage|demo-act)$/.exec(p);
       if (li) {
         const [status, body] = await leadsInternal(ctx, req, env, li[1], url.searchParams, { origin: publicHost ? `https://${publicHost}` : `http://${host}` });
         return json(req, res, status, body);

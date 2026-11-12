@@ -3250,3 +3250,19 @@ The owner, on the $7 cap of 2026-11-11: "maybe a bit less". `UNPAID_SETUP_USD` i
 (about $3.40) and about half a round of samples more, or a search again. A workspace that has not paid costs at most
 the cap and one sample. `OF_UNPAID_SETUP_USD` still changes it on the server (src/billing/setup-cap.js; tested in
 test/setup-before-pay.test.js).
+
+## 2026-11-12: the shared lead dashboard moves a lead and works its demo here
+
+The owner: accounts' /admin/leads is to have "everything i need for creating and doing leads", and it "MUST not send
+me to old fronts like https://accounts.openfrequency.co.il/admin/teder/leads?tab=new#lead-40". Toran's lead page
+asks Teder, on this machine, with OF_INTERNAL_TOKEN (test/fixtures/teder-leads.json, the same file in Toran):
+
+- POST /internal/leads/stage moves the lead as /leads' buttons do: "ענו", "הצטרפו", "לא רלוונטי", and back from "לא
+  רלוונטי" to where it was (leads.js `moveLead`, the one function both use).
+- POST /internal/leads/demo-act works its demo as /demos/<id>'s buttons do: approve one built before demos approved
+  themselves, write it again, write it on another topic, take it down (demos.js `demoAct`, the same function).
+- A lead's state now gives its demo's topic, the idea the card shows ("רעיון לטיקטוק ולאינסטגרם שלהם").
+
+Toran moves Teder's lead to match what the operator marks on the shared page (they answered, not interested, back on
+the list, neither), so a store that answered gets no Teder reminder, and a take-down there takes Teder's demo down too.
+/leads and /demos stay as they are. Tested in test/leads-internal.test.js.

@@ -1,9 +1,9 @@
 import { domainKey, refreshStages, upsertLead, workspaceDomains } from '../leads/sync.js';
-import { reminderReady } from '../leads/messages.js';
+import { reminderReady, topicOf } from '../leads/messages.js';
 import { now } from '../core/clock.js';
 import { ActionError } from './actions.js';
-import { internalRefusal, running } from './demos.js';
-import { buildLeadDemo, markLeadSent } from './leads.js';
+import { DEMO_ACTS, demoAct, internalRefusal, running } from './demos.js';
+import { buildLeadDemo, LEAD_MOVES, markLeadSent, moveLead } from './leads.js';
 import { accountsLinks } from './accounts.js';
 
 // One store, both products: Toran's lead page asks Teder about the same store (the owner, 2026-11-08: "i want the admin
@@ -21,8 +21,15 @@ import { accountsLinks } from './accounts.js';
 //   POST /internal/leads/mark   { toran, domain, stage: "first" | "reminder", by }
 //        the first message or the one reminder went (from Toran: the message that carried both demos), marked as
 //        "שלחתי" marks it, via whatsapp
+//   POST /internal/leads/stage  { toran, domain, stage: "replied" | "joined" | "irrelevant" | "back", by }
+//        the lead moved as /leads' "ענו", "הצטרפו", "לא רלוונטי" and "להחזיר לרשימה" move it
+//   POST /internal/leads/demo-act  { toran, domain, act: "approve" | "redo" | "other" | "remove", by }
+//        the lead's demo approved (one built before demos approved themselves), written again, written on another
+//        topic, or taken down, as /demos/<id>'s buttons do
 //
-// The lead is found by Toran's id, else by its domain (www. left out).
+// The last two are the shared lead dashboard's (the owner, 2026-11-12: accounts' /admin/leads "to have everything i
+// need for creating and doing leads", and it "MUST not send me to old fronts" like /admin/teder/leads). The lead is
+// found by Toran's id, else by its domain (www. left out). A demo's topic is the idea /leads shows on its card.
 
 const BODY_LIMIT = 20_000;
 
@@ -58,7 +65,7 @@ function findLead(db, toranId, domain) {
  */
 export function leadState(ctx, lead, { origin, admin = origin }) {
   if (!lead) return null;
-  const demo = lead.demo_id ? ctx.db.get('SELECT id, status, slug, error FROM demos WHERE id = ?', lead.demo_id) : null;
+  const demo = lead.demo_id ? ctx.db.get('SELECT id, status, slug, error, topic_json FROM demos WHERE id = ?', lead.demo_id) : null;
   const pageUrl = demo && demo.status === 'approved' && demo.slug ? `${origin}/s/${demo.slug}` : null;
   return {
     id: lead.id,
@@ -68,13 +75,13 @@ export function leadState(ctx, lead, { origin, admin = origin }) {
     reminderDue: Boolean(lead.sent_at && !lead.reminder_sent_at && ['sent', 'opened'].includes(lead.stage) && reminderReady(lead.sent_at, now())),
     whatsapp: lead.whatsapp || null,
     demo: demo
-      ? { id: demo.id, status: demo.status, building: ['new', 'building'].includes(demo.status) && running.has(demo.id), pageUrl, error: demo.status === 'failed' ? String(demo.error || '').slice(0, 300) || null : null, reviewUrl: `${admin}/demos/${demo.id}` }
+      ? { id: demo.id, status: demo.status, building: ['new', 'building'].includes(demo.status) && running.has(demo.id), pageUrl, error: demo.status === 'failed' ? String(demo.error || '').slice(0, 300) || null : null, topic: demo.status === 'removed' ? null : topicOf(demo.topic_json), reviewUrl: `${admin}/demos/${demo.id}` }
       : null,
     leadUrl: `${admin}/leads?tab=${lead.stage === 'demo_ready' ? 'ready' : lead.stage === 'new' ? 'new' : lead.stage}#lead-${lead.id}`,
   };
 }
 
-/** The three routes. Returns [status, body]; `origin` is Teder's public address, for the pages' links. */
+/** The routes. Returns [status, body]; `origin` is Teder's public address, for the pages' links. */
 export async function leadsInternal(ctx, req, env, action, query, { origin }) {
   const refused = internalRefusal(req, env);
   if (refused) return refused;
@@ -124,6 +131,28 @@ export async function leadsInternal(ctx, req, env, action, query, { origin }) {
     if (!lead) return [200, { ok: false, error: 'אין לתדר ליד כזה.' }];
     try {
       const out = markLeadSent(ctx, byOf(b.by), lead, b.stage, 'whatsapp', { from: 'toran' });
+      return [200, { ok: true, message: out.message, lead: leadState(ctx, ctx.db.get('SELECT * FROM leads WHERE id = ?', lead.id), { origin, admin }) }];
+    } catch (e) {
+      if (e instanceof ActionError) return [200, { ok: false, error: e.message }];
+      throw e;
+    }
+  }
+  if (action === 'stage' || action === 'demo-act') {
+    const toran = idOf(b.toran);
+    const what = action === 'stage' ? b.stage : b.act;
+    if (toran === undefined || (!toran && !domainKey(b.domain || '')) || !(action === 'stage' ? LEAD_MOVES : DEMO_ACTS).includes(what)) return [400, { error: 'bad_request' }];
+    refreshStages(ctx);
+    const lead = findLead(ctx.db, toran, b.domain || '');
+    if (!lead) return [200, { ok: false, error: 'אין לתדר ליד כזה.' }];
+    try {
+      let out;
+      if (action === 'stage') out = moveLead(ctx, byOf(b.by), lead, what);
+      else {
+        const d = lead.demo_id ? ctx.db.get('SELECT * FROM demos WHERE id = ?', lead.demo_id) : null;
+        if (!d) return [200, { ok: false, error: 'לחנות הזו אין עדיין דמו של תדר.' }];
+        out = demoAct(ctx, byOf(b.by), d, what);
+      }
+      refreshStages(ctx);
       return [200, { ok: true, message: out.message, lead: leadState(ctx, ctx.db.get('SELECT * FROM leads WHERE id = ?', lead.id), { origin, admin }) }];
     } catch (e) {
       if (e instanceof ActionError) return [200, { ok: false, error: e.message }];

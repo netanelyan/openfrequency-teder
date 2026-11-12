@@ -338,6 +338,29 @@ const naturalStage = (db, lead) => {
 };
 const TAB_OF = Object.fromEntries(TABS.flatMap(([k, , stages]) => stages.map((s) => [s, k])));
 
+/** The moves a lead takes by hand, here and from the shared lead dashboard (src/web/leads-internal.js 'stage'). */
+export const LEAD_MOVES = [...Object.keys(MOVES), 'back'];
+
+/**
+ * A lead moved by hand: "ענו", "הצטרפו", "לא רלוונטי", or "להחזיר לרשימה" from "לא רלוונטי" (back). { message, stage }, or
+ * an ActionError when it is already there.
+ */
+export function moveLead(ctx, by, lead, act) {
+  if (act === 'back') {
+    if (lead.stage !== 'irrelevant') throw new ActionError('החנות הזו כבר ברשימה');
+    const stage = naturalStage(ctx.db, lead);
+    setLead(ctx, lead.id, { stage, skipped_at: null });
+    audit(ctx.db, { actor: by, action: 'lead_back', detail: { lead: lead.id, domain: lead.domain } });
+    return { message: 'החנות חזרה לרשימה', stage };
+  }
+  const move = MOVES[act];
+  if (!move) throw new ActionError('אין פעולה כזו');
+  if (lead.stage === move.stage) throw new ActionError('החנות כבר מסומנת כך');
+  setLead(ctx, lead.id, { stage: move.stage, ...(move.at ? { [move.at]: nowIso() } : {}) });
+  audit(ctx.db, { actor: by, action: `lead_${act}`, detail: { lead: lead.id, domain: lead.domain } });
+  return { message: move.message, stage: move.stage };
+}
+
 export function leadsRoutes({ env = process.env } = {}) {
   return [
     ['GET', /^\/leads$/, (ctx, user, _m, q, pc) => (operatorOnly(user), leadsPage(ctx, pc, q, env))],
@@ -411,17 +434,8 @@ export function leadsRoutes({ env = process.env } = {}) {
           const out = markLeadSent(ctx, user.name, lead, act === 'sent' ? 'first' : 'reminder', via);
           return { ok: true, message: out.message, redirect: back(lead, act === 'sent' ? 'sent' : TAB_OF[lead.stage]) };
         }
-        if (act === 'back') {
-          if (lead.stage !== 'irrelevant') throw new ActionError('החנות הזו כבר ברשימה');
-          const stage = naturalStage(ctx.db, lead);
-          setLead(ctx, lead.id, { stage, skipped_at: null });
-          return { ok: true, message: 'החנות חזרה לרשימה', redirect: back(lead, TAB_OF[stage]) };
-        }
-        const move = MOVES[act];
-        if (lead.stage === move.stage) throw new ActionError('החנות כבר מסומנת כך');
-        setLead(ctx, lead.id, { stage: move.stage, ...(move.at ? { [move.at]: nowIso() } : {}) });
-        audit(ctx.db, { actor: user.name, action: `lead_${act}`, detail: { lead: lead.id, domain: lead.domain } });
-        return { ok: true, message: move.message, redirect: back(lead, move.tab) };
+        const out = moveLead(ctx, user.name, lead, act);
+        return { ok: true, message: out.message, redirect: back(lead, act === 'back' ? TAB_OF[out.stage] : MOVES[act].tab) };
       },
     ],
   ];

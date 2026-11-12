@@ -214,3 +214,48 @@ test('a store that asked not to be written to is not built, and an unknown lead 
   const none = await (await post('/internal/leads/mark', { toran: '555', domain: 'nobody.example.co.il', stage: 'first' })).json();
   assert.equal(none.ok, false);
 });
+
+test('the shared lead dashboard moves the lead and works its demo, with the same rules as /leads and /demos/<id>', async () => {
+  const lead = db.get('SELECT * FROM leads WHERE domain = ?', STORE.domain);
+  const at = { toran: String(STORE.id), domain: STORE.domain, by: 'Demo' };
+  // The demo's topic is the idea /leads shows on the card.
+  assert.equal((await (await state({ toran: String(STORE.id) })).json()).lead.demo.topic, 'הסיפור של התה');
+
+  const stage = route('/internal/leads/stage');
+  const nullable = ['reminderSentAt', 'whatsapp', 'pageUrl', 'error', 'topic'];
+  const replied = await (await post('/internal/leads/stage', { ...at, stage: 'replied' })).json();
+  sameShape(replied, stage.answers[0].body, nullable);
+  assert.deepEqual([replied.ok, replied.message, replied.lead.stage], [true, stage.answers[0].body.message, 'replied']);
+  assert.deepEqual(await (await post('/internal/leads/stage', { ...at, stage: 'replied' })).json(), stage.answers[1].body, 'there already: refused in the contract\'s words');
+  assert.equal((await (await post('/internal/leads/stage', { ...at, stage: 'irrelevant' })).json()).lead.stage, 'irrelevant');
+  assert.ok(db.get('SELECT skipped_at FROM leads WHERE id = ?', lead.id).skipped_at, '"לא רלוונטי" keeps when, as on /leads');
+  const back = await (await post('/internal/leads/stage', { ...at, stage: 'back' })).json();
+  assert.equal(back.lead.stage, 'sent', 'back to where it was: sent, and nobody opened it since');
+  assert.equal(db.get('SELECT skipped_at FROM leads WHERE id = ?', lead.id).skipped_at, null);
+  assert.match((await (await post('/internal/leads/stage', { ...at, stage: 'back' })).json()).error, /כבר ברשימה/);
+  for (const bad of [{ ...at, stage: 'later' }, { stage: 'replied' }]) assert.equal((await post('/internal/leads/stage', bad)).status, 400, JSON.stringify(bad));
+  assert.equal((await (await post('/internal/leads/stage', { toran: '555', domain: 'nobody.example.co.il', stage: 'replied' })).json()).ok, false);
+
+  const act = route('/internal/leads/demo-act');
+  assert.match((await (await post('/internal/leads/demo-act', { ...at, act: 'approve' })).json()).error, /רק דמו שמוכן לבדיקה/, 'approved by itself: nothing to approve');
+  let release;
+  gate = { promise: new Promise((r) => (release = r)), open: () => release() };
+  const other = await (await post('/internal/leads/demo-act', { ...at, act: 'other' })).json();
+  sameShape(other, act.answers[0].body, nullable);
+  assert.deepEqual([other.ok, other.message], [true, act.answers[0].body.message]);
+  assert.deepEqual(await (await post('/internal/leads/demo-act', { ...at, act: 'redo' })).json(), act.answers[1].body, 'one build at a time');
+  gate.open();
+  gate = null;
+  await settle();
+  const rebuilt = await (await state({ toran: String(STORE.id) })).json();
+  assert.equal(rebuilt.lead.demo.status, 'approved', 'written again, it approved itself again');
+  assert.ok(db.get("SELECT 1 FROM audit WHERE action = 'demo_other'"), 'the audit says who asked');
+
+  const removed = await (await post('/internal/leads/demo-act', { ...at, act: 'remove' })).json();
+  assert.equal(removed.ok, true);
+  assert.deepEqual([removed.lead.demo.status, removed.lead.demo.pageUrl, removed.lead.demo.topic], ['removed', null, null], 'taken down: its page no longer opens');
+  assert.equal(db.get('SELECT status FROM demos WHERE id = ?', lead.demo_id).status, 'removed');
+  assert.match((await (await post('/internal/leads/demo-act', { ...at, act: 'redo' })).json()).error, /הורד/, 'a demo taken down is not written again: a new one is built');
+  assert.equal((await post('/internal/leads/demo-act', { ...at, act: 'publish' })).status, 400);
+  assert.equal((await (await post('/internal/leads/demo-act', { toran: '555', domain: 'nobody.example.co.il', act: 'redo' })).json()).ok, false);
+});

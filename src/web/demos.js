@@ -47,6 +47,35 @@ export function startBuild(ctx, id, opts = {}) {
   return p;
 }
 
+/** What the operator does to a demo, here and from the shared lead dashboard (src/web/leads-internal.js 'demo-act'). */
+export const DEMO_ACTS = ['approve', 'redo', 'other', 'remove'];
+
+/**
+ * One of a demo's buttons: approve one built before demos approved themselves (status ready), write it again, write it
+ * on another topic, or take it down. { message }, or an ActionError when it cannot be done now.
+ */
+export function demoAct(ctx, by, d, act) {
+  if (act === 'approve') {
+    if (d.status !== 'ready') throw new ActionError('אפשר לאשר רק דמו שמוכן לבדיקה');
+    ctx.db.update('demos', d.id, { status: 'approved', approved_at: nowIso(), approved_by: by, updated_at: nowIso() });
+    audit(ctx.db, { actor: by, action: 'demo_approved', detail: { id: d.id, domain: d.domain } });
+    return { message: 'העמוד של החנות באוויר' };
+  }
+  if (act === 'remove') {
+    if (d.status === 'removed') throw new ActionError('הדמו הזה כבר הורד');
+    ctx.db.update('demos', d.id, { status: 'removed', removed_at: nowIso(), updated_at: nowIso() });
+    audit(ctx.db, { actor: by, action: 'demo_removed', detail: { id: d.id, domain: d.domain } });
+    return { message: 'הדמו הורד, והעמוד שלו כבר לא עולה' };
+  }
+  if (act !== 'redo' && act !== 'other') throw new ActionError('אין פעולה כזו');
+  if (d.status === 'building' || running.has(d.id)) throw new ActionError('הדמו הזה נבנה עכשיו');
+  if (d.status === 'removed') throw new ActionError('הדמו הזה הורד');
+  const skip = act === 'other' ? [readDemo(d).topic?.angle].filter(Boolean) : [];
+  startBuild(ctx, d.id, { skip });
+  audit(ctx.db, { actor: by, action: act === 'other' ? 'demo_other' : 'demo_redo', detail: { id: d.id, domain: d.domain } });
+  return { message: act === 'other' ? 'בונים את הדמו על נושא אחר' : 'כותבים את הדמו מחדש' };
+}
+
 // The price on the stores' pages, as the operator sets it on /demos: the full plan's monthly price and setup fee, VAT
 // (the same for both plans), and the small plan's price, setup fee, slideshows and redos (openfrequency.co.il sells
 // both: site.config.json teder.* and teder.small.*). The full plan's slideshows and redos are Teder's own
@@ -540,23 +569,8 @@ export function demosRoutes() {
       (ctx, user, m) => {
         operatorOnly(user);
         const d = demoOf(ctx, m[1]);
-        const act = m[2];
-        if (act === 'approve') {
-          if (d.status !== 'ready') throw new ActionError('אפשר לאשר רק דמו שמוכן לבדיקה');
-          ctx.db.update('demos', d.id, { status: 'approved', approved_at: nowIso(), approved_by: user.name, updated_at: nowIso() });
-          audit(ctx.db, { actor: user.name, action: 'demo_approved', detail: { id: d.id, domain: d.domain } });
-          return { ok: true, message: 'העמוד של החנות באוויר', redirect: `/demos/${d.id}` };
-        }
-        if (act === 'remove') {
-          ctx.db.update('demos', d.id, { status: 'removed', removed_at: nowIso(), updated_at: nowIso() });
-          audit(ctx.db, { actor: user.name, action: 'demo_removed', detail: { id: d.id, domain: d.domain } });
-          return { ok: true, message: 'הדמו הורד, והעמוד שלו כבר לא עולה', redirect: '/demos' };
-        }
-        if (d.status === 'building') throw new ActionError('הדמו הזה נבנה עכשיו');
-        if (d.status === 'removed') throw new ActionError('הדמו הזה הורד');
-        const skip = act === 'other' ? [readDemo(d).topic?.angle].filter(Boolean) : [];
-        startBuild(ctx, d.id, { skip });
-        return { ok: true, message: act === 'other' ? 'בונים את הדמו על נושא אחר' : 'כותבים את הדמו מחדש', redirect: `/demos/${d.id}` };
+        const out = demoAct(ctx, user.name, d, m[2]);
+        return { ok: true, message: out.message, redirect: m[2] === 'remove' ? '/demos' : `/demos/${d.id}` };
       },
     ],
   ];
