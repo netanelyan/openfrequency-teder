@@ -223,7 +223,8 @@ test('hand-checked facts are added from the website, refused when malformed, and
   const id = /name="id" value="([^"]+)"/.exec(page)[1];
   res = await post('/facts/confirm', cookie, { _csrf: csrf, account: 'demo', topic: 'השקיה', id, expires: '2027-10-01' });
   assert.equal(res.status, 200);
-  assert.match((await res.json()).message, /2027-10-01/);
+  // The date as a person writes it, not "2027-10-01" (the audit's copy notes, 2026-11-12).
+  assert.match((await res.json()).message, /בתוקף עד 1 באוקטובר 2027\./);
 });
 
 test('rivals are typed in by hand per account: refused when malformed, shown, updated and removed', async () => {
