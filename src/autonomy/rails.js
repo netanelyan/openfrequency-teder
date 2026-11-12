@@ -1,6 +1,7 @@
 import { nowIso } from '../core/clock.js';
 import { audit, settings } from '../core/store.js';
 import { workspaceAllowed } from '../billing/entitlement.js';
+import { accountAiPaused, AI_PAUSED, PAUSED_HE } from '../billing/ai-share.js';
 import { customerWorkspace } from '../billing/own.js';
 
 // The safety rails, in every mode:
@@ -10,8 +11,10 @@ import { customerWorkspace } from '../billing/own.js';
 //     account goes on
 // A paused account says why, on the website, and stays paused until the owner
 // resumes it. An account of a customer's workspace that has not paid for Teder (src/billing/entitlement.js) is stopped the same
-// way without being paused: nothing is drafted or published for it until accounts says it is allowed again. Money pauses nothing: there is no cap, and the month's plan (40
-// slideshows, 10 redos) stops the drafting without pausing (src/budget/quota.js).
+// way without being paused: nothing is drafted or published for it until accounts says it is allowed again. The month's
+// plan (40 slideshows, 10 redos) stops the drafting without pausing (src/budget/quota.js), and so does the one money line:
+// a customer's workspace whose AI cost this month reached half of what it pays writes nothing new until the next month,
+// while what is approved still goes out (canGenerate below, src/billing/ai-share.js).
 
 // In the words a customer reads them, on every page of a paused account and as the reason a send was refused (the
 // audit, 2026-11-12: "מתג הכיבוי הופעל" and "רצף שגיאות פרסום" were the engine's words).
@@ -90,6 +93,18 @@ export function canRun(db, accountId) {
   // The paywall is a customer's: an account in no workspace, or in one of ours, is never asked about.
   if (customerWorkspace(acc.workspace_id) && !workspaceAllowed(db, acc.workspace_id)) return { ok: false, why: UNPAID, code: 'unpaid' };
   return { ok: true, why: null };
+}
+
+/**
+ * May the engine write for this account now? canRun, and its workspace's AI not stopped this month (the owner,
+ * 2026-11-11: "if ai costs of an account reach 30% of the payment of the customer, we get alerted. them on 50% it
+ * stops"; src/billing/ai-share.js). Every drafting the runner and the jobs start asks this; publishing asks canRun
+ * alone, so what is approved still goes out. { ok, why, code }.
+ */
+export function canGenerate(db, accountId) {
+  const run = canRun(db, accountId);
+  if (!run.ok) return run;
+  return accountAiPaused(db, accountId) ? { ok: false, why: PAUSED_HE.title, code: AI_PAUSED } : run;
 }
 
 /** Consecutive failed publishes, newest first, until the last success. */

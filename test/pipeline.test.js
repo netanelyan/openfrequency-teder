@@ -116,7 +116,7 @@ test('a money post recommending a fund fails (investment advice, hard rule 6)', 
   }
 });
 
-test('no money cap stops a post: a month that has already cost hundreds of dollars still drafts, and what it costs is recorded', async () => {
+test("the operator's own account is never weighed: a month that has already cost hundreds of dollars still drafts, and what it costs is recorded", async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);

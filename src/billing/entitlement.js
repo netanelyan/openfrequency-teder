@@ -8,7 +8,7 @@ import { customerWorkspace } from './own.js';
 //
 //   GET {OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=<id>&product=teder, bearer OF_INTERNAL_TOKEN
 //   -> { workspace, product: "teder", enabled, access: paid | comp | due | unpaid | cancelled | off, allowed, paidThrough,
-//        cancelAt, graceUntil, plan: { name: "full" | "small", slideshows, redos } }
+//        cancelAt, graceUntil, plan: { name: "full" | "small", slideshows, redos }, monthlyIls }
 //
 // The contract is openfrequency-accounts' docs/contracts/entitlement.json. `due` (2026-10-29) is a paid period that is
 // over while the grace the terms give runs (72 hours since 2026-11-03, until graceUntil, allowed: true); then it is unpaid. An access this file
@@ -16,9 +16,12 @@ import { customerWorkspace } from './own.js';
 //
 // `allowed` is the only thing that opens or stops Teder. `plan` is the size of the workspace's month (src/budget/quota.js:
 // the slideshows and redos all its accounts share); an answer without one, or with one not in that shape, is the full
-// plan (40 and 10), and the rest of the answer stands. The day the workspace stopped being allowed is kept with the
-// answer (`stoppedAt`, cleared when it is allowed again): the retention pass (src/billing/retention.js) disconnects its
-// TikTok and Instagram once the service has stopped, as the privacy policy says.
+// plan (40 and 10), and the rest of the answer stands. `monthlyIls` (since 2026-11-11) is what a month costs the
+// workspace before VAT, in shekels: the base its AI cost is weighed against (src/billing/ai-share.js); an answer without
+// it, or with one that is not a price, keeps none, and the plan's list price stands. The day the workspace stopped
+// being allowed is kept with the answer (`stoppedAt`, cleared when it is allowed again): the retention pass
+// (src/billing/retention.js) disconnects its TikTok and Instagram once the service has stopped, as the privacy policy
+// says.
 //
 // `allowed` is the only thing acted on here. The answer is kept in the settings table (entitlement:<workspace>), so the
 // website and the runner read the same one and a restart keeps it:
@@ -50,7 +53,7 @@ const MIN_TOKEN = 32;
 
 const keyOf = (workspaceId) => `entitlement:${workspaceId}`;
 
-/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, graceUntil, plan, stoppedAt, checkedAt, changedAt? }, or null. */
+/** The last answer accounts gave for a workspace, as kept: { allowed, access, paidThrough, cancelAt, graceUntil, plan, monthlyIls, stoppedAt, checkedAt, changedAt? }, or null. */
 export const lastKnown = (db, workspaceId) => getSetting(db, keyOf(workspaceId), null);
 
 /**
@@ -124,6 +127,15 @@ export function planOfAnswer(b) {
   const n = (v) => Number.isInteger(v) && v >= 0 && v <= MAX_PLAN_SIZE;
   if (typeof p.name !== 'string' || !/^[a-z][a-z0-9-]{0,19}$/.test(p.name) || !n(p.slideshows) || !n(p.redos)) return null;
   return { name: p.name, slideshows: p.slideshows, redos: p.redos };
+}
+
+/** The most a month may cost a workspace here, in shekels: a price past it is a typo, not a base to weigh a month against. */
+export const MAX_MONTHLY_ILS = 1_000_000;
+
+/** What a month costs the workspace before VAT, from an answer: a price above 0 (to the agora), else null. */
+export function monthlyOfAnswer(b) {
+  const m = b?.monthlyIls;
+  return typeof m === 'number' && Number.isFinite(m) && m > 0 && m <= MAX_MONTHLY_ILS ? Math.round(m * 100) / 100 : null;
 }
 
 /** A 200 is believed only in the shape the contract gives it, and for the workspace asked about. */
@@ -206,7 +218,7 @@ export function entitlementClient({ db, env = process.env, fetchImpl = localFetc
     const since = Math.max(Date.parse(lastKnown(db, workspaceId)?.changedAt ?? '') || 0, changedSince.get(workspaceId) ?? 0);
     const changedAt = since > t ? new Date(since).toISOString() : null;
     if (!changedAt) changedSince.delete(workspaceId);
-    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, graceUntil: a.graceUntil ?? null, plan: planOfAnswer(a), stoppedAt, checkedAt: at, ...(changedAt ? { changedAt } : {}) };
+    const next = { allowed: a.allowed, access: a.access ?? null, paidThrough: a.paidThrough ?? null, cancelAt: a.cancelAt ?? null, graceUntil: a.graceUntil ?? null, plan: planOfAnswer(a), monthlyIls: monthlyOfAnswer(a), stoppedAt, checkedAt: at, ...(changedAt ? { changedAt } : {}) };
     setSetting(db, keyOf(workspaceId), next);
     // Said once per change, not on every answer: the log and the audit.
     if (!had || had.allowed !== next.allowed) {

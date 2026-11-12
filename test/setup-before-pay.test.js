@@ -20,7 +20,7 @@ import { customer, fakeAccounts, listenFree, opened, operator, tempHome } from '
 // Setting up before paying (the owner, 2026-11-02, item 2 of the audit): a customer who signed up and has not paid goes
 // through /new (niche, sources, samples) and sees the samples; the paywall stops only going live and connecting, and its
 // page shows the samples with "המצגות שלכם מוכנות, נשאר רק להפעיל". What the setup may spend before paying is capped
-// (src/billing/setup-cap.js, $3.50 a workspace); a paying or comp workspace is as it was.
+// (src/billing/setup-cap.js, $7 a workspace since the writing moved to Opus, $3.50 before); a paying or comp workspace is as it was.
 //
 // Workspaces: 3 unpaid (the whole flow), 4 comp, 5 paid, 6 unpaid (the cap), 7 unpaid at the cap before it began,
 // 8 unpaid (the closing slide's promo saved while the sources are searched).
@@ -343,14 +343,15 @@ test('a comp and a paid workspace: exactly as before, never counted against the 
 });
 
 test('the cap: the samples stop at the limit, nothing more is spent, and the page says the samples are ready', async () => {
-  assert.equal(UNPAID_SETUP_USD, 3.5, 'the cap the owner was shown');
-  assert.equal(setupCapUsd({}), 3.5);
-  for (const junk of ['', 'abc', '-1', ' ']) assert.equal(setupCapUsd({ OF_UNPAID_SETUP_USD: junk }), 3.5, `"${junk}" is the default`);
+  // The cap the owner was shown, $3.50, kept as the same thing at Opus's price (2026-11-11): one setup and one more round.
+  assert.equal(UNPAID_SETUP_USD, 7, 'one setup and one more round of samples, on Opus');
+  assert.equal(setupCapUsd({}), 7);
+  for (const junk of ['', 'abc', '-1', ' ']) assert.equal(setupCapUsd({ OF_UNPAID_SETUP_USD: junk }), 7, `"${junk}" is the default`);
   assert.equal(setupCapUsd({ OF_UNPAID_SETUP_USD: '5' }), 5);
   assert.equal(setupCapUsd({ OF_UNPAID_SETUP_USD: '0' }), 0, 'nothing at all before paying, if the operator says so');
 
   const b = browser(customer(6));
-  price = 1; // a dollar a sample: past $3.50 after the fourth
+  price = 2; // two dollars a sample: past $7 after the fourth
   const before = built;
   const { id, pack } = await setUp(b, 6);
   assert.equal(setupSpend(db, 6).usd, 0, 'offline, the search and the account cost nothing');
@@ -358,7 +359,7 @@ test('the cap: the samples stop at the limit, nothing more is spent, and the pag
   await settle();
   assert.equal(built - before, 4, 'three under the cap, the fourth crosses it, and no fifth is started');
   assert.equal(sampleIds(pack).length, 4);
-  assert.deepEqual([setupSpend(db, 6).usd, setupSpend(db, 6).calls], [4, 4]);
+  assert.deepEqual([setupSpend(db, 6).usd, setupSpend(db, 6).calls], [8, 4]);
   const r = JSON.parse(db.get('SELECT candidates_json FROM onboarding WHERE id = ?', id).candidates_json);
   assert.deepEqual([r.samples.made, r.samples.failure], [4, null], 'four is more than enough to go on');
   assert.deepEqual(sampleRoom(db, { ...db.get('SELECT * FROM onboarding WHERE id = ?', id), found: r }), { ok: false, why: 'cap' });
@@ -387,12 +388,12 @@ test('the cap: the samples stop at the limit, nothing more is spent, and the pag
   assert.equal((await op.post(`/new/${id}/samples`)).status, 303);
   await settle();
   assert.ok(built - before > 4, "the operator's round is written");
-  assert.deepEqual([setupSpend(db, 6).usd, setupSpend(db, 6).calls], [4, 4], 'and not counted');
+  assert.deepEqual([setupSpend(db, 6).usd, setupSpend(db, 6).calls], [8, 4], 'and not counted');
 
   // The operator raises the cap: more opens again. Paid since: no cap, no banner.
   process.env.OF_UNPAID_SETUP_USD = '10';
   try {
-    assert.deepEqual(setupRoom(db, 6), { ok: true, unpaid: true, spent: 4, cap: 10 });
+    assert.deepEqual(setupRoom(db, 6), { ok: true, unpaid: true, spent: 8, cap: 10 });
     html = await (await b.get(`/new/${id}`)).text();
     assert.match(html, new RegExp(`action="/new/${id}/samples"`));
   } finally {

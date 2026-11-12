@@ -8,6 +8,7 @@ import { workspaceAllowed } from '../billing/entitlement.js';
 import { customerWorkspace } from '../billing/own.js';
 import { connectLine, missingConnections } from '../publish/hold.js';
 import { diskOnly } from '../publish/live.js';
+import { nextMonthHe, workspaceAiPaused } from '../billing/ai-share.js';
 
 // What the owner hears by email. Teder writes the words; openfrequency-accounts sends them to the workspace's owners
 // (and keeps their own opt-out):
@@ -30,13 +31,17 @@ import { diskOnly } from '../publish/live.js';
 //                   where the platforms gave them, the most viewed post)
 //   connect_needed  posts held because nothing is connected (src/publish/hold.js), at most once a day
 //   publish_failed  a post that did not go out and will not be tried again by itself, once per post
+//   ai_paused       a notice, not a choice (NOTICE_KINDS below): the workspace's AI stopped this month at half of what it
+//                   pays (src/billing/ai-share.js), once, while the stop lasts: new slideshows wait, what is approved still
+//                   goes out, we are on it, and it resumes by the 1st of the next month at the latest. Nothing is sent
+//                   when the operator lifts it, and nothing if it is lifted before this one went
 //
 // Every email is found from the database at a tick, like the assistant's events, so nothing in the pipeline has to
 // remember to send one, and one missed while the server was down is found when it is back (within its own window).
 // Each is sent once (settings email:sent:<key>). A send that fails is tried again later, four times at most; nothing
-// here throws into the runner. A workspace that has not paid gets none, and each kind can be turned off by the customer
-// in Settings (email:prefs:<workspace>). The link is always to Teder's public name (https://PUBLIC_HOST): without one on
-// openfrequency.co.il there is nothing accounts would link to, and no email is sent.
+// here throws into the runner. A workspace that has not paid gets none, and each kind but a notice can be turned off by
+// the customer in Settings (email:prefs:<workspace>). The link is always to Teder's public name (https://PUBLIC_HOST):
+// without one on openfrequency.co.il there is nothing accounts would link to, and no email is sent.
 
 export const EMAIL_KINDS = ['posts_waiting', 'weekly', 'monthly', 'connect_needed', 'publish_failed'];
 /** Each kind as the Settings page offers it. */
@@ -47,6 +52,12 @@ export const EMAIL_HE = {
   connect_needed: 'כשמצגות מחכות לחיבור לרשתות',
   publish_failed: 'כשמצגת לא עלתה',
 };
+/**
+ * The notices: what the owners are told about their account whatever they chose, so no box for them in Settings, and
+ * accounts sends them to every owner (its NOTICES_OF, docs/contracts/notify.json). The website's terms and FAQ promise
+ * this one: when very unusual use beyond the plan pauses the AI until the next month, "אנחנו מודיעים לכם".
+ */
+export const NOTICE_KINDS = ['ai_paused'];
 export const WEEKLY_AT = { day: 0, at: '09:00' };
 export const MONTHLY_AT = '09:00';
 /** Waits before each retry of a send that failed; after the last one it is given up. */
@@ -217,6 +228,21 @@ export function publishFailedEmail({ name, hook, reason, paused, link }) {
   });
 }
 
+/**
+ * ai_paused, a notice: the workspace's AI stopped this month (src/billing/ai-share.js). Calm, with no cost and no share
+ * in it: what stopped and why, as the terms say it, that what is approved still goes out and nothing is theirs to do,
+ * that we are on it, and the day it resumes at the latest. `names`: its accounts; `until`: the 1st of the next month.
+ */
+export function aiPausedEmail({ names, until, link }) {
+  const where = names.length === 1 ? `בחשבון ${names[0]}` : `בחשבונות שלכם (${names.join(', ')})`;
+  return message({
+    subject: 'מצגות חדשות לא נכתבות כרגע בתדר',
+    body: lines(`החודש היה ${where} שימוש חריג מאוד, מעבר למה שהחבילה כוללת, ולכן מצגות חדשות לא נכתבות כרגע.`, 'מה שכבר אישרתם עולה בזמן, כרגיל, ולא צריך לעשות כלום.', `אנחנו כבר מטפלים בזה, ולכל המאוחר הכתיבה חוזרת ב-${until}.`),
+    link,
+    label: 'לתדר',
+  });
+}
+
 /* ------------------------------------------------------------------ what is due */
 
 /** The accounts of each workspace there is an owner to tell: on air, of a workspace that has paid or is one of ours. */
@@ -314,6 +340,12 @@ function due(ctx, ws, accounts, { t, link }) {
       out.push({ key: `publish_failed:${p.id}`, kind: 'publish_failed', build: () => publishFailedEmail({ name: name(pack), hook: p.hook, reason: p.reason, paused, link: link(`/post/${encodeURIComponent(p.id)}`) }) });
     }
   }
+
+  // ai_paused: the workspace's AI is stopped this month, once a month, and only while it is (lifted, nothing is due).
+  if (workspaceAiPaused(db, ws, { t })) {
+    const month = monthKey(t);
+    out.push({ key: `ai_paused:${ws}:${month}`, kind: 'ai_paused', build: () => aiPausedEmail({ names: accounts.map(({ pack }) => name(pack)), until: nextMonthHe(month), link: link('/') }) });
+  }
   return out;
 }
 
@@ -333,7 +365,7 @@ export async function emailTick(ctx, { t = now(), env = process.env, client = nu
       const key = `email:sent:${e.key}`;
       const had = getSetting(db, key, null);
       if (had?.state === 'sent' || had?.state === 'off' || had?.state === 'gave_up') continue;
-      if (!prefs[e.kind]) {
+      if (!NOTICE_KINDS.includes(e.kind) && !prefs[e.kind]) {
         setSetting(db, key, { state: 'off', at: new Date(t).toISOString() });
         out.off++;
         continue;

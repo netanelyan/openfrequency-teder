@@ -11,7 +11,7 @@ import { lineDraft } from '../rules/overlay.js';
 import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
-import { canRun, isCustomerAccount, mayResume, pauseAccount, resumeAccount } from '../autonomy/rails.js';
+import { canGenerate, isCustomerAccount, mayResume, pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { blockForClosing, closingRecheck, publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
 import { CLOSING_HE } from '../publish/errors.js';
 import { publishErrorHe } from '../publish/errors.js';
@@ -38,6 +38,7 @@ import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budg
 import { addBankTopic, PASS, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
 import { customerWorkspace } from '../billing/own.js';
+import { accountAiPaused, PAUSED_HE } from '../billing/ai-share.js';
 import { EMAIL_KINDS, setEmailPrefs } from '../notify/email.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
@@ -250,7 +251,7 @@ function decline(ctx, user, post, form, { deleting = false } = {}) {
   const wants = !['0', 'false', false].includes(form.redo);
   // Down first, so its place in the month is free for what comes instead.
   ctx.db.update('posts', id, { status: 'rejected', reason, updated_at: nowIso() });
-  const runs = !post.sample && canRun(ctx.db, post.account_id).ok && Boolean(pack);
+  const runs = !post.sample && canGenerate(ctx.db, post.account_id).ok && Boolean(pack);
   const q = room(ctx.db, post.account_id, { redo: true });
   const redo = wants && runs && q.ok;
   const slot = post.sample ? null : daySlotOf(ctx.db, post);
@@ -479,6 +480,8 @@ async function factCheckChanged(ctx, { post, pack, draft, form, user = null }) {
   if (customerWorkspace(ctx.workspaceId ?? null) && editChecksToday(ctx.db, ctx.workspaceId) >= EDIT_CHECKS_PER_DAY) {
     throw new ActionError(`היום כבר בדקנו ${EDIT_CHECKS_PER_DAY} עריכות טקסט בחשבונות שלכם, וזה המקסימום ליום. אפשר לערוך שוב מחר, או לדחות את הפוסט עם סיבה ולקבל פוסט חלופי.`, 429, { values: { ...form } });
   }
+  // The 30/50 rule (src/billing/ai-share.js): no fact check while the workspace's AI is stopped, so the text stays as it was.
+  if (accountAiPaused(ctx.db, post.account_id)) throw new ActionError(PAUSED_HE.edit, 409, { values: { ...form } });
   const engine = engineOf(ctx);
   let review;
   try {

@@ -37,6 +37,8 @@ import { missingConnections } from '../publish/hold.js';
 import { autonomyMode, isCustomerAccount, mayResume } from '../autonomy/rails.js';
 import { unfinishedPromo } from './promo.js';
 import { diskOnly } from '../publish/live.js';
+import { accountAiPaused } from '../billing/ai-share.js';
+import { aiShareData } from './ai-share.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -115,6 +117,8 @@ export function today(ctx, t = now()) {
       // Posts that did not go out, the last two weeks, newest first: each with "לנסות שוב" (src/web/actions.js retryPublish).
       failed: ctx.db.all("SELECT id, hook, topic, reason, slot_at, updated_at, publish_json FROM posts WHERE account_id = ? AND status = 'failed' AND sample = 0 AND updated_at >= ? ORDER BY updated_at DESC", id, new Date(t - FAILED_DAYS * DAY).toISOString()),
       unconnected: missingConnections(ctx.db, row.pack),
+      // Its workspace's AI stopped this month (src/billing/ai-share.js): the line over the pages says so, once.
+      aiPaused: accountAiPaused(ctx.db, id, { t }),
       blocked: ctx.db.all("SELECT id, hook, topic, reason, format_id, created_at FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC", id, from),
       published: done.filter((p) => !diskOnly(p.publish_json)),
       written: done.filter((p) => diskOnly(p.publish_json)),
@@ -331,6 +335,8 @@ export function settingsData(ctx) {
     push: { key: vapid(ctx.db).publicKey, browsers: operator ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n },
     audit: operator ? ctx.db.all('SELECT * FROM audit ORDER BY id DESC LIMIT 40').map((a) => ({ ...a, detail: j(a.detail_json, null) })) : [],
     quotas: operator ? quotasData(ctx) : null,
+    // Each customer's AI cost this month against what they pay, with the stop's lift (src/web/ai-share.js): the operator's.
+    aiShare: operator ? aiShareData(ctx.db) : null,
     // The customer's month, account by account: what the plan promises and what is used of it.
     plans: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id) })),
     // The days and times the account shown posts on (src/schedule/choice.js): its owner chooses them here.

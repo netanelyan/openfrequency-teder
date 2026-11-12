@@ -27,6 +27,7 @@ import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
 import { captionAction } from '../pipeline/closing.js';
 import { MODEL_KEY, MODEL_NAME, MODEL_WHY, UNSOURCED_HE } from '../sources/model.js';
 import { installCard, installPanel } from './install.js';
+import { AI_SHARE_TITLE, aiPausedBanner, aiSharePanel } from './ai-share.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -526,6 +527,8 @@ function stopBanners(ctx, d) {
       out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(several ? connectLine(g.unconnected).replace('כדי שהמצגות יעלו', `כדי שהמצגות של ${g.pack.meta.displayName} יעלו`) : connectLine(g.unconnected))}</b><p>${held ? (held === 1 ? 'מצגת מאושרת אחת מחכה לחיבור, ותעלה בשעה הפנויה הבאה אחרי שתחברו.' : `${held} מצגות מאושרות מחכות לחיבור, ויעלו בשעות הפנויות הבאות אחרי שתחברו.`) :'עד שמחברים, מצגות מאושרות מחכות ולא עולות.'}</p></div><a class="btn sm primary" href="/accounts?account=${esc(g.pack.id)}#connect-${esc(g.pack.id)}">לחבר</a></div>`);
     }
   }
+  // The workspace's AI is stopped this month (src/billing/ai-share.js): one calm line, once, whatever the accounts shown.
+  out.push(aiPausedBanner(ctx, d.groups));
   return out.join('');
 }
 
@@ -1482,8 +1485,8 @@ function publisherHe({ wants, via }) {
 
 /**
  * The month's cost, for the operator to read: every account's total, and in developer mode what each account's post
- * costs. Nothing caps it; each account's plan (40 posts the customer got, 10 redos) is the limit (src/budget/quota.js), and
- * DRAFTS_PER_DAY the guard against a loop.
+ * costs. Each account's plan (40 posts the customer got, 10 redos) is the limit (src/budget/quota.js), the 30/50 rule the
+ * one money line over a customer's month (src/billing/ai-share.js), and DRAFTS_PER_DAY the guard against a loop.
  */
 export function costsPanel(ctx, d, { dev = false } = {}) {
   const rows = d.costs
@@ -1491,7 +1494,7 @@ export function costsPanel(ctx, d, { dev = false } = {}) {
     .join('');
   return `<section class="panel" id="costs"><header><h2>עלות החודש</h2><span class="end muted small ltr">${esc(d.month)}</span></header>
 <div class="row spread"><span>כל החשבונות</span><b class="num">${usd(d.spend.usd)}</b></div>
-<p class="muted small">אין תקרת הוצאה. כל לקוח מקבל את החבילה שלו בחודש (${DEFAULT_PLAN.suggested} פוסטים שאישר ו-${DEFAULT_PLAN.redos} החלפות בחבילה המלאה), משותפת לכל החשבונות שלו, וזה מה שעוצר את הכתיבה. חוץ מזה יש רק שמירה שלנו מפני לולאה: עד ${DRAFTS_PER_DAY} פוסטים נכתבים לחשבון ביום, ועל חשבון שמגיע לזה מקבלים התראה. הסכום כאן רק לידיעה.</p>
+<p class="muted small">כל לקוח מקבל את החבילה שלו בחודש (${DEFAULT_PLAN.suggested} פוסטים שאישר ו-${DEFAULT_PLAN.redos} החלפות בחבילה המלאה), משותפת לכל החשבונות שלו, וזה מה שעוצר את הכתיבה. בכסף יש קו אחד: כשה-AI של לקוח עולה החודש 30% ממה שהוא משלם מגיעה התראה, וב-50% הכתיבה שלו נעצרת עד סוף החודש (${esc(AI_SHARE_TITLE)}, למטה). חוץ מזה יש רק שמירה שלנו מפני לולאה: עד ${DRAFTS_PER_DAY} פוסטים נכתבים לחשבון ביום, ועל חשבון שמגיע לזה מקבלים התראה.</p>
 ${dev ? `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>החודש</th><th>לפוסט, 30 יום</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">לפוסט: כל הקריאות של 30 הימים האחרונים, גם של פוסטים שהבדיקות עצרו, חלקי הפוסטים שנכתבו. מופיע מהפוסט הרביעי.</p>` : ''}</section>`;
 }
@@ -1533,6 +1536,7 @@ ${acct ? fold('logo', LOGO_TITLE, logoPanel(ctx, acct.pack)) : ''}
 ${d.schedule ? fold('schedule', 'מתי מפרסמים', schedulePanel(ctx, d.schedule)) : ''}
 ${ctx.costs ? fold('costs', 'עלות החודש', costsPanel(ctx, d, { dev })) : fold('plan', 'החבילה החודשית', planPanel(d.plans))}
 ${d.quotas && ctx.costs ? fold('quotas', 'מכסות ועלות לפי לקוח', quotasPanel(ctx, d.quotas)) : ''}
+${d.aiShare && ctx.costs ? fold('ai-share', AI_SHARE_TITLE, aiSharePanel(ctx, d.aiShare)) : ''}
 ${fold('push', 'התראות', `<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
 <p class="muted">${acct?.pack.meta.platforms.includes('tiktok') ? 'תדר שולח התראה כשמגיעה השעה לפרסם טיוטה בטיקטוק, כשטיוטה לא הגיעה לשם, וכשפוסט שביקשתם במקום אחר מחכה לאישור.' : 'תדר שולח התראה כשפוסט שביקשתם במקום אחר מחכה לאישור.'} ההתראה מגיעה רק למכשירים שהפעלתם בהם התראות.</p>
 <p class="muted small">באייפון ההתראות עובדות רק כשפותחים את תדר מהאייקון במסך הבית. <a href="#install">איך מוסיפים את האייקון</a></p>

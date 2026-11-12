@@ -158,7 +158,7 @@ For each candidate return:
 - relevance 0-10: how much of what it publishes is about this account's subject: "${seed.niche}"${seed.nicheEn ? ` ("${seed.nicheEn}")` : ''}${seed.topics?.length ? `, topics: ${seed.topics.join(', ')}` : ''}. Judge by its title, its description and its latest items, not by its name alone. A site about the subject scores 8-10; a general site whose latest items are mostly about something else 3-5; a site about another subject 0-2. A general open-data catalog (Wikidata) is 6.
 - relevance_reason: one short Hebrew line, why.`;
   const user = list.map((c, i) => `[${i}] ${c.type} ${c.url} | ${c.name}${c.snippet ? ` | ${c.snippet.slice(0, 200)}` : ''}${c.about ? ` | about: ${c.about.slice(0, 200)}` : ''}${c.sample?.length ? ` | latest: ${c.sample.slice(0, 5).join(' ; ').slice(0, 300)}` : ''}${c.newest ? ` | newest item ${c.newest}` : ''}`).join('\n');
-  const { data } = await askJson(ctx, { task: 'score_sources', role: 'judge', system, user, schema: SCORE_SCHEMA, effort: 'low', maxTokens: 8000, expectOut: 2500, tag: 'onboarding' });
+  const { data } = await askJson(ctx, { task: 'score_sources', role: 'scout', system, user, schema: SCORE_SCHEMA, effort: 'low', maxTokens: 8000, expectOut: 2500, tag: 'onboarding' });
   return list.map((c, i) => {
     const s = (data.scores || []).find((x) => x.i === i);
     return s ? { authority: s.authority, freshness: s.freshness, terms: s.terms, reason: s.reason, by: 'claude', ...(Number.isInteger(s.relevance) ? { relevance: Math.max(0, Math.min(10, s.relevance)), relevanceReason: String(s.relevance_reason || '') } : relevanceOf(c, seed)) } : heuristicScore(c, now(), seed);
@@ -332,7 +332,7 @@ const NICHE_EN_SCHEMA = { type: 'object', properties: { en: { type: 'string' } }
 export async function nicheInEnglish(ctx, niche) {
   if (ctx.llm?.kind !== 'claude' || !niche) return null;
   const { data } = await askJson(ctx, {
-    task: 'niche_en', role: 'judge', effort: 'low', maxTokens: 200, expectOut: 30, tag: 'onboarding', schema: NICHE_EN_SCHEMA,
+    task: 'niche_en', role: 'scout', effort: 'low', maxTokens: 200, expectOut: 30, tag: 'onboarding', schema: NICHE_EN_SCHEMA,
     system: 'Translate the niche of a Hebrew social account into the two to five English words a person would type into YouTube search to find short videos about it. Return { en }.',
     user: niche,
   });
@@ -362,7 +362,7 @@ export const SEARCHES = 6;
 export async function nicheSites(ctx, seed) {
   if (ctx.llm?.kind !== 'claude' || !seed.niche) return { sites: [], queries: [] };
   const { data } = await askJson(ctx, {
-    task: 'niche_sites', role: 'judge', effort: 'low', maxTokens: 4000, expectOut: 1500, tag: 'onboarding', schema: SITES_SCHEMA,
+    task: 'niche_sites', role: 'scout', effort: 'low', maxTokens: 4000, expectOut: 1500, tag: 'onboarding', schema: SITES_SCHEMA,
     system: `A Hebrew social account posts about a subject. Every fact it posts is quoted from a website it reads every day, through the site's RSS or Atom feed. Name the websites worth reading for this subject.
 
 - sites: up to ${NAMED_SITES} real websites that publish often and specifically about this subject: specialist magazines and news sites, sites of recognized experts, schools or makers in the field, professional and governing bodies when the subject has them, and the subject's own section of a large outlet (give the section's address, not the home page). Hebrew sites first where good ones exist, then English. Only sites you are confident exist, at their real address. Never a social network, a video platform, a forum, a shop's product pages, or a site that only collects other sites' links. For each: url, name, and why in one short English line.

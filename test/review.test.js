@@ -59,8 +59,9 @@ test('a text scored 4 or more is rewritten, and the rewrite is kept when it pass
     assert.equal(post.review_score, 2, 'the score is the rewrite measured again, not 3 put down unread');
     assert.deepEqual(calls.filter((c) => c.task === 'review').length, 2, 'the rewritten text is scored again');
     assert.equal(post.checks.reviewer, 'claude');
-    assert.equal(calls.find((c) => c.task === 'review').model, 'claude-sonnet-5-5', 'the review runs on Sonnet: Haiku was measured and missed what it is for');
-    assert.equal(calls.find((c) => c.task === 'rewrite').model, 'claude-sonnet-5-5', 'the rewrite on the drafting model');
+    // Opus since 2026-11-11 (the owner: "make sure toran and teder ai are smart"); never Haiku, which missed what it is for.
+    assert.equal(calls.find((c) => c.task === 'review').model, 'claude-opus-5-5', "the review runs on Opus, the writer's model");
+    assert.equal(calls.find((c) => c.task === 'rewrite').model, 'claude-opus-5-5', 'the rewrite on the drafting model');
   } finally {
     cleanup();
   }

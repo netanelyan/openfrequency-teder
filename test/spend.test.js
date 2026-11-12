@@ -16,8 +16,9 @@ import { askJson } from '../src/llm/index.js';
 import { makeBatcher, recoverBatches } from '../src/llm/batch.js';
 import { keepOnly, opened, tempHome } from './helpers.js';
 
-// What every call costs is recorded, and nothing refuses a call for money: there is no cap (docs/decisions.md, "The
-// budget is gone, the plan is the limit"). The plan's own tests are in quota.test.js.
+// What every call costs is recorded, and nothing here refuses a call for money: the one money line is a customer's
+// workspace's AI cost against what it pays (src/billing/ai-share.js), and its tests are in ai-share.test.js. The plan's
+// own tests are in quota.test.js.
 
 after(() => closeBrowser());
 afterEach(() => setNow(null));
@@ -55,7 +56,7 @@ test('the cost of a call, per model, cache writes and reads, the long-prompt tie
   assert.equal(claudeCost({ input_tokens: 1e6 }, 'claude-mystery-9'), WORST.in);
 });
 
-test('a paid call is recorded after it, whatever the month has spent: no cap, no spend file, nothing refused', async () => {
+test('a paid call for no account is recorded after it, whatever the month has spent: no spend file, nothing refused', async () => {
   const { home, cleanup } = tempHome();
   try {
     const db = new Db(path.join(home, 'data', 'test.db'));

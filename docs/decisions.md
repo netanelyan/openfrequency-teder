@@ -1529,7 +1529,9 @@ engine can act on, and what changed:
     building it takes. Until then such an account's TikTok posts are written to disk, as
     for any publisher without credentials.
 
-- **The budget is gone, the plan is the limit (2026-10-24, the owner's call).** "Teder
+- **The budget is gone, the plan is the limit (2026-10-24, the owner's call).** Superseded on 2026-11-11 by *A cap on
+  a customer's AI cost: 30% alerts, 50% stops* (the last section): the plan still bounds the month, and one money line
+  is over it. "Teder
   should remove its budget, each page gets 40 videos a month with 10 redos." Every
   account gets 40 slideshows and 10 redos a month (`src/budget/quota.js`, counted from
   the posts as before), and no sum of money blocks or slows anything any more. Gone:
@@ -1909,7 +1911,7 @@ owner's small plan.
    draw several times what they pay for. Now the month is the workspace's, shared by its accounts, and its size comes
    from accounts' entitlement answer (`plan: { name, slideshows, redos }`): the full plan 40 and 10, the small one (₪490
    a month) 15 and 4. No dollar ceiling was added: there is none on purpose ("The budget is gone, the plan is the
-   limit"). The operator's own accounts keep a month each. Each account's schedule is thinned to its even share of the
+   limit"; until 2026-11-11, when the 30/50 rule put one over each customer's month). The operator's own accounts keep a month each. Each account's schedule is thinned to its even share of the
    month, so a customer's second account does not leave the first with nothing in the last week.
 2. *Samples are bounded.* A round of samples is up to nine full-price builds that the plan does not count; a customer
    gets two rounds per new account and six a month, none once the account is live. A light edit's fact check, free in
@@ -3160,3 +3162,84 @@ hour, the page's "נמחק"; a deletion while the draft is on its way; the refus
 form, approved and held), test/every-day.test.js (the day gets another post and the month its place back, and the tick
 at the hour sends nothing; a held post deleted with a redo, never released by a connection), test/workspaces.test.js
 (the route, refused for another workspace's post).
+
+## A cap on a customer's AI cost: 30% alerts, 50% stops; Opus writes (2026-11-11)
+
+The owner: "also make sure toran and teder ai are smart. even if a slideshow gets to 0.5$, and even if toran costs 1.5x
+themselves. just make sure there is a cap where if ai costs of an account reach 30% of the payment of the customer, we
+get alerted. them on 50% it stops." Toran's side is its own; this is Teder's and accounts'.
+
+**Smarter, within $0.50 a slideshow.** The writing roles move from Claude Sonnet 5.5 to Claude Opus 5.5: the outline,
+the research details, the slides, the art direction, the closing line, the repairs and the rewrites, a new account's
+voice and setup writing. The review goes to Opus too: measured on Sonnet drafts (2026-10-13) Opus found nothing Sonnet
+missed, but the reviewer now reads Opus's writing, every flag it raises buys an Opus rewrite or a post drafted again,
+two Sonnet runs disagreed on most slide titles, and it is the only check of the sentence around a quoted number; it
+adds about two cents. Two new roles: `scout` (a new account's sources, named, searched wider and scored, and its
+scenes: Opus, once an account, about ten cents) and `rank` (the day's topics and the angle each post is written on, a
+photograph searched again: Sonnet, daily). The photograph screen stays on Haiku, at medium effort with twice the room
+(ten to twenty a slideshow; on Sonnet they alone would be about $0.22 a slideshow made). Each role is overridable in
+`.env` (MODEL_DRAFT, MODEL_REWRITE, MODEL_REVIEW, MODEL_SCOUT, MODEL_RANK, MODEL_JUDGE).
+
+- *What it costs.* Estimated, not measured (nothing spent on the key): the calls of the two whole posts recorded on
+  2026-10-28, the steps added since, priced at pricing.js (read again on 2026-11-11), over the attempts a post takes as
+  measured on 2026-10-14. A slideshow made, its stopped attempts and rewrites included, at the batch price the day's
+  posts go at: about $0.33, $0.42 counting every stopped attempt whole, against $0.17 and $0.21 on Sonnet. A redo goes
+  at once, at twice that. docs/costs.md, *Opus writes*, has the method, each call's share, and what happens if Opus
+  thinks more than Sonnet did ($0.44).
+- *Room to think.* The slides may answer in 12,000 tokens (Sonnet's came to 5,080 of 8,000), a repair in 6,000, the
+  closing line in 4,000: an answer cut off at its cap is billed and thrown away.
+- *The setup before paying* is the same setup at twice the price, so its cap goes from $3.50 to $7: one normal setup and
+  one more round of samples, as before (`src/billing/setup-cap.js`; `OF_UNPAID_SETUP_USD` changes it).
+
+**The 30/50 rule** (`src/billing/ai-share.js`), per paying customer (a workspace), per Israel calendar month.
+
+- *The cost* is everything the spend ledger recorded this month for the workspace's accounts (Claude, Brave, every paid
+  API; on a laptop the API price of the Claude Code CLI's calls), made shekels at `USD_ILS`, 3.17 unless set (the Bank of
+  Israel's representative rate on 2026-11-11, 3.172). Zernio is not AI, and is not in it. Spend recorded before an
+  account exists (a new account's search for sources, a few cents) has no account, and is not in it either.
+- *The base* is what a month costs the workspace before VAT: accounts' entitlement answer now says it (`monthlyIls`,
+  docs/contracts/entitlement.json: the subscription's price, with the VAT taken out when it was recorded with it; the
+  plan's list price when the product is complimentary or no price above 0 is recorded, since against 0 any cost would be
+  over half). From an accounts that does not say it yet, the plan's list price here (790 or 490).
+- *At 30%* the operator hears it once that month (src/notify/operator.js: the log, /all, their WhatsApp through Toran's
+  operator_alert), in Hebrew: which customer (the workspace and its accounts' names), what it cost in ₪ and in dollars,
+  the share, the month.
+- *At 50%* the AI stops for the workspace's accounts until the 1st of the next month, and the operator hears that too,
+  once. Nothing new is drafted (the runner's day, a blocked slot drafted again, a declined day's new post, a recap), no
+  redo, no sample, no step of a new account's setup (the search, creating it, the samples, searching again), no topic
+  scored nor trend read, and no light edit's text check (a photo swap and a removed slide make no model call and still
+  work). Posts already approved still go out: publishing asks `canRun`, the drafting asks `canGenerate`. It is weighed
+  live, at every check, so the call that crosses the line is the last: the runner and the jobs skip such an account
+  quietly, buildPost refuses before it spends (AiStoppedError, a PausedError, which every caller already takes quietly),
+  and `askJson` refuses any call left for the account (the backstop). The customer reads one calm line on Today, Posts
+  and /all: "כרגע לא נכתבות מצגות חדשות, ואנחנו כבר מטפלים בזה. מה שכבר אישרתם עולה בזמן, כרגיל." No cost and no share,
+  ever: what it costs us is developer mode's (2026-11-10).
+- *The owners hear it once by email* (the website's terms and FAQ promise, for both products, that when very unusual use
+  beyond the plan pauses the AI until the next month, "אנחנו מודיעים לכם"). When the stop starts, the email pass
+  (src/notify/email.js, kind `ai_paused`) sends accounts one notice, once that month and only while the stop lasts: a
+  lift before it went, and it does not go. Accounts sends a notice to every owner whatever they chose and to no member,
+  and never offers it on /notifications (its NOTICES_OF, docs/contracts/notify.json); Teder's Settings never offers it
+  either. Its words, calm, with no cost and no share: "מצגות חדשות לא נכתבות כרגע בתדר", what stopped and why as the
+  terms say it, that what is approved still goes out and nothing is theirs to do, that we are on it, and the 1st of the
+  next month as the latest day it resumes. Nothing is sent when the operator lifts it: the Today line goes away.
+- *The lift.* The operator may let the workspace's AI go on for the rest of the month: Settings in developer mode, the
+  panel "עלות ה-AI מול התשלום" (each customer's cost this month in ₪ and dollars, what it pays, the share, where it
+  stands), the button "לפתוח עד סוף החודש" beside a stopped one (POST /settings/ai-share/<workspace>/lift, the
+  operator's alone). It is audited (`ai_stop_lifted`, with who and the share then). In developer mode the stopped
+  customer's pages say which accounts and link to the panel. Kept, with the month's alerts, in `ai-share:<workspace>`;
+  a new month starts with no alert, no stop and no lift, and a customer that moves to a dearer plan mid-month is weighed
+  against the new price at once.
+- *Who is never weighed.* The company's own workspaces (`OF_OWN_WORKSPACES`) and accounts in no workspace. A workspace
+  that has not paid drafts nothing anyway, and its setup has its own cap.
+- *Why per workspace and live.* The plan is the workspace's, shared by its accounts, so the money is too. A pass that only
+  marked a workspace stopped once a minute would let a day's batch run past the line; weighed at each call, the money
+  stops where the rule says.
+- *A normal month is far below it*: a full plan of 40 slideshows and 10 redos is about $20, 65 ₪ of 790 ₪ (8%). What
+  reaches 30% is a month drafting far more than it pays for: declines drafted again one after another, round after
+  round of samples, searches again.
+
+Tests: test/ai-share.test.js (the cost summed per workspace and month, the base and its fallbacks, the 30% alert once,
+the 50% stop with drafting refused and publishing going on, the backstop, onboarding, a light edit and the redo
+refused calmly, the Today line, the owners' email once and never for a lift, the lift and its audit, our own
+workspaces never weighed, the month rolling over, the model defaults), the entitlement client in test/capacity.test.js,
+the setup cap in test/setup-before-pay.test.js, what a deleted workspace leaves in test/workspace-delete.test.js.

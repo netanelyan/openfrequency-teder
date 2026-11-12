@@ -180,6 +180,15 @@ const SCREEN_SYSTEM = `You check one photograph before it goes on a public socia
 - consistent, when the request says the post is about no person (a company, a product, a place, a thing or an idea): a portrait, a headshot or a press photograph whose main subject is one person is false, whoever it shows, the company's founder included; the picture shows the thing itself or what happened.
 - When the account's owner added the photograph themselves, the request gives their description of it: take it as true for who and what it shows and where it was taken, and judge only that it fits the slide. It changes nothing about blood, injury, unconscious, watermark, logoOrBelt or weapon: answer those from what you see.`;
 
+/**
+ * How hard the model thinks about one picture, and the room it has to. Medium since 2026-11-11 (the owner: "make sure
+ * toran and teder ai are smart"): the screen holds a page of rules (who, when, which kit, no founder on a company's
+ * post), and at low effort Haiku answered in 500 to 1,100 tokens of the 1,500 it had; thinking more costs about a
+ * hundredth of a cent a picture (docs/costs.md).
+ */
+export const SCREEN_EFFORT = 'medium';
+export const SCREEN_MAX_TOKENS = 3000;
+
 /** The red share above which a person (or the model) must look. Strict packs look sooner. */
 export const RED_REVIEW = { strict: 0.04, standard: 0.12 };
 
@@ -218,7 +227,7 @@ export async function screenImage(ctx, { pack, buf, type, meta = '', postId = nu
   if (ctx.llm?.kind === 'claude' && (strict || reddish || claim)) {
     try {
       const user = screenRequest({ claim, query, meta, role, owner });
-      const { data } = await askJson(ctx, { task: 'image-screen', role: 'judge', system: SCREEN_SYSTEM, user, image: { type, buf }, schema: SCREEN_SCHEMA, effort: 'low', maxTokens: 1500, tag: 'image-screen' });
+      const { data } = await askJson(ctx, { task: 'image-screen', role: 'judge', system: SCREEN_SYSTEM, user, image: { type, buf }, schema: SCREEN_SCHEMA, effort: SCREEN_EFFORT, maxTokens: SCREEN_MAX_TOKENS, tag: 'image-screen' });
       const bad = ['blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'weapon'].filter((k) => data[k]);
       if (bad.length) return { safety: 'refused', why: `the model saw: ${bad.join(', ')} (${data.note})`, red, model: data };
       if (claim && data.consistent === false) return { safety: 'refused', why: `it does not show what the slide says: ${data.mainSubject} (${data.note})`, red, model: data, mismatch: true };

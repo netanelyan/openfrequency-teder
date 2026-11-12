@@ -278,6 +278,8 @@ const casesFor = () => {
     ['/accounts/loose/kill'],
     ['/settings/kill', { on: '1' }],
     ['/settings/generate-at', { at: '05:00' }],
+    // Letting a stopped customer's AI go on (src/web/ai-share.js) is the operator's alone.
+    ['/settings/ai-share/2/lift'],
     ['/settings/dev', { on: '1' }],
     ['/account/switch', { to: 'bravo' }],
     [`/sources/${B.source}/approve`],

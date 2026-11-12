@@ -10,7 +10,7 @@ import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
-import { autonomyMode, canRun } from './rails.js';
+import { autonomyMode, canGenerate, canRun } from './rails.js';
 import { usage } from '../budget/quota.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
 import { collectSignals, scoreTopics } from '../topics/index.js';
@@ -23,6 +23,7 @@ import { hasModelFacts } from '../sources/model.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 import { zernioTick } from '../publish/connect.js';
 import { accountAllowed, refreshEntitlements } from '../billing/entitlement.js';
+import { accountAiPaused, aiShareTick } from '../billing/ai-share.js';
 import { releaseHeld, reslotOverdue } from '../publish/hold.js';
 import { emailTick } from '../notify/email.js';
 import { retentionPass } from '../billing/retention.js';
@@ -50,8 +51,15 @@ import { refillDeclined } from './every-day.js';
 //      go on publishing. No more posts than the account's month has left
 //      (src/budget/quota.js: the plan's 40 count the posts the customer got,
 //      with those waiting for them and those being written): when they are all
-//      taken, nothing until the next month. No money cap stops or slows
-//      anything.
+//      taken, nothing until the next month. One money line stops it too: a
+//      customer's workspace whose AI cost this month reached half of what it
+//      pays (1d below) drafts nothing until the next month.
+//   1d. the 30/50 rule, every tick (src/billing/ai-share.js): the operator hears
+//      when a customer's AI cost this month reaches 30% of what they pay, and
+//      again at 50%, once a month each; from 50% nothing is drafted for the
+//      workspace (rails.js canGenerate, asked before every drafting below), its
+//      topics are not scored nor its trends read, and what is approved still
+//      goes out
 //   2b. a slot whose post was blocked is drafted again the same day, directly, once, while it is 90 minutes away or
 //      more (redraftBlocked); a batch that has not ended in two hours is given up and drafted directly
 //      (src/llm/batch.js BATCH_DEADLINE_MS), so a stuck batch never holds a day's generation
@@ -217,7 +225,7 @@ export async function generateRecaps(ctx, report, { t = now() } = {}) {
   const { db } = ctx;
   const today = israelDate(t);
   for (const pack of ctx.packs) {
-    if (!pack.meta.schedule?.fightWeek || !canRun(db, pack.id).ok) continue;
+    if (!pack.meta.schedule?.fightWeek || !canGenerate(db, pack.id).ok) continue;
     for (const w of recapsDue(db, pack, t)) {
       const slots = slotsFor(today, scheduleOf(db, pack)).slots.map((s) => s.toISOString());
       const slot = [...fightWeekSlots(db, pack, today, slots).assign].find(([, x]) => x.role === 'recap')?.[0];
@@ -365,7 +373,8 @@ export async function tick(ctx, { t = now() } = {}) {
     for (const pack of ctx.packs) {
       const key = `topics:${pack.id}:${today}`;
       const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
-      if (!acc || acc.status === 'onboarding' || getSetting(db, key) || !accountAllowed(db, pack.id, t)) continue;
+      // Scoring is a model call: not for an account whose workspace's AI is stopped (src/billing/ai-share.js).
+      if (!acc || acc.status === 'onboarding' || getSetting(db, key) || !accountAllowed(db, pack.id, t) || accountAiPaused(db, pack.id, { t })) continue;
       setSetting(db, key, new Date(t).toISOString());
       try {
         const found = ctx.mode === 'live' ? await collectSignals(ctx, pack, { t }) : null;
@@ -377,13 +386,23 @@ export async function tick(ctx, { t = now() } = {}) {
     }
   }
 
+  // ---- 1d. the 30/50 rule (src/billing/ai-share.js): each customer's AI cost this month against what they pay a month.
+  // The operator hears at 30% and at 50%, once a month each; from 50% the workspace's accounts write nothing new until
+  // the next month (canGenerate), and what is approved still goes out
+  try {
+    const said = await aiShareTick(ctx, { t });
+    if (said.length) report.aiShare = said;
+  } catch (e) {
+    report.errors.push({ step: 'ai-share', error: e.message });
+  }
+
   // ---- 2. generate, a day ahead, once a day
   const plans = [];
   if (!ctx.generating && t >= israelInstant(today, cfg.generateAt).getTime()) {
     for (const pack of ctx.packs) {
       const acc = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
       const genKey = `generated:${pack.id}:${today}`;
-      if (!acc || acc.status === 'onboarding' || getSetting(db, genKey) || !canRun(db, pack.id).ok) continue;
+      if (!acc || acc.status === 'onboarding' || getSetting(db, genKey) || !canGenerate(db, pack.id).ok) continue;
       // The customer's month, before the day is marked generated: a quota the operator raises later in the day lets
       // the account's posts be drafted the same day.
       const month = usage(db, pack.id, t);
@@ -473,6 +492,7 @@ export async function tick(ctx, { t = now() } = {}) {
   if (youtubeConfigured()) {
     for (const pack of ctx.packs) {
       const key = `trends:${pack.id}`;
+      if (accountAiPaused(db, pack.id, { t })) continue;
       const last = getSetting(db, key);
       if (last && t - Date.parse(last) < 7 * 86_400_000) continue;
       setSetting(db, key, new Date(t).toISOString());
@@ -524,7 +544,7 @@ export async function redraftBlocked(ctx, report, { t = now() } = {}) {
   const plans = [];
   for (const pack of ctx.packs) {
     const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
-    if (!acc || acc.status === 'onboarding' || !getSetting(db, `generated:${pack.id}:${today}`) || !canRun(db, pack.id).ok) continue;
+    if (!acc || acc.status === 'onboarding' || !getSetting(db, `generated:${pack.id}:${today}`) || !canGenerate(db, pack.id).ok) continue;
     let left = usage(db, pack.id, t).suggested.left;
     if (left <= 0) continue;
     const from = new Date(t + REDRAFT_LEAD_MS).toISOString();
@@ -558,7 +578,7 @@ export async function nothingDrafted(ctx, report, { t = now() } = {}) {
   if (ctx.generating || t < israelInstant(today, settings(db).generateAt).getTime() + NOTHING_AFTER_MS) return report;
   for (const pack of ctx.packs) {
     const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
-    if (!acc || acc.status === 'onboarding' || !canRun(db, pack.id).ok || usage(db, pack.id, t).suggested.left <= 0) continue;
+    if (!acc || acc.status === 'onboarding' || !canGenerate(db, pack.id).ok || usage(db, pack.id, t).suggested.left <= 0) continue;
     const since = new Date(t - 86_400_000).toISOString();
     if (db.get("SELECT id FROM posts WHERE account_id = ? AND created_at >= ? AND sample = 0 AND status NOT IN ('blocked', 'drafting') LIMIT 1", pack.id, since)) continue;
     if (!generationTargets(db, pack, { t }).length) continue;

@@ -117,6 +117,10 @@ test("a workspace's accounts and everything theirs go; Zernio is told; the other
   setEmailPrefs(db, 3, { weekly: false });
   setSetting(db, 'generated:alpha:2026-10-13', 'x');
   setSetting(db, 'generated:gamma:2026-10-13', 'x');
+  // The month's AI cost record and its alerts (src/billing/ai-share.js), the workspace's and another's.
+  setSetting(db, 'ai-share:3', { month: '2026-10', stoppedAt: 'x' });
+  setSetting(db, 'alert:ai-share-50:3:2026-10', { at: 'x', title: 't', body: 'alpha' });
+  setSetting(db, 'alert:ai-share-30:34:2026-10', { at: 'x', title: 't', body: 'other' });
   const sources = count("SELECT COUNT(*) AS n FROM sources WHERE account_id IN ('alpha', 'bravo')");
   const gammaBefore = JSON.stringify([db.get("SELECT * FROM accounts WHERE id = 'gamma'"), count("SELECT COUNT(*) AS n FROM posts WHERE account_id = 'gamma'"), count("SELECT COUNT(*) AS n FROM sources WHERE account_id = 'gamma'")]);
 
@@ -145,7 +149,8 @@ test("a workspace's accounts and everything theirs go; Zernio is told; the other
   assert.equal(count("SELECT COUNT(*) AS n FROM slides WHERE post_id = ?", a), 0);
   assert.equal(count("SELECT COUNT(*) AS n FROM onboarding WHERE workspace_id = 3"), 0);
   assert.equal(count("SELECT COUNT(*) AS n FROM push_subs WHERE workspace_id = 3"), 0);
-  assert.equal(count("SELECT COUNT(*) AS n FROM settings WHERE key IN ('entitlement:3', 'email:prefs:3', 'generated:alpha:2026-10-13')"), 0);
+  assert.equal(count("SELECT COUNT(*) AS n FROM settings WHERE key IN ('entitlement:3', 'email:prefs:3', 'generated:alpha:2026-10-13', 'ai-share:3', 'alert:ai-share-50:3:2026-10')"), 0);
+  assert.equal(count("SELECT COUNT(*) AS n FROM settings WHERE key = 'alert:ai-share-30:34:2026-10'"), 1, "another workspace's alert stays");
   for (const f of [...files, pub, dry, path.join(home.home, 'packs', 'alpha'), path.join(home.home, 'packs', 'bravo')]) assert.equal(existsSync(f), false, f);
   assert.equal(ctx.pack('alpha'), null);
   assert.deepEqual(ctx.packs.map((p) => p.id), ['gamma']);

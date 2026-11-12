@@ -260,7 +260,7 @@ test("the Settings page shows the operator what the month cost, with no cap to s
   assert.doesNotMatch(await (await get('/settings', cookie)).text(), /id="costs"|id="quotas"/, 'what it cost us is for developer mode only');
   const html = await (await get('/settings', `${cookie}; of_dev=1`)).text();
   assert.match(html, /id="costs"/);
-  assert.match(html, /אין תקרת הוצאה/);
+  assert.match(html, /בכסף יש קו אחד: כשה-AI של לקוח עולה החודש 30% ממה שהוא משלם מגיעה התראה, וב-50% הכתיבה שלו נעצרת עד סוף החודש/);
   for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'OF_BUDGET_MONTHLY_USD', 'action="/settings/budget"', 'name="cap"']) assert.ok(!html.includes(s), s);
   const dev = await (await get('/settings', `${cookie}; of_dev=1`)).text();
   assert.ok(dev.includes('לפוסט, 30 יום'));
