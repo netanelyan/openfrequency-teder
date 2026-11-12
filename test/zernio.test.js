@@ -509,7 +509,7 @@ test('an expired connect link sends the customer to the account page, whose butt
   const res = await get(`${old.pathname}${old.search}`);
   assert.equal(res.status, 404);
   const html = await res.text();
-  assert.match(html, /<h1>הלינק הזה כבר לא בתוקף<\/h1>/);
+  assert.match(html, /<h1>הקישור הזה כבר לא בתוקף<\/h1>/);
   assert.ok(html.includes('<p>לינק לחיבור עובד 72 שעות. מחברים מדף החשבון בתדר, והכפתור שם פותח חיבור חדש בכל לחיצה.</p>'));
   assert.ok(html.includes('<a class="btn primary" href="/accounts?account=alpha">לדף החשבון</a>'));
   assert.doesNotMatch(html, /וואטסאפ|WhatsApp/);

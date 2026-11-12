@@ -381,6 +381,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ['POST', /^\/push\/subscribe$/, (c, u, m, f) => act.subscribePush(c, u, {}, f)],
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
+    ['POST', /^\/post\/([\w-]+)\/tiktok-published$/, (c, u, m) => act.tiktokPublished(c, u, { id: m[1] })],
     ...onboardingRoutes(connectLinks),
     ...deeperRoutes(),
     ...writeNowRoutes(),
@@ -591,7 +592,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         return r.allowed ? redirect(res, back) : redirect(res, back, { 'set-cookie': recheckCookie(r.said, secure) });
       }
       if (ent && !ent.allowed && !(unpaid && setupOpen(req.method, p))) {
-        const kind = ent.known ? 'unpaid' : 'error';
+        const kind = ent.known ? 'unpaid' : 'pay_error';
         if (!reading) return json(req, res, ent.known ? 402 : 503, { ok: false, message: pages.GATE[kind].text, ...(ent.known ? { pay: links.setup } : {}) });
         // What the last "בדקו שוב" found, once: the line shows on this page and the cookie goes.
         const said = RECHECK_SAID.includes(jar.of_recheck) ? jar.of_recheck : null;
@@ -756,6 +757,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
       // The one page that is not one account's: every account of the workspace, and what waits in all of them.
       if (p === '/all') {
+        // A customer's workspace has one account: the page of every account is Today's (the audit, 2026-11-12, P2-66:
+        // a customer could type it and approve posts without seeing their slides).
+        if (!user.operator && c.packs.length < 2) return redirect(res, '/');
         // The operator also sees every workspace's health (src/web/health.js): payment, failures, connections, drafts;
         // and, in red at the top, that posts are only written to disk while PUBLISH_MODE or ZERNIO_API_KEY says so
         // (src/publish/live.js), read from this process's environment.

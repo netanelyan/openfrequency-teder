@@ -91,9 +91,9 @@ test('a search for sources: on home with how far it got, polled; its line moves 
   const html = await homeOf(cookie);
   // Under the day's numbers, over what needs the owner; asked about while it runs, and drawn again in place.
   assert.match(html, /<section class="panel home-panel inprog" id="inprog" aria-labelledby="inprog-h" data-poll="\/progress\.json" data-key="o:o-run:sources:running" data-swap><header><h2 id="inprog-h">בתהליך<\/h2><\/header>/);
-  assert.ok(html.indexOf('class="kpis"') < html.indexOf('id="inprog"') && html.indexOf('id="inprog"') < html.indexOf('<h2>צריך אותך</h2>'), 'under the numbers, over what needs you');
+  assert.ok(html.indexOf('class="kpis"') < html.indexOf('id="inprog"') && html.indexOf('id="inprog"') < html.indexOf('<h2>מחכה לכם</h2>'), 'under the numbers, over what needs you');
   assert.match(html, /<li class="running" data-item="o:o-run:sources"><span class="ico"><span class="spin" aria-hidden="true"><\/span><\/span><span class="tx"><b>מחפשים מקורות<\/b><span class="sub"><bdi>כדורגל<\/bdi><span data-progress="o:o-run:sources" aria-live="polite">עכשיו בודקים אתרים, 3 מתוך 8\.<\/span><\/span><\/span><\/li>/);
-  assert.doesNotMatch(html.slice(html.indexOf('id="inprog"'), html.indexOf('<h2>צריך אותך</h2>')), /class="btn/, 'no link while it runs');
+  assert.doesNotMatch(html.slice(html.indexOf('id="inprog"'), html.indexOf('<h2>מחכה לכם</h2>')), /class="btn/, 'no link while it runs');
   assert.match(html, /<p class="small m6 js-hide"><a href="\/">לבדוק שוב<\/a><\/p>/, 'without the script, a link to look again');
 
   const s1 = await status(cookie);

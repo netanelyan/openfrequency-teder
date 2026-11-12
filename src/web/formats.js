@@ -13,7 +13,7 @@ import { exampleImg } from './examples.js';
 
 export const FORMATS_TITLE = 'סוגי המצגות';
 export const FORMATS_FEW = `צריך לבחור לפחות ${MIN_PICKED} סוגים, כדי ששתי מצגות ברצף לא ייצאו באותו סוג.`;
-const LEDE_NEW = `בוחרים לפחות ${MIN_PICKED}. כל מצגת תצא בסוג אחר מזו שלפניה, ואפשר לשנות את הבחירה בכל זמן בדף החשבון.`;
+const LEDE_NEW = `בוחרים לפחות ${MIN_PICKED}. כל מצגת תצא בסוג אחר מזו שלפניה, ואפשר לשנות את הבחירה בכל זמן בהגדרות.`;
 const LEDE_ACCOUNT = `כל מצגת יוצאת בסוג הבא ברשימה, כך ששתי מצגות ברצף לא יוצאות באותו סוג. בוחרים לפחות ${MIN_PICKED}.`;
 
 /**

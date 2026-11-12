@@ -487,7 +487,7 @@ test('too few good sources: said plainly, and a search again with more of the cu
   const { cookie } = fake.session(customer(1));
   const html = await (await get('/new/o-few', cookie)).text();
   assert.match(html, /<h2>מצאנו מעט מקורות טובים לנושא הזה<\/h2>/);
-  assert.match(html, /יש כאן מקור אחד שאפשר לעבוד איתם/);
+  assert.match(html, /יש כאן מקור אחד שאפשר לעבוד איתו\./);
   assert.match(html, /action="\/new\/o-few\/more"/);
   ctx.discoverOpts = { readSite: async () => [] };
   const r = await post('/new/o-few/more', cookie, { examples: 'https://club.example.org/\nhttps://league.example.org/' });

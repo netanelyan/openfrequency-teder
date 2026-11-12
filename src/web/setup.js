@@ -94,7 +94,7 @@ export function setupSteps(ctx, workspaceId, { base, env = process.env } = {}) {
   const panel = account && pack ? at(account.status === 'onboarding' && ob ? `/new/${encodeURIComponent(ob.id)}#connect-${pack.id}` : `/accounts?account=${encodeURIComponent(pack.id)}#connect-${pack.id}`) : early ? at(`/new/${encodeURIComponent(ob.id)}#connect`) : null;
   const states = pack ? pack.meta.platforms.filter((p) => STEP_PLATFORMS.includes(p)).map((p) => connectState(c.db, pack, p, env)) : early ? onboardingStates(c.db, ob.id) : [];
   const on = states.filter((s) => s.state === 'connected' || s.state === 'meta');
-  const CONNECT = 'מחברים את טיקטוק או אינסטגרם';
+  const CONNECT = 'מחברים את הרשתות';
   if (on.length) steps.push(step('connect', CONNECT, 'done', { detail: on.map((s) => `${PLATFORM_NAME[s.platform]} מחובר${s.username ? ` (@${s.username})` : ''}.`).join(' ') }));
   else if (!zernioConfigured()) steps.push(step('connect', CONNECT, 'soon', { detail: CONNECT_CLOSED_HE }));
   else if (!pack && !early) steps.push(step('connect', CONNECT, 'todo', { detail: 'מחברים אחרי שהחשבון נוצר. בלי חיבור המצגות לא עולות.' }));

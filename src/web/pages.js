@@ -1,4 +1,4 @@
-import { a11yLink, accDot, csrfField, dayHe, esc, fold, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
+import { a11yLink, a11yWidget, accDot, csrfField, dayHe, esc, fold, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
 import { GLOBAL_KILL_HE, PAUSE_REASONS } from '../autonomy/rails.js';
 import { STUCK_REASON, publishErrorHe } from '../publish/errors.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
@@ -51,7 +51,8 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
 function rejectForm(ctx, post, { ajax = null, left = null } = {}) {
   const w = DELETABLE.includes(post.status) ? DELETE_WORDS : REJECT_WORDS;
   const canRedo = !post.sample && left !== 0;
-  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? `<p class="muted small m0">ההחלפות של החודש נוצלו. ${w.after} מגיע פוסט אחר לאותו יום.</p>` : '') : `<p class="muted small m0">${w.after} מגיע פוסט אחר לאותו יום. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
+  // A new post comes for the day only while more than an hour of it is left (src/autonomy/every-day.js DAY_LEFT_MS).
+  const tail = !canRedo || left == null ? (left === 0 && !post.sample ? `<p class="muted small m0">ההחלפות של החודש נוצלו. ${w.after} מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה.</p>` : '') : `<p class="muted small m0">${w.after} מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
   return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/${w.path}"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
 <label class="f">${w.ask}<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
 <input type="text" name="note" placeholder="מה לשנות, במילים שלכם (לא חובה)" maxlength="300">
@@ -111,6 +112,8 @@ function redoBanners(d) {
   if (r?.redo === 'none' && !r.day) out.push(`<div class="banner info">${icon('alert')}<div><b>לא נכתב פוסט חלופי</b><p>ההחלפות של החודש נוצלו כשהפוסט ${r.deleted ? 'נמחק' : 'נדחה'}.</p></div></div>`);
   // A new post for the same day (src/autonomy/every-day.js), when this one was declined without a redo.
   if (r?.day === 'writing') out.push(`<div class="banner info">${icon('clock')}<div><b>פוסט אחר לאותו יום נכתב עכשיו</b><p>הוא יגיע לאישור בעוד כמה דקות.</p></div></div>`);
+  // The day's new post not written yet (the runner tries again within 20 minutes, src/autonomy/every-day.js).
+  if (r?.day === 'failed') out.push(`<div class="banner info">${icon('clock')}<div><b>עוד לא נכתב פוסט אחר לאותו יום</b><p>ננסה שוב בדקות הקרובות.</p></div></div>`);
   if (r?.day === 'queued' && d.dayPost) out.push(`<div class="banner info">${icon('check')}<div><b>נכתב פוסט אחר לאותו יום</b><p><a href="/post/${esc(d.dayPost.id)}">${esc(d.dayPost.hook || 'לפוסט החדש')}</a></p></div></div>`);
   return out.join('');
 }
@@ -301,6 +304,9 @@ const atHe = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t
 export function whenHe(post) {
   if (post.status === 'published' && post.published_at) return shownStatus(post) === 'written' ? 'לא נשלחה לרשתות' : `עלתה ב-${atHe(post.published_at)}`;
   if (post.sample || !['queued', 'approved', 'held', 'publishing'].includes(post.status)) return '';
+  // Its slot may be past by then: a held post goes up after the connection, one on its way now (the audit, 2026-11-12).
+  if (post.status === 'held') return 'תעלה אחרי שתחברו';
+  if (post.status === 'publishing') return 'עולה עכשיו';
   if (post.slot_at) return `תעלה ב-${atHe(post.slot_at)}`;
   return post.status === 'queued' ? 'תעלה בשעה הפנויה הבאה אחרי שתאשרו' : 'תעלה בשעה הפנויה הבאה';
 }
@@ -466,7 +472,7 @@ const stoppedCard = (post) => `<article class="card acc acc-${esc(post.account_i
 </article>`;
 
 /** One post as a card, decision first: when and what, the headline, the slides, what the checks found, the buttons. */
-export function postCard(ctx, post, pack) {
+export function postCard(ctx, post, pack, { left = null } = {}) {
   // A customer sees a post still being written as one line, and the real card once the page reloads with it ready.
   if (!ctx.operator && building(post)) return buildingCard(post);
   if (!ctx.operator && !post.slides?.length) return stoppedCard(post);
@@ -486,7 +492,7 @@ ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(p
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 ${DELETABLE.includes(post.status) ? `<button class="btn ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}מחיקה</button>` : ''}
 </div>
-${decide || DELETABLE.includes(post.status) ? rejectForm(ctx, post, { ajax: 'remove' }) : ''}
+${decide || DELETABLE.includes(post.status) ? rejectForm(ctx, post, { ajax: 'remove', left: post.sample ? null : left }) : ''}
 ${captionDetails(post, pack?.meta?.platforms || [])}
 ${factsBlock(ctx, post)}
 </article>`;
@@ -500,9 +506,15 @@ ${factsBlock(ctx, post)}
 /** The banners that stop the engine: the kill switch, a paused account, an account that got every post of its month. */
 function stopBanners(ctx, d) {
   const out = [];
+  // On the page of every account (/all) a banner says whose it is.
+  const several = d.groups.length > 1;
   // The operator's stop for everything: the operator reads the switch they turned on, a customer what it means for them.
   if (ctx.globalKill) out.push(ctx.operator ? `<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>` : `<div class="banner warn">${icon('power')}<div><b>${esc(GLOBAL_KILL_HE)}.</b><p>אנחנו מטפלים בזה ונעדכן.</p></div></div>`);
   for (const g of d.groups) {
+    // A connection the network asks to approve again (src/publish/connect.js, "reconnect"): said now, before a post
+    // fails on it (the audit, 2026-11-12: the customer learned it from a failed post). A paused account says its own.
+    const renew = (g.connect?.platforms || []).filter((s) => s.state === 'reconnect').map((s) => PLATFORM_HE[s.platform] || s.platform);
+    if (renew.length && g.acc?.status !== 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(`${several ? `${g.pack.meta.displayName}: ` : ''}${renew.join(' ו')} ${renew.length === 1 ? 'ביקש' : 'ביקשו'} לאשר את החיבור מחדש`)}</b><p>עד שמחברים מחדש, מצגות לא מגיעות לשם.</p></div><a class="btn sm primary" href="/accounts?account=${esc(g.pack.id)}#connect-${esc(g.pack.id)}">לחבר מחדש</a></div>`);
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${withSupport(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     // The plan counts the posts the customer got (src/budget/quota.js): all of them is the month kept, said as such.
     else if (g.quota && g.quota.suggested.limit && g.quota.suggested.used >= g.quota.suggested.limit) out.push(g.quota.shared
@@ -511,7 +523,7 @@ function stopBanners(ctx, d) {
     // Nothing connected where the posts go (src/publish/hold.js): what is held, and the way to connect.
     if (g.unconnected?.length) {
       const held = g.held?.length || 0;
-      out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(connectLine(g.unconnected))}</b><p>${held ? (held === 1 ? 'מצגת מאושרת אחת מחכה לחיבור, ותעלה בשעה הפנויה הבאה אחרי שתחברו.' : `${held} מצגות מאושרות מחכות לחיבור, ויעלו בשעות הפנויות הבאות אחרי שתחברו.`) :'עד שמחברים, מצגות מאושרות מחכות ולא עולות.'}</p></div><a class="btn sm primary" href="/accounts?account=${esc(g.pack.id)}#connect-${esc(g.pack.id)}">לחבר</a></div>`);
+      out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(several ? connectLine(g.unconnected).replace('כדי שהמצגות יעלו', `כדי שהמצגות של ${g.pack.meta.displayName} יעלו`) : connectLine(g.unconnected))}</b><p>${held ? (held === 1 ? 'מצגת מאושרת אחת מחכה לחיבור, ותעלה בשעה הפנויה הבאה אחרי שתחברו.' : `${held} מצגות מאושרות מחכות לחיבור, ויעלו בשעות הפנויות הבאות אחרי שתחברו.`) :'עד שמחברים, מצגות מאושרות מחכות ולא עולות.'}</p></div><a class="btn sm primary" href="/accounts?account=${esc(g.pack.id)}#connect-${esc(g.pack.id)}">לחבר</a></div>`);
     }
   }
   return out.join('');
@@ -645,8 +657,8 @@ ${stopBanners(ctx, d)}
 <div class="kpi side">${side('/posts', 'waiting', 'מחכים לאישור')}${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}</div>
 </section>
 ${d.progressHtml || ''}
-<section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
-${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.</p>'}
+<section class="panel home-panel"><header><h2>מחכה לכם</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
+${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : d.firstPostAt ? `<p class="muted">הפוסט הראשון ייכתב ${dayHe(d.firstPostAt) === dayHe(Date.now()) ? 'היום' : 'מחר'} ב-${esc(timeHe(d.firstPostAt))}, ויחכה כאן לאישור שלכם. את הימים והשעות שלו בוחרים <a href="/settings#schedule">בהגדרות</a>.</p>` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.</p>'}
 </section>
 ${pushAsk(ctx, d)}
 ${installCard(ctx.install)}
@@ -677,7 +689,7 @@ export function allPage(ctx, d) {
   const others = needsYou(d, 100, ctx).rows.filter((r) => !r.acc);
   const accounts = `<div class="acctab" role="table" aria-label="היום בכל חשבון">
 <div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
-${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.mode || 'approve'][0])} · ${g.quota ? `פורסמו ${g.quota.suggested.out}/${g.quota.suggested.limit}` : ''}</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
+${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc([g.acc?.status === 'paused' ? 'מושהה' : ctx.operator ? MODE_HE[g.mode || 'approve'][0] : '', g.quota ? `פורסמו ${g.quota.suggested.out}/${g.quota.suggested.limit}` : ''].filter(Boolean).join(' · '))}</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
 </div>`;
   const row = (p, g) => {
     const cover = p.media?.tiktok?.length ? `<img class="thumb" src="${media(p, 'tiktok', 0)}" alt="" width="36" height="64" loading="lazy" decoding="async">` : '<span class="thumb"></span>';
@@ -695,7 +707,7 @@ ${stopBanners(ctx, d)}
 <section class="panel home-panel" id="waiting"><header><h2>מחכים לאישור</h2>${waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `${icon('check')}לאשר את כל ה-${waiting.length}`, { cls: 'btn primary', fields: { ids: ids(waiting) }, confirm: `לחצו שוב לאישור ${waiting.length} פוסטים` })}</span>` : ''}</header>
 ${queue || '<p class="muted">אף חשבון לא מחכה לאישור.</p>'}
 </section>
-${others.length ? `<section class="panel home-panel"><header><h2>עוד דברים שמחכים לך</h2></header>${postLines(others)}</section>` : ''}
+${others.length ? `<section class="panel home-panel"><header><h2>עוד דברים שמחכים לכם</h2></header>${postLines(others)}</section>` : ''}
 ${d.healthHtml || ''}`;
   return layout({ ...ctx, title: 'כל החשבונות', active: 'all' }, body);
 }
@@ -728,8 +740,8 @@ ${stopBanners(ctx, d)}
 ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.mode || 'approve'];
-    return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
-${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.'}</div>`}
+    return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}${ctx.operator ? `<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span>` : ''}</span></header>
+${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack, { left: g.quota?.redos?.left ?? null })).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו לימים ולשעות שבחרתם <a href="/settings#schedule">בהגדרות</a>.'}</div>`}
 ${failedList(ctx, g)}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${withSupport(reasonHe(ctx, 'blocked', b.reason))}</div></li>`).join('')}</ul></details>` : ''}
 </section>`;
@@ -765,7 +777,9 @@ function tiktokDraftBanners(ctx, post) {
   if (tk?.flow) {
     const st = flowState(tk.flow);
     const note = tk.flow.state === 'waiting' ? draftNote(tk.flow, post.slot_at || tk.flow.slotAt, timeHe) : ctx.operator || ctx.dev ? tk.flow.error || '' : '';
-    out.push(`<div class="banner info">${icon('clock')}<div><b>${esc(TIKTOK_BANNER_HE[st] || FLOW_HE[st]?.[0] || st)}</b>${note ? `<p>${esc(note)}</p>` : ''}</div></div>`);
+    // A draft that waits: the owner can say they published it, for the post to count as out (P2-17).
+    const mine = tk.flow.state === 'waiting' ? postButton(ctx, `/post/${post.id}/tiktok-published`, 'פרסמתי בטיקטוק', { cls: 'btn sm', ajax: 'reload' }) : '';
+    out.push(`<div class="banner info">${icon('clock')}<div><b>${esc(TIKTOK_BANNER_HE[st] || FLOW_HE[st]?.[0] || st)}</b>${note ? `<p>${esc(note)}</p>` : ''}</div>${mine}</div>`);
   } else if (tk?.uploading) out.push(`<div class="banner info">${icon('clock')}<div><b>הטיוטה בדרך לאפליקציה של טיקטוק</b></div></div>`);
   // What went wrong, in Hebrew for a customer (src/publish/errors.js): Zernio's own words ("Zernio 502: upstream TikTok
   // API timeout") are the operator's to read.
@@ -1001,7 +1015,7 @@ ${pausedBanner}
 <div class="acct-grid">
 ${quota ? monthPanel(ctx, quota, pack.id, spend) : ''}
 ${weekPanel(pack, week)}
-${queuePanel(pack, week.counts)}
+${queuePanel(ctx, pack, week.counts)}
 ${networks}
 ${modePanel(ctx, pack, { mode, customer })}
 ${connect ? tiktokModePanel(ctx, connect) : ''}
@@ -1041,7 +1055,7 @@ function monthNotes(q, mine, m) {
   return [
     toGo > 0 ? `<p class="muted small ${m}">${toGo === 1 ? 'ועוד פוסט מאושר שמחכה לשעה שלו.' : `ועוד ${toGo} פוסטים מאושרים שמחכים לשעה שלהם.`}</p>` : '',
     own,
-    s.held ? `<p class="muted small ${m}">עוד ${s.held} בכתיבה עכשיו.</p>` : '',
+    s.held ? `<p class="muted small ${m}">${s.held === 1 ? 'עוד פוסט אחד בכתיבה עכשיו.' : `עוד ${s.held} פוסטים בכתיבה עכשיו.`}</p>` : '',
     s.limit && s.used >= s.limit ? `<p class="small ${m}"><span class="chip ok">כל הפוסטים של החודש אצלכם</span> הפוסטים הבאים ייכתבו מתחילת החודש הבא.</p>` : '',
   ].join('');
 }
@@ -1058,12 +1072,12 @@ function weekPanel(pack, week) {
 }
 
 /** What waits, made this week: the posts to approve and the approved ones, each a link to them, and what was stopped. */
-function queuePanel(pack, counts) {
+function queuePanel(ctx, pack, counts) {
   const id = esc(pack.id);
   return `<section class="panel acct-queue"><header><h3>בתור</h3></header><div class="qlist">
-<a href="/posts?account=${id}"><span class="l">ממתינים</span>${n(counts.queued || 0, 'sig')}</a>
+<a href="/posts?account=${id}"><span class="l">מחכים לאישור</span>${n(counts.queued || 0, 'sig')}</a>
 <a href="/posts?account=${id}#scheduled"><span class="l">מאושרים</span>${n(counts.approved || 0)}</a>
-<div><span class="l">נחסמו השבוע</span>${n(counts.blocked || 0)}</div></div></section>`;
+${ctx.operator ? `<div><span class="l">נחסמו השבוע</span>${n(counts.blocked || 0)}</div>` : ''}</div></section>`;
 }
 
 /**
@@ -1090,8 +1104,8 @@ function stylePanel(ctx, pack, style) {
   const pending = style.pending
     ? `<div class="notice">${icon('alert')}<div><b>${ctx.operator ? 'הסגנון בקובץ theme.json השתנה' : 'יש לחשבון סגנון חדש'}</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>`
     : '';
-  return `<section class="panel acct-style"><header><h3>סגנון</h3></header>
-<p class="m0"><b>${name}</b> <span class="muted small m-hide">נעול מ-${esc(shortDate(style.at))}</span></p>
+  return `<section class="panel acct-style"><header><h3>עיצוב המצגות</h3></header>
+<p class="m0"><b>${name}</b> <span class="muted small m-hide">מאז ${esc(shortDate(style.at))}</span></p>
 <div class="actions p0 m6"><a class="btn sm" href="/styles?account=${esc(pack.id)}">לראות את כל העיצובים</a></div>${pending}</section>`;
 }
 
@@ -1133,7 +1147,7 @@ function planPanel(plans) {
     rows = plans.map(({ pack, usage: x }) => `${plans.length > 1 ? `<h3 class="lbl">${accDot(pack.id)} ${esc(pack.meta.displayName)}</h3>` : ''}${quotaRow(x)}`).join('');
   }
   return `<section class="panel" id="plan"><header><h2>החבילה החודשית</h2><span class="end muted small">מתחדשת בתחילת כל חודש</span></header>
-<p class="muted">${gives} פוסט נספר רק כשאישרתם אותו. פוסט שדחיתם לא נספר, ובמקומו מגיע פוסט אחר לאותו יום. אם ביקשתם שייכתב מחדש לפי הסיבה, זו החלפה. פוסט שלא אישרתם עד סוף היום שלו לא עולה ולא נספר, וגם פוסט שהבדיקות שלנו עצרו לא נספר.</p>
+<p class="muted">${gives} פוסט נספר רק כשאישרתם אותו. פוסט שדחיתם לא נספר, ובמקומו מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה. אם ביקשתם שייכתב מחדש לפי הסיבה, זו החלפה. פוסט שלא אישרתם עד סוף היום שלו לא עולה ולא נספר, וגם פוסט שהבדיקות שלנו עצרו לא נספר.</p>
 <p class="muted">שינויים קטנים לא נספרים בכלל: עריכת הטקסט, תמונה אחרת מאלה שכבר נמצאו לפוסט, או שקף שמורידים.</p>
 ${rows}</section>`;
 }
@@ -1353,11 +1367,11 @@ export function topicsPage(ctx, { current, topics, pass, watch, queries, youtube
   const out = topics.filter((t) => !next.includes(t) && !used.includes(t));
   const q = [...(queries.he || []), ...(queries.en || [])];
   const body = `<div class="head"><h1>נושאים</h1><span class="sub">מה כדאי לספר, לפני שמחפשים במקורות</span><span class="end"><a class="btn sm" href="/sources">${icon('sources')}מקורות</a></span></div>
-<p class="lede">כל פוסט מתחיל מנושא: קודם מהבנק שלך, אחר כך ממה שאנשים קוראים ורואים השבוע. כל נושא מקבל ציון של 0 עד 10 על כמה הוא עוצר גלילה, ונושא מתחת ל-${pass} לא נכתב. רק אחרי שנבחר נושא מחפשים לו עובדות במקורות המאושרים, ונושא שאף מקור לא תומך בו נשאר בצד.</p>
+<p class="lede">כל פוסט מתחיל מנושא: קודם מהבנק שלכם, אחר כך ממה שאנשים קוראים ורואים השבוע. כל נושא מקבל ציון של 0 עד 10 על כמה הוא עוצר גלילה, ונושא מתחת ל-${pass} לא נכתב. רק אחרי שנבחר נושא מחפשים לו עובדות במקורות המאושרים, ונושא שאף מקור לא תומך בו נשאר בצד.</p>
 <section class="panel" id="bank"><header><h2>להוסיף לבנק</h2><span class="end muted small">נושאים שכבר ראיתם שעובדים. הם הראשונים בתור.</span></header>
 ${problems.length ? `<div class="problems"><b>לא נשמר:</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 <form method="post" action="/topics/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
-<label class="f">הנושא<input type="text" name="title" value="${esc(form.title || '')}" maxlength="300" required placeholder="למשל: השחקן שסירב לחוזה של 100 מיליון"></label>
+<label class="f">הנושא<input type="text" name="title" value="${esc(form.title || '')}" maxlength="300" required placeholder="למשל: הטעות שכולם עושים בפעם הראשונה"></label>
 <label class="f">למה זה הפך ויראלי<textarea name="why" maxlength="600" placeholder="מה גרם לאנשים לעצור ולשתף">${esc(form.why || '')}</textarea></label>
 <label class="f">קישור <small>איפה זה עבד. הוא לא משמש כמקור לעובדות.</small><input type="url" name="url" value="${esc(form.url || '')}" dir="ltr" placeholder="https://"></label>
 <div><button class="btn primary" type="submit">${icon('plus')}להוסיף לבנק</button></div></form></section>
@@ -1366,9 +1380,9 @@ ${next.length ? `<ul class="topics">${next.map((t) => topicRow(ctx, t, { remove:
 ${used.length ? `<details class="panel"><summary><h2 class="inline">כבר נכתבו <span class="muted small">${used.length}</span></h2></summary><ul class="topics">${used.map((t) => topicRow(ctx, t)).join('')}</ul></details>` : ''}
 ${out.length ? `<details class="panel"><summary><h2 class="inline">נשארו בצד <span class="muted small">${out.length}</span></h2></summary><ul class="topics">${out.map((t) => topicRow(ctx, t, { remove: t.origin === 'bank' && t.status !== 'removed' })).join('')}</ul></details>` : ''}
 <section class="panel" id="watch"><header><h2>מאיפה מגיעים הסימנים</h2></header>
-<p class="muted">פעם ביום תדר בודק כמה קוראים את הדפים בוויקיפדיה של השמות כאן, ונושא נוצר כשקוראים אחד מהם השבוע פי 1.5 לפחות מבחודש שלפני. ${youtube ? 'הוא גם בודק אילו שורטס נצפו הכי הרבה בשבועיים האחרונים בחיפושים של החשבון' : 'יוטיוב עוד לא מחובר, אז שורטס לא נבדקים'}${q.length && youtube ? `: ${q.map((x) => `<span class="chip ghost">${esc(x)}</span>`).join(' ')}` : '.'}${live ? '' : ' (בהדגמה הסימנים לא נבדקים: רק הבנק פעיל.)'}</p>
+<p class="muted">פעם ביום תדר בודק כמה קוראים את הדפים בוויקיפדיה של השמות כאן, ונושא נוצר כשקוראים אחד מהם השבוע פי 1.5 לפחות מבחודש שלפני. ${youtube ? 'הוא גם בודק אילו שורטס נצפו הכי הרבה בשבועיים האחרונים בחיפושים של החשבון' : ctx.operator ? 'יוטיוב עוד לא מחובר, אז שורטס לא נבדקים' : ''}${q.length && youtube ? `: ${q.map((x) => `<span class="chip ghost">${esc(x)}</span>`).join(' ')}` : youtube || ctx.operator ? '.' : ''}${live ? '' : ' (בהדגמה הסימנים לא נבדקים: רק הבנק פעיל.)'}</p>
 <form method="post" action="/topics/watch" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
-<label class="f">שמות למעקב <small>שחקנים, קבוצות, חברות: שם אחד בשורה, כמו בכותרת של הדף בוויקיפדיה. שם בעברית נבדק בוויקיפדיה העברית.</small><textarea name="names" rows="6" dir="auto">${esc(watch.join('\n'))}</textarea></label>
+<label class="f">שמות למעקב <small>אנשים, מקומות, חברות: שם אחד בשורה, כמו בכותרת של הדף בוויקיפדיה. שם בעברית נבדק בוויקיפדיה העברית.</small><textarea name="names" rows="6" dir="auto">${esc(watch.join('\n'))}</textarea></label>
 <div><button class="btn" type="submit">שמירה</button></div></form></section>`;
   return layout({ ...ctx, title: 'נושאים', active: 'topics' }, body);
 }
@@ -1528,14 +1542,14 @@ ${d.email ? fold('email', 'מיילים', emailPanel(ctx, d.email)) : ''}
 ${ctx.operator ? fold('generate', 'מתי נכתבים הפוסטים', `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה${timeSelect('at', s.generateAt)}</label><button class="btn" type="submit">שמירה</button></form></section>`) : ''}
 ${ctx.operator ? fold('demos', 'דמואים לחנויות', `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>`) : ''}
 ${ctx.operator ? fold('leads', 'לידים', `<section class="panel"><header><h2>לידים</h2><a class="end" href="/leads">לרשימה</a></header><p class="muted m0">חנויות שתורן מצא, הדמו של כל אחת, ומה שלחתם לה.</p></section>`) : ''}
-${fold('me', 'החשבון שלך', `<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>`)}
+${fold('me', 'החשבון שלכם', `<section class="panel"><header><h2>החשבון שלכם</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : ctx.workspace?.name ? ` (<b>${esc(ctx.workspace.name)}</b>).` : '.'}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>`)}
 ${ctx.operator ? fold('kill', 'עצירת חירום', `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
 <p class="muted">עוצר את כל החשבונות מיד. אף פוסט לא נכתב ולא מתפרסם עד שמפעילים מחדש.</p>
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}לעצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'לחצו שוב כדי לעצור הכל' })}
 </section>`) : ''}
 </div>
 ${devPanels}
-${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.operator || ctx.superadmin ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
+${dev || !(ctx.operator || ctx.superadmin) ? '' : `<form method="post" action="/settings/dev" class="ver" data-devtap>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
   return layout({ ...ctx, title: 'הגדרות', active: 'settings' }, body);
 }
 
@@ -1605,7 +1619,7 @@ export function morePage(ctx) {
   const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;
   const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
 ${ctx.newAccount === false ? '' : row('/new', 'plus', 'חשבון חדש', 'ממקור ועד פוסטים לדוגמה')}
-${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, מכסות, מפתחות' : 'התראות, החבילה החודשית, החשבון שלך')}
+${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, מכסות, מפתחות' : 'התראות, החבילה החודשית, החשבון שלכם')}
 ${ctx.operator ? row('/demos', 'accounts', 'דמואים לחנויות', 'חנויות שביקשו דמו באתר') : ''}
 ${ctx.operator ? row('/leads', 'inbox', 'לידים', 'חנויות שתורן מצא, מהדמו ועד התשובה') : ''}
 <a class="danger" href="${esc(ctx.links?.logout || '#')}"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></a></nav>`;
@@ -1617,9 +1631,11 @@ ${ctx.operator ? row('/leads', 'inbox', 'לידים', 'חנויות שתורן �
  * workspace is closed, Teder is not in its plan, or the check itself failed. No redirect, so no loop.
  */
 export const GATE = {
-  closed: { title: 'החשבון סגור', text: 'החשבון הזה סגור, ואי אפשר להיכנס דרכו לתדר.' },
-  not_in_plan: { title: 'תדר לא מופעל בחשבון שלכם', text: 'החשבון שלכם פתוח, אבל תדר לא כלול בו.' },
+  closed: { title: 'החשבון סגור', text: 'החשבון הזה סגור, ואי אפשר להיכנס דרכו לתדר. אם זו טעות, כתבו לנו.' },
+  not_in_plan: { title: 'תדר לא מופעל בחשבון שלכם', text: 'החשבון שלכם פתוח, אבל תדר לא כלול בו. אפשר להפעיל את תדר מהחשבון שלכם.' },
   error: { title: 'אי אפשר לבדוק כרגע מי נכנס', text: 'שירות הכניסה לא ענה. נסו שוב בעוד דקה.' },
+  // The payment's check that had no answer (accounts silent for a day, server.js), not the sign-in's.
+  pay_error: { title: 'אי אפשר לבדוק כרגע את המנוי', text: 'בדיקת המנוי לא ענתה. נסו שוב בעוד כמה דקות.' },
   // The paywall (src/billing/entitlement.js): signed in, but the workspace has not paid for Teder. How to pay is
   // accounts' to say (its /setup page), whichever way it takes payment, so this says only what is true either way.
   // What is kept and what is not after a stop (src/billing/retention.js): the posts, sources and settings stay, and
@@ -1676,7 +1692,7 @@ export function gatePage({ kind, links, v = 1, theme = 'light', setup = null, re
       : '';
   const said = kind === 'unpaid' && recheck?.said && Object.hasOwn(RECHECK_HE.said, recheck.said) ? `<p class="said" role="status">${esc(RECHECK_HE.said[recheck.said])}</p>` : '';
   const actions =
-    kind === 'error'
+    kind === 'error' || kind === 'pay_error'
       ? '<a class="btn primary" href="">לנסות שוב</a>'
       : before && !ready
         ? `<a class="btn primary" href="${esc(before.href)}">${before.started ? 'להמשיך בהקמת החשבון' : 'להקים את החשבון'}</a><a class="btn" href="${esc(links.setup)}">איך משלמים</a>${again}<a class="btn" href="${esc(links.logout)}">יציאה</a>`
@@ -1692,13 +1708,13 @@ export function gatePage({ kind, links, v = 1, theme = 'light', setup = null, re
     ? `<ul class="paysamples" aria-label="פוסטים לדוגמה">${ready.samples.map((s) => `<li><img src="${esc(s.src)}" alt="${esc(s.alt)}" width="270" height="480" decoding="async"></li>`).join('')}</ul>
 <p class="small"><a href="${esc(ready.href)}#samples">${esc(BEFORE_PAY_HE.all)}</a></p>
 <p>${esc(BEFORE_PAY_HE.ready)}</p>`
-    : `<p>${esc(before ? BEFORE_PAY_HE.setup : g.text)}</p>`;
+    : `<p>${withSupport(before ? BEFORE_PAY_HE.setup : g.text)}</p>`;
   return `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${themeMeta(theme)}<title>${esc(title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
 <body class="login"><main class="card${ready ? ' paywall' : ''}">${themeButton(theme)}
 <div class="hero">${tederMark()}<b>תדר</b></div>
 ${head}
 ${body}
-${said}<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
+${said}<div class="links">${actions}</div><p class="a11y-foot">${a11yLink()}</p></main>${a11yWidget()}${themeScript(v)}<script src="/static/app.js?v=${v}" defer></script></body></html>`;
 }
 
 /**
@@ -1722,7 +1738,7 @@ export function errorPage({ kind = 'broken', text = null, back = '/', v = 1, the
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1 class="err" role="alert">${esc(g.title)}</h1>
 <p>${withSupport(text || g.text)}</p>
-<div class="links">${links}</div></main>${themeScript(v)}</body></html>`;
+<div class="links">${links}</div></main>${a11yWidget()}${themeScript(v)}<script src="/static/app.js?v=${v}" defer></script></body></html>`;
 }
 
 export function notFoundPage(ctx) {
@@ -1740,7 +1756,7 @@ export function factsPage(ctx, { packs, current, topics, today, nextYear, form =
       (t) => `<section class="panel"><header><h2 dir="auto">${esc(t.topic)}</h2><span class="end muted small">${t.facts.length} עובדות</span></header>${t.facts.length ? `<ul class="factlist">${t.facts
         .map((f) => {
           const [he, cls] = FACT_STATE[f.state] || [f.state, ''];
-          return `<li><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span>${f.checkedBy === 'claude' ? '<span class="chip warn" title="הועתק מהעמוד, עוד לא נבדק על ידיך">נבדק על ידי Claude</span>' : ''}<span class="end muted small">${t.owner ? `נכתב ${esc(f.checkedAt)}` : `נבדק ${esc(f.checkedAt)} · עד ${esc(f.expires)}`}</span></div>
+          return `<li><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span>${f.checkedBy === 'claude' ? '<span class="chip warn" title="הועתק מהעמוד, ועוד לא בדקתם אותו">הועתק אוטומטית</span>' : ''}<span class="end muted small">${t.owner ? `נכתב ${esc(f.checkedAt)}` : `נבדק ${esc(f.checkedAt)} · עד ${esc(f.expires)}`}</span></div>
 <blockquote dir="auto">${esc(f.quote)}</blockquote><a class="small" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" dir="auto">${esc(f.source)}</a>${f.note ? `<p class="muted small m4" dir="auto">${esc(f.note)}</p>` : ''}
 ${f.problems.length ? `<div class="problems"><ul>${f.problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
 <div class="actions pt10 p0x"><form method="post" action="/facts/confirm" class="inline">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="topic" value="${esc(t.topic)}"><input type="hidden" name="id" value="${esc(f.id)}"><label class="small">בתוקף עד <input type="date" name="expires" value="${esc(f.expires > today ? f.expires : nextYear)}" dir="ltr"></label><button class="btn sm primary" type="submit">${icon('check')}בדקתי שוב היום</button></form>${postButton(ctx, '/facts/remove', 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את העובדה?', fields: { account: current.id, topic: t.topic, id: f.id } })}</div></li>`;
@@ -1748,9 +1764,9 @@ ${f.problems.length ? `<div class="problems"><ul>${f.problems.map((x) => `<li>${
         .join('')}</ul>` : '<p class="muted">אין עובדות בנושא הזה.</p>'}</section>`
     )
     .join('');
-  const body = `<div class="head"><h1>עובדות שנבדקו ביד</h1><span class="sub">מה שקראתם באתר שהמנוע לא קורא</span></div>
+  const body = `<div class="head"><h1>עובדות שנבדקו ביד</h1><span class="sub">מה שקראתם באתר שתדר לא קורא</span></div>
 ${tabs}
-<p class="lede">חלק מהאתרים הרשמיים (כל זכות, gov.il) חוסמים קוראים אוטומטיים, והמנוע לא עוקף את זה. כאן אתם כותבים עובדה שקראתם בעצמכם: המשפט מילה במילה, העמוד, היום שבדקתם, ועד מתי היא בתוקף. אחרי תאריך התפוגה העובדה לא משמשת אף פוסט עד שתבדקו אותה שוב, ופוסט שנכתב ממנה ועוד לא פורסם ייחסם.</p>
+<p class="lede">חלק מהאתרים הרשמיים (כל זכות, gov.il) חוסמים קוראים אוטומטיים, ותדר לא עוקף את זה. כאן אתם כותבים עובדה שקראתם בעצמכם: המשפט מילה במילה, העמוד, היום שבדקתם, ועד מתי היא בתוקף. אחרי תאריך התפוגה העובדה לא משמשת אף פוסט עד שתבדקו אותה שוב, ופוסט שנכתב ממנה ועוד לא פורסם ייחסם.</p>
 <div class="cols"><div>${list || '<div class="empty"><b>עוד אין עובדות לחשבון הזה</b>העובדה הראשונה שתוסיפו תופיע כאן.</div>'}</div>
 <section class="panel"><header><h2>עובדה חדשה</h2></header>
 ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
@@ -1764,7 +1780,7 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(
 <label class="f">הערה <small>לא חובה</small><input type="text" name="note" maxlength="200" value="${esc(form.note || '')}"></label>
 <button class="btn primary" type="submit">${icon('plus')}להוסיף עובדה</button></form></section>
 <section class="panel"><header><h2>הסיפור שלכם</h2></header>
-<p class="muted small">מה שקרה לכם בעסק, במילים שלכם: טעות שעשיתם, מספר מהשנה הראשונה, משהו שאף אחד לא סיפר לכם לפני שפתחתם. הסליידשואו של עסקים קטנים שהכי מתפשטים בטיקטוק הם בדיוק זה, על התמונות שלכם. החשבון כותב בגוף ראשון רק ממה שכתבתם כאן.</p>
+<p class="muted small">מה שקרה לכם בעסק, במילים שלכם: טעות שעשיתם, מספר מהשנה הראשונה, משהו שאף אחד לא סיפר לכם לפני שפתחתם. מה שהכי עובד לעסקים קטנים בטיקטוק הוא בדיוק זה, סיפור אמיתי מהעסק. החשבון כותב בגוף ראשון רק ממה שכתבתם כאן.</p>
 <form method="post" action="/facts/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="owner" value="1">
 <label class="f">נושא<input type="text" name="topic" required maxlength="60" placeholder="השנה הראשונה" value=""></label>
 <label class="f">מה קרה <small>משפט אחד, 4 עד 40 מילים, עם המספר אם יש</small><textarea name="quote" required rows="3" placeholder="מכרנו ב-100 אלף שקל בשנה הראשונה ועדיין הפסדנו כסף"></textarea></label>
@@ -1783,7 +1799,7 @@ function rivalForm(ctx, current, r = {}, { id = null, submit = 'להוסיף מ�
   return `<form method="post" action="/rivals/save" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">${id ? `<input type="hidden" name="id" value="${esc(id)}">` : ''}
 <label class="f">שם משתמש<input type="text" name="handle" required maxlength="40" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="@" value="${esc(r.handle || '')}"></label>
 <label class="f">פלטפורמה<select name="platform">${['tiktok', 'instagram'].map((x) => `<option value="${x}"${(r.platform || 'tiktok') === x ? ' selected' : ''}>${PLATFORM_HE[x]}</option>`).join('')}</select></label>
-<label class="f">שורות השער שעבדו להם הכי טוב <small>שורה לכל אחת, עד ${RIVALS.hooks}, כמו שהן כתובות</small><textarea name="hooks" required rows="4" dir="auto">${esc(v(r.hooks))}</textarea></label>
+<label class="f">שורות הפתיחה שעבדו להם הכי טוב <small>שורה לכל אחת, עד ${RIVALS.hooks}, כמו שהן כתובות</small><textarea name="hooks" required rows="4" dir="auto">${esc(v(r.hooks))}</textarea></label>
 <label class="f">הפורמטים שלהם <small>שורה לכל אחד: "דירוג 5 עד 1", "סיפור בשקפים"</small><textarea name="formats" rows="2" dir="auto">${esc(v(r.formats))}</textarea></label>
 <label class="f">שעות פרסום <small><bdi dir="ltr">18:30, 21:00</bdi></small><input type="text" name="times" dir="ltr" value="${esc(Array.isArray(r.times) ? r.times.join(', ') : r.times || '')}"></label>
 <label class="f">מה הם לא נותנים <small>הנושאים והזוויות שהקהל שלהם לא מקבל. זה הכי חשוב בטופס</small><textarea name="gaps" rows="3" maxlength="${RIVALS.gapChars}" dir="auto">${esc(r.gaps || '')}</textarea></label>
@@ -1812,7 +1828,7 @@ export function rivalsPage(ctx, { packs, current, rivals, times, form = {}, prob
   const adding = !editing && problems.length;
   const body = `<div class="head"><h1>מתחרים</h1><span class="sub">מה שראיתם אצלם, בשביל הכתיבה</span></div>
 ${tabs}
-<p class="lede">המנוע לא קורא חשבונות של אחרים: זה דף של מישהו אחר, וכלל הרשת שלנו חוסם אותו. כאן אתם כותבים מה ראיתם כשגללתם בנישה: השערים שעבדו להם, הפורמטים, מתי הם מפרסמים ומה הם לא נותנים. הכותב מקבל את זה בכל תכנון: מה שחסר אצלם מכוון את הנושא והזווית, והשערים שלהם הם מה שהשער שלנו צריך לבלוט מולו, בלי להעתיק. מתחרה שלא עודכן ${RIVALS.staleDays} יום מסומן, ואחרי ${RIVALS.dropDays} יום הוא כבר לא מגיע לכותב.</p>
+<p class="lede">תדר לא נכנס לחשבונות של אחרים. כאן כותבים מה ראיתם אצל המתחרים: שורות הפתיחה שעבדו להם, הפורמטים, מתי הם מפרסמים ומה חסר אצלם. כשתדר מתכנן פוסט, מה שחסר אצלם עוזר לבחור נושא, והפתיחות שלהם עוזרות לכתוב פתיחה שבולטת מולן, בלי להעתיק. מתחרה שלא עודכן ${RIVALS.staleDays} יום מסומן, ואחרי ${RIVALS.dropDays} יום תדר כבר לא משתמש בו.</p>
 ${fewer}
 <div class="cols"><div>${list || '<div class="empty"><b>עוד אין מתחרים לחשבון הזה</b>הכתיבה עובדת גם בלעדיהם, רק בלי לדעת מה הנישה כבר רואה.</div>'}${slots}</div>
 ${rivals.length < RIVALS.max ? `<section class="panel"><header><h2>מתחרה חדש</h2><span class="end muted small">${rivals.length} מתוך ${RIVALS.max}</span></header>

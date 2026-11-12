@@ -247,7 +247,8 @@ test("the store's page says what the sample is and what Teder does, promises no 
   assert.ok(page.indexOf(sec) > page.indexOf('id="show"'), 'after the slideshow');
   assert.ok(sec.includes('<h2 id="links-h">בתדר אתם בוחרים על מה החשבון כותב</h2>'));
   assert.ok(sec.includes('את המצגת הזו תדר כתב מהאתר שלכם'), 'the sample is from their site');
-  assert.ok(sec.includes('בוחרים לו נושא, ותדר כותב עליו מצגות מתוך מקורות שאתם מאשרים'), 'in Teder they choose the subject');
+  // What is true of the sources (the audit, 2026-11-12, P1-11): Teder adds some itself, and marks general knowledge.
+  assert.ok(sec.includes('בוחרים לו נושא ומקורות, ותדר כותב עליו מצגות. כל עובדה בהן מגיעה עם המקור שלה, ועובדה כללית בלי מקור מסומנת'), 'in Teder they choose the subject');
   assert.ok(sec.includes('ואין בהן המלצות על מוצרים'), 'and Teder never recommends products');
   for (const name of ['TikTok', 'Instagram', 'Facebook']) assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
   for (const name of ['Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva']) assert.ok(!sec.includes(`aria-label="${name}"`), `no ${name}: Teder does not connect to it`);

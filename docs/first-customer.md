@@ -1,11 +1,14 @@
 # The first customer, and every month after
 
 What the operator does, in order, from a business signing up to its second month, and what to do when a post fails or
-a connection breaks. Where to look first, always: **/all**, signed in as the operator (the superadmin outside
-view-as). Under the accounts it has the table "מצב הלקוחות": one line per business (workspace) with whether it has
-paid, its failed posts of the last 7 days, the connections to make again, what was blocked today, its paused accounts,
-and how long since anything reached the customer. Under it, the alerts of the week (src/notify/operator.js), the same
-ones that went to the operator's phone through `/usr/local/bin/of-alert`.
+a connection breaks. Where to look first, always: accounts' **/admin/teder/all**, signed in as the operator (the
+superadmin outside view-as). Since the split of 2026-11-10/11 (accounts' docs/admin-split.md) Teder's own name shows the
+operator a customer's screens, and /all there has no table; under /admin/teder, /all has under the accounts the table
+"מצב הלקוחות": one line per business (workspace) with whether it has paid, its failed posts of the last 7 days, the
+connections to make again, what was blocked today, its paused accounts, and how long since anything reached the
+customer. Under it, the alerts of the week (src/notify/operator.js), the same ones that went to the operator's WhatsApp
+through Toran, and to `/usr/local/bin/of-alert` where it is installed. Since 2026-11-12 a strike pause, a pause after a
+second takedown notice and a post stopped by the server's own setup alert too.
 
 Technical notes about keys and errors are in [operator-notes.md](operator-notes.md); this page is the routine.
 

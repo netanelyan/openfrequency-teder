@@ -144,7 +144,17 @@ export function today(ctx, t = now()) {
   // Whether a device of the workspace gets notifications, and the key a browser subscribes with: Today asks for one
   // while none does (src/web/pages.js pushAsk).
   const subs = ctx.workspaceId == null ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n;
-  return { day, groups, summary, summaryRows, attention: attention(ctx), push: { on: subs > 0, key: vapid(ctx.db).publicKey } };
+  // An account just on air, with no post yet: when the first is written (the audit, 2026-11-12, P2-75: Today read
+  // "אין מה לאשר כרגע" and nothing said when anything would come). The runner writes the day's posts once a day at
+  // generateAt, a day ahead (src/autonomy/runner.js), so the first comes at the next one.
+  const onAir = groups.filter((g) => g.acc?.status === 'active').map((g) => g.pack.id);
+  let firstPostAt = null;
+  if (onAir.length && !ctx.db.get(`SELECT 1 FROM posts WHERE account_id IN (${onAir.map(() => '?').join(', ')}) AND sample = 0 LIMIT 1`, ...onAir)) {
+    const at = settings(ctx.db).generateAt || '07:00';
+    const todayAt = israelInstant(day, at).getTime();
+    firstPostAt = new Date(t < todayAt ? todayAt : israelInstant(addDays(day, 1), at).getTime()).toISOString();
+  }
+  return { day, groups, summary, summaryRows, attention: attention(ctx), push: { on: subs > 0, key: vapid(ctx.db).publicKey }, firstPostAt };
 }
 
 /** The last 7 Israel days for one account: posts published per day (none only written to disk), and reach where it is known. */

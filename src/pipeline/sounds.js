@@ -46,7 +46,7 @@ export function soundsOf(db, accountId, { t = now() } = {}) {
 /** Add a sound from the form. Returns { id } or { problems }. A sixth, or one already on the list, is refused. */
 export function saveSound(db, accountId, form, { by = null, business = false } = {}) {
   const { sound, problems } = readSound(form);
-  if (business && form.commercial !== '1') problems.push('בחשבון עסקי רק סאונד מהספרייה המסחרית של טיקטוק (Commercial Music Library): סמנו שהוא משם');
+  if (business && form.commercial !== '1') problems.push('בחשבון עסקי רק סאונד מהספרייה המסחרית של טיקטוק: סמנו שהוא משם');
   const have = db.all('SELECT name, artist FROM sounds WHERE account_id = ?', accountId);
   if (have.length >= SOUNDS.max) problems.push(`עד ${SOUNDS.max} סאונדים לחשבון: הסירו אחד ישן`);
   const key = (x) => `${x.name}|${x.artist}`.toLowerCase();

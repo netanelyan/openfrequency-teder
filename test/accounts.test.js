@@ -244,7 +244,7 @@ test("the operator's settings: a customer is refused on the server; the operator
   assert.deepEqual(ctx.db.all('SELECT key, value_json FROM settings ORDER BY key'), before, 'nothing changed');
   const page = await (await get('/settings', owner)).text();
   for (const p of ['/settings/kill', '/settings/generate-at']) assert.ok(!page.includes(`action="${p}"`), `no ${p} form for a customer`);
-  assert.match(page, /נכנסתם בתור <b class="ltr">owner1@example\.test<\/b>, בחשבון <b>Workspace 1<\/b>/);
+  assert.match(page, /נכנסתם בתור <b class="ltr">owner1@example\.test<\/b> \(<b>Workspace 1<\/b>\)\./);
   assert.match(page, /href="https:\/\/accounts\.test\/logout"/, 'signing out is accounts\'');
 
   const op = fake.session(operator()).cookie;

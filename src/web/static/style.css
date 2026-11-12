@@ -227,7 +227,8 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .ring circle.v { stroke: var(--accent-fill); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 .ring.warn circle.v { stroke: var(--warn); }
 .ring.bad circle.v { stroke: var(--bad); }
-@media (max-width: 520px) { .spend .lbl { display: none; } }
+/* On a phone the word leaves the bar but stays for a screen reader, so the count is never a bare number to it. */
+@media (max-width: 520px) { .spend .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 /* Signing out, on every page: beside the month's tokens on a phone, at the foot of the side bar on a desk. */
 .top .logout { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 40px; padding: 0 14px; border-radius: 999px; background: var(--fill); color: var(--ink-2); font-size: 13px; white-space: nowrap; }
 .top .logout:hover { text-decoration: none; background: var(--fill-2); color: var(--ink); }

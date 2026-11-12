@@ -512,6 +512,9 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
       await alertOperator(ctx, `paused:strike:${pack.id}`, { title: `Teder: ${pack.meta.displayName || pack.id} is paused: ${failedOn || 'a platform'} refused a post`, body: `${String(failed.message || '').slice(0, 300)}. Only we can resume it, and the customer was told we will get back to them. /post/${postId}` }).catch((e) => ctx.log?.(`[alert] ${e.message}`));
     } else if (isTokenProblem(failed)) pauseAccount(db, pack.id, 'publish_errors', he);
     else if (publishErrorStreak(db, pack.id) >= Number(settings(db).publishErrorStreak || 3)) pauseAccount(db, pack.id, 'publish_errors', he);
+    // Our own setup stopped it (no Zernio key, no public address for the slides): the customer reads "אנחנו מטפלים
+    // בזה" (src/publish/errors.js), so the operator hears of it, once a day.
+    if (['not_configured', 'no_media_url'].includes(failed.code)) await alertOperator(ctx, `publish-setup:${failed.code}`, { title: `Teder: a post could not go out because of the server's setup (${failed.code})`, body: `${String(failed.message || '').slice(0, 300)}. /post/${postId}` }).catch((e) => ctx.log?.(`[alert] ${e.message}`));
   }
   // Out on the other platforms while the TikTok draft did not take: the owner hears that, and the post's page offers
   // to send the draft again.

@@ -249,13 +249,15 @@ test('the paywall has "בדקו שוב": a plain form after the way to pay, carr
   assert.equal(res.status, 402);
   const html = await res.text();
   assert.match(html, /<div class="links"><a class="btn primary" href="https:\/\/accounts\.test\/setup">איך משלמים<\/a><form method="post" action="\/paywall\/check"><input type="hidden" name="_csrf" value="[^"]+"><input type="hidden" name="back" value="\/posts\?account=bravo"><button class="btn" type="submit">בדקו שוב<\/button><\/form><a class="btn" href="[^"]+">יציאה<\/a><\/div>/);
-  assert.doesNotMatch(html, /static\/app\.js/, 'nothing on the page needs the script');
+  // The script is there for the accessibility panel alone (the audit, 2026-11-12, P2-64): the page's one form is plain.
+  assert.doesNotMatch(html, /data-ajax|data-confirm/, 'nothing on the page needs the script');
   assert.doesNotMatch(html, /class="said"/, 'no line before it is pressed');
   assert.doesNotMatch(html, /[—–]/);
   // Not on the other gates: accounts not answering, or another refusal.
   fake.entitlement(5, { status: 503, body: { error: 'down' } });
   const lost = await (await page(fake.session(customer(5)).cookie)).text();
-  assert.match(lost, new RegExp(GATE.error.title));
+  // It is the payment's check that had no answer, said as such, not the sign-in's.
+  assert.match(lost, new RegExp(GATE.pay_error.title));
   assert.doesNotMatch(lost, /paywall\/check/);
 });
 

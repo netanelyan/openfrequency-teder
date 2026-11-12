@@ -191,3 +191,19 @@ test('Today asks for notifications while no device of a TikTok account gets them
   ctx.db.run('DELETE FROM push_subs');
   ctx.db.run("DELETE FROM settings WHERE key = 'schedule:demo'");
 });
+
+test('a TikTok draft the owner published by hand is marked theirs, and a post that was only that draft is out', async () => {
+  const { tiktokPublished } = await import('../src/web/actions.js');
+  const { loadPost } = await import('../src/pipeline/build.js');
+  const sentAt = new Date().toISOString();
+  ctx.db.update('posts', postId, { status: 'drafted', published_at: sentAt, publish_json: { tiktok: { via: 'zernio', draftId: 'd1', flow: { mode: 'now', state: 'waiting', sentAt, slotAt: sentAt, remindedAt: sentAt } } } });
+  const page = postPage(customer, postFull(ctx, postId));
+  assert.match(page, new RegExp(`action="/post/${postId}/tiktok-published"`));
+  const r = tiktokPublished(ctx, { id: 1, name: 'owner' }, { id: postId });
+  assert.equal(r.message, 'סומן. המצגת פורסמה בטיקטוק.');
+  const p = loadPost(ctx.db, postId);
+  assert.equal(p.status, 'published');
+  assert.equal(p.publish.tiktok.flow.state, 'mine');
+  assert.throws(() => tiktokPublished(ctx, { id: 1, name: 'owner' }, { id: postId }), /אין טיוטה שמחכה/);
+  ctx.db.update('posts', postId, { status: 'queued', publish_json: null, published_at: null });
+});

@@ -46,10 +46,11 @@ export function publishErrorHe(e, platform = null) {
   const text = `${code} ${e?.category || ''} ${e?.message || ''}`;
   if (REFUSED_HE[code]) return REFUSED_HE[code];
   if (e?.name === 'PublishRefused' && ['shabbat', 'paused', 'image_review'].includes(code)) return e.message;
-  if (code === 'not_configured') return 'הפרסום עוד לא זמין בשרת הזה. אנחנו מטפלים בזה.';
+  // Ours to fix, and the operator is alerted when one stops a post (src/publish/index.js): "אנחנו מטפלים בזה" is true.
+  if (code === 'not_configured') return 'הפרסום עוד לא פתוח אצלנו. אנחנו מטפלים בזה.';
   if (code === 'no_account') return `${name} לא מחובר לחשבון. מחברים אותו בדף החשבון, והמצגת תעלה אחרי זה.`;
   if (code === 'card_images') return platform === 'instagram' ? 'באינסטגרם מצגת יכולה להכיל עד 10 תמונות, ובמצגת הזו יש יותר.' : platform === 'facebook' ? 'בפוסט בפייסבוק אפשר עד 10 תמונות, ובמצגת הזו יש יותר.' : 'בטיקטוק מצגת צריכה בין 2 ל-35 תמונות.';
-  if (code === 'no_media_url') return 'השרת לא הצליח להעביר את התמונות לפלטפורמה. אנחנו מטפלים בזה.';
+  if (code === 'no_media_url') return 'לא הצלחנו להעביר את התמונות לרשת. אנחנו מטפלים בזה.';
   if (e?.status === 401 || e?.status === 403 || /auth_expired|token|oauth|unauthori[sz]ed|reconnect/i.test(text) || [190, 102].includes(Number(code))) return `החיבור ל${name} הפסיק לעבוד. מחברים אותו מחדש בדף החשבון.`;
   if (/user_content|strike|violation|banned|suspend|restricted|spam/i.test(text) || Number(e?.subcode) === 2207051) return `${name} דחה את המצגת בגלל הכללים שלו. אפשר לראות אותה בדף המצגת.`;
   if (e?.status === 429 || /rate.?limit|too many|throttl/i.test(text) || [4, 17, 32, 613].includes(Number(code))) return `${name} ביקש לחכות קצת. ננסה שוב בעוד כמה דקות.`;

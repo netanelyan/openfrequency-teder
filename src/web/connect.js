@@ -13,7 +13,7 @@ import { facebookPages, instagramPages, selectFacebookPage, selectInstagram } fr
 import { j } from '../db/index.js';
 import { ActionError } from './actions.js';
 import { connectErrorHe } from '../publish/errors.js';
-import { a11yLink, csrfField, esc, htmlOpen, icon, postButton, tederMark, themeButton, themeMeta, themeScript, usd, withSupport } from './ui.js';
+import { a11yLink, a11yWidget, csrfField, esc, htmlOpen, icon, postButton, tederMark, themeButton, themeMeta, themeScript, usd, withSupport } from './ui.js';
 
 // Connecting a customer's TikTok, Instagram and Facebook Page (src/publish/connect.js), on the website:
 //
@@ -268,7 +268,7 @@ function resultPage({ title, text, actions = '', v = 1, theme = 'light', go = nu
 <div class="hero">${tederMark()}<b>תדר</b></div>
 <h1>${esc(title)}</h1>
 <p>${withSupport(text)}</p>
-${go ? '<p class="muted small">עוד רגע חוזרים לדף שממנו התחלתם.</p>' : ''}${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main>${themeScript(v)}</body></html>`;
+${go ? '<p class="muted small">עוד רגע חוזרים לדף שממנו התחלתם.</p>' : ''}${actions ? `<div class="links">${actions}</div>` : ''}<p class="a11y-foot">${a11yLink()}</p></main>${a11yWidget()}${themeScript(v)}<script src="/static/app.js?v=${v}" defer></script></body></html>`;
 }
 
 /**
@@ -285,7 +285,7 @@ export function goPage(url, { name = '', v = 1, theme = 'light' } = {}) {
  * asks Zernio for a fresh link at every tap (connectRoutes above). The page sends nobody to WhatsApp for one: the
  * assistant hands links on only where it runs, and it did not on 2026-10-30.
  */
-const EXPIRED = { title: 'הלינק הזה כבר לא בתוקף', text: 'לינק לחיבור עובד 72 שעות. מחברים מדף החשבון בתדר, והכפתור שם פותח חיבור חדש בכל לחיצה.' };
+const EXPIRED = { title: 'הקישור הזה כבר לא בתוקף', text: 'קישור לחיבור עובד 72 שעות. מחברים מדף החשבון בתדר, והכפתור שם פותח חיבור חדש בכל לחיצה.' };
 // The account the address names, whether or not it exists: the page is the same either way, and the account page shows
 // only the workspace's own.
 const expired = (account, theme) => resultPage({ theme, ...EXPIRED, actions: `<a class="btn primary" href="/accounts?account=${esc(encodeURIComponent(account))}">לדף החשבון</a>` });
@@ -406,7 +406,8 @@ async function selection(ctx, { target, platform, query, actions, t, theme, home
  */
 export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }) {
   const pick = takePick(ctx.db, id, { t });
-  if (!pick) return [404, resultPage({ theme, title: 'הבחירה הזו כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף באתר.' })];
+  // The pick is gone (taken once, or past 15 minutes): the way back to connect again, as an expired link has.
+  if (!pick) return [404, resultPage({ theme, title: 'הבחירה הזו כבר לא בתוקף', text: 'אפשר לחבר שוב מדף החשבון בתדר.', actions: '<a class="btn primary" href="/accounts">לדף החשבון</a>' })];
   const back = setupBack(setupOfTarget(ctx.db, pick.target));
   const setupId = setupOfTarget(ctx.db, pick.target);
   const home = backPath(pick.back) || (setupId ? `/new/${encodeURIComponent(setupId)}#connect` : pick.target.kind === 'account' ? accountHome(pick.target.id) : '/');
@@ -450,7 +451,7 @@ export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }
  */
 export async function publicOnboardingConnect(ctx, { onboardingId, platform, query, links, t = now(), theme = 'light' }) {
   const ob = ctx.db.get('SELECT id, pack_id, seed_json FROM onboarding WHERE id = ?', onboardingId);
-  if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ theme, title: 'הלינק הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
+  if (!ob || !onboardingDoneLinkOk(links.secret, { onboardingId, platform, e: query.get('e'), s: query.get('s'), t })) return [404, resultPage({ theme, title: 'הקישור הזה כבר לא בתוקף', text: 'אפשר לחבר שוב מהדף של החשבון החדש באתר.' })];
   const name = PLATFORM_NAME[platform];
   if (!zernioConfigured()) return [503, resultPage({ theme, ...CLOSED })];
   const back = setupBack(ob.id);

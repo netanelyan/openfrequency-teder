@@ -221,7 +221,7 @@ export function accountSwitch(ctx) {
  */
 export function viewAsBanner(ctx) {
   if (!ctx.readOnly) return '';
-  const text = ctx.viewAs ? `אתם צופים ב-${esc(ctx.workspace?.name || '')} כמו שהלקוח רואה אותו. זו צפייה בלבד, ושום שינוי לא נשמר.` : 'זו צפייה בלבד, ושום שינוי לא נשמר.';
+  const text = ctx.viewAs ? `אתם צופים בחשבון של ${esc(ctx.workspace?.name || 'הלקוח')} כמו שהלקוח רואה אותו. זו צפייה בלבד, ושום שינוי לא נשמר.` : 'זו צפייה בלבד, ושום שינוי לא נשמר.';
   const end = ctx.viewAs && ctx.links ? `<a class="btn sm" href="${esc(ctx.links.admin)}">סיום צפייה</a>` : '';
   return `<div class="banner info viewas" role="status">${icon('shield')}<div><b>${text}</b></div>${end}</div>`;
 }
@@ -278,7 +278,7 @@ const APP_META = `<meta name="apple-mobile-web-app-title" content="תדר">
 /** The page around a body. ctx: { title, active, csrf, quota: { used, out, limit }, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
-  const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
+  const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לכם">${ctx.waiting}</b>` : '');
   const nav = navFor(ctx).map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const tabs = navFor(ctx).map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   // The month's posts of the accounts shown, the ones already out of the plan's (src/budget/quota.js): "פורסמו X / 40".
@@ -355,7 +355,7 @@ export function postButton(ctx, action, label, { cls = 'btn', ajax = null, confi
   return `<form method="post" action="${esc(action)}"${ajax ? ` data-ajax="${esc(ajax)}"` : ''}>${csrfField(ctx)}${hidden}<button class="${cls}" type="submit"${confirm ? ` data-confirm="${esc(confirm)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>${iconName ? icon(iconName) : ''}${label}</button></form>`;
 }
 
-export const MODE_HE = { approve: ['אישור', 'כל פוסט מחכה לך'], digest: ['תקציר', 'יוצא אם לא דחית'], auto: ['אוטומטי', 'יוצא, וסיכום יומי'] };
+export const MODE_HE = { approve: ['אישור', 'כל פוסט מחכה לכם'], digest: ['תקציר', 'יוצא אם לא דחיתם'], auto: ['אוטומטי', 'יוצא, וסיכום יומי'] };
 // A post's state on its chip, in the words of the cards (src/web/pages.js postCard): "בכתיבה" as "מצגת חדשה בכתיבה".
 export const STATUS_HE = {
   drafting: ['בכתיבה', ''],

@@ -12,16 +12,18 @@ import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
 import { canRun, isCustomerAccount, mayResume, pauseAccount, resumeAccount } from '../autonomy/rails.js';
-import { blockForClosing, closingRecheck, draftMissed, publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
+import { blockForClosing, closingRecheck, publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
 import { CLOSING_HE } from '../publish/errors.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { rulesFor } from '../schedule/choice.js';
-import { STATUS_HE, dayHe, shortDate, timeHe } from './ui.js';
+import { STATUS_HE, dayHe, shortDate, timeHe, untilHe } from './ui.js';
 // Whether a TikTok draft can go now, for what the approval says (canRun is imported once more under its own name: the
 // import above it is the cost rule's to change).
 import { canRun as canSend } from '../autonomy/rails.js';
 import { needsConnection } from '../publish/hold.js';
+import { publishedByHand } from '../publish/draft.js';
+import { draftMissed } from '../publish/index.js';
 import { moreThanFactsHe, problemsHe } from './problems.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
@@ -33,7 +35,7 @@ import { robotsAllows } from '../sources/robots.js';
 import { israelDate, israelInstant } from '../schedule/israel.js';
 import { postSpend } from '../budget/ledger.js';
 import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budget/quota.js';
-import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
+import { addBankTopic, PASS, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
 import { customerWorkspace } from '../billing/own.js';
 import { EMAIL_KINDS, setEmailPrefs } from '../notify/email.js';
@@ -285,6 +287,13 @@ function decline(ctx, user, post, form, { deleting = false } = {}) {
   if (q.full === 'posts') return result('נדחה, והפוסט ירד.', `כל ${q.usage.suggested.limit} הפוסטים של החודש כבר נכתבו, אז לא נכתב פוסט במקומו.`);
   // The day is over (or the post had none): nothing would be seen in time.
   return !wants ? result('נדחה, והפוסט ירד. הסיבה נשמרה.') : result('נדחה, והפוסט ירד.', `כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.`);
+}
+
+/** The owner published the post's TikTok draft in the app themselves (src/publish/draft.js publishedByHand). */
+export function tiktokPublished(ctx, user, { id }) {
+  const post = mustPost(ctx, id);
+  if (!publishedByHand(ctx.db, post, { by: user.name })) throw new ActionError('לפוסט הזה אין טיוטה שמחכה בטיקטוק.');
+  return { ok: true, message: 'סומן. המצגת פורסמה בטיקטוק.' };
 }
 
 /** The owner deleted a post's old TikTok drafts in the app: the reminder on the post goes away. */
@@ -596,7 +605,8 @@ export function applyStyle(ctx, user, { id }) {
  */
 export function killAccount(ctx, user, { id }) {
   if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
-  pauseAccount(ctx.db, id, user.operator ? 'kill' : 'manual', `${user.name} כיבה את החשבון`, user.name);
+  // Who switched it off is in the audit log; the page says what happened ("<name> כיבה" was masculine, and the name an email).
+  pauseAccount(ctx.db, id, user.operator ? 'kill' : 'manual', 'החשבון כובה ידנית.', user.name);
   return { ok: true, message: user.operator ? 'החשבון כובה. שום דבר לא ייכתב ולא יפורסם בו.' : 'החשבון כובה. שום דבר לא ייכתב ולא יפורסם בו עד שתפעילו אותו מחדש.' };
 }
 
@@ -726,7 +736,7 @@ export function confirmFact(ctx, user, _p, form) {
   if (problems.length) throw new ActionError(problems[0]);
   saveFact(dir, topic.topic, next);
   audit(ctx.db, { actor: user.name, action: 'fact_confirmed', accountId: pack.id, detail: { topic: topic.topic, id: fact.id, expires: next.expires } });
-  return { ok: true, message: `נבדקה שוב, בתוקף עד ${next.expires}.`, redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
+  return { ok: true, message: `נבדקה שוב, בתוקף עד ${untilHe(`${next.expires}T12:00:00Z`)}.`, redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
 }
 
 export function removeFactAction(ctx, user, _p, form) {
@@ -786,7 +796,7 @@ export function setEmailPrefsAction(ctx, user, _p, form) {
 /** A browser asks for notifications: its push endpoint is kept. */
 export function subscribePush(ctx, user, _p, form) {
   const r = subscribe(ctx.db, { endpoint: form.endpoint }, { userId: user.id ?? null, workspaceId: ctx.workspaceId ?? null });
-  if (!r.ok) throw new ActionError('הדפדפן לא החזיר כתובת התראות תקינה');
+  if (!r.ok) throw new ActionError('הדפדפן לא אישר התראות. בודקים שההתראות מותרות בהגדרות הדפדפן ומנסים שוב.');
   audit(ctx.db, { actor: user.name, action: 'push_subscribed', detail: { host: new URL(String(form.endpoint)).hostname } });
   return { ok: true, message: 'ההתראות מופעלות בדפדפן הזה.' };
 }
@@ -857,7 +867,8 @@ export function addTopicAction(ctx, user, _p, form) {
   } catch (e) {
     throw new ActionError('הנושא לא נשמר', 422, { problems: [e.message], values: { ...form } });
   }
-  return { ok: true, message: 'נוסף לבנק. הוא יקבל ציון, והפוסט הבא יתחיל ממנו.', redirect: '/topics' };
+  // Only a topic that scores PASS or more is written (src/topics/index.js): it said the next post starts from it.
+  return { ok: true, message: `נוסף לבנק. נושא שיקבל ציון ${PASS} ומעלה ייכנס לתור.`, redirect: '/topics' };
 }
 
 export function removeTopicAction(ctx, user, _p, form) {

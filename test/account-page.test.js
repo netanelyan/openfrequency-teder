@@ -88,7 +88,8 @@ test("a customer's account page: the header, the month, the week, the queue, app
   assert.match(html, /<section class="acct acc acc-demo" id="acc-demo" aria-labelledby="acct-name-demo">/, 'the section home links to (#acc-demo)');
   assert.match(html, /<header class="panel acct-head"><span class="dot acc-demo" aria-hidden="true"><\/span><div class="who"><h2 id="acct-name-demo">עציץ ושמש<\/h2><span class="muted ltr">@demo\.atzitz<\/span><\/div><span class="chip ok">פעיל<\/span>/);
   for (const p of ['sources', 'rivals', 'sounds']) assert.match(html, new RegExp(`<a class="btn sm" href="/${p}\\?account=demo">`), p);
-  assert.match(html, /<a class="btn sm" href="\/new">/, 'a new account starts here, as before');
+  // Its workspace has its one account: no "חשבון חדש" to a refusal (the audit, 2026-11-12, P2-31).
+  assert.doesNotMatch(html, /<a class="btn sm" href="\/new">/, 'no new account for a workspace that has its one');
 
   // The month, a meter for each part of the plan.
   // The plan counts the posts the customer got (src/budget/quota.js): three out, one approved still to go; the two
@@ -107,15 +108,15 @@ test("a customer's account page: the header, the month, the week, the queue, app
   assert.match(days, /<span class="today" title="[^"]+: 1"><b class="num">1<\/b><i class="h\d"><\/i>/, 'today, with its count over its bar');
 
   // What waits, each count a link to it.
-  assert.match(html, /<a href="\/posts\?account=demo"><span class="l">ממתינים<\/span><b class="cnt num sig">2<\/b><\/a>/);
+  assert.match(html, /<a href="\/posts\?account=demo"><span class="l">מחכים לאישור<\/span><b class="cnt num sig">2<\/b><\/a>/);
   assert.match(html, /<a href="\/posts\?account=demo#scheduled"><span class="l">מאושרים<\/span><b class="cnt num">1<\/b><\/a>/);
-  assert.match(html, /<span class="l">נחסמו השבוע<\/span><b class="cnt num">1<\/b>/);
+  assert.doesNotMatch(html, /נחסמו השבוע/, "what our checks stopped is ours");
 
   // Approval, fixed for a customer; how TikTok posts go out; the look and the way to another.
   assert.match(html, /<h3>אישור<\/h3><\/header><p class="m0">כל פוסט מחכה לאישור שלכם לפני שהוא עולה\.<\/p>/);
   assert.doesNotMatch(html, /name="mode"/);
   assert.match(html, /<h3>איך פוסטים עולים לטיקטוק<\/h3><\/header><p class="m0">המצגות מגיעות לטיוטות בטיקטוק\./);
-  assert.match(html, /<h3>סגנון<\/h3>[\s\S]*?נעול מ-[\s\S]*?<a class="btn sm" href="\/styles\?account=demo">לראות את כל העיצובים<\/a>/);
+  assert.match(html, /<h3>עיצוב המצגות<\/h3>[\s\S]*?מאז [\s\S]*?<a class="btn sm" href="\/styles\?account=demo">לראות את כל העיצובים<\/a>/);
   assert.doesNotMatch(html, /acct-formats/, 'the kinds of slideshow are on Settings');
 
   // The networks: their names the panel's heading, a check, and a row each with its state, its account and its button.
@@ -136,7 +137,7 @@ test("a customer's account page: the header, the month, the week, the queue, app
 
 test('a paused account says why, with the way back on and no switch; a new look waits in its panel with the button that takes it', async () => {
   const { cookie } = fake.session(customer(1));
-  pauseAccount(db, 'demo', 'manual', 'owner כיבה את החשבון', 'owner');
+  pauseAccount(db, 'demo', 'manual', 'החשבון כובה ידנית.', 'owner');
   const pack = ctx.pack('demo');
   const accent = pack.theme.colors.accent;
   try {
@@ -144,7 +145,7 @@ test('a paused account says why, with the way back on and no switch; a new look 
     pack.theme.colors.accent = '#0F5E9C';
     const html = await (await get('/accounts', cookie)).text();
     assert.match(html, /<span class="chip warn">מושהה<\/span>/);
-    assert.match(html, /<div class="banner warn">[^]*?<b>הושהה ידנית<\/b><p>owner כיבה את החשבון<\/p><\/div><form method="post" action="\/accounts\/demo\/resume">[^]*?הפעלה מחדש/);
+    assert.match(html, /<div class="banner warn">[^]*?<b>הושהה ידנית<\/b><p>החשבון כובה ידנית\.<\/p><\/div><form method="post" action="\/accounts\/demo\/resume">[^]*?הפעלה מחדש/);
     assert.doesNotMatch(html, /action="\/accounts\/demo\/kill"/, 'no switch on an account already off');
     assert.match(html, /<div class="notice">[^]*?<b>יש לחשבון סגנון חדש<\/b>[^]*?<form method="post" action="\/accounts\/demo\/style">[^]*?לעבור לסגנון החדש/);
   } finally {

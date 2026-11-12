@@ -250,6 +250,7 @@ const casesFor = () => {
     [`/post/${B.post}/takedown`, { notice: 'a takedown notice from A for B', platform: 'tiktok' }],
     [`/post/${B.post}/image-ok`],
     [`/post/${B.post}/old-drafts-deleted`],
+    [`/post/${B.post}/tiktok-published`],
     [`/takedowns/${B.takedown}/deleted`, { platform: 'tiktok' }],
     ['/accounts/bravo/mode', { mode: 'auto' }],
     ['/accounts/bravo/style'],
@@ -415,7 +416,7 @@ test("a notification of B's account wakes B's browsers and the operator's, never
 test('the operator viewing B as its customer sees B, with the banner, and changes nothing: every button is refused', async () => {
   const view = fake.session(viewingAs(2, 'Bravo Shop')).cookie;
   const home = await (await get('/', view)).text();
-  assert.match(home, /אתם צופים ב-Bravo Shop כמו שהלקוח רואה אותו\. זו צפייה בלבד, ושום שינוי לא נשמר\./);
+  assert.match(home, /אתם צופים בחשבון של Bravo Shop כמו שהלקוח רואה אותו\. זו צפייה בלבד, ושום שינוי לא נשמר\./);
   assert.match(home, /href="https:\/\/accounts\.test\/admin">סיום צפייה<\/a>/);
   assert.match(home, /<body class="readonly">/);
   assert.match(home, /bravo/i);

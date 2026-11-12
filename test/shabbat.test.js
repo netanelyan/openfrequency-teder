@@ -188,7 +188,8 @@ test('end to end on a Saturday: the TikTok draft, the runner and the publish pat
   assert.match(a.message, /הטיוטה נשלחת לטיקטוק/);
   assert.equal((await a.job).state, 'drafted');
   const b = approve(ctx, owner, { id: posts.beta });
-  assert.match(b.message, /הטיוטה תישלח לטיקטוק כששבת ייגמר/);
+  // "אחרי השבת": it said "כששבת ייגמר", in the wrong gender (the audit, 2026-11-12, P2-19).
+  assert.match(b.message, /הטיוטה תישלח לטיקטוק אחרי השבת\./);
   const held = await b.job;
   assert.equal(held.state, 'held');
   assert.equal(held.code, 'shabbat');

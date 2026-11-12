@@ -134,7 +134,7 @@ test('the banner: each state in its words, the day in Israel time, one way to pa
     const due = payBanner({ pay: { state: 'due', until: GRACE_UNTIL }, links });
     assert.equal(
       due,
-      `<div class="banner warn pay" id="pay"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><b>החודש ששילמתם עליו נגמר, והתשלום על החודש הבא עוד לא הגיע אלינו.</b><p>תדר ממשיך לעבוד עד סוף יום שישי, 13 בנובמבר, ואז ייעצר עד שהתשלום יגיע.</p></div><a class="btn sm primary" href="${PAY}">איך משלמים</a></div>`,
+      `<div class="banner warn pay" id="pay"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><b>החודש ששילמתם עליו נגמר, והתשלום על החודש הבא עוד לא הגיע אלינו.</b><p>תדר ממשיך לעבוד עד סוף יום שישי, 13 בנובמבר, ואז ייעצר עד שהתשלום יגיע. 3 ימים אחרי העצירה החיבורים לרשתות מתנתקים.</p></div><a class="btn sm primary" href="${PAY}">איך משלמים</a></div>`,
       'clearer: the warning\'s colour, the day and date, the one blue button'
     );
     for (const html of [soon, due]) assert.equal((html.match(/<a /g) || []).length, 1, 'one action');

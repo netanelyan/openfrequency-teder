@@ -57,6 +57,24 @@ function nowOut(db, post, t) {
   if (loadPost(db, post.id)?.status === 'drafted') db.update('posts', post.id, { status: 'published', published_at: new Date(t).toISOString(), updated_at: nowIso() });
 }
 
+/**
+ * The owner says they published a waiting draft themselves (src/web/actions.js tiktokPublished): it is theirs, as one
+ * the watch found would be, and a post that was only that draft is out. The watch reads the owner's posts for its hours
+ * and knows one only by its caption, so a draft published later, or with its caption changed, stayed "בטיוטות של
+ * טיקטוק" for good (the audit, 2026-11-12, P2-17). Returns whether there was a draft waiting.
+ */
+export function publishedByHand(db, post, { by = 'owner', t = now() } = {}) {
+  const results = post.publish || {};
+  const flow = results.tiktok?.flow;
+  if (!flow || flow.state !== 'waiting') return false;
+  Object.assign(flow, { state: 'mine', byHand: true, foundAt: new Date(t).toISOString() });
+  save(db, post.id, results);
+  nowOut(db, post, t);
+  step(db, post.id, 'tiktok', 'ok', { flow: 'mine', byHand: true, by });
+  audit(db, { actor: by, action: 'tiktok_published_by_hand', accountId: post.account_id, postId: post.id });
+  return true;
+}
+
 /** What a TikTok draft post is now, in the owner's words. */
 export const FLOW_HE = {
   drafted: ['בטיוטות של טיקטוק', 'ghost'],

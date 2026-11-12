@@ -44,7 +44,7 @@ export const EMAIL_HE = {
   posts_waiting: 'כשמצגות חדשות מחכות לאישור',
   weekly: 'סיכום שבועי, ביום ראשון בבוקר',
   monthly: 'דוח תוצאות בתחילת כל חודש',
-  connect_needed: 'כשמצגות מחכות לחיבור של טיקטוק או אינסטגרם',
+  connect_needed: 'כשמצגות מחכות לחיבור לרשתות',
   publish_failed: 'כשמצגת לא עלתה',
 };
 export const WEEKLY_AT = { day: 0, at: '09:00' };

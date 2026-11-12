@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { allPage, needsYou, postCard, postPage, postsPage, typeHe } from '../src/web/pages.js';
-import { timeHe } from '../src/web/ui.js';
+import { dayHe, shortDate, timeHe } from '../src/web/ui.js';
 
 // The post cards a customer reads: a slideshow still being written is one plain line, and a ready one says in plain
 // words when it goes up, what kind it is, the text that goes with it and where its facts come from. The operator
@@ -11,6 +11,9 @@ const pack = { id: 'demo', meta: { displayName: 'עציצים', handle: 'demo' }
 const customerCtx = { csrf: 'x', operator: false };
 const operatorCtx = { csrf: 'x', operator: true };
 const soon = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+// The card says the hour of a slot today, and the date with it for another day's: an hour from now is tomorrow in the
+// last hour of the Israel day, when this failed by the clock (the audit, 2026-11-12, P2-76).
+const soonHe = dayHe(soon) === dayHe(Date.now()) ? timeHe(soon) : `${shortDate(soon)}, ${timeHe(soon)}`;
 
 const fact = { key: 'f1', claim: 'מונסטרה צריכה אור עקיף', quote: 'Monstera prefers bright, indirect light', doc_url: 'https://example.test/monstera', source_name: 'Example', doc_fetched_at: '2026-10-01T10:00:00Z', source_status: 'approved', verified: true };
 
@@ -68,7 +71,7 @@ test('the operator still sees the whole card while it is written', () => {
 
 test('a ready card says when it goes up, what kind it is, its text and where its facts come from', () => {
   const html = postCard(customerCtx, readyPost(), pack);
-  assert.match(html, new RegExp(`<span class="when num">תעלה ב-${timeHe(soon)}</span>`));
+  assert.match(html, new RegExp(`<span class="when num">תעלה ב-${soonHe}</span>`));
   assert.match(html, /<span class="fmt">סוג: הסבר בכמה שלבים<\/span>/);
   assert.ok(!html.includes('איך זה עובד'), 'the pack format name is the operator\'s');
   assert.match(html, /הטקסט שעולה עם המצגת/);

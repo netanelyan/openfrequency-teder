@@ -230,7 +230,7 @@ test('rivals are typed in by hand per account: refused when malformed, shown, up
   const cookie = await login();
   const csrf = await csrfOf(cookie);
   let html = await (await get('/rivals?account=demo', cookie)).text();
-  assert.match(html, /המנוע לא קורא חשבונות של אחרים/);
+  assert.match(html, /תדר לא נכנס לחשבונות של אחרים/);
   assert.match(html, /עוד אין מתחרים/);
   let res = await post('/rivals/save', cookie, { _csrf: csrf, account: 'demo', handle: 'לא תקין', platform: 'tiktok', hooks: '' });
   assert.equal(res.status, 422);

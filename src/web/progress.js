@@ -29,6 +29,11 @@ import { esc, icon } from './ui.js';
 
 /** How long a done item stays on home. */
 export const READY_MS = DAY;
+/**
+ * A post that is ready stays in the block this long: "מחכה לכם" lists it under it all day, so for a day it was on home
+ * twice (the audit, 2026-11-12, P2-1). A new account's setup keeps the day.
+ */
+export const POST_READY_MS = 60 * 60_000;
 /** The most items the block lists, running ones first. */
 const MAX_ITEMS = 6;
 
@@ -54,7 +59,7 @@ function postWork(sc, t) {
     .all(`SELECT id, redo_of, created_at FROM posts WHERE account_id IN (${inIds}) AND status = 'drafting' AND sample = 0 ORDER BY created_at DESC`, ...ids)
     .map((p) => ({ id: `p:${p.id}`, state: 'running', title: p.redo_of ? 'פוסט חלופי נכתב עכשיו' : 'מצגת חדשה בכתיבה', subject: '', line: p.redo_of ? 'הוא יגיע לאישור בעוד כמה דקות.' : 'תהיה מוכנה בעוד כמה דקות.', at: p.created_at }));
   const ready = sc.db
-    .all(`SELECT id, hook, redo_of, created_at FROM posts WHERE account_id IN (${inIds}) AND status = 'queued' AND sample = 0 AND created_at >= ? ORDER BY created_at DESC`, ...ids, new Date(t - READY_MS).toISOString())
+    .all(`SELECT id, hook, redo_of, created_at FROM posts WHERE account_id IN (${inIds}) AND status = 'queued' AND sample = 0 AND created_at >= ? ORDER BY created_at DESC`, ...ids, new Date(t - POST_READY_MS).toISOString())
     .map((p) => ({ id: `p:${p.id}`, state: 'ready', title: p.redo_of ? 'הפוסט החלופי מחכה לאישור' : 'מצגת חדשה מחכה לאישור', subject: p.hook || '', line: '', href: `/post/${p.id}`, go: 'לפוסט', at: p.created_at }));
   return [...writing, ...ready];
 }

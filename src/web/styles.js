@@ -93,9 +93,9 @@ export function previewFile(pack, postKey, style, n) {
 /** What a preview's warnings say, in a line: which text this style would send back to the writer. */
 function warnLine(ws = []) {
   if (!ws.length) return '';
-  const what = [...new Set(ws.map((w) => (w.slide === 0 ? 'השער' : `שקף ${w.slide + 1}`)))];
+  const what = [...new Set(ws.map((w) => (w.slide === 0 ? 'שקף הפתיחה' : `שקף ${w.slide + 1}`)))];
   const list = what.length > 1 ? `${what.slice(0, -1).join(', ')} ו${what.at(-1)}` : what[0];
-  return `<p class="small warnline">${icon('alert')}${esc(list)} ${what.length > 1 ? 'ארוכים' : 'ארוך'} מדי לסגנון הזה. בפוסט שייכתב בו, הכותב יקצר.</p>`;
+  return `<p class="small warnline">${icon('alert')}${esc(list)} ${what.length > 1 ? 'ארוכים' : 'ארוך'} מדי לסגנון הזה. בפוסט שייכתב בו, תדר יקצר.</p>`;
 }
 
 /**
@@ -154,7 +154,7 @@ ${s === current ? '' : postButton(pc, `/accounts/${pack.id}/style-pick`, `לעב
   return `<section class="panel" id="acc-${esc(pack.id)}"><header><h2>${esc(pack.meta.displayName)}</h2><span class="muted small">${current ? `עכשיו בסגנון ${current} · ${HE[current]}` : 'עכשיו בעיצוב הישן'}</span></header>
 ${pending ? `<div class="banner info">${icon('alert')}<div><b>${pc.operator ? `ב-pack.json כתוב סגנון ${esc(pending)}` : `הוכן לחשבון סגנון ${esc(pending)}`}</b><div class="small">הוא ייכנס רק כשתעברו אליו כאן.</div></div></div>` : ''}
 <p class="small">ההמלצה: <b>${esc(suggestion.name)} · ${HE[suggestion.name]}</b>. ${esc(suggestion.why.join('. '))}.</p>
-${prev ? `<p class="muted small">התצוגה היא של ${prev.live ? 'הפוסט האחרון' : `הפוסט האחרון מסט ההשקה (<bdi dir="ltr">${esc(prev.from || '')}</bdi>)`}: “${esc(prev.hook || '')}”${prev.styles && Object.values(prev.styles).some((x) => x.highlights?.length) ? '. לפוסט הזה אין הדגשה משלו, אז ההדגשה בתצוגה נבחרה בקוד. בפוסטים חדשים הכותב בוחר אותה.' : ''}</p>` : '<p class="muted small">לחשבון עוד אין פוסט להציג.</p>'}
+${prev ? `<p class="muted small">התצוגה היא של ${prev.live || !pc.operator ? 'הפוסט האחרון' : `הפוסט האחרון מסט ההשקה (<bdi dir="ltr">${esc(prev.from || '')}</bdi>)`}: “${esc(prev.hook || '')}”${pc.operator && prev.styles && Object.values(prev.styles).some((x) => x.highlights?.length) ? '. לפוסט הזה אין הדגשה משלו, אז ההדגשה בתצוגה נבחרה בקוד. בפוסטים חדשים הכותב בוחר אותה.' : ''}</p>` : '<p class="muted small">לחשבון עוד אין פוסט להציג.</p>'}
 <div class="stylegrid">${cols}</div>
 ${testLine}
 <form method="post" action="/accounts/${esc(pack.id)}/style-test" class="row">${csrfField(pc)}<input type="hidden" name="on" value="${on ? '0' : '1'}"><span class="small">מבחן סגנונות: 14 יום לסירוגין בין שני הסגנונות שהכי מתאימים, ואז נשאר המנצח לפי צפיות ותגובה.</span><button class="btn sm" type="submit">${on ? 'לעצור את המבחן' : 'להפעיל מבחן'}</button></form>
@@ -170,7 +170,7 @@ export async function stylesPage(ctx, pc, { only = null, back = null } = {}) {
     const lock = lockedStyle(ctx.db, pack, (ctx.global || ctx).packs);
     const prev = await previewsOf(ctx, pack).catch((e) => ({ error: e.message }));
     const suggestion = suggestStyle({ ...pack.meta }, pack.theme.colors, ((ctx.global || ctx).packs).filter((p) => p.id !== pack.id), { business: true });
-    panels.push(prev?.error ? `<section class="panel"><header><h2>${esc(pack.meta.displayName)}</h2></header><p class="muted">התצוגה לא נוצרה: ${esc(prev.error)}</p></section>` : accountPanel(pc, pack, { lock, prev, suggestion, test: styleTest(ctx.db, pack), back: to?.href || null }));
+    panels.push(prev?.error ? `<section class="panel"><header><h2>${esc(pack.meta.displayName)}</h2></header><p class="muted">${pc.operator ? `התצוגה לא נוצרה: ${esc(prev.error)}` : 'התצוגה לא נוצרה הפעם. נסו שוב בעוד כמה דקות.'}</p></section>` : accountPanel(pc, pack, { lock, prev, suggestion, test: styleTest(ctx.db, pack), back: to?.href || null }));
   }
   const body = `<div class="head"><div><a class="muted small back" href="${esc(to?.href || '/accounts')}">${icon('chev')}${to?.label || 'חזרה לחשבון'}</a><h1>עיצוב המצגות</h1></div></div>
 <p class="muted">לכל חשבון סגנון אחד, וכל הפוסטים שלו יוצאים בו. החלפה חלה מהפוסט הבא, ופוסטים שכבר צוירו לא משתנים.</p>

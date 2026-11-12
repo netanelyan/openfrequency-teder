@@ -121,7 +121,7 @@
         body: new URLSearchParams(e.submitter ? new FormData(form, e.submitter) : new FormData(form)),
         credentials: 'same-origin',
       });
-      const out = await res.json().catch(() => ({ ok: false, message: 'תשובה לא צפויה מהשרת' }));
+      const out = await res.json().catch(() => ({ ok: false, message: 'משהו השתבש אצלנו. נסו שוב.' }));
       // The session ended (signed out elsewhere, or expired): off to accounts' login, which brings the browser back.
       if (res.status === 401 && typeof out.login === 'string' && /^https?:\/\//.test(out.login)) {
         location.href = out.login;
@@ -163,7 +163,7 @@
       form.querySelector('[name=endpoint]').value = sub.endpoint;
       form.requestSubmit();
     } catch {
-      say('לא הצלחתי להפעיל התראות בדפדפן הזה.', true);
+      say('לא הצלחנו להפעיל התראות בדפדפן הזה.', true);
     }
   });
 
@@ -199,7 +199,7 @@
       await sub.unsubscribe();
       pushOff.requestSubmit();
     } catch {
-      say('לא הצלחתי לכבות את ההתראות במכשיר הזה.', true);
+      say('לא הצלחנו לכבות את ההתראות במכשיר הזה.', true);
     }
   });
 

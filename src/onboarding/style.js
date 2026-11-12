@@ -109,6 +109,7 @@ export function suggestStyle(about, colors = {}, existing = [], { business = fal
   if (business) ranked = [...ranked.filter((s) => s !== 'E'), 'E'];
   const free = ranked.filter((s) => !looksLike(s) && !(business && s === 'E'));
   const name = free[0] || ranked[0];
-  if (name !== top) why.push(`לחשבון אחר באותו תחום כבר יש את סגנון ${top} בצבע קרוב, אז החשבון הזה מקבל את הבא בתור`);
+  // Never what another customer's account uses (the audit, 2026-11-12, P2-48): only that this one is set apart.
+  if (name !== top && looksLike(top)) why.push(`כדי שהמצגות ייראו אחרת מאלה של חשבונות דומים בתחום, החשבון הזה מקבל את סגנון ${name}`);
   return { name, ranked: [name, ...ranked.filter((s) => s !== name)], why };
 }

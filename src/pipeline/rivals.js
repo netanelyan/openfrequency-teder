@@ -66,8 +66,8 @@ export function readRival(form) {
   const platform = String(form.platform || '');
   if (!RIVAL_PLATFORMS.includes(platform)) problems.push('פלטפורמה: טיקטוק או אינסטגרם');
   const hooks = lines(form.hooks);
-  if (!hooks.length) problems.push('לפחות שורת שער אחת שעבדה להם');
-  if (hooks.length > RIVALS.hooks) problems.push(`עד ${RIVALS.hooks} שורות שער`);
+  if (!hooks.length) problems.push('לפחות שורת פתיחה אחת שעבדה להם');
+  if (hooks.length > RIVALS.hooks) problems.push(`עד ${RIVALS.hooks} שורות פתיחה`);
   const formats = lines(form.formats);
   if (formats.length > RIVALS.formats) problems.push(`עד ${RIVALS.formats} פורמטים`);
   const long = [...hooks, ...formats].find((l) => l.length > RIVALS.lineChars);
