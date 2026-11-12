@@ -13,14 +13,19 @@ import { customerWorkspace } from '../billing/own.js';
 // way without being paused: nothing is drafted or published for it until accounts says it is allowed again. Money pauses nothing: there is no cap, and the month's plan (40
 // slideshows, 10 redos) stops the drafting without pausing (src/budget/quota.js).
 
+// In the words a customer reads them, on every page of a paused account and as the reason a send was refused (the
+// audit, 2026-11-12: "מתג הכיבוי הופעל" and "רצף שגיאות פרסום" were the engine's words).
 export const PAUSE_REASONS = {
-  kill: 'מתג הכיבוי הופעל',
+  kill: 'עצרנו את החשבון',
   manual: 'הושהה ידנית',
   fact_check: 'בדיקת עובדות נכשלה', // no longer set; an account paused for it before still says so
   strike: 'הפלטפורמה דחתה פוסט כהפרת מדיניות',
-  publish_errors: 'רצף שגיאות פרסום',
+  publish_errors: 'כמה מצגות ברצף לא עלו',
   takedowns: 'הודעות הסרה חוזרות',
 };
+
+/** Why nothing writes or publishes while the operator's stop for everything is on, as a customer reads it. */
+export const GLOBAL_KILL_HE = 'תדר עצר זמנית את הכתיבה והפרסום';
 
 /** Why an account of a workspace that has not paid writes and publishes nothing. */
 export const UNPAID = 'התשלום על תדר לא פעיל בחשבון';
@@ -78,7 +83,7 @@ export function resumeAccount(db, accountId, actor = 'engine') {
 
 /** Can this account publish or generate right now? { ok, why } */
 export function canRun(db, accountId) {
-  if (settings(db).globalKill) return { ok: false, why: 'מתג הכיבוי הכללי מופעל' };
+  if (settings(db).globalKill) return { ok: false, why: GLOBAL_KILL_HE };
   const acc = db.get('SELECT status, paused_reason, workspace_id FROM accounts WHERE id = ?', accountId);
   if (!acc) return { ok: false, why: 'אין חשבון כזה' };
   if (acc.status !== 'active') return { ok: false, why: PAUSE_REASONS[acc.paused_reason] || acc.status };

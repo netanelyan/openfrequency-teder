@@ -2,6 +2,7 @@ import { DAY, now, nowIso } from '../core/clock.js';
 import { audit, step } from '../core/store.js';
 import { j } from '../db/index.js';
 import { pauseAccount } from '../autonomy/rails.js';
+import { alertOperator } from '../notify/operator.js';
 import { loadPost } from '../pipeline/build.js';
 import { deleteMedia, igConfig } from './instagram.js';
 import { unpublishFacebook } from './zernio.js';
@@ -89,6 +90,8 @@ export async function recordTakedown(ctx, { postId, platform = null, claimant = 
   if (n >= PAUSE_AFTER) {
     pauseAccount(db, post.account_id, 'takedowns', `${n} הודעות הסרה ב-${WINDOW_DAYS} הימים האחרונים, אז החשבון עוצר עד שתבדקו ותפעילו אותו מחדש.`, by);
     paused = true;
+    // Two notices in 90 days are a pattern, and a legal matter: the operator hears of it (the audit, 2026-11-12, P1-18).
+    await alertOperator(ctx, `paused:takedowns:${post.account_id}`, { title: `Teder: ${pack?.meta?.displayName || post.account_id} is paused after ${n} takedown notices in ${WINDOW_DAYS} days`, body: `The latest${claimant ? ` from ${String(claimant).slice(0, 80)}` : ''}, on /post/${postId}. The customer can resume it themselves.` }).catch((e) => ctx.log?.(`[alert] ${e.message}`));
   }
   return { id, deleted, paused, count: n };
 }

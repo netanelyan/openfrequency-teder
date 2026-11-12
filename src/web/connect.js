@@ -1,9 +1,9 @@
-import { monthKey, now, nowIso } from '../core/clock.js';
+import { DAY, monthKey, now, nowIso } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { TIKTOK_MODES } from '../packs/validate.js';
 import { setPackPublishing } from '../packs/write.js';
 import { tiktokMode, wantedPublisher } from '../publish/index.js';
-import { isCustomerAccount } from '../autonomy/rails.js';
+import { isCustomerAccount, resumeAccount } from '../autonomy/rails.js';
 import { accountAllowed } from '../billing/entitlement.js';
 import { OWN_APP } from '../publish/tiktok-app.js';
 import { zernioConfigured } from '../publish/zernio.js';
@@ -217,7 +217,8 @@ export function connectRoutes(links) {
           ctx.log?.(`[connect] ${pack.id}: ${e.message}`);
           throw new ActionError('לא הצלחנו לבדוק את החיבורים עכשיו. נסו שוב בעוד כמה דקות.', 502);
         }
-        return { ok: true, message: 'החיבורים נבדקו ועודכנו.' };
+        const resumed = resumedHe(ctx, pack);
+        return { ok: true, message: resumed ? `החיבורים נבדקו, ${resumed}` : 'החיבורים נבדקו ועודכנו.' };
       },
     ],
     [
@@ -314,7 +315,25 @@ const homeButton = (home, cls = 'btn primary') => `<a class="${cls}" href="${esc
 /** Seconds before a page that says a connect worked goes back by itself. */
 export const GO_AFTER_S = 2;
 /** What the page a connect went back to says, as a toast (server.js flash), once. */
-const connectedHe = (name) => `${name} מחובר`;
+const connectedHe = (name, resumed = '') => (resumed ? `${name} מחובר, ${resumed}` : `${name} מחובר`);
+
+/**
+ * A connect that ends connected lifts the pause a broken connection caused. The audit of 2026-11-12, P1-17: after
+ * reconnecting, the account still read "מושהה (רצף שגיאות פרסום)", "החיבור לטיקטוק הפסיק לעבוד", and nothing went out
+ * until the customer found "הפעלה מחדש" on the account page. An account paused for publish errors (src/autonomy/rails.js,
+ * a pause the customer may lift themselves) with no platform still asking to be connected again is active again, as its
+ * own button would make it. Returns what the toast and the page add ("והחשבון פעיל שוב", and the posts that did not go
+ * out meanwhile, which "לנסות שוב" sends), or ''.
+ */
+export function resumedHe(ctx, pack, t = now()) {
+  const acc = ctx.db.get('SELECT status, paused_reason FROM accounts WHERE id = ?', pack.id);
+  if (acc?.status !== 'paused' || acc.paused_reason !== 'publish_errors') return '';
+  if (pack.meta.platforms.some((p) => connectState(ctx.db, pack, p).state === 'reconnect')) return '';
+  resumeAccount(ctx.db, pack.id, 'connect');
+  // The posts Today lists as not out (src/web/data.js FAILED_DAYS, two weeks), each with "לנסות שוב".
+  const failed = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'failed' AND sample = 0 AND updated_at >= ?", pack.id, new Date(t - 14 * DAY).toISOString()).n;
+  return `והחשבון פעיל שוב.${failed ? ` ${failed === 1 ? 'מצגת אחת לא עלתה בינתיים, ואפשר לשלוח אותה' : `${failed} מצגות לא עלו בינתיים, ואפשר לשלוח אותן`} שוב מדף היום.` : ''}`;
+}
 
 /** The setup an account is still in: its onboarding, not live or given up (null when there is none). */
 const setupFor = (db, accountId) => db.get("SELECT id FROM onboarding WHERE pack_id = ? AND status NOT IN ('live', 'abandoned') ORDER BY updated_at DESC LIMIT 1", accountId)?.id || null;
@@ -393,6 +412,7 @@ export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }
   }
   const platform = PICKS[pick.platform] ? pick.platform : 'instagram';
   const name = PLATFORM_NAME[platform];
+  let resumed = '';
   try {
     const got = await PICKS[platform].select({ profileId: pick.target.profileId, pageId: page.pageId, tempToken: pick.tempToken, connectToken: pick.connectToken, userProfile: pick.userProfile || null });
     const prefer = { [platform]: got.accountId };
@@ -407,9 +427,10 @@ export async function publicPick(ctx, { id, pageId, t = now(), theme = 'light' }
     } else {
       const pack = ctx.pack(pick.target.id);
       if (pack) await refreshConnections(ctx.db, pack, { t, prefer });
+      resumed = pack ? resumedHe(ctx, pack, t) : '';
     }
     const who = platform === 'facebook' ? page.name || got.username || 'העמוד בפייסבוק' : got.username || page.username ? handleHe(got.username || page.username) : 'החשבון באינסטגרם';
-    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו.`, actions: homeButton(home), go: home }), null, connectedHe(name)];
+    return [200, resultPage({ theme, title: `${name} מחובר`, text: `${who} מחובר עכשיו.${resumed ? ' החשבון פעיל שוב.' : ''}`, actions: homeButton(home), go: home }), null, connectedHe(name, resumed)];
   } catch (e) {
     ctx.log?.(`[connect] ${pick.target.kind} ${pick.target.id} ${platform} pick: ${e.message}`);
     return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: 'לא הצלחנו לחבר את החשבון שבחרתם. אפשר לחבר שוב מהדף באתר.', actions: back })];
@@ -512,6 +533,7 @@ export async function publicConnect(ctx, { account, platform, done, query, links
   const s = connectState(ctx.db, pack, platform);
   if (s.state !== 'connected') return [200, resultPage({ theme, title: 'החיבור לא הושלם', text: `לא רואים ${name} מחובר ל-${pack.meta.displayName}. אפשר לנסות שוב.`, actions: again() })];
   ctx.db.update('accounts', pack.id, { updated_at: nowIso() });
-  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}.`, actions: back, go: home }), null, connectedHe(name)];
+  const resumed = resumedHe(ctx, pack, t);
+  return [200, resultPage({ theme, title: `${name} מחובר`, text: `${s.username ? handleHe(s.username) : `החשבון ב${name}`} מחובר עכשיו ל-${pack.meta.displayName}.${resumed ? ' החשבון פעיל שוב.' : ''}`, actions: back, go: home }), null, connectedHe(name, resumed)];
 }
 

@@ -527,3 +527,84 @@ test('a document reaches the writer fenced: its own tags cannot close or open a 
   assert.doesNotMatch(b.split('\n')[0], /y="z/, 'an attribute cannot be forged');
   assert.equal(fenced('a <Document> b'), 'a < Document> b');
 });
+
+/* ------------------------------------------------------------------ the audit of 2026-11-12: P1-16, P1-17, P1-18 */
+
+test("a TikTok draft that does not take at the slot never stops Instagram: the post is out, the draft is sent again from its page", async () => {
+  asCustomer();
+  Z.fail.tiktok = { status: 422, body: { error: { message: 'the inbox did not take the upload' } } };
+  const ids = [await post('approved'), await post('approved', { slot: TUE('13:40') }), await post('approved', { slot: TUE('14:40') })];
+  for (const [i, id] of ids.entries()) {
+    const r = await publishPost(ctx, id, { t: TUE(['12:45', '13:45', '14:45'][i]) });
+    assert.equal(r.ok, true, 'out on Instagram');
+    const p = loadPost(db, id);
+    assert.equal(p.status, 'published');
+    assert.equal(p.publish.instagram.status, 'published');
+    assert.ok(p.publish.tiktok.error && !p.publish.tiktok.flow, "the draft's failure is recorded on the post");
+  }
+  assert.equal(db.get("SELECT status FROM accounts WHERE id = 'alpha'").status, 'active', 'three drafts that did not take pause nothing: Instagram kept going');
+  assert.ok(db.get("SELECT 1 FROM notifications WHERE post_id = ? AND kind = 'draft_failed'", ids[0]), 'the owner is told');
+
+  // The customer's page says it and offers the draft alone again; Today lists it.
+  const c = await session(customer(7));
+  const page = await (await get(`/post/${ids[0]}`, c.cookie)).text();
+  assert.match(page, /הטיוטה לא הגיעה לטיקטוק/);
+  assert.match(page, /באינסטגרם המצגת עלתה\. אפשר לשלוח את הטיוטה לטיקטוק שוב\./);
+  assert.match(page, new RegExp(`action="/post/${ids[0]}/publish-again"`));
+  // Today lists the last day and a half's: this post went out "now", as far as the page knows.
+  db.update('posts', ids[0], { published_at: new Date().toISOString() });
+  assert.match(await (await get('/', c.cookie)).text(), /הטיוטה לא הגיעה לטיקטוק · אפשר לשלוח שוב/);
+  delete Z.fail.tiktok;
+  const before = creates().length;
+  const res = await (await send(`/post/${ids[0]}/publish-again`, c.cookie, { _csrf: c.csrf })).json();
+  assert.equal(res.message, 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.');
+  assert.deepEqual(creates().slice(before).map((x) => x.body.platforms[0].platform), ['tiktok'], 'the draft alone: Instagram is not posted twice');
+  const p = loadPost(db, ids[0]);
+  assert.equal(p.status, 'published');
+  assert.ok(p.publish.tiktok.flow, 'the draft is in the inbox');
+
+  // A TikTok-only account has nothing else out: a draft that did not take fails the post, as before.
+  pack().meta.platforms = ['tiktok'];
+  Z.fail.tiktok = { status: 422, body: { error: { message: 'the inbox did not take the upload' } } };
+  const only = await post('approved', { slot: TUE('15:40') });
+  assert.equal((await publishPost(ctx, only, { t: TUE('15:45') })).ok, false);
+  assert.equal(loadPost(db, only).status, 'failed');
+});
+
+test('reconnecting lifts the pause a broken connection caused; a strike and repeated takedowns tell the operator', async () => {
+  const { resumedHe } = await import('../src/web/connect.js');
+  const { getSetting } = await import('../src/core/store.js');
+  const { recordTakedown } = await import('../src/publish/takedown.js');
+  asCustomer();
+  pauseAccount(db, 'alpha', 'publish_errors', 'החיבור לטיקטוק הפסיק לעבוד. מחברים אותו מחדש בדף החשבון.');
+  // Still asking to be connected again: nothing is lifted.
+  db.run("UPDATE zernio_connections SET status = 'reconnect' WHERE account_id = 'alpha' AND platform = 'tiktok'");
+  assert.equal(resumedHe(ctx, pack()), '');
+  assert.equal(db.get("SELECT status FROM accounts WHERE id = 'alpha'").status, 'paused');
+  db.run("UPDATE zernio_connections SET status = 'connected' WHERE account_id = 'alpha'");
+  const failed = await post('failed');
+  db.update('posts', failed, { updated_at: new Date().toISOString() });
+  assert.equal(resumedHe(ctx, pack()), 'והחשבון פעיל שוב. מצגת אחת לא עלתה בינתיים, ואפשר לשלוח אותה שוב מדף היום.');
+  assert.equal(db.get("SELECT status FROM accounts WHERE id = 'alpha'").status, 'active');
+  // A pause only we lift is not the connection's to lift.
+  pauseAccount(db, 'alpha', 'strike', 'x');
+  assert.equal(resumedHe(ctx, pack()), '');
+  db.run("UPDATE accounts SET status = 'active', paused_reason = NULL WHERE id = 'alpha'");
+
+  // A platform's strike pauses the account, and the operator hears of it.
+  pack().meta.platforms = ['instagram'];
+  Z.fail.instagram = { status: 403, body: { error: { message: 'the account is restricted for spam' } } };
+  const struck = await post('approved', { slot: TUE('16:40') });
+  await publishPost(ctx, struck, { t: TUE('16:45') });
+  assert.equal(db.get("SELECT paused_reason FROM accounts WHERE id = 'alpha'").paused_reason, 'strike');
+  assert.match(getSetting(db, 'alert:paused:strike:alpha', {})?.title || '', /alpha|חשבון/, 'the operator was alerted');
+  db.run("UPDATE accounts SET status = 'active', paused_reason = NULL WHERE id = 'alpha'");
+
+  // The second takedown notice in 90 days pauses it, and the operator hears of that too.
+  delete Z.fail.instagram;
+  const [a, b] = [await post('published'), await post('published')];
+  for (const id of [a, b]) await recordTakedown(ctx, { postId: id, claimant: 'משרד עורכי דין', notice: 'נא להסיר את הפוסט, הוא משתמש בתמונה שלנו.' });
+  assert.equal(db.get("SELECT paused_reason FROM accounts WHERE id = 'alpha'").paused_reason, 'takedowns');
+  assert.ok(getSetting(db, 'alert:paused:takedowns:alpha', null), 'the operator was alerted');
+  assert.match(loadPost(db, b).reason, /^הודעת הסרה מאת משרד עורכי דין: /);
+});

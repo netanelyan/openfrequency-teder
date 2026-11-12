@@ -230,8 +230,10 @@ test('a post written to disk is never called published on a customer page: its p
     assert.match(html, /<span class="sub"><span class="chip warn">לא נשלח<\/span><\/span>/);
     assert.match(html, /<div class="banner warn" id="written">[\s\S]*?<b>המצגת לא נשלחה לרשתות<\/b><p>הפרסום אצלנו כבוי כרגע, אז שמרנו אותה ולא שלחנו אותה לטיקטוק ולאינסטגרם\. אם היא צריכה לעלות, כתבו לנו\.<\/p><\/div><\/div>/);
     assert.match(html, /<span class="chip"><svg[^>]*><use href="#i-clock"\/><\/svg>לא נשלחה לרשתות<\/span>/, 'the line of when it went up says it did not');
-    assert.doesNotMatch(html, /טיוטה מחכה לך|בטיוטות של טיקטוק|הודעות הסרה|נכתבה לדיסק/);
-    assert.match(html, /<b>פרסום<\/b> <span class="muted small num">[^<]*<\/span><div class="d">טיקטוק: לא נשלח, נשמר אצלנו · אינסטגרם: לא נשלח, נשמר אצלנו<\/div>/, 'its trace too');
+    assert.doesNotMatch(html, /טיוטה מחכה לכם|הטיוטה בתיבת הטיוטות|בטיוטות של טיקטוק|הודעות הסרה|נכתבה לדיסק/);
+    // The steps are developer mode's and the operator's since the audit of 2026-11-12: there it says it was not sent.
+    assert.doesNotMatch(html, /<ol class="trace">/);
+    assert.match(await page(`/post/${id}`, `${fake.session(operator()).cookie}; of_dev=1`), /<b>פרסום<\/b> <span class="muted small num">[^<]*<\/span><div class="d">טיקטוק: נכתב לדיסק בפרסום יבש · אינסטגרם: נכתב לדיסק בפרסום יבש<\/div>/, 'its trace too');
     // The operator reads where it was written.
     assert.match(await page(`/post/${id}`, fake.session(operator()).cookie), /<p>נכתבה לדיסק ב-<bdi>[^<]+<\/bdi><\/p>/);
 

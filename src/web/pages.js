@@ -1,7 +1,8 @@
 import { a11yLink, accDot, csrfField, dayHe, esc, fold, htmlOpen, icon, k, layout, MODE_HE, postButton, reasonHe, shortDate, stamp, statusChip, tederMark, themeButton, themeMeta, themeScript, timeHe, usd, weekdayNarrow, withSupport } from './ui.js';
-import { PAUSE_REASONS } from '../autonomy/rails.js';
+import { GLOBAL_KILL_HE, PAUSE_REASONS } from '../autonomy/rails.js';
 import { STUCK_REASON, publishErrorHe } from '../publish/errors.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
+import { draftMissed } from '../publish/index.js';
 import { CATALOG } from '../sources/catalog.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
@@ -497,7 +498,8 @@ ${factsBlock(ctx, post)}
 /** The banners that stop the engine: the kill switch, a paused account, an account that got every post of its month. */
 function stopBanners(ctx, d) {
   const out = [];
-  if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${ctx.operator ? postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } }) : ''}</div>`);
+  // The operator's stop for everything: the operator reads the switch they turned on, a customer what it means for them.
+  if (ctx.globalKill) out.push(ctx.operator ? `<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>` : `<div class="banner warn">${icon('power')}<div><b>${esc(GLOBAL_KILL_HE)}.</b><p>אנחנו מטפלים בזה ונעדכן.</p></div></div>`);
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${withSupport(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     // The plan counts the posts the customer got (src/budget/quota.js): all of them is the month kept, said as such.
@@ -523,6 +525,8 @@ export function needsYou(d, max = 6, ctx = {}) {
   // A post that did not go out comes first: it can be sent again from its page.
   for (const g of d.groups) {
     for (const p of g.failed || []) rows.push({ href: `/post/${p.id}`, ic: 'alert', bad: true, title: p.hook || p.topic || 'מצגת', sub: `${g.pack.meta.displayName} · לא עלתה · אפשר לנסות שוב` });
+    // Out elsewhere while its TikTok draft did not take (src/publish/index.js draftMissed): its page sends the draft again.
+    for (const p of g.tiktokMissed || []) rows.push({ href: `/post/${p.id}`, ic: 'alert', bad: true, title: p.hook || 'מצגת', sub: `${g.pack.meta.displayName} · הטיוטה לא הגיעה לטיקטוק · אפשר לשלוח שוב` });
   }
   // A TikTok post that went out twice, or whose automatic post failed, comes next; then a draft waiting for you.
   for (const g of d.groups) {
@@ -733,6 +737,12 @@ function tiktokDraftBanners(ctx, post) {
   // What went wrong, in Hebrew for a customer (src/publish/errors.js): Zernio's own words ("Zernio 502: upstream TikTok
   // API timeout") are the operator's to read.
   else if (tk?.error && post.status === 'approved') out.push(`<div class="banner warn">${icon('alert')}<div><b>הטיוטה לא הגיעה לטיקטוק</b><p>${esc(ctx.operator || ctx.dev ? tk.error : publishErrorHe({ code: tk.code, message: tk.error }, 'tiktok'))}</p><p>${(Number(tk.tries) || 0) < 3 ? 'עוד ניסיון בדקות הקרובות, ולכל המאוחר בשעה של הפוסט.' : 'עוד ניסיון אחד בשעה של הפוסט.'}</p></div></div>`);
+  // Out on the other platforms while the TikTok draft did not take at the slot (src/publish/index.js draftMissed): said,
+  // with the way to send the draft alone again.
+  else if (post.status === 'published' && draftMissed(post)) {
+    const on = ['instagram', 'facebook'].filter((p) => post.publish?.[p] && !post.publish[p].error && !post.publish[p].skipped).map((p) => PLATFORM_HE[p]);
+    out.push(`<div class="banner warn">${icon('alert')}<div><b>הטיוטה לא הגיעה לטיקטוק</b><p>${esc(ctx.operator || ctx.dev ? tk.error : publishErrorHe({ code: tk.code, message: tk.error }, 'tiktok'))}</p>${on.length ? `<p>${esc(`ב${on.join(' וב')} המצגת עלתה. אפשר לשלוח את הטיוטה לטיקטוק שוב.`)}</p>` : ''}</div>${postButton(ctx, `/post/${post.id}/publish-again`, 'לשלוח שוב לטיקטוק', { cls: 'btn sm primary' })}</div>`);
+  }
   const old = post.publish?.oldDrafts || [];
   if (old.length) out.push(`<div class="banner warn">${icon('alert')}<div><b>${old.length === 1 ? 'טיוטה ישנה של הפוסט הזה נמצאת' : `${old.length} טיוטות ישנות של הפוסט הזה נמצאות`} בתיבת הטיוטות של טיקטוק</b><p>מחקו ${old.length === 1 ? 'אותה' : 'אותן'} באפליקציה, כדי ש${old.length === 1 ? 'היא לא תפורסם' : 'הן לא יפורסמו'} בטעות.</p></div>${postButton(ctx, `/post/${post.id}/old-drafts-deleted`, 'מחקתי', { cls: 'btn sm' })}</div>`);
   return out.join('');

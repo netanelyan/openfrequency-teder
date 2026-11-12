@@ -12,7 +12,7 @@ import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { lockStyle } from '../render/style.js';
 import { canRun, isCustomerAccount, mayResume, pauseAccount, resumeAccount } from '../autonomy/rails.js';
-import { blockForClosing, closingRecheck, publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
+import { blockForClosing, closingRecheck, draftMissed, publishPost, retireDraft, sendDraft, tiktokModeFor } from '../publish/index.js';
 import { CLOSING_HE } from '../publish/errors.js';
 import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
@@ -281,16 +281,42 @@ export function oldDraftsDeleted(ctx, user, { id }) {
  */
 const writtenHe = (user) => (ours(user) ? 'נכתב לדיסק בפרסום יבש, ושום דבר לא נשלח לרשתות.' : 'המצגת לא נשלחה. הפרסום אצלנו כבוי כרגע, אז שמרנו אותה ולא שלחנו אותה לרשתות.');
 
+/** Said for a post held for a connection (src/publish/hold.js): any of the networks, Facebook too. */
+const HELD_HE = 'הפוסט מחכה לחיבור לרשתות. מחברים מדף החשבון.';
+/** Said when a platform asked to wait and the post is sent again by itself (src/publish/index.js retry). */
+const LATER_HE = 'הפלטפורמה ביקשה לחכות. ננסה שוב לבד בדקות הקרובות.';
+/** The networks a post is out on now, by their names, and where its TikTok part stands: what "פורסם" says. */
+function outHe(post) {
+  const names = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
+  const r = post?.publish || {};
+  const out = Object.keys(names).filter((p) => p !== 'tiktok' && r[p] && !r[p].error && !r[p].skipped && (r[p].status === 'published' || r[p].zernioId || r[p].mediaId || r[p].pending));
+  if (!out.length) return 'פורסם.';
+  const where = `פורסם ב${out.map((p) => names[p]).join(' וב')}.`;
+  if (r.tiktok?.flow) return `${where} בטיקטוק הטיוטה מחכה באפליקציה.`;
+  if (draftMissed(post)) return `${where} הטיוטה לא הגיעה לטיקטוק, ואפשר לשלוח אותה שוב מדף הפוסט.`;
+  return where;
+}
+/** A send refused because the account is paused: who lifts it, and then to try again (it read the pause's name). */
+const pausedHe = (ctx, user, accountId) =>
+  ctx.db.get('SELECT status FROM accounts WHERE id = ?', accountId)?.status !== 'paused'
+    ? null
+    : mayResume(ctx.db, accountId, { operator: user.operator })
+      ? 'החשבון מושהה. מפעילים אותו מחדש בדף החשבון, ואז מנסים שוב.'
+      : 'החשבון מושהה, ואותו מפעילים מחדש רק אנחנו. כתבו לנו ונבדוק יחד מה קרה.';
+
 export async function publishNow(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   // Held for a connection (src/publish/hold.js): it goes out by itself once TikTok or Instagram is connected.
-  if (post.status === 'held') throw new ActionError(post.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.');
+  if (post.status === 'held') throw new ActionError(post.reason || HELD_HE);
   try {
     const r = await publishPost(engineOf(ctx), id);
     audit(ctx.db, { actor: user.name, action: 'publish_now', accountId: post.account_id, postId: id, detail: { via: r.via, ok: r.ok } });
-    if (r.held) return { ok: false, message: loadPost(ctx.db, id)?.reason || 'הפוסט מחכה לחיבור של טיקטוק או אינסטגרם.' };
-    const drafted = loadPost(ctx.db, id)?.status === 'drafted';
-    return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? writtenHe(user) : drafted ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט, ואפשר לנסות שוב משם.' };
+    const after = loadPost(ctx.db, id);
+    if (r.held) return { ok: false, message: after?.reason || HELD_HE };
+    const drafted = after?.status === 'drafted';
+    // A platform that asked to wait is tried again by itself: "הפרסום נכשל" said otherwise, with no button to press.
+    if (!r.ok) return { ok: false, message: r.retry ? LATER_HE : 'הפרסום נכשל. הסיבה בדף הפוסט, ואפשר לנסות שוב משם.' };
+    return { ok: true, message: r.via === 'dry' ? writtenHe(user) : drafted ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : outHe(after) };
   } catch (e) {
     // The publisher's own words go to the log; the customer reads them in Hebrew (src/publish/errors.js).
     console.error(`[publish-now] ${id}: ${e?.message || e}`);
@@ -307,20 +333,26 @@ export async function publishNow(ctx, user, { id }) {
  */
 export async function retryPublish(ctx, user, { id }) {
   const post = mustPost(ctx, id);
-  if (post.status !== 'failed') throw new ActionError('אפשר לנסות שוב רק מצגת שלא עלתה.');
-  ctx.db.update('posts', id, { status: 'approved', reason: null, updated_at: nowIso() });
-  audit(ctx.db, { actor: user.name, action: 'publish_again', accountId: post.account_id, postId: id, detail: via(user) });
+  // Out on Instagram and Facebook while its TikTok draft did not take (src/publish/index.js): the draft alone goes
+  // again, since publishPost sends only what is not out.
+  const draftOnly = post.status === 'published' && draftMissed(post);
+  if (post.status !== 'failed' && !draftOnly) throw new ActionError('אפשר לנסות שוב רק מצגת שלא עלתה.');
+  ctx.db.update('posts', id, { status: 'approved', reason: draftOnly ? post.reason : null, updated_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'publish_again', accountId: post.account_id, postId: id, detail: via(user, draftOnly ? { tiktokDraft: true } : null) });
   try {
     const r = await publishPost(engineOf(ctx), id);
     const after = loadPost(ctx.db, id);
-    if (r.held) return { ok: false, message: after?.reason || 'המצגת מחכה לחיבור של טיקטוק או אינסטגרם.' };
-    if (!r.ok) return { ok: false, message: after?.status === 'approved' ? 'הפלטפורמה ביקשה לחכות. ננסה שוב לבד בדקות הקרובות.' : 'גם הפעם זה לא עלה. הסיבה בדף המצגת.' };
+    if (draftOnly) return after?.publish?.tiktok?.flow ? { ok: true, message: 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' } : { ok: false, message: 'גם הפעם הטיוטה לא הגיעה לטיקטוק. הסיבה בדף הפוסט.' };
+    if (r.held) return { ok: false, message: after?.reason || HELD_HE };
+    if (!r.ok) return { ok: false, message: after?.status === 'approved' ? LATER_HE : 'גם הפעם זה לא עלה. הסיבה בדף המצגת.' };
     return { ok: true, message: r.via === 'dry' ? writtenHe(user) : after?.status === 'drafted' ? 'הטיוטה נשלחה לטיקטוק. מפרסמים אותה מהאפליקציה.' : 'המצגת עלתה.' };
   } catch (e) {
     // Refused before anything was sent: back where it was, with the reason in Hebrew. A failed fact check has blocked it.
-    if (loadPost(ctx.db, id)?.status === 'approved') ctx.db.update('posts', id, { status: 'failed', reason: publishErrorHe(e), updated_at: nowIso() });
+    // A pause keeps the post's own reason (it was replaced by the pause's name) and says who lifts it.
+    const paused = e?.code === 'paused' ? pausedHe(ctx, user, post.account_id) : null;
+    if (loadPost(ctx.db, id)?.status === 'approved') ctx.db.update('posts', id, { status: draftOnly ? 'published' : 'failed', reason: draftOnly || paused ? post.reason : publishErrorHe(e), updated_at: nowIso() });
     console.error(`[publish-again] ${id}: ${e?.message || e}`);
-    throw new ActionError(ours(user) ? `לא נשלח: ${e.message}` : publishErrorHe(e));
+    throw new ActionError(ours(user) ? `לא נשלח: ${e.message}` : paused || publishErrorHe(e));
   }
 }
 

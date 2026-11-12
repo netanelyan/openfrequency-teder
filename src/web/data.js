@@ -15,7 +15,7 @@ import { MECHANISMS, speakerOf, templatesFor, voiced } from '../formats/hooks.js
 import { hookPatterns, kindOf } from '../formats/kinds.js';
 import { takedowns } from '../publish/takedown.js';
 import { engineMode } from '../engine.js';
-import { publisherFor, tiktokMode, wantedPublisher } from '../publish/index.js';
+import { draftMissed, publisherFor, tiktokMode, wantedPublisher } from '../publish/index.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { igConfig, instagramConfigured } from '../publish/instagram.js';
 import { getSetting } from '../core/store.js';
@@ -124,6 +124,11 @@ export function today(ctx, t = now()) {
         .all("SELECT id, hook, slot_at, published_at, publish_json FROM posts WHERE account_id = ? AND publish_json LIKE '%\"flow\"%' AND published_at >= ? ORDER BY published_at DESC", id, new Date(t - 36 * 3_600_000).toISOString())
         .filter((p) => ctx.workspaceId == null || j(p.publish_json, {}).tiktok?.via !== 'dry')
         .map((p) => ({ id: p.id, hook: p.hook, slotAt: p.slot_at || p.published_at, flow: j(p.publish_json, {}).tiktok?.flow || {} })),
+      // Out on the other platforms in the last day and a half while the TikTok draft did not take (src/publish/index.js
+      // draftMissed): each is a line under "מחכה לכם", to send the draft again from its page.
+      tiktokMissed: ctx.db
+        .all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND json_extract(publish_json, '$.tiktok.error') IS NOT NULL ORDER BY published_at DESC", id, new Date(t - 36 * 3_600_000).toISOString())
+        .filter((p) => draftMissed({ publish: j(p.publish_json, {}) })),
     };
   });
   const overall = ctx.db.get('SELECT * FROM summaries WHERE account_id IS NULL ORDER BY day DESC LIMIT 1');

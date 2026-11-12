@@ -19,6 +19,7 @@ import { approvedByPerson, canRun, isCustomerAccount, pauseAccount, publishError
 import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured, zernioPostState } from './zernio.js';
 import { assignSound } from '../pipeline/sounds.js';
 import { notify } from '../notify/index.js';
+import { alertOperator } from '../notify/operator.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
 import { zernioAccountId } from './connect.js';
 import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
@@ -26,6 +27,9 @@ import { heldReason, needsConnection } from './hold.js';
 import { CLOSING_HE, FACT_CHECK_HE, publishErrorHe, retryingHe } from './errors.js';
 import { storedClosingProblems } from '../pipeline/closing.js';
 import { mediaOf } from '../core/platforms.js';
+
+/** The platforms by their Hebrew names, for what the owner is told. */
+const PLATFORM_NAME_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם', facebook: 'פייסבוק' };
 
 // Publishing one approved post, through the rails, to each of its pack's
 // platforms, each by the publisher the pack names for it:
@@ -242,7 +246,8 @@ function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', be
   if (rest) throw new PublishRefused(`${rest}: לא מפרסמים עכשיו`, 'shabbat');
   const run = canRun(db, pack.id);
   if (!run.ok) throw new PublishRefused(run.why, 'paused');
-  if (post.status !== 'approved') throw new PublishRefused(`the post is ${post.status}, not approved`, 'not_approved');
+  // One the runner is sending right now is on its way, not taken back: said so (it read "כבר לא מאושרת").
+  if (post.status !== 'approved') throw new PublishRefused(`the post is ${post.status}, not approved`, post.status === 'publishing' ? 'in_flight' : 'not_approved');
   // A photograph the screen could not clear waits for a person to look at it: every one on the post, not only the cover's.
   if (waitingImages(db, post).length) throw new PublishRefused('התמונה מחכה לבדיקה של אדם (דם, פציעה, סימן מים): אשרו אותה בדף הפוסט', 'image_review');
 
@@ -267,6 +272,15 @@ function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', be
     if (n > MAX_HASHTAGS) throw new PublishRefused(`${n} hashtags in the ${platform} caption: ${MAX_HASHTAGS} at most`, 'hashtags');
   }
 }
+
+/**
+ * A post out elsewhere whose TikTok draft did not take (publishPost records it and sends the other platforms): its page
+ * says so and offers to send the draft again (src/web/actions.js retryPublish).
+ */
+export const draftMissed = (post) => {
+  const tk = post?.publish?.tiktok;
+  return Boolean(tk?.error) && !tk.flow && !tk.uploading;
+};
 
 /** A platform's part that is out, or a draft in the app: never sent again. */
 const done = (r) => r && !r.error && (r.status === 'published' || r.status === 'written' || r.pending || r.zernioId || r.mediaId || r.flow);
@@ -357,6 +371,8 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   let drafted = null;
   let failed = null;
   let failedOn = null;
+  // A TikTok draft that did not take (below): the post's other platforms still go.
+  let draftFailed = null;
   const vias = {};
   // The post's TikTok mode, once: a customer's is draft-now, and only a post a person approved goes direct.
   const mode = tiktokModeFor(db, pack, post);
@@ -430,12 +446,26 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
       // A post Zernio took keeps its id, and every send its round and when it went: a retry settles them first
       // (settled). A draft's id is never a post that is out, and is not kept.
       results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null, zernioId: asDraft ? null : e.zernioId || results[platform]?.zernioId || null };
+      ctx.log?.(`[publish] ${postId} ${platform} via ${via}: ${e.message}`);
+      // A TikTok draft is an inbox item for the owner, never a post half out: one that did not take is recorded, and
+      // the post's other platforms still go. A customer's pack lists TikTok first, so a draft that failed again at the
+      // slot left Instagram and Facebook unsent, and three of them in a row paused the account (the audit, 2026-11-12,
+      // P1-16). Nothing else out, it fails below as any send does.
+      if (asDraft) {
+        draftFailed = e;
+        continue;
+      }
       failed = e;
       failedOn = platform;
-      ctx.log?.(`[publish] ${postId} ${platform} via ${via}: ${e.message}`);
       break; // a platform that might have half-posted is never retried blind; stop here and report
     }
     if (asDraft && mode === 'draft-fallback') drafted = flow;
+  }
+
+  // The TikTok draft did not take and nothing of the post is out anywhere: it failed, as any send that failed.
+  if (draftFailed && !failed && !pack.meta.platforms.some((p) => isOut(results[p]))) {
+    failed = draftFailed;
+    failedOn = 'tiktok';
   }
 
   // An Instagram throttle, or a container still processing, clears by itself: try
@@ -475,9 +505,19 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   if (failed && !retry) {
     // What the customer reads on the paused account is Hebrew; the publisher's own words are in the post's steps.
     const he = publishErrorHe(failed, failedOn);
-    if (isStrike(failed) || isRefusal(failed)) pauseAccount(db, pack.id, 'strike', he);
-    else if (isTokenProblem(failed)) pauseAccount(db, pack.id, 'publish_errors', he);
+    if (isStrike(failed) || isRefusal(failed)) {
+      pauseAccount(db, pack.id, 'strike', he);
+      // A pause only the operator lifts, whose email tells the customer "אנחנו בודקים מה קרה ונחזור אליכם"
+      // (src/notify/email.js): the operator hears of it now. Nobody did (the audit, 2026-11-12, P1-18).
+      await alertOperator(ctx, `paused:strike:${pack.id}`, { title: `Teder: ${pack.meta.displayName || pack.id} is paused: ${failedOn || 'a platform'} refused a post`, body: `${String(failed.message || '').slice(0, 300)}. Only we can resume it, and the customer was told we will get back to them. /post/${postId}` }).catch((e) => ctx.log?.(`[alert] ${e.message}`));
+    } else if (isTokenProblem(failed)) pauseAccount(db, pack.id, 'publish_errors', he);
     else if (publishErrorStreak(db, pack.id) >= Number(settings(db).publishErrorStreak || 3)) pauseAccount(db, pack.id, 'publish_errors', he);
+  }
+  // Out on the other platforms while the TikTok draft did not take: the owner hears that, and the post's page offers
+  // to send the draft again.
+  if (draftFailed && ok) {
+    const out = pack.meta.platforms.filter((p) => p !== 'tiktok' && isOut(results[p])).map((p) => PLATFORM_NAME_HE[p] || p);
+    await notify(ctx, { accountId: pack.id, postId, kind: 'draft_failed', title: `${pack.meta.displayName}: הטיוטה לא הגיעה לטיקטוק`, body: [oneLine(post.hook), publishErrorHe(draftFailed, 'tiktok'), out.length ? `ב${out.join(' וב')} המצגת עלתה.` : ''].filter(Boolean).join('\n'), url: `/post/${postId}` }).catch((e) => ctx.log?.(`notify ${postId}: ${e.message}`));
   }
   // The owner is told the draft is waiting, and which sound to add.
   if (drafted) {

@@ -163,7 +163,7 @@ test('approval taken back after the draft went: the owner is told to delete it i
     assert.equal((await approve(ctx, owner, { id }).job).state, 'drafted', 'a new approval, a new draft');
     post = loadPost(db, id);
     assert.equal(post.publish.oldDrafts.length, 1);
-    assert.match(postPage({ csrf: 'x' }, { post, pack, steps: [], metrics: [], takedowns: [] }), /טיקטוק: בטיוטות של טיקטוק[\s\S]*תזכורת ב-12:45/);
+    assert.match(postPage({ csrf: 'x' }, { post, pack, steps: [], metrics: [], takedowns: [] }), /<b>הטיוטה בתיבת הטיוטות בטיקטוק<\/b>[\s\S]*תזכורת ב-12:45/);
     oldDraftsDeleted(ctx, owner, { id });
     assert.equal(loadPost(db, id).publish.oldDrafts, undefined);
 
