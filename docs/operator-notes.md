@@ -299,7 +299,8 @@ says which keys are set without showing them.
   after activating, and a search or another round is refused with the same words. The step that crosses the cap
   finishes, so a workspace costs at most the cap and one sample (about $0.16, $0.40 at the very worst). Not a month's
   allowance: it is not renewed. The per-workspace limits on rounds of samples (two a new account, six a month) stand
-  as they are. Where $3.50 comes from: docs/costs.md, "Setting up before paying".
+  as they are. The cap is $5 since 2026-11-12 ($7 the day before, $3.50 on Sonnet); where it comes from: docs/costs.md,
+  "Setting up before paying".
 - **Where it shows.** `settings`, key `setup-spend:<workspace>` = { usd, calls, at }: what the workspace's setup spent
   while it had not paid. The log says "[onboarding] ... stopped before try N: the setup of a workspace that has not paid
   reached its cap". A workspace that pays (paid, comp or due), one of ours and the operator are never counted or

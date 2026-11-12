@@ -168,7 +168,11 @@ Message Batches price; the samples are direct calls, which cost twice that, **ab
 $0.16 a try** ($0.15 to $0.17). At the measured pass rate (79 of 147, 54%) five
 samples take about nine tries, so a round normally uses all nine of SAMPLE_ATTEMPTS.
 
-**Since 2026-11-11, $7.** The writing is on Opus (*Opus writes*, above), and a sample is
+**Since 2026-11-12, $5.** The owner asked for "a bit less" than $7: $5 is one normal setup on
+Opus (about $3.40) and about half a round more, four or five samples, or a search again
+(`UNPAID_SETUP_USD`; `OF_UNPAID_SETUP_USD=7` brings back the day before's number).
+
+**On 2026-11-11, $7.** The writing is on Opus (*Opus writes*, above), and a sample is
 written as any slideshow is, at the direct price: about $0.35 a try, $3.15 a round of
 nine; the search for sources about $0.14 (Opus scores them), the account about $0.08.
 One normal setup is about $3.40, and the cap keeps what it was for: one normal setup,

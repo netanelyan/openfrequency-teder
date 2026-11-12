@@ -15,15 +15,15 @@ import { customerWorkspace } from './own.js';
 // as they are (src/web/onboarding.js SAMPLE_ROUNDS: two rounds a new account, six a month); this is a lower ceiling over
 // all of it, in dollars, while the workspace has not paid.
 //
-// THE CAP. UNPAID_SETUP_USD, $7 a workspace, for as long as it has not paid (not a month: it is not renewed), or
+// THE CAP. UNPAID_SETUP_USD, $5 a workspace, for as long as it has not paid (not a month: it is not renewed), or
 // OF_UNPAID_SETUP_USD in the environment. Where the number comes from (docs/costs.md, "Setting up before paying"): one
 // normal setup and one more full round of samples, with a little left for searching again. On Sonnet that was $3.50
 // (2026-11-02): a setup about $1.50, a round of samples (nine builds at most, about $0.16 each at the API's direct
 // price) about $1.44. The writing moved to Claude Opus 5.5 on 2026-11-11 (the owner: "make sure toran and teder ai are
 // smart. even if a slideshow gets to 0.5$"; src/llm/index.js), and a sample is written as any slideshow is, so each costs
 // about twice that: a setup is about $3.40 (a search about $0.14 with the sources scored on Opus, the account about
-// $0.08, a round of samples about $3.15 at $0.35 a build), and $7 is that, one more round and about $0.50 for searching
-// again. The cap is weighed before each paid step (a search, creating the account, each sample), so the step that
+// $0.08, a round of samples about $3.15 at $0.35 a build). It was $7 for one more full round; the owner asked for "a bit
+// less" (2026-11-12), so $5 is one setup and about half a round more (four or five samples), or a search again. The cap is weighed before each paid step (a search, creating the account, each sample), so the step that
 // crosses it finishes and nothing starts after it: at most one sample past it.
 //
 // WHAT IS COUNTED is what the ledger records (src/budget/ledger.js record) inside the setup's work, through a meter that
@@ -33,7 +33,7 @@ import { customerWorkspace } from './own.js';
 // operator, one of our own workspaces (src/billing/own.js) or an account in no workspace.
 
 /** The most the setup of a workspace that has not paid may spend, in dollars, unless OF_UNPAID_SETUP_USD says otherwise. */
-export const UNPAID_SETUP_USD = 7;
+export const UNPAID_SETUP_USD = 5;
 
 /** The cap in force: OF_UNPAID_SETUP_USD when it is a number of dollars from 0, else UNPAID_SETUP_USD. Read at every call. */
 export function setupCapUsd(env = process.env) {

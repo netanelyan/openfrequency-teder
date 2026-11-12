@@ -3243,3 +3243,10 @@ the 50% stop with drafting refused and publishing going on, the backstop, onboar
 refused calmly, the Today line, the owners' email once and never for a lift, the lift and its audit, our own
 workspaces never weighed, the month rolling over, the model defaults), the entitlement client in test/capacity.test.js,
 the setup cap in test/setup-before-pay.test.js, what a deleted workspace leaves in test/workspace-delete.test.js.
+
+## 2026-11-12: the setup before paying is capped at $5
+
+The owner, on the $7 cap of 2026-11-11: "maybe a bit less". `UNPAID_SETUP_USD` is $5: one normal setup on Opus
+(about $3.40) and about half a round of samples more, or a search again. A workspace that has not paid costs at most
+the cap and one sample. `OF_UNPAID_SETUP_USD` still changes it on the server (src/billing/setup-cap.js; tested in
+test/setup-before-pay.test.js).

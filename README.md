@@ -208,7 +208,7 @@ Teder asks accounts three more things, on `OF_ACCOUNTS_INTERNAL` (default
   except the new-account flow up to its samples and the Sources page (`src/web/server.js` `SETUP_OPEN`): a
   customer who signed up sets the account up and sees its samples before paying, and the
   paywall shows those samples ("המצגות שלכם מוכנות, נשאר רק להפעיל"); going live and
-  connecting stay behind it. What that setup may spend before paying is capped at $3.50 a
+  connecting stay behind it. What that setup may spend before paying is capped at $5 a
   workspace (`src/billing/setup-cap.js`, `OF_UNPAID_SETUP_USD`). The operator, and the
   operator viewing as the customer, never see the paywall. The paywall has "בדקו שוב", a
   plain form (`POST /paywall/check`, CSRF and Origin checked, no script needed): accounts
