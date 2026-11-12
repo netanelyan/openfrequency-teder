@@ -1423,13 +1423,15 @@ export function sourcesPage(ctx, { packs, current, sources, deeper = '', form = 
   const more = ctx.unpaid ? '' : `<span class="end m-hide"><a class="btn sm" href="/topics">${icon('spark')}נושאים</a><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span>`;
   // On a phone the two are rows at the foot of the page, after the sources and the way to add one.
   const moreRows = ctx.unpaid ? '' : `<nav class="list m-only mlinks" aria-label="עוד במקורות">${navRow('/topics', 'spark', 'נושאים')}${navRow(`/facts?account=${esc(current.id)}`, 'shield', 'עובדות שנבדקו ביד')}</nav>`;
-  // What is true of the sources (the audit, 2026-11-12, P1-11): every fact on a slide is quoted word for word from an
-  // approved source's document, and some of them Teder adds itself (Wikipedia, strong sources found while the samples
-  // were written, and general knowledge when the sources are thin, src/sources/model.js), marked on their cards. It said
-  // "רק מקור מאושר יכול לתמוך בעובדה" and "only after you approve it", and showed Teder's own as "אושר <date>".
+  // What is true of the sources (the audit, 2026-11-12, P1-11): a fact from a source is quoted word for word from its
+  // document, and some of the sources Teder adds itself (Wikipedia, strong sources found while the samples were
+  // written), marked on their cards. When the sources are thin it writes from general knowledge (src/sources/model.js),
+  // which nobody checked against a source, so "every fact on a slide is quoted" is not said: such a fact is marked as
+  // the post page marks it (UNSOURCED_HE). It said "רק מקור מאושר יכול לתמוך בעובדה" and "only after you approve it",
+  // and showed Teder's own as "אושר <date>".
   const body = `<div class="head"><h1>מקורות</h1><span class="sub">מכאן תדר לוקח את העובדות</span>${more}</div>
 ${tabs}
-<p class="lede m-hide">כל עובדה בשקף מצוטטת מילה במילה ממסמך של מקור מאושר. חלק מהמקורות תדר מוסיף בעצמו, כמו ויקיפדיה, וכשאין מספיק במקורות הוא נעזר בידע כללי, ואז הפוסט מסומן "כדאי לבדוק". מקור שמסירים כאן לא ישמש פוסטים שעוד לא עלו.</p>
+<p class="lede m-hide">כל עובדה ממקור מגיעה עם ציטוט מילה במילה ממנו. חלק מהמקורות תדר מוסיף בעצמו, כמו ויקיפדיה. כשאין מספיק במקורות, תדר נעזר בידע כללי, ועובדה כזו מסומנת "${esc(UNSOURCED_HE)}". מקור שמסירים כאן לא ישמש פוסטים שעוד לא עלו.</p>
 ${deeper}
 <div class="cols"><div class="grid12">${list || `<div class="empty"><b>אין מקורות</b></div>`}</div>
 ${fold('add', 'הוספת מקור', `<section class="panel"><header><h2>הוספת מקור</h2></header>

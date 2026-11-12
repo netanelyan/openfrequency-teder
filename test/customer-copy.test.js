@@ -139,7 +139,9 @@ test('the Sources page says who adds a source, and Teder\'s own are marked as Te
   const html = sourcesPage({ csrf: 'x' }, { packs: [ctx.pack('demo')], current: ctx.pack('demo'), sources });
   assert.match(html, /<span class="sub">מכאן תדר לוקח את העובדות<\/span>/);
   assert.match(html, /חלק מהמקורות תדר מוסיף בעצמו, כמו ויקיפדיה/);
-  assert.doesNotMatch(html, /רק מקור מאושר יכול לתמוך בעובדה|ידע כללי של המודל|שהמודל מכיר|יופיע ליד כל עובדה/);
+  // General knowledge has no quote: the lede says a fact from a source has one, and how the others are marked.
+  assert.match(html, /כל עובדה ממקור מגיעה עם ציטוט מילה במילה ממנו\..*ועובדה כזו מסומנת "בלי מקור, כדאי לבדוק"\./);
+  assert.doesNotMatch(html, /רק מקור מאושר יכול לתמוך בעובדה|ידע כללי של המודל|שהמודל מכיר|יופיע ליד כל עובדה|כל עובדה בשקף מצוטטת/);
   assert.ok(html.includes(MODEL_WHY.replace(/"/g, '&quot;')), 'the general knowledge says what it is, in words a customer reads');
   assert.equal((html.match(/נוסף על ידי תדר/g) || []).length, 3, "general knowledge, Wikipedia and the round's find");
   assert.equal((html.match(/אושר 1 בנוב׳/g) || []).length, 1, 'the one the customer chose');
