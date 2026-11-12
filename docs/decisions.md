@@ -3177,6 +3177,14 @@ photograph searched again: Sonnet, daily). The photograph screen stays on Haiku,
   and `askJson` refuses any call left for the account (the backstop). The customer reads one calm line on Today, Posts
   and /all: "כרגע לא נכתבות מצגות חדשות, ואנחנו כבר מטפלים בזה. מה שכבר אישרתם עולה בזמן, כרגיל." No cost and no share,
   ever: what it costs us is developer mode's (2026-11-10).
+- *The owners hear it once by email* (the website's terms and FAQ promise, for both products, that when very unusual use
+  beyond the plan pauses the AI until the next month, "אנחנו מודיעים לכם"). When the stop starts, the email pass
+  (src/notify/email.js, kind `ai_paused`) sends accounts one notice, once that month and only while the stop lasts: a
+  lift before it went, and it does not go. Accounts sends a notice to every owner whatever they chose and to no member,
+  and never offers it on /notifications (its NOTICES_OF, docs/contracts/notify.json); Teder's Settings never offers it
+  either. Its words, calm, with no cost and no share: "מצגות חדשות לא נכתבות כרגע בתדר", what stopped and why as the
+  terms say it, that what is approved still goes out and nothing is theirs to do, that we are on it, and the 1st of the
+  next month as the latest day it resumes. Nothing is sent when the operator lifts it: the Today line goes away.
 - *The lift.* The operator may let the workspace's AI go on for the rest of the month: Settings in developer mode, the
   panel "עלות ה-AI מול התשלום" (each customer's cost this month in ₪ and dollars, what it pays, the share, where it
   stands), the button "לפתוח עד סוף החודש" beside a stopped one (POST /settings/ai-share/<workspace>/lift, the
@@ -3195,5 +3203,6 @@ photograph searched again: Sonnet, daily). The photograph screen stays on Haiku,
 
 Tests: test/ai-share.test.js (the cost summed per workspace and month, the base and its fallbacks, the 30% alert once,
 the 50% stop with drafting refused and publishing going on, the backstop, onboarding, a light edit and the redo
-refused calmly, the Today line, the lift and its audit, our own workspaces never weighed, the month rolling over, the
-model defaults), the entitlement client in test/capacity.test.js, the setup cap in test/setup-before-pay.test.js.
+refused calmly, the Today line, the owners' email once and never for a lift, the lift and its audit, our own
+workspaces never weighed, the month rolling over, the model defaults), the entitlement client in test/capacity.test.js,
+the setup cap in test/setup-before-pay.test.js, what a deleted workspace leaves in test/workspace-delete.test.js.

@@ -563,10 +563,14 @@ says which keys are set without showing them.
   ..."): nothing new is drafted for its accounts, no redo, no sample, no step of a new account's setup, no light
   edit's text check (a photo swap or a removed slide still work), and posts already approved still go out. The
   customer reads one line on Today, Posts and /all: "כרגע לא נכתבות מצגות חדשות, ואנחנו כבר מטפלים בזה. מה שכבר
-  אישרתם עולה בזמן, כרגיל." No cost and no share are ever shown to them.
+  אישרתם עולה בזמן, כרגיל." No cost and no share are ever shown to them. Its owners also get one email when it starts
+  ("מצגות חדשות לא נכתבות כרגע בתדר": what stopped and why, as the terms say it, that what is approved goes out, that we
+  are on it, and the 1st of the next month as the latest it resumes), sent through accounts as a notice, so it reaches
+  every owner whatever they chose (accounts' NOTICES_OF). The website's terms and FAQ promise it.
 - **To let it go on** for the rest of the month: Settings in developer mode (under /admin/teder), "עלות ה-AI מול
   התשלום", the button "לפתוח עד סוף החודש" beside the customer. It is audited (`ai_stop_lifted`, with who and the share
-  then), and the next month starts with no alert, no stop and no lift. A customer that moves to a dearer plan
+  then), and nothing is emailed for it: the line on their pages goes away. The next month starts with no alert, no stop
+  and no lift. A customer that moves to a dearer plan
   mid-month weighs against the new price at once.
 - **What to check.** `journalctl -u openfrequency | grep ai-share` for each line said, and the panel for where every
   customer stands. A normal month is far below 30%: about $20 for a full plan of 40 and 10, 65 ₪ of 790 (docs/costs.md).

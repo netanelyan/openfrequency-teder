@@ -205,7 +205,8 @@ export async function fakeAccounts() {
       const b = JSON.parse(raw.toString('utf8'));
       // The checks accounts makes, a code per bad field.
       if (typeof b.workspace !== 'number') return out(400, { error: 'bad_workspace' });
-      if (!['posts_waiting', 'weekly', 'monthly', 'connect_needed', 'publish_failed'].includes(b.kind)) return out(400, { error: 'bad_kind' });
+      // Teder's five kinds, and the notice ai_paused (accounts' NOTICES_OF), which reaches the owners whatever they chose.
+      if (!['posts_waiting', 'weekly', 'monthly', 'connect_needed', 'publish_failed', 'ai_paused'].includes(b.kind)) return out(400, { error: 'bad_kind' });
       if (typeof b.subject !== 'string' || !b.subject || b.subject.length > 200) return out(400, { error: 'bad_subject' });
       if (typeof b.text !== 'string' || !b.text || b.text.length > 5000) return out(400, { error: 'bad_text' });
       let link;

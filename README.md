@@ -682,8 +682,9 @@ Settings, never a sum of money.
   against what accounts says a month costs it before VAT (`monthlyIls`). At 30% the
   operator hears it (the log, `/all`, their WhatsApp through Toran), once a month; at
   50% nothing new is drafted for it, no redo, no sample, no step of a new account, no
-  light edit's check, until the next month, while what is approved still goes out, and
-  the customer reads one calm line on Today. The operator can let it go on for the rest
+  light edit's check, until the next month, while what is approved still goes out; the
+  customer reads one calm line on Today, and its owners get one email, as the terms
+  promise (a notice through accounts). The operator can let it go on for the rest
   of the month in Settings (developer mode), audited. The company's own workspaces are
   never weighed.
 - **The other stops** are not about money: the kill switch per account and the

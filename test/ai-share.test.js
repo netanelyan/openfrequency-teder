@@ -25,6 +25,7 @@ import { forWorkspace } from '../src/web/workspace.js';
 import { nicheInEnglish } from '../src/onboarding/discover.js';
 import { writeScenes } from '../src/images/scenes.js';
 import { SCREEN_EFFORT, SCREEN_MAX_TOKENS } from '../src/images/safety.js';
+import { EMAIL_KINDS, emailTick, NOTICE_KINDS, notifyClient, setEmailPrefs } from '../src/notify/email.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { closeBrowser } from '../src/render/render.js';
 import { fakeAccounts, opened, tempHome } from './helpers.js';
@@ -89,7 +90,7 @@ after(async () => {
 beforeEach(() => {
   setNow(NOW);
   db.run('DELETE FROM spend');
-  db.run("DELETE FROM settings WHERE key LIKE 'ai-share:%' OR key LIKE 'alert:%' OR key LIKE 'entitlement:%'");
+  db.run("DELETE FROM settings WHERE key LIKE 'ai-share:%' OR key LIKE 'alert:%' OR key LIKE 'entitlement:%' OR key LIKE 'email:%'");
   delete process.env.OF_OWN_WORKSPACES;
   delete process.env.USD_ILS;
 });
@@ -368,7 +369,7 @@ test('the lift: the operator lets it go on for the rest of the month, audited; n
   assert.throws(() => lift(ctx, operatorUser, re.exec('/settings/ai-share/2/lift')), (e) => e.status === 409);
   const r = lift(ctx, operatorUser, m);
   assert.deepEqual([r.ok, r.redirect], [true, '/settings#ai-share']);
-  assert.equal(r.message, 'נפתח. עד סוף החודש תדר כותב ללקוח הזה כרגיל.');
+  assert.equal(r.message, 'עד סוף החודש תדר כותב ללקוח הזה שוב כרגיל.');
   const a = aiShare(db, 1);
   assert.deepEqual([a.stopped, a.liftedBy, Boolean(a.liftedAt)], [false, 'operator@example.test', true]);
   assert.equal(canGenerate(db, 'alpha').ok, true, 'it writes again');
@@ -391,6 +392,44 @@ test('the lift: the operator lets it go on for the rest of the month, audited; n
   assert.equal(workspaceAiPaused(db, 1), true, 'stopped again in December, the lift was November\'s');
   await aiShareTick(ctx, { t: dec, alert });
   assert.deepEqual(said.slice(1), ['ai-share-50:1:2026-12'], 'and said again, under December');
+});
+
+test('the owners hear it once by email when the stop starts, calmly, whatever they chose in Settings; nothing when it is lifted', async () => {
+  paid(1);
+  paid(2);
+  const client = notifyClient({ env: { ...fake.env, PUBLIC_HOST: 'teder.openfrequency.co.il' } });
+  fake.resetNotify();
+  const notices = (ws = null) => fake.notified.filter((e) => e.kind === 'ai_paused' && (ws == null || e.workspace === ws));
+  // Under the line: nothing.
+  bring(1, 'alpha', 0.4);
+  await emailTick(ctx, { t: NOW, client });
+  assert.equal(notices().length, 0);
+  // The customer turned every email off in Settings: a notice is none of those, and is never offered there.
+  assert.deepEqual(NOTICE_KINDS, ['ai_paused']);
+  assert.ok(!EMAIL_KINDS.includes('ai_paused'));
+  setEmailPrefs(db, 1, Object.fromEntries(EMAIL_KINDS.map((k) => [k, false])));
+  bring(1, 'alpha', 0.55);
+  await emailTick(ctx, { t: NOW + 60_000, client });
+  assert.equal(notices(1).length, 1);
+  const e = notices(1)[0];
+  assert.deepEqual([e.product, e.subject, e.link], ['teder', 'מצגות חדשות לא נכתבות כרגע בתדר', 'https://teder.openfrequency.co.il/']);
+  const name = db.get("SELECT display_name FROM accounts WHERE id = 'alpha'").display_name;
+  assert.ok(
+    e.text.startsWith(`החודש היה בחשבון ${name} שימוש חריג מאוד, מעבר למה שהחבילה כוללת, ולכן מצגות חדשות לא נכתבות כרגע.\nמה שכבר אישרתם עולה בזמן, כרגיל, ולא צריך לעשות כלום.\nאנחנו כבר מטפלים בזה, ולכל המאוחר הכתיבה חוזרת ב-1.12.2026.`),
+    e.text
+  );
+  assert.doesNotMatch(`${e.subject} ${e.text}`, /%|₪|\$|דולר|—|–|!/, 'no cost and no share; no dashes as breaks, no exclamation marks');
+  // Once: the next pass sends nothing more.
+  await emailTick(ctx, { t: NOW + 120_000, client });
+  assert.equal(notices(1).length, 1);
+  // Lifted before a pass could tell it: nothing goes. Lifted after: nothing either, the Today line just goes away.
+  bring(2, 'bravo', 0.6);
+  liftStop(db, 2, { by: 'operator@example.test' });
+  await emailTick(ctx, { t: NOW + 180_000, client });
+  assert.equal(notices(2).length, 0);
+  liftStop(db, 1, { by: 'operator@example.test' });
+  await emailTick(ctx, { t: NOW + 240_000, client });
+  assert.equal(notices().length, 1);
 });
 
 test("the company's own workspaces and accounts in no workspace are never weighed", async () => {

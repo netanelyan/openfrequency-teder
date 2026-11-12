@@ -63,7 +63,7 @@ export function aiShareRoutes() {
         if (!user.operator) throw new ActionError('את זה משנה רק מי שמפעיל את תדר', 403);
         const r = liftStop(ctx.db, Number(m[1]), { by: user.email || user.name });
         if (!r.lifted) throw new ActionError('הלקוח הזה לא עצור עכשיו, אז אין מה לפתוח.', 409);
-        return { ok: true, message: 'נפתח. עד סוף החודש תדר כותב ללקוח הזה כרגיל.', redirect: '/settings#ai-share' };
+        return { ok: true, message: 'עד סוף החודש תדר כותב ללקוח הזה שוב כרגיל.', redirect: '/settings#ai-share' };
       },
     ],
   ];
