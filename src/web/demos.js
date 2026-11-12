@@ -1,6 +1,7 @@
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { dataDir } from '../core/paths.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
 import { nowIso } from '../core/clock.js';
@@ -35,6 +36,24 @@ import { a11yLink } from './ui.js';
 // finds nothing (test/workspaces.test.js).
 
 export const running = new Map();
+
+// The demo page's stylesheet by its contents (?v=), so a change reaches every browser at once and not after the hour it
+// may keep the old one (server.js serves /static/demo.css for an hour); read again whenever the file changed on disk.
+const DEMO_CSS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'static', 'demo.css');
+let cssMark = { mtime: 0, v: '' };
+function demoCssV() {
+  try {
+    const m = statSync(DEMO_CSS).mtimeMs;
+    if (m !== cssMark.mtime) cssMark = { mtime: m, v: createHash('sha256').update(readFileSync(DEMO_CSS)).digest('hex').slice(0, 10) };
+  } catch {
+    return '';
+  }
+  return cssMark.v;
+}
+const demoCssHref = () => {
+  const v = demoCssV();
+  return `/static/demo.css${v ? `?v=${v}` : ''}`;
+};
 
 /** Build a demo in the background; one build per demo at a time. */
 export function startBuild(ctx, id, opts = {}) {
@@ -432,7 +451,7 @@ export function demoPage(demo, { offer, join = joinUrl(), theme = 'light', origi
 <meta name="robots" content="noindex, nofollow, noarchive">${themeMeta(theme)}
 <title>מצגת לדוגמה ${esc(le(name))}${esc(name)} | תדר</title>
 ${shareMeta(demo, name, base, origin)}
-<link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/demo.css"><link rel="stylesheet" href="${base}/theme.css"></head>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="${demoCssHref()}"><link rel="stylesheet" href="${base}/theme.css"></head>
 <body class="d-page">
 <div class="wrap"><header class="top"><span class="for">עמוד שהכנו בשביל <bdi>${esc(name)}</bdi></span><span class="by">${ofMark()}OpenFrequency</span>${themeButton(theme)}</header></div>
 <div class="lead${shelfHtml ? ' with-shelf' : ''}">
@@ -468,7 +487,7 @@ ${themeScript()}
 }
 
 export const goneHtml = (theme = 'light') =>
-  `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">${themeMeta(theme)}<title>העמוד לא כאן | תדר</title><link rel="stylesheet" href="/static/demo.css"></head><body class="d-page"><div class="wrap"><section class="hero"><h1>העמוד הזה לא כאן</h1><p class="lede">אולי הקישור ישן. אם קיבלתם אותו מאיתנו, אפשר לענות להודעה ונשלח קישור חדש.</p></section><footer class="foot">${a11yLink()}${themeButton(theme)}</footer></div>${themeScript()}</body></html>`;
+  `<!doctype html>${htmlOpen(theme)}<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">${themeMeta(theme)}<title>העמוד לא כאן | תדר</title><link rel="stylesheet" href="${demoCssHref()}"></head><body class="d-page"><div class="wrap"><section class="hero"><h1>העמוד הזה לא כאן</h1><p class="lede">אולי הקישור ישן. אם קיבלתם אותו מאיתנו, אפשר לענות להודעה ונשלח קישור חדש.</p></section><footer class="foot">${a11yLink()}${themeButton(theme)}</footer></div>${themeScript()}</body></html>`;
 
 // ---------------------------------------------------------------- the operator's pages
 
