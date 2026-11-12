@@ -21,9 +21,9 @@ import { israelDate, israelInstant } from '../schedule/israel.js';
 // THE PLAN IS THE ONLY LIMIT, AND IT IS THE CUSTOMER'S. A workspace (one paying customer) gets its plan's slideshows
 // and redos a month, shared by every account (page) it has: the full plan 40 and 10, the small one 15 and 4, as accounts
 // says in its entitlement answer (src/billing/entitlement.js, `plan`; no answer, or none with a plan, is the full one).
-// Opening another account gives a customer more pages, never more posts. No money cap blocks or slows anything
-// (docs/decisions.md, "The budget is gone, the plan is the limit"), and there is no cap on how many accounts a
-// workspace opens: the paid plan is the ceiling.
+// Opening another account gives a customer more pages, never more posts. There is no cap on how many accounts a
+// workspace opens: the paid plan is the ceiling. Over the plan, one money line: a workspace whose AI cost this month
+// reached half of what it pays drafts nothing until the next month (src/billing/ai-share.js; the owner, 2026-11-11).
 //
 // An account in no workspace (the operator's own) has a month of its own: 40 and 10, or the operator's numbers for it
 // (setPlan). So does an account in one of the company's own workspaces (OF_OWN_WORKSPACES, src/billing/own.js): it is
@@ -44,8 +44,8 @@ import { israelDate, israelInstant } from '../schedule/israel.js';
 // waiting and those being written, reach the plan, nothing more is generated for the account until the next month
 // (runner.js, buildPost).
 //
-// What the posts cost is recorded (ledger.js) and shown to the operator, by what it went to (ledger() below). It
-// never stops a post.
+// What the posts cost is recorded (ledger.js) and shown to the operator, by what it went to (ledger() below). Here it
+// never stops a post; the 30/50 rule may (src/billing/ai-share.js).
 
 export const DEFAULT_PLAN = { suggested: 40, redos: 10 };
 /**

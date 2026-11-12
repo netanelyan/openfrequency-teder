@@ -2,6 +2,7 @@ import { monthKey, newId, now, nowIso } from '../core/clock.js';
 import { customerWorkspace } from '../billing/own.js';
 import { workspaceAllowed } from '../billing/entitlement.js';
 import { meterSetup, setupRoom } from '../billing/setup-cap.js';
+import { AI_PAUSED, PAUSED_HE, workspaceAiPaused } from '../billing/ai-share.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
 import { FEW, discover, offered, strong } from '../onboarding/discover.js';
@@ -130,11 +131,13 @@ export const SAMPLE_ROUNDS = { perOnboarding: 2, perWorkspaceMonth: 6 };
 const counted = (found) => (found?.rounds || []).filter((x) => x.counted !== false);
 
 /**
- * May this onboarding's customer start another round of samples? { ok, why: null | 'live' | 'onboarding' | 'month' | 'cap' }.
- * 'cap': the workspace has not paid and its setup reached the cap for that (src/billing/setup-cap.js).
+ * May this onboarding's customer start another round of samples? { ok, why: null | 'live' | 'paused' | 'onboarding' | 'month' | 'cap' }.
+ * 'cap': the workspace has not paid and its setup reached the cap for that (src/billing/setup-cap.js). 'paused': its AI
+ * is stopped this month (src/billing/ai-share.js).
  */
 export function sampleRoom(db, r, t = now()) {
   if (r.status === 'live') return { ok: false, why: 'live' };
+  if (workspaceAiPaused(db, r.workspace_id ?? null, { t })) return { ok: false, why: 'paused' };
   // An account still short of the samples it needs to go on (SAMPLE_ENOUGH, counted from what each round made) is not
   // stopped by its own count of rounds: it cannot go live without them, and "write to us" left the owner's own account
   // stuck after two rounds on thin sources made none (the owner, 2026-11-07: "i want a redo button"). The workspace's
@@ -170,8 +173,12 @@ const goodSamples = (db, workspaceId) => db.get("SELECT COUNT(*) AS n FROM posts
 /** What a paid step refused at the cap says: the samples are ready, or what was built is kept. */
 const capMessage = (db, workspaceId) => (goodSamples(db, workspaceId) ? `${READY_LINE}. ${CAP_HE.more}` : `${CAP_HE.noneTitle}. ${CAP_HE.none}`);
 
-/** A paid step of the setup (a search, creating the account): refused once a workspace that has not paid reached the cap. */
+/**
+ * A paid step of the setup (a search, creating the account): refused while the workspace's AI is stopped this month
+ * (src/billing/ai-share.js), whoever asks, and once a workspace that has not paid reached the cap.
+ */
 function capCheck(ctx, user, workspaceId) {
+  if (workspaceAiPaused(ctx.db, workspaceId ?? null)) throw new ActionError(PAUSED_HE.setup, 409);
   if (user.operator) return;
   if (!setupRoom(ctx.db, workspaceId ?? null).ok) throw new ActionError(capMessage(ctx.db, workspaceId), 409);
 }
@@ -182,6 +189,7 @@ export const ROUNDS_HE = {
   onboarding: `כבר כתבנו לחשבון הזה פוסטים לדוגמה ${SAMPLE_ROUNDS.perOnboarding} פעמים, וזה המקסימום לחשבון חדש. אם צריך עוד דוגמאות, כתבו לנו.`,
   month: `החודש כבר כתבנו לכם פוסטים לדוגמה ${SAMPLE_ROUNDS.perWorkspaceMonth} פעמים, בכל החשבונות החדשים יחד, וזה המקסימום לחודש. אם צריך עוד, כתבו לנו.`,
   cap: `${READY_LINE}. ${CAP_HE.more}`,
+  paused: PAUSED_HE.setup,
 };
 const running = new Map();
 /** What a running job is doing now: { step, done, total } (src/onboarding/discover.js onProgress, and the samples). */
@@ -273,7 +281,7 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     const now = row(ctx, id, { recover: false });
     // A round that wrote nothing because something broke on our side, or because the setup's cap stopped it before
     // paying, is not the customer's.
-    const rounds = (now.found.rounds || []).map((x) => (x.at === round && ['error', 'cap'].includes(samples.failure) && !samples.made ? { ...x, counted: false } : x.at === round ? { ...x, made: samples.made } : x));
+    const rounds = (now.found.rounds || []).map((x) => (x.at === round && ['error', 'cap', 'paused'].includes(samples.failure) && !samples.made ? { ...x, counted: false } : x.at === round ? { ...x, made: samples.made } : x));
     ctx.db.update('onboarding', id, { status: now.status === 'ready' || now.status === 'live' ? now.status : 'samples', candidates_json: { ...now.found, rounds, samplesFailed: Boolean(samples.failure), samples }, notes_json: [...now.notes, ...notes], updated_at: nowIso() });
   };
   const job = metered(ctx.db, r, async () => {
@@ -291,6 +299,8 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     const heal = async () => {
       if (heals >= SAMPLE_HEALS || !nextRound(ctx.db, pack.id)) return false;
       if (counts && !setupRoom(ctx.db, r.workspace_id ?? null).ok) return false;
+      // A search is a paid step too: not while the workspace's AI is stopped (src/billing/ai-share.js).
+      if (workspaceAiPaused(ctx.db, r.workspace_id ?? null)) return false;
       heals++;
       progress.set(id, { step: 'sources', done: count() - before, total: SAMPLE_TARGET });
       say(`the sources ran dry: finding new ones (${heals} of ${SAMPLE_HEALS})`);
@@ -316,7 +326,7 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     // A customer's round that still made too few is the operator's to look at, not the customer's to fix: the operator
     // hears of it (src/notify/operator.js), once a day an account, and the page tells the customer it is being looked at.
     const tell = (failure, why) => {
-      if (!failure || failure === 'cap' || !counts) return;
+      if (!failure || failure === 'cap' || failure === 'paused' || !counts) return;
       alertOperator(ctx, `samples:${pack.id}`, { title: `Teder: ${pack.meta.displayName || pack.id} has ${count()} of ${SAMPLE_ENOUGH} samples`, body: `${why}. /new/${id}` }).catch(() => {});
     };
     if (!got.docs && (await heal())) got.docs = 1;
@@ -337,6 +347,7 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
     ctx.db.update('onboarding', id, { candidates_json: { ...at.found, rounds: [...(at.found.rounds || []), { at: round, by: counts ? 'customer' : 'operator', ...(counts ? {} : { counted: false }) }] }, updated_at: nowIso() });
     progress.set(id, { step: 'write', done: 0, total: SAMPLE_TARGET });
     let capped = false;
+    let paused = false;
     while (count() - before < SAMPLE_TARGET && tries < SAMPLE_ATTEMPTS + heals * HEAL_TRIES) {
       // A workspace that has not paid stops at its setup's cap (src/billing/setup-cap.js), before the next sample costs.
       if (counts && !setupRoom(ctx.db, r.workspace_id ?? null).ok) {
@@ -349,6 +360,12 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
       try {
         res = await build(ctx, { pack, sample: true });
       } catch (e) {
+        // The workspace's AI stopped this month (src/billing/ai-share.js): the round ends here, quietly, uncounted.
+        if (e.code === AI_PAUSED) {
+          paused = true;
+          say(`try ${tries} not started: the workspace's AI is stopped this month`);
+          break;
+        }
         res = { status: 'blocked', kind: 'error', reason: String(e.message).slice(0, 300) };
       }
       if (res.status === 'sample') {
@@ -373,7 +390,7 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
       }
     }
     const made = count() - before;
-    const failure = made >= SAMPLE_ENOUGH ? null : capped ? 'cap' : errors >= SAMPLE_ERRORS ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
+    const failure = made >= SAMPLE_ENOUGH ? null : capped ? 'cap' : paused ? 'paused' : errors >= SAMPLE_ERRORS ? 'error' : empty >= 2 ? 'nofacts' : 'refused';
     tell(failure, `${failure} after ${tries} tries and ${heals} search(es) for new sources`);
     if (made < SAMPLE_TARGET && ctx.mode === 'recorded') notes.push(RECORDED_NOTE);
     say(`${made} sample(s) in ${tries} tries${failure ? `, failed: ${failure}` : ''}`);
@@ -818,6 +835,8 @@ const SAMPLES_HE = {
   // Stopped at the setup's cap before paying (src/billing/setup-cap.js). While the cap still holds, the page says what
   // opens after activating instead (activateBanner); this is for once it no longer does.
   cap: 'הכתיבה נעצרה לפני ההפעלה. אפשר לנסות שוב.',
+  // Stopped because the workspace's AI is stopped this month (src/billing/ai-share.js): no cost, no share, said calmly.
+  paused: PAUSED_HE.setup,
 };
 
 /** The samples' outcome, said with what helps. `more` is sampleRoom's answer: whether another round may be asked for. */
@@ -829,6 +848,8 @@ function samplesSaid(pc, r, pack, { busy, more = { ok: true } }) {
   if (more.why === 'cap') return '';
   const made = s?.made || 0;
   const kept = made ? `${made === 1 ? 'פוסט אחד לדוגמה מוכן' : `${made} פוסטים לדוגמה מוכנים`}, והם כאן למטה. ` : '';
+  // The workspace's AI is stopped this month (src/billing/ai-share.js): its own calm line, once, and no button.
+  if (failed === 'paused' || more.why === 'paused') return `<div class="banner info">${icon('clock')}<div><b>${esc(kept)}${esc(PAUSED_HE.setup)}</b></div></div>`;
   // A customer is not sent to fix it (the owner, 2026-11-07: "make sure no real customer goes trough that"): the round
   // already looked for new sources itself and the operator was told; they read that it is being looked at, with one
   // button to try again. The operator reads what stopped it, with the way to the sources.

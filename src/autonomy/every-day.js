@@ -5,7 +5,7 @@ import { addDays, israelDate, israelInstant } from '../schedule/israel.js';
 import { buildPost, PausedError } from '../pipeline/build.js';
 import { notify } from '../notify/index.js';
 import { HOLD_MS, room } from '../budget/quota.js';
-import { autonomyMode, canRun } from './rails.js';
+import { autonomyMode, canGenerate } from './rails.js';
 
 // A post every day. The owner, 2026-11-09: "because we promise 40 videos a month, there cant be a day without posts.
 // even if 10 posts are being declined, the customer has to get the 11th".
@@ -140,7 +140,7 @@ export async function refillDeclined(ctx, report, { t = now() } = {}) {
   for (const pack of ctx.packs) {
     if (plans.length >= REFILL_PER_TICK) break;
     const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
-    if (!acc || acc.status === 'onboarding' || !canRun(db, pack.id).ok) continue;
+    if (!acc || acc.status === 'onboarding' || !canGenerate(db, pack.id).ok) continue;
     for (const slotAt of declinedSlots(db, pack, { t })) {
       if (plans.length >= REFILL_PER_TICK) break;
       const key = `refill:${pack.id}:${slotAt}`;

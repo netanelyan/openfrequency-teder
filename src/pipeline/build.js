@@ -6,6 +6,7 @@ import { step, settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { postSpend } from '../budget/ledger.js';
 import { DRAFTS_PER_DAY, draftsToday, quotaMonth, room } from '../budget/quota.js';
+import { accountAiPaused, AI_PAUSED, PAUSED_HE } from '../billing/ai-share.js';
 import { alertOperator } from '../notify/operator.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
@@ -71,7 +72,9 @@ import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 //
 // Returns { postId, status: 'queued'|'sample'|'blocked', reason, kind }. `kind`
 // names a blocked post's failure: 'fact_check', 'review', 'render' and the rest
-// block that post alone. No money cap stops a post (src/budget/ledger.js).
+// block that post alone. One money line stops posts: a customer's workspace whose AI
+// cost this month reached half of what it pays drafts nothing until the next month
+// (src/billing/ai-share.js, AiStoppedError below).
 //
 // THE CUSTOMER'S MONTH (src/budget/quota.js). A post that is not a sample is
 // weighed against the account's quota before anything is spent: a QuotaError, and
@@ -107,6 +110,18 @@ export class DraftCapError extends PausedError {
     super(message);
     this.name = 'DraftCapError';
     this.code = 'draft_cap';
+  }
+}
+
+/**
+ * The account's workspace spent half of what it pays on AI this month (src/billing/ai-share.js): nothing is drafted for
+ * it, a sample neither, until the next month or until the operator lifts it. Thrown before anything is spent.
+ */
+export class AiStoppedError extends PausedError {
+  constructor(message = PAUSED_HE.title) {
+    super(message);
+    this.name = 'AiStoppedError';
+    this.code = AI_PAUSED;
   }
 }
 
@@ -577,7 +592,9 @@ export function fixDraft(draft) {
 }
 
 /** Output room per call. The ceiling reserved for a call is priced on this, so it is no bigger than the answer needs. */
-export const MAX_TOKENS = { outline: 10_000, slides: 8_000, rewrite: 6_000, repair: 4_000 };
+// Thinking counts against these. On Sonnet the slides came to 5,080 tokens and a repair to 2,008 (2026-10-28); Opus
+// (2026-11-11) gets room to think more, since an answer cut off at the cap is billed and thrown away.
+export const MAX_TOKENS = { outline: 10_000, slides: 12_000, rewrite: 6_000, repair: 6_000 };
 export const EFFORT = { outline: 'medium', slides: 'medium', rewrite: 'medium', repair: 'medium' };
 
 /**
@@ -1062,6 +1079,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     if (settings(db).globalKill) throw new PausedError('the global kill switch is on');
     if (account.status === 'paused') throw new PausedError(`${pack.id} is paused (${account.paused_reason})`);
   }
+  // The 30/50 rule, for a sample too: a stopped workspace's post is not started, so it costs nothing.
+  if (accountAiPaused(db, pack.id)) throw new AiStoppedError();
 
   ensureFormats(db, pack);
   const order = turns ? [...turnOrder(db, pack, { exclude: dv.avoidFormats || [] }), ...turnOrder(db, pack)] : null;
@@ -1747,7 +1766,7 @@ Never a search already tried, a logo, a screen, a page of text, a crowd, or a pe
 
 /**
  * New photograph searches for the slides still without one (`left`, each with its own search and why nothing it found
- * fitted, in `tried`): one call to the model (the screen's, a small one), Map(slide -> [query, ...]), up to three a
+ * fitted, in `tried`): one call to the model (src/llm/index.js `rank`), Map(slide -> [query, ...]), up to three a
  * slide, never the search it already tried.
  */
 export async function newSearches(ctx, { draft, outline, left, tried }) {
@@ -1758,7 +1777,7 @@ export async function newSearches(ctx, { draft, outline, left, tried }) {
     const t = tried.get(w.idx);
     return `Slide ${w.idx}${w.idx === 0 ? ' (the cover)' : ''}: "${words}". Searched: "${t?.query || w.query}". Nothing fitted: ${top(t?.why) || 'nothing was found'}.`;
   });
-  const { data } = await askJson(ctx, { task: 'image-search', role: 'judge', system: SEARCH_SYSTEM, user: `The post is about: ${outline.topic || draft.hook}.\n\n${lines.join('\n')}`, schema: SEARCH_SCHEMA, effort: 'low', maxTokens: 1200, tag: 'image-search' });
+  const { data } = await askJson(ctx, { task: 'image-search', role: 'rank', system: SEARCH_SYSTEM, user: `The post is about: ${outline.topic || draft.hook}.\n\n${lines.join('\n')}`, schema: SEARCH_SCHEMA, effort: 'low', maxTokens: 1200, tag: 'image-search' });
   const out = new Map();
   // The slides whose name is a company, a brand, a building or the like, not a person (out.things).
   const things = new Set();

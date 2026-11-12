@@ -2,6 +2,7 @@ import { nowIso } from '../core/clock.js';
 import { audit } from '../core/store.js';
 import { j } from '../db/index.js';
 import { setupRoom } from '../billing/setup-cap.js';
+import { PAUSED_HE, workspaceAiPaused } from '../billing/ai-share.js';
 import { offered } from '../onboarding/discover.js';
 import { DEEPER_ROUNDS, deeperBusy, deeperLine, deeperProgress, hostOf, lastRound, nextRound, startDeeper } from '../onboarding/deeper.js';
 import { MODEL_KEY } from '../sources/model.js';
@@ -126,7 +127,9 @@ export function deeperRoutes() {
         if (deeperBusy(pack.id)) return { ok: true, message: DEEPER_HE.running, redirect: back };
         if (!nextRound(ctx.db, pack.id)) throw new ActionError(DEEPER_HE.cap, 409);
         const workspaceId = ctx.db.get('SELECT workspace_id FROM accounts WHERE id = ?', pack.id)?.workspace_id ?? null;
-        // A paid step: before paying, under the setup's cap and counted against it (src/billing/setup-cap.js).
+        // A paid step: not while the workspace's AI is stopped this month (src/billing/ai-share.js); before paying, under
+        // the setup's cap and counted against it (src/billing/setup-cap.js).
+        if (workspaceAiPaused(ctx.db, workspaceId)) throw new ActionError(PAUSED_HE.setup, 409);
         if (!user.operator && !setupRoom(ctx.db, workspaceId).ok) throw new ActionError('החיפוש נפתח שוב אחרי ההפעלה.', 409);
         const e = engine(ctx);
         const { known, dropped } = accountKnown(ctx.db, pack.id);

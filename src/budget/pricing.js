@@ -6,8 +6,12 @@
 // A model that is not here is recorded at the dearest rate in the table
 // (ledger.js WORST): a cost overstated, never hidden.
 
-/** The day these were last read from platform.claude.com/docs/en/about-claude/pricing. */
-export const PRICES_VERIFIED = '2026-10-13';
+/**
+ * The day these were last read from platform.claude.com/docs/en/about-claude/pricing: on 2026-11-11, for the move of
+ * the writing to Opus (src/llm/index.js), every rate below was as the page has it, cache reads at 0.05x the input
+ * price on Opus 5.5 and Sonnet 5.5.
+ */
+export const PRICES_VERIFIED = '2026-11-11';
 
 export const MODEL_RATES = {
   'claude-fable-5-1': { in: 10, out: 50, cacheRead: 0.25, write5m: 12.5, write1h: 20 },

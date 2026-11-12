@@ -223,7 +223,7 @@ export async function scoreTopics(ctx, pack, { max = 30 } = {}) {
   let data;
   try {
     ({ data } = await askJson(ctx.withPack ? ctx.withPack(pack) : { ...ctx, pack }, {
-      task: 'topics', role: 'judge', system: scoreSystem(pack), user, schema: SCORE_SCHEMA, effort: 'low', maxTokens: 6000, expectOut: 160 * fresh.length, tag: 'topics',
+      task: 'topics', role: 'rank', system: scoreSystem(pack), user, schema: SCORE_SCHEMA, effort: 'low', maxTokens: 6000, expectOut: 160 * fresh.length, tag: 'topics',
       meta: { recordingsDir: pack.recordingsDir, docKey: `topics:${fresh.map((x) => x.id).join(',')}`, attempt: 0 },
     }));
   } catch (e) {

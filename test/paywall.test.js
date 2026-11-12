@@ -231,5 +231,5 @@ test('the token is checked: a wrong one is refused by accounts and nobody is all
   const res = await fetch(`${fake.env.OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=1&product=teder`, { headers: { authorization: 'Bearer nope' } });
   assert.equal(res.status, 401);
   const ok = await fetch(`${fake.env.OF_ACCOUNTS_INTERNAL}/internal/entitlement?workspace=1&product=teder`, { headers: { authorization: `Bearer ${INTERNAL_TOKEN}` } });
-  assert.deepEqual(Object.keys(await ok.json()).sort(), ['access', 'allowed', 'cancelAt', 'enabled', 'graceUntil', 'paidThrough', 'plan', 'product', 'workspace'], "the fake answers in the contract's shape");
+  assert.deepEqual(Object.keys(await ok.json()).sort(), ['access', 'allowed', 'cancelAt', 'enabled', 'graceUntil', 'monthlyIls', 'paidThrough', 'plan', 'product', 'workspace'], "the fake answers in the contract's shape");
 });

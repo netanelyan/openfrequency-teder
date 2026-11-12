@@ -128,7 +128,7 @@ export function plainQueries(seed, plan) {
 export async function planRound(ctx, seed, plan, { searched = [], hosts = new Set(), dropped = [] } = {}) {
   if (ctx.llm?.kind !== 'claude' || !seed.niche) return { sites: [], queries: plainQueries(seed, plan).filter((q) => !searched.includes(q)) };
   const { data } = await askJson(ctx, {
-    task: 'deeper_sites', role: 'judge', effort: 'low', maxTokens: 5000, expectOut: 1800, tag: 'onboarding', schema: PLAN_SCHEMA,
+    task: 'deeper_sites', role: 'scout', effort: 'low', maxTokens: 5000, expectOut: 1800, tag: 'onboarding', schema: PLAN_SCHEMA,
     system: `A Hebrew social account posts short slideshows about a subject. Every fact it posts is quoted from a website it reads every day, through the site's RSS or Atom feed or its articles. Earlier searches found too little to write from, so this is search round ${plan.n} of ${DEEPER_ROUNDS}, wider than the last.
 
 This round looks for: ${plan.widen}.

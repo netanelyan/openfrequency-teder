@@ -15,6 +15,7 @@ import * as pages from './pages.js';
 import * as act from './actions.js';
 import { beforePaying, onboardingRoutes } from './onboarding.js';
 import { writeNowRoutes } from './write-now.js';
+import { aiShareRoutes } from './ai-share.js';
 import { deeperPanel, deeperRoutes } from './deeper.js';
 import { previewFile, stylesRoutes } from './styles.js';
 import { EXAMPLE_FILE, EXAMPLES_DIR } from './examples.js';
@@ -389,6 +390,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
     ...demosRoutes(),
     ...leadsRoutes({ env }),
     ...connectRoutes(connectLinks),
+    ...aiShareRoutes(),
   ];
 
   const handler = async function handler(req, res) {
