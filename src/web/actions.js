@@ -487,7 +487,7 @@ async function factCheckChanged(ctx, { post, pack, draft, form, user = null }) {
     ctx.db.update('posts', post.id, { cost_usd: postSpend(ctx.db, post.id).usd });
   }
   const bad = review.reviews.map((r, i) => ({ ...r, where: changed[i].where })).filter((r) => r.factProblem);
-  if (bad.length) throw new ActionError('בדיקת העובדות עצרה את השינוי', 422, { problems: ours(user) ? bad.map((r) => `${r.where}: ${r.factProblem}`) : [...new Set(bad.map((r) => moreThanFactsHe(r.where, { igCaption: Boolean(post.caption_ig) })))], values: { ...form } });
+  if (bad.length) throw new ActionError('בדיקת העובדות עצרה את השינוי', 422, { problems: ours(user) ? bad.map((r) => `${r.where}: ${r.factProblem}`) : [...new Set(bad.map((r) => moreThanFactsHe(r.where, { igCaption: Boolean(post.caption_ig), said: r.factProblem })))], values: { ...form } });
 }
 
 /** Each slide's rendered files, as the post's media now has them. */

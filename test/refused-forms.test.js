@@ -114,6 +114,10 @@ test("a refused edit says each problem's place and what to do in Hebrew; the ope
   assert.equal(problemHe({ where: 'hashtags', code: 'caption', msg: '6 hashtags: 5 at most' }), 'ההאשטגים: יש 6 האשטגים, ואפשר עד 5.');
   assert.equal(problemHe({ where: 'caption', code: 'caption', msg: 'the TikTok caption is 40 characters: it needs 80 or more' }, { igCaption: true }), 'הכיתוב לטיקטוק: הכיתוב קצר מדי. יש בו 40 תווים, וצריך לפחות 80.');
   assert.equal(problemHe({ where: 'cover', code: 'voice:phrase', msg: 'an ad phrase: "הזדמנות של פעם בחיים"' }), 'שקף הפתיחה: יש ביטוי שנשמע כמו מודעה או כמו מכונה: "הזדמנות של פעם בחיים". כדאי לנסח אחרת.');
+  // The reviewer's fact check: its own words when Hebrew, the general line when English.
+  const { moreThanFactsHe } = await import('../src/web/problems.js');
+  assert.equal(moreThanFactsHe('slide 2 title', { said: 'הטקסט אומר יותר מהעובדה' }), 'שקף 2, הכותרת: הטקסט אומר יותר מהעובדה');
+  assert.equal(moreThanFactsHe('slide 2 title', { said: 'the text claims more than its fact' }), 'שקף 2, הכותרת: כתוב כאן יותר ממה שהעובדות של הפוסט אומרות. מנסחים קרוב יותר לעובדה.');
   // Anything without a line of its own: one general line at its place, and the same line once.
   const odd = problemsHe([{ where: 'cover', code: 'overlay', msg: 'one line of text: at least 3 on a slide' }, { where: 'cover', code: 'overlay', msg: 'another thing the overlay check says' }]);
   assert.deepEqual(odd, ['שקף הפתיחה: יש כאן ניסוח שהבדיקות שלנו לא מקבלות. נסו לנסח אחרת, ואם זה חוזר, כתבו לנו.']);

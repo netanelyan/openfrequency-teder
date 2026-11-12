@@ -101,8 +101,12 @@ export function problemHe(p, { igCaption = false } = {}) {
 /** Every problem as the customer reads it, each line once. */
 export const problemsHe = (list, opts = {}) => [...new Set((list || []).map((p) => problemHe(p, opts)))];
 
-/** The reviewer's fact check of a changed text, at its place. */
-export const moreThanFactsHe = (where, opts = {}) => {
+/**
+ * The reviewer's fact check of a changed text, at its place: its own words when it wrote them in Hebrew (they say
+ * what is wrong), else the general line (it is asked in English, and usually answers so).
+ */
+export const moreThanFactsHe = (where, { said = '', ...opts } = {}) => {
   const place = placeHe(where, opts);
-  return place ? `${place}: ${MORE_THAN_FACTS_HE}` : MORE_THAN_FACTS_HE;
+  const line = String(said || '').trim() && !LATIN.test(said) ? String(said).trim() : MORE_THAN_FACTS_HE;
+  return place ? `${place}: ${line}` : line;
 };
