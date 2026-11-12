@@ -556,7 +556,10 @@ function drawText(m, slide, g, S) {
   // The number big once: a line that says it already ("20 אלף דולר מחברים ומשפחה") is not followed by it again.
   const digits = (v) => String(v || '').replace(/[^\d.]/g, '');
   const said = m.kind === 'number' && digits(m.value?.num) && digits(m.title).includes(digits(m.value?.num));
-  const num = m.kind === 'number' && layout !== 'corner' && !said ? `<div class="tl-num">${unit(m.value.pre)}${bigNum(m.value.num, g.hs(S.text.number.px))}${unit(m.value.post)}</div>` : '';
+  // A number slide of two sides (a head-to-head) has no one value: its line and text say both, as the other layouts'
+  // sides do. It read m.value.pre of null and threw, so every preview of such a post on /styles failed ("התצוגה לא
+  // נוצרה"), found on 2026-11-12 by test/layout.test.js failing now and then.
+  const num = m.kind === 'number' && m.value && layout !== 'corner' && !said ? `<div class="tl-num">${unit(m.value.pre)}${bigNum(m.value.num, g.hs(S.text.number.px))}${unit(m.value.post)}</div>` : '';
   const big = layout === 'corner' ? cornerNumber(m, slide) : '';
   const src = cover ? '' : srcHtml(slide);
   const inner = {

@@ -647,7 +647,7 @@ ${setupCard(d.setup)}`);
   const last = d.groups.flatMap((g) => g.published).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))[0];
   // Today's posts that were only written to disk are not among them (src/publish/live.js): the line under says so.
   const written = d.groups.reduce((s, g) => s + (g.written?.length || 0), 0);
-  const next = d.groups.flatMap((g) => g.scheduled).map((p) => p.slot_at).filter(Boolean).sort()[0];
+  const next = d.groups.flatMap((g) => g.scheduled).filter((p) => p.status === 'approved').map((p) => p.slot_at).filter(Boolean).sort()[0];
   const when = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
   const side = (href, k, label) => `<a href="${href}"><span class="l">${label}</span>${n(count(k), TONE[k])}</a>`;
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>

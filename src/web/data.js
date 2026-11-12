@@ -108,7 +108,8 @@ export function today(ctx, t = now()) {
     return {
       ...row,
       waiting: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'queued' AND sample = 0 ORDER BY slot_at IS NULL, slot_at, created_at", id),
-      scheduled: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' ORDER BY slot_at", id),
+      // Approved, and one being sent right now ("עולה עכשיו"): it left every list while it went (the audit, 2026-11-12).
+      scheduled: ids("SELECT id FROM posts WHERE account_id = ? AND status IN ('approved', 'publishing') ORDER BY slot_at", id),
       // Approved, and waiting for TikTok or Instagram to be connected (src/publish/hold.js); what is not connected.
       held: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'held' ORDER BY slot_at", id),
       // Posts that did not go out, the last two weeks, newest first: each with "לנסות שוב" (src/web/actions.js retryPublish).

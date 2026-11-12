@@ -93,8 +93,9 @@ test('with both plans set, a card for each as on openfrequency.co.il: its figure
   assert.ok(small.includes('<span class="num">490</span><span class="cur">₪</span><span class="per">לחודש</span>'));
   assert.ok(full.includes('<span class="num">790</span><span class="cur">₪</span><span class="per">לחודש</span>'));
   for (const c of [small, full]) assert.ok(c.includes('<p class="plan-vat">לא כולל מע״מ</p>'), 'VAT on each');
-  assert.ok(small.includes('<b>15</b> מצגות מוצעות בחודש, ועד <b>4</b> החלפות'), "the small plan's slideshows and redos, from the offer");
-  assert.ok(full.includes('<b>40</b> מצגות מוצעות בחודש, ועד <b>10</b> החלפות'), "the full plan's, Teder's own (DEFAULT_PLAN)");
+  // The plan counts the posts the customer got, not those offered (src/budget/quota.js; the audit, 2026-11-12, P2-73).
+  assert.ok(small.includes('<b>15</b> מצגות בחודש, ועד <b>4</b> החלפות'), "the small plan's slideshows and redos, from the offer");
+  assert.ok(full.includes('<b>40</b> מצגות בחודש, ועד <b>10</b> החלפות'), "the full plan's, Teder's own (DEFAULT_PLAN)");
   assert.ok(small.includes('בחודש הראשון יש גם 990 ₪ דמי הקמה, פעם אחת. דמי ההקמה לא מוחזרים.'));
   assert.ok(full.includes('בחודש הראשון יש גם 1,490 ₪ דמי הקמה, פעם אחת. דמי ההקמה לא מוחזרים.'));
   // The website's links (openfrequency-web src/lib.mjs signupUrl('teder', plan)), escaped in the attribute.

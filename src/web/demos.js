@@ -336,7 +336,7 @@ function priceSection(offer, join) {
 <h3 class="plan-name">${name}</h3>
 <p class="figure"><span class="num">${esc(Number(p.monthly).toLocaleString('he-IL'))}</span><span class="cur">₪</span><span class="per">לחודש</span></p>
 <p class="plan-vat">${vatWords(offer)}</p>
-<p class="plan-cap"><b>${esc(p.slideshows)}</b> מצגות מוצעות בחודש, ועד <b>${esc(p.redos)}</b> החלפות</p>
+<p class="plan-cap"><b>${esc(p.slideshows)}</b> מצגות בחודש, ועד <b>${esc(p.redos)}</b> החלפות</p>
 ${fee ? `<p class="plan-fee">${esc(fee)}</p>` : ''}${open ? `<a class="go" href="${esc(planUrl(join, plan))}">להצטרף ${inIt}</a>` : ''}
 </article>`;
     };
