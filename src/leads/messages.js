@@ -28,10 +28,14 @@ export const le = (name) => (/^ה/.test(name) ? `בשביל ${name}` : `${/^[א-
  * to hear more, instead of a pitch line. o.topic, when the demo has one, is what its slideshow is about (topicOf), and
  * the sample's line names it ("..., על הסיפור של התה, ..."): the idea the card shows the operator, told to the store.
  */
+// Since 2026-11-12, in the words of Toran's pitches (openfrequency-toran src/pitchWords.ts; the owner: Teder "its for
+// creating a nice community etc"): what Teder makes, and the audience it grows around the store.
 export const TEDER_COLD_FIRST = (o) =>
-  `היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין מצגות בעברית לטיקטוק ולאינסטגרם. הוא קורא את האתר של החנות, וכותב ומעצב מצגות על נושאים מהתחום שלה. כל מצגת מחכה לאישור שלכם לפני שהיא עולה.
+  `היי, כאן OpenFrequency. בנינו את תדר, שכותב ומעצב לחנויות מצגות בעברית לטיקטוק, לאינסטגרם ולפייסבוק, על נושאים מהתחום שלהן, ומפרסם כל מצגת רק אחרי שאישרתם אותה.
 
-הכנו ${le(o.storeName)} מצגת אחת לדוגמה, ${o.topic ? `על ${o.topic}, ` : ''}כדי שתראו איך זה ייראה אצלכם:
+מי שעוקב אחריכם רואה אתכם כמה פעמים בשבוע, וכל מצגת נגמרת בשקף ששולח לחנות. כך גדל סביב החנות קהל שמכיר אתכם.
+
+הכנו ${le(o.storeName)} מצגת אחת לדוגמה מהאתר שלכם${o.topic ? `, על ${o.topic}` : ''}:
 ${o.url}
 
 אם זה מעניין אתכם, אפשר לענות כאן ונספר עוד. אם לא, אפשר לענות "לא" ולא נכתוב שוב.`;

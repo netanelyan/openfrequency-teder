@@ -382,8 +382,8 @@ test('"דמו מוכן": the cold first message, never "ביקשתם", and a but
   const msg = TEDER_COLD_FIRST({ storeName: 'חנות הקומקומים', url: `${base}/s/${slug}` });
   assert.equal(unesc(/<textarea id="msg-\d+" rows="9" readonly dir="rtl">([\s\S]*?)<\/textarea>/.exec(card)[1]), msg);
   assert.doesNotMatch(card, /ביקשתם/);
-  assert.ok(msg.startsWith('היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין'));
-  assert.match(msg, /הכנו לחנות הקומקומים מצגת אחת לדוגמה, כדי שתראו איך זה ייראה אצלכם:\n/);
+  assert.ok(msg.startsWith('היי, כאן OpenFrequency. בנינו את תדר, שכותב ומעצב לחנויות מצגות בעברית'));
+  assert.match(msg, /הכנו לחנות הקומקומים מצגת אחת לדוגמה מהאתר שלכם:\n/);
   assert.match(msg, /אפשר לענות "לא" ולא נכתוב שוב\.$/);
   const links = hrefs(card);
   assert.ok(links.includes(`https://wa.me/972509999999?text=${encodeURIComponent(msg)}`), 'WhatsApp with the message written in');
@@ -404,7 +404,7 @@ test('"דמו מוכן": the cold first message, never "ביקשתם", and a but
   const plainSlug = db.get('SELECT slug FROM demos WHERE id = ?', lead('plain.example.co.il').demo_id).slug;
   const told = TEDER_COLD_FIRST({ storeName: 'החנות הפשוטה', url: `${base}/s/${plainSlug}`, topic: 'הסיפור של התה' });
   assert.equal(unesc(/<textarea id="msg-\d+" rows="9" readonly dir="rtl">([\s\S]*?)<\/textarea>/.exec(plain)[1]), told);
-  assert.match(told, /\nהכנו .+ מצגת אחת לדוגמה, על הסיפור של התה, כדי שתראו איך זה ייראה אצלכם:\n/);
+  assert.match(told, /\nהכנו .+ מצגת אחת לדוגמה מהאתר שלכם, על הסיפור של התה:\n/);
   assert.match(plain, /לא מצאנו לחנות וואטסאפ, מייל, טלפון או פרופיל ברשתות/);
   assert.match(plain, /<button class="btn primary" type="submit">שלחתי<\/button>/, 'then "שלחתי" is its one blue button');
   assert.equal((plain.match(/btn primary/g) || []).length, 1);
@@ -509,20 +509,21 @@ test('every card has "ענו", "הצטרפו" and "לא רלוונטי" and a no
   }
 });
 
-test('the first message names the demo\'s topic when it has one, and is word for word as it was without one', () => {
+test('the first message names the demo\'s topic when it has one, and says what Teder makes and the audience it grows', () => {
   const url = 'https://teder.example/s/kettles-a1b2c3';
-  const opening = 'היי, כאן OpenFrequency. בנינו את תדר, שמכין לחנויות אונליין מצגות בעברית לטיקטוק ולאינסטגרם. הוא קורא את האתר של החנות, וכותב ומעצב מצגות על נושאים מהתחום שלה. כל מצגת מחכה לאישור שלכם לפני שהיא עולה.';
+  const opening = 'היי, כאן OpenFrequency. בנינו את תדר, שכותב ומעצב לחנויות מצגות בעברית לטיקטוק, לאינסטגרם ולפייסבוק, על נושאים מהתחום שלהן, ומפרסם כל מצגת רק אחרי שאישרתם אותה.';
+  const audience = 'מי שעוקב אחריכם רואה אתכם כמה פעמים בשבוע, וכל מצגת נגמרת בשקף ששולח לחנות. כך גדל סביב החנות קהל שמכיר אתכם.';
   const ending = 'אם זה מעניין אתכם, אפשר לענות כאן ונספר עוד. אם לא, אפשר לענות "לא" ולא נכתוב שוב.';
   assert.equal(
     TEDER_COLD_FIRST({ storeName: 'חנות הקומקומים', url }),
-    `${opening}\n\nהכנו לחנות הקומקומים מצגת אחת לדוגמה, כדי שתראו איך זה ייראה אצלכם:\n${url}\n\n${ending}`
+    `${opening}\n\n${audience}\n\nהכנו לחנות הקומקומים מצגת אחת לדוגמה מהאתר שלכם:\n${url}\n\n${ending}`
   );
   assert.equal(
     TEDER_COLD_FIRST({ storeName: 'חנות הקומקומים', url, topic: 'הסיפור של התה' }),
-    `${opening}\n\nהכנו לחנות הקומקומים מצגת אחת לדוגמה, על הסיפור של התה, כדי שתראו איך זה ייראה אצלכם:\n${url}\n\n${ending}`
+    `${opening}\n\n${audience}\n\nהכנו לחנות הקומקומים מצגת אחת לדוגמה מהאתר שלכם, על הסיפור של התה:\n${url}\n\n${ending}`
   );
   assert.equal(TEDER_COLD_FIRST({ storeName: 'Kettles', url, topic: null }), TEDER_COLD_FIRST({ storeName: 'Kettles', url }), 'no topic: as it was');
-  assert.match(TEDER_COLD_FIRST({ storeName: 'Kettles', url, topic: 'קפה טורקי' }), /הכנו ל־Kettles מצגת אחת לדוגמה, על קפה טורקי, כדי/);
+  assert.match(TEDER_COLD_FIRST({ storeName: 'Kettles', url, topic: 'קפה טורקי' }), /הכנו ל־Kettles מצגת אחת לדוגמה מהאתר שלכם, על קפה טורקי:/);
   for (const m of [TEDER_COLD_FIRST({ storeName: 'x', url }), TEDER_COLD_FIRST({ storeName: 'x', url, topic: 'קפה טורקי' })]) assert.doesNotMatch(m, /[—–!]/, 'no dashes, no exclamation marks');
 
   // The topic as the build kept it on the demo: its niche, in Hebrew; none when there is none.

@@ -266,7 +266,8 @@ test('a scheduled post\'s page: "לפרסם עכשיו" leads, "ביטול אי�
     db.update('posts', id, { status: 'approved', approved_by: 'owner' });
     html = page();
     assert.doesNotMatch(html, /\/reject"/);
-    assert.match(html, new RegExp(`<form class="rejectbox" id="reject-${id}" method="post" action="/post/${id}/delete">`));
+    // On the post's own page the reason form is a card of its own (the owner, 2026-11-12: "Ui problems").
+    assert.match(html, new RegExp(`<form class="rejectbox panel own" id="reject-${id}" method="post" action="/post/${id}/delete">`));
     assert.match(html, /למה למחוק\?[\s\S]*אחרי המחיקה מגיע פוסט אחר לאותו יום[\s\S]*<button class="btn danger" type="submit" name="redo" value="0">למחוק<\/button><button class="btn" type="submit" name="redo" value="1">למחוק ולכתוב מחדש<\/button>/);
     const bar = /<div class="actionbar">([\s\S]*?)<\/div>\n/.exec(html)[1];
     assert.match(bar, /class="btn primary"[^>]*>לפרסם עכשיו/);

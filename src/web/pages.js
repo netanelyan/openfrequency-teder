@@ -49,12 +49,16 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
  * A scheduled post (DELETABLE) gets the same form as a deletion (the owner, 2026-11-11: "let someone change his mind and
  * delete a scheduled post"): "למחוק" and "למחוק ולכתוב מחדש", to /post/<id>/delete (src/web/actions.js deletePost).
  */
-function rejectForm(ctx, post, { ajax = null, left = null } = {}) {
+/**
+ * own: on a post's own page, after its bar, outside any card: a card of its own (the owner, 2026-11-12: "Ui problems",
+ * of the form hanging bare under the bar on a phone). On a card in a list it opens inside the card, as before.
+ */
+function rejectForm(ctx, post, { ajax = null, left = null, own = false } = {}) {
   const w = DELETABLE.includes(post.status) ? DELETE_WORDS : REJECT_WORDS;
   const canRedo = !post.sample && left !== 0;
   // A new post comes for the day only while more than an hour of it is left (src/autonomy/every-day.js DAY_LEFT_MS).
   const tail = !canRedo || left == null ? (left === 0 && !post.sample ? `<p class="muted small m0">ההחלפות של החודש נוצלו. ${w.after} מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה.</p>` : '') : `<p class="muted small m0">${w.after} מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
-  return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/${w.path}"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
+  return `<form class="rejectbox${own ? ' panel own' : ''}" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/${w.path}"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
 <label class="f">${w.ask}<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
 <input type="text" name="note" placeholder="מה לשנות, במילים שלכם (לא חובה)" maxlength="300">
 ${tail}<div class="rejectacts"><button class="btn danger" type="submit" name="redo" value="0">${w.go}</button>${canRedo ? `<button class="btn" type="submit" name="redo" value="1">${w.go} ולכתוב מחדש</button>` : ''}</div></form>`;
@@ -67,7 +71,7 @@ const DELETE_WORDS = { path: 'delete', ask: 'למה למחוק?', go: 'למחו�
  * reason form as a deletion (rejectForm).
  */
 const deleteRow = (ctx, post, left) => `<div class="actions p0x pt10"><button class="btn sm ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}למחוק את הפוסט</button></div>
-${rejectForm(ctx, post, { left })}`;
+${rejectForm(ctx, post, { left, own: true })}`;
 
 /** What a post counted as in the customer's month (src/budget/quota.js). */
 const QUOTA_KIND_HE = { suggestion: 'הצעה', redo: 'החלפה', retry: 'לא נספר, הבדיקות שלנו עצרו אותו' };
@@ -937,7 +941,7 @@ ${trustLine(post, ctx)}
 ${post.caption || post.caption_ig ? fold('caption', 'הטקסט שעולה עם המצגת', `<div class="capwrap">${captionBlock(post, pack?.meta?.platforms || [])}</div>`, { inCard: true, one: false }) : ''}
 </section>
 ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}לערוך</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
-${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}
+${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null, own: true })}` : ''}
 ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
 ${post.status === 'held' ? `<div class="actionbar"><a class="btn primary" href="/accounts?account=${esc(post.account_id)}#connect-${esc(post.account_id)}">לחבר</a></div>` : ''}
 ${DELETABLE.includes(post.status) ? deleteRow(ctx, post, d.quota && !post.sample ? d.quota.redos.left : null) : ''}
