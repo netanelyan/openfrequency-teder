@@ -757,9 +757,6 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
       // The one page that is not one account's: every account of the workspace, and what waits in all of them.
       if (p === '/all') {
-        // A customer's workspace has one account: the page of every account is Today's (the audit, 2026-11-12, P2-66:
-        // a customer could type it and approve posts without seeing their slides).
-        if (!user.operator && c.packs.length < 2) return redirect(res, '/');
         // The operator also sees every workspace's health (src/web/health.js): payment, failures, connections, drafts;
         // and, in red at the top, that posts are only written to disk while PUBLISH_MODE or ZERNIO_API_KEY says so
         // (src/publish/live.js), read from this process's environment.
