@@ -128,3 +128,37 @@ test('Results: a customer reads what their posts did; the formats, the blocks an
   assert.match(ops, /id="formats"/);
   assert.doesNotMatch(ops, /YOUTUBE_API_KEY/, 'the variable is named only in developer mode');
 });
+
+test('the Sources page says who adds a source, and Teder\'s own are marked as Teder\'s, the old general-knowledge name included', async () => {
+  const { sourcesPage } = await import('../src/web/pages.js');
+  const { MODEL_KEY, MODEL_WHY } = await import('../src/sources/model.js');
+  const { WIKI_KEY } = await import('../src/sources/research.js');
+  const at = '2026-11-01T10:00:00.000Z';
+  const src = (key, extra = {}) => ({ id: key.length, key, type: 'web', url: 'https://example.test/', name: key, why: 'למה סומכים עליו', status: 'approved', approved_at: at, docs: 1, config: {}, ...extra });
+  const sources = [src(MODEL_KEY, { name: 'ידע כללי של המודל', why: 'עובדות שהמודל מכיר בעצמו' }), src(WIKI_KEY), src('found-by-a-round', { config: { byTeder: true } }), src('chosen-by-them')];
+  const html = sourcesPage({ csrf: 'x' }, { packs: [ctx.pack('demo')], current: ctx.pack('demo'), sources });
+  assert.match(html, /<span class="sub">מכאן תדר לוקח את העובדות<\/span>/);
+  assert.match(html, /חלק מהמקורות תדר מוסיף בעצמו, כמו ויקיפדיה/);
+  assert.doesNotMatch(html, /רק מקור מאושר יכול לתמוך בעובדה|ידע כללי של המודל|שהמודל מכיר|יופיע ליד כל עובדה/);
+  assert.ok(html.includes(MODEL_WHY.replace(/"/g, '&quot;')), 'the general knowledge says what it is, in words a customer reads');
+  assert.equal((html.match(/נוסף על ידי תדר/g) || []).length, 3, "general knowledge, Wikipedia and the round's find");
+  assert.equal((html.match(/אושר 1 בנוב׳/g) || []).length, 1, 'the one the customer chose');
+});
+
+test('money and plan wording: the paywall and the grace say the connections go 3 days after a stop; a thinned month says how the posts spread', async () => {
+  const { GATE } = await import('../src/web/pages.js');
+  const { PAY_HE } = await import('../src/web/ui.js');
+  const { STOP_GRACE_DAYS } = await import('../src/billing/retention.js');
+  const { schedulePanel } = await import('../src/web/schedule.js');
+  assert.equal(STOP_GRACE_DAYS, 3, 'the copy below says 3');
+  assert.match(GATE.unpaid.text, /החיבורים לטיקטוק, לאינסטגרם ולפייסבוק מתנתקים 3 ימים אחרי שתדר נעצר/);
+  assert.doesNotMatch(GATE.unpaid.text, /כמו שהם/);
+  assert.match(PAY_HE.due.text('יום שבת, 14 בנובמבר'), /3 ימים אחרי העצירה החיבורים לרשתות מתנתקים\.$/);
+  const panel = (month) => schedulePanel({ csrf: 'x' }, { pack: { id: 'demo', meta: { displayName: 'עציץ ושמש' } }, byDay: {}, month: { rest: 0, rules: { shabbat: false, holidays: false }, shared: false, ...month } });
+  // The small plan's 15 over a month of 27 posting days: one about every other day, never "one instead of two".
+  const small = panel({ all: 51, days: 27, plan: 15, whole: 15 });
+  assert.match(small, /החבילה שלכם היא 15 פוסטים בחודש, אז הפוסטים יתפזרו על כל החודש, בערך פוסט אחד כל יומיים\./);
+  assert.doesNotMatch(small, /פוסט אחד במקום שניים/);
+  // The full plan's 40 over the same days: every day still gets one.
+  assert.match(panel({ all: 51, days: 27, plan: 40, whole: 40 }), /ולכן בחלק מהימים ייצא פוסט אחד במקום שניים\./);
+});

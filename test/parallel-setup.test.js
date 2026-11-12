@@ -358,8 +358,9 @@ test('one Teder account a subscription: a customer whose account is open gets no
   await atSamples('o-one', 'one.acct', 41);
   const { cookie } = fake.session(customer(41));
   const page = await (await get('/new', cookie)).text();
-  assert.match(page, /<h2>עוד חשבון הוא עוד מנוי<\/h2>/);
-  assert.ok(page.includes('לכל חשבון בתדר יש מנוי משלו, והחשבון שלכם כבר פתוח. רוצים עוד חשבון?'), 'says why, and how to get one');
+  assert.match(page, /<h2>חשבון נוסף<\/h2>/);
+  // One answer, the code's: the plan is the workspace's, and another account shares it (the audit, 2026-11-12, P1-12).
+  assert.ok(page.includes('במנוי של תדר יש חשבון אחד, והחשבון שלכם כבר פתוח. רוצים עוד חשבון? כתבו לנו ונסדר את זה. חשבון נוסף מתחלק באותה חבילה, ולא מוסיף פוסטים.'), 'says why, and how to get one');
   assert.doesNotMatch(page, /name="niche"/, 'no form for another');
   assert.match(page, /href="\/new\/o-one"/, 'the setup in progress is still listed: the way back to its samples');
   const again = await post('/new', cookie, { niche: 'עוד נושא' }, { ajax: true });
@@ -473,7 +474,7 @@ test('the sources step is compact: a row each, 8 open with the ticked ones first
   const open = html.slice(0, html.indexOf('<details class="srcrest">'));
   assert.equal((open.match(/<li class="srcrow">/g) || []).length, 8, '8 rows open');
   assert.equal((html.match(/<li class="srcrow">/g) || []).length, 12, 'all 12 on the page');
-  assert.match(html, /סימנו 11 מקורות חזקים\. תדר כותב רק ממקורות מסומנים\./);
+  assert.match(html, /סימנו 11 מקורות חזקים\. תדר כותב מהמקורות המסומנים, וכשהם דלים הוא מוסיף מקורות בעצמו\. כולם מופיעים בעמוד המקורות\./);
   assert.match(html, /<summary>עוד 4 מקורות, 3 מהם מסומנים<\/summary>/);
   assert.match(html, /<span class="ltr">m1\.example\.org<\/span>/, 'the site, not the whole address');
   assert.doesNotMatch(html, /name="why_/, 'no reason box for the customer');

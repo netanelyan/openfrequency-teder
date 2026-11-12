@@ -190,8 +190,9 @@ export function accountSwitch(ctx) {
   const all = ctx.accounts || [];
   const cur = all.find((a) => a.id === ctx.current);
   const badge = (n, label) => (n ? `<b class="badge num" aria-label="${n} ${label}">${n}</b>` : '');
-  // A read-only session (the operator viewing as a customer) opens no new account.
-  const newRow = ctx.readOnly ? '' : `<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a>`;
+  // A read-only session (the operator viewing as a customer) opens no new account, and nor does a customer whose
+  // workspace has its one (ctx.newAccount, server.js): the row led to a refusal (the audit, 2026-11-12, P2-31).
+  const newRow = ctx.readOnly || ctx.newAccount === false ? '' : `<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a>`;
   // On the page of every account (/all) the switcher says so, and each account is a link to its own home.
   if (ctx.active === 'all' && all.length) {
     const link = (a) => `<a class="to" href="/?account=${encodeURIComponent(a.id)}" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</a>`;
@@ -242,7 +243,9 @@ export function adminBar(ctx) {
  */
 export const PAY_HE = {
   soon: { title: (date) => `המנוי לתדר שולם עד ${date}.`, text: () => 'אפשר כבר לשלם על החודש הבא, כדי שתדר ימשיך לעבוד בלי הפסקה.' },
-  due: { title: () => 'החודש ששילמתם עליו נגמר, והתשלום על החודש הבא עוד לא הגיע אלינו.', text: (day) => `תדר ממשיך לעבוד עד סוף ${day}, ואז ייעצר עד שהתשלום יגיע.` },
+  // The connections go 3 days after the stop (src/billing/retention.js STOP_GRACE_DAYS; test/customer-copy.test.js holds
+  // the two together): said here, before the stop, too.
+  due: { title: () => 'החודש ששילמתם עליו נגמר, והתשלום על החודש הבא עוד לא הגיע אלינו.', text: (day) => `תדר ממשיך לעבוד עד סוף ${day}, ואז ייעצר עד שהתשלום יגיע. 3 ימים אחרי העצירה החיבורים לרשתות מתנתקים.` },
   button: 'איך משלמים',
 };
 const sameYear = (a, b) => F.year.format(new Date(a)) === F.year.format(new Date(b));
@@ -310,7 +313,7 @@ ${SPRITE}
   <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'להרחיב את סרגל הצד' : 'לכווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'להרחיב' : 'לכווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#plan" title="פורסמו ${taken} מתוך ${limit} החודש">${ring}<span class="lbl">פורסמו</span><span class="amt num ltr"><b>${taken}</b><span> / ${limit}</span></span></a>
+    ${limit ? `<a class="spend" href="/settings#plan" title="פורסמו ${taken} מתוך ${limit} החודש">${ring}<span class="lbl">פורסמו</span><span class="amt num ltr"><b>${taken}</b><span> / ${limit}</span></span></a>` : ''}
     ${themeButton(ctx.theme)}
     ${ctx.links?.logout ? `<a class="logout" href="${esc(ctx.links.logout)}" title="יציאה">${icon('logout')}<span class="lbl">יציאה</span></a>` : ''}
   </div>

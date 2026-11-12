@@ -136,7 +136,8 @@ test('allowed is the only thing acted on, and a change is logged once', async ()
   assert.equal(log.filter((l) => /workspace 1: /.test(l) && /allowed/.test(l)).length, 2);
 });
 
-const GATE_TEXT = 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.';
+// What is kept after a stop, and what is not: the connections go 3 days after it (src/billing/retention.js).
+const GATE_TEXT = 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות נשמרים. החיבורים לטיקטוק, לאינסטגרם ולפייסבוק מתנתקים 3 ימים אחרי שתדר נעצר, ואחרי התשלום מחברים אותם שוב בדף החשבון.';
 
 test('the website: a workspace that has not paid sees where to read how to pay; the operator never does', async () => {
   fake.entitlement(2, 'unpaid');
@@ -158,7 +159,7 @@ test('the website: a workspace that has not paid sees where to read how to pay; 
   }
   const fresh = await fetch(`${base}/new`, { headers: { cookie: unpaid }, redirect: 'manual' });
   assert.equal(fresh.status, 200, '/new: open before paying');
-  assert.match(await fresh.text(), /עוד חשבון הוא עוד מנוי/, 'and its one account is open already');
+  assert.match(await fresh.text(), /<h2>חשבון נוסף<\/h2>/, 'and its one account is open already');
   // A button is refused too, before anything else is looked at.
   const res = await fetch(`${base}/posts/approve-all`, { method: 'POST', headers: { cookie: unpaid, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: 'ids=x' });
   assert.equal(res.status, 402);

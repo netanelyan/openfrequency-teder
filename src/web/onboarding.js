@@ -91,11 +91,12 @@ const TOPICS = { commas: true, max: 12, len: 60 };
 export const SITE_WAIT_MS = 6000;
 
 /**
- * One Teder account a subscription (the owner, 2026-10-31): a customer's plan is their one account's, never split
- * between accounts. Another account is another subscription, at the same price, opened by us. Our own workspaces keep
- * as many as they have.
+ * One Teder account a customer opens themselves (the owner, 2026-10-31). Another is ours to open for them, and it shares
+ * the workspace's plan: the plan is the workspace's, and another account gives more pages, never more posts
+ * (src/budget/quota.js). This said "another subscription at the same price" while Settings said the posts are shared;
+ * the audit of 2026-11-12 (P1-12) asked for one answer, the code's. Our own workspaces keep as many as they have.
  */
-export const ONE_ACCOUNT = 'לכל חשבון בתדר יש מנוי משלו, והחשבון שלכם כבר פתוח. רוצים עוד חשבון? כתבו לנו, ונפתח לכם עוד מנוי באותו מחיר.';
+export const ONE_ACCOUNT = 'במנוי של תדר יש חשבון אחד, והחשבון שלכם כבר פתוח. רוצים עוד חשבון? כתבו לנו ונסדר את זה. חשבון נוסף מתחלק באותה חבילה, ולא מוסיף פוסטים.';
 /** Whether a customer's workspace already has its one account. */
 export const hasAccount = (db, workspaceId) => customerWorkspace(workspaceId) && Boolean(db.get('SELECT 1 FROM accounts WHERE workspace_id = ? LIMIT 1', workspaceId));
 /** The samples one press asks for, the fewest that count as done, and the most tries to get there. */
@@ -199,7 +200,7 @@ export function recoverOnboarding(db) {
 
 const row = (ctx, id, { recover = true } = {}) => {
   let r = ctx.db.get('SELECT * FROM onboarding WHERE id = ?', id);
-  if (!r || (ctx.workspaceId != null && r.workspace_id !== ctx.workspaceId)) throw new ActionError('אין תהליך כזה', 404);
+  if (!r || (ctx.workspaceId != null && r.workspace_id !== ctx.workspaceId)) throw new ActionError('החשבון החדש הזה לא נמצא', 404);
   // Still searching with nobody searching: this process never started it, so a restart cut it off.
   if (recover && r.status === 'discovering' && !running.has(id)) {
     ctx.db.update('onboarding', id, { status: 'failed', candidates_json: { failure: 'restart' }, notes_json: [RESTARTED], updated_at: nowIso() });
@@ -301,7 +302,8 @@ function startSamples(ctx, id, { counted: counts = true } = {}) {
         keepForAccount(ctx.db, pack.id, res.candidates);
         const urls = res.candidates.filter(strong).map((c) => c.url);
         const at = nowIso();
-        const approved = urls.reduce((n, url) => n + Number(ctx.db.run("UPDATE sources SET status = 'approved', approved_at = ? WHERE account_id = ? AND url = ? AND status = 'pending'", at, pack.id, url).changes), 0);
+        // Approved by Teder, not the customer: marked so, for the Sources page to say "נוסף על ידי תדר" (P1-11).
+        const approved = urls.reduce((n, url) => n + Number(ctx.db.run("UPDATE sources SET status = 'approved', approved_at = ?, config_json = json_set(COALESCE(config_json, '{}'), '$.byTeder', json('true')) WHERE account_id = ? AND url = ? AND status = 'pending'", at, pack.id, url).changes), 0);
         notes.push(`המקורות נגמרו, אז חיפשנו מקורות חדשים: ${approved} אושרו לבד, ${res.candidates.filter(offered).length - approved} מחכים בעמוד המקורות`);
         say(`new sources: ${approved} approved, ${res.candidates.filter(offered).length - approved} pending`);
         if (!approved) return false;
@@ -461,7 +463,7 @@ export function statusOf(ctx, r) {
 const WAIT_STAGES = ['קוראים את המקורות', 'בוחרים נושא', 'כותבים', 'בודקים עובדות', 'מחפשים תמונות', 'מעצבים'];
 const WAIT_PHASE = ['קוראים את המקורות שבחרתם.', 'בוחרים נושא ועובדות לפוסט הבא.', 'כותבים את השקפים.', 'בודקים כל עובדה מול המקור שלה.', 'מחפשים לכל שקף תמונה אמיתית.', 'מעצבים את השקפים.'];
 const WAIT_SOURCES = 'המקורות נגמרו, אז מחפשים מקורות נוספים בעצמנו.';
-export const WAIT_TIPS = ['כל פוסט לוקח כמה דקות. אפשר לסגור את הדף, והכתיבה ממשיכה.', 'כל פוסט שמוכן מופיע כאן מיד.', 'פוסט שלא עובר את הבדיקות לא מגיע לכאן. כותבים אחר במקומו.', 'כל עובדה נבדקת מול המקור שלה לפני שהיא עולה על שקף.'];
+export const WAIT_TIPS = ['כל פוסט לוקח כמה דקות. אפשר לסגור את הדף, והכתיבה ממשיכה.', 'כל פוסט שמוכן מופיע כאן מיד.', 'פוסט שלא עובר את הבדיקות לא מגיע לכאן. כותבים אחר במקומו.', 'כל עובדה נבדקת מול המסמך שממנו היא לקוחה לפני שהיא עולה על שקף.'];
 
 /**
  * Where a round of samples is now: { stage (0 to 5, WAIT_STAGES), count, phase }, from its progress and the last step
@@ -663,7 +665,7 @@ ${connectPanel(pc, obConnectData(ctx, r), { base: `/new/${r.id}` })}</section>`)
  */
 /** The one step left: the samples are ready and the account is not live yet, so nothing is written for it. */
 function goLiveBanner(pc, r) {
-  return `<div class="banner info" id="golive">${icon('power')}<div><b>הדוגמאות מוכנות. נשאר צעד אחד: להעלות את החשבון לאוויר</b><p>עד שהחשבון באוויר תדר לא כותב לו פוסטים. במצב אישור כל פוסט מחכה לכם, ושום דבר לא יוצא בלי שתאשרו.</p></div>${postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' })}</div>`;
+  return `<div class="banner info" id="golive">${icon('power')}<div><b>הדוגמאות מוכנות, ונשאר להעלות את החשבון לאוויר</b><p>עד שהחשבון באוויר תדר לא כותב לו פוסטים. במצב אישור כל פוסט מחכה לכם, ושום דבר לא יוצא בלי שתאשרו.</p></div>${postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' })}</div>`;
 }
 
 function activateBanner(pc, { good, capped }) {
@@ -693,9 +695,9 @@ function listPage(ctx, pc) {
     { ...pc, title: 'חשבון חדש', active: 'new' },
     `<div class="setup"><div class="head"><h1>חשבון חדש</h1>${one || capped ? '' : '<span class="sub">כותבים במה החשבון יעסוק, מאשרים מקורות ומקבלים פוסטים לדוגמה.</span>'}</div>
 ${capped ? activateBanner(pc, { good: goodSamples(ctx.db, ctx.workspaceId), capped: true }) : ''}
-${capped ? '' : one ? `<section class="panel"><header><h2>עוד חשבון הוא עוד מנוי</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
+${capped ? '' : one ? `<section class="panel"><header><h2>חשבון נוסף</h2></header><p>${withSupport(ONE_ACCOUNT)}</p>
 <div class="actions p0"><a class="btn" href="/accounts">לחשבון שלכם</a></div></section>` : `<section class="panel"><header><h2>מתחילים מכאן</h2></header>
-<p class="muted m-hide">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. מקור נכנס לחשבון רק אחרי שאתם מאשרים אותו.</p>
+<p class="muted m-hide">תדר מחפש אתרים שאפשר לסמוך עליהם, כמו משרדי ממשלה, גופים רשמיים וכלי תקשורת ותיקים, ובודק שכל אחד מהם באמת עוסק בנושא שלכם. אתם בוחרים מאיפה לכתוב. כשהמקורות דלים, תדר מוסיף בעצמו את ויקיפדיה ומקורות חזקים שהוא מוצא, ונעזר בידע כללי שמסומן "כדאי לבדוק". כל אחד מהם מופיע בעמוד המקורות, ואפשר להסיר אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}<input type="hidden" name="language" value="he">
 <label class="f">במה החשבון יעסוק <small>כמו שהייתם מספרים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">למי הוא מיועד<input type="text" name="audience" maxlength="160" placeholder="למשל: סטודנטים שמבשלים בתקציב קטן"></label>
@@ -787,7 +789,10 @@ function sourcesPanel(pc, shown, hidden, chosen = null) {
   const restTicked = rest.filter(on).length;
   const rows = (list) => `<ul class="srclist">${list.map((c) => sourceRow(pc, c, { on: on(c), why: chosen?.why(c) ?? null, isNew: isNew(c) })).join('')}</ul>`;
   const strongCount = shown.filter(strong).length;
-  const said = `${strongCount ? `סימנו ${strongCount === 1 ? 'מקור חזק אחד' : `${strongCount} מקורות חזקים`}. ` : ''}תדר כותב רק ממקורות מסומנים.`;
+  // What Teder writes from: the sources ticked here, and what it adds itself when they run dry (the audit, 2026-11-12,
+  // P1-11: "תדר כותב רק ממקורות מסומנים" was not true of Wikipedia, of strong sources found while the samples are written,
+  // or of general knowledge).
+  const said = `${strongCount ? `סימנו ${strongCount === 1 ? 'מקור חזק אחד' : `${strongCount} מקורות חזקים`}. ` : ''}תדר כותב מהמקורות המסומנים, וכשהם דלים הוא מוסיף מקורות בעצמו. כולם מופיעים בעמוד המקורות.`;
   const more = `${rest.length === 1 ? 'עוד מקור אחד' : `עוד ${rest.length} מקורות`}${restTicked ? `, ${restTicked === rest.length ? (rest.length === 1 ? 'מסומן' : 'כולם מסומנים') : restTicked === 1 ? 'אחד מהם מסומן' : `${restTicked} מהם מסומנים`}` : ''}`;
   return `<section class="panel" id="found"><header><h2>המקורות שמצאנו</h2></header><p class="muted small m0">${esc(said)}</p>
 ${rows(first)}
@@ -801,7 +806,7 @@ ${pc.operator && hidden.length ? `<details class="srcrest"><summary class="muted
  */
 function fewPanel(pc, r, n) {
   return `<section class="panel" id="more"><header><h2>מצאנו מעט מקורות טובים לנושא הזה</h2></header>
-<p class="muted">${n ? `יש כאן ${n === 1 ? 'מקור אחד' : `${n} מקורות`} שאפשר לעבוד איתם.` : 'לא מצאנו מקור שבאמת עוסק בנושא.'} עדיף להוסיף אתרים שאתם סומכים עליהם ולחפש שוב, במקום למלא את החשבון במקורות חלשים.</p>
+<p class="muted">${n ? (n === 1 ? 'יש כאן מקור אחד שאפשר לעבוד איתו.' : `יש כאן ${n} מקורות שאפשר לעבוד איתם.`) : 'לא מצאנו מקור שבאמת עוסק בנושא.'} עדיף להוסיף אתרים שאתם סומכים עליהם ולחפש שוב, במקום למלא את החשבון במקורות חלשים.</p>
 <div class="formgrid">
 <label class="f">אתרים שאתם סומכים עליהם <small class="js-hide">כתובת אחת בכל שורה</small><small class="js-show">כותבים כתובת ולוחצים Enter</small><textarea name="examples" rows="3" dir="ltr" required data-pills data-max="10" form="more-form"></textarea></label>
 <div><button class="btn" type="submit" form="more-form">${icon('spark')}לחפש שוב</button></div></div></section>`;

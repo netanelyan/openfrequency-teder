@@ -743,9 +743,14 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
       const pc = pageCtx(current, flashMsg);
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
 
+      // A customer's workspace with no account on air yet (paid by bank transfer first, as the payment decision allows,
+      // or one of ours): Today and the account page are one card with the way to set it up, and the pages that need
+      // an account go there (the audit, 2026-11-12, P1-20: Today read "0 / 0" and "אין מה לאשר כרגע", with nothing
+      // to press, and on a phone no way to /new at all). beforePaying is the paywall's own answer to "is there one".
+      const setup = !user.operator && user.workspace ? beforePaying(c, user.workspace.id) : null;
       // Home, with the block of work in progress (src/web/progress.js): the workspace's new-account setups, the posts
       // of the account shown being written.
-      if (p === '/') return page(pages.todayPage(pc, { ...data.today(sc), progressHtml: progressPanel(progressOf(c, sc)) }));
+      if (p === '/') return page(pages.todayPage(pc, { ...data.today(sc), progressHtml: progressPanel(progressOf(c, sc)), setup }));
       // What that block's script asks while something runs: JSON, never cached, the same workspace's and account's.
       if (p === '/progress.json') return json(req, res, 200, progressStatus(progressOf(c, sc)));
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
@@ -765,30 +770,30 @@ export function createHandler(ctx, { port, env = process.env, accounts = null, e
         return d ? page(pages.postPage(pc, d)) : own ? redirect(res, atAdmin) : page(pages.notFoundPage(pc), 404);
       }
       // The look is locked against the same customer's other accounts (no two alike), so the style reads the engine's packs.
-      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(c, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
+      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(c, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) })), { setup }));
       if (p === '/results') return page(pages.resultsPage(pc, data.results(sc)));
       const cur = current;
       if (p === '/sources') {
-        if (!cur) return page(pages.notFoundPage(pc), 404);
+        if (!cur) return setup ? redirect(res, '/') : page(pages.notFoundPage(pc), 404);
         return page(pages.sourcesPage(pc, { packs: sc.packs, current: cur, sources: data.sourcesFor(c, cur.id), deeper: sourcesDeeper(pc, c, cur) }));
       }
       if (p === '/settings') return page(pages.settingsPage(pc, data.settingsData(sc)));
       if (p === '/facts') {
-        if (!cur) return page(pages.notFoundPage(pc), 404);
+        if (!cur) return setup ? redirect(res, '/') : page(pages.notFoundPage(pc), 404);
         return page(pages.factsPage(pc, { packs: sc.packs, current: cur, topics: data.factsFor(c, cur), ...factDates() }));
       }
       if (p === '/sounds') {
-        if (!cur) return page(pages.notFoundPage(pc), 404);
+        if (!cur) return setup ? redirect(res, '/') : page(pages.notFoundPage(pc), 404);
         return page(pages.soundsPage(pc, { ...data.soundsFor(c, cur), packs: sc.packs }));
       }
       // The service worker asks what to show for a push it was woken by: the workspace's latest, the operator's any.
       if (p === '/notifications/latest.json') return json(req, res, 200, latestNotification(c.db, user.operator ? null : c.packs.map((x) => x.id)) || {});
       if (p === '/topics') {
-        if (!cur) return page(pages.notFoundPage(pc), 404);
+        if (!cur) return setup ? redirect(res, '/') : page(pages.notFoundPage(pc), 404);
         return page(pages.topicsPage(pc, data.topicsFor(c, cur)));
       }
       if (p === '/rivals') {
-        if (!cur) return page(pages.notFoundPage(pc), 404);
+        if (!cur) return setup ? redirect(res, '/') : page(pages.notFoundPage(pc), 404);
         return page(pages.rivalsPage(pc, { ...data.rivalsFor(c, cur), packs: sc.packs }));
       }
       if (p === '/more') return page(pages.morePage(pc));

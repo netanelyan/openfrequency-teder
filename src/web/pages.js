@@ -9,6 +9,8 @@ import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
 import { SLIDE_MAX } from '../pipeline/build.js';
+import { WIKI_KEY } from '../sources/research.js';
+import { STOP_GRACE_DAYS } from '../billing/retention.js';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_PLAN, DRAFTS_PER_DAY, MAX_PLAN, PLAN_HE, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 import { TIKTOK_LINE, connectPanel, tiktokModePanel } from './connect.js';
@@ -23,7 +25,7 @@ import { PROMO_TITLE, promoPanel } from './promo.js';
 import { LOGO_TITLE, logoPanel } from './logo.js';
 import { notLiveWords, sentPlatforms, shownStatus } from '../publish/live.js';
 import { captionAction } from '../pipeline/closing.js';
-import { MODEL_KEY, MODEL_NAME, UNSOURCED_HE } from '../sources/model.js';
+import { MODEL_KEY, MODEL_NAME, MODEL_WHY, UNSOURCED_HE } from '../sources/model.js';
 import { installCard, installPanel } from './install.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
@@ -593,7 +595,23 @@ function tiktokPanel(d) {
 /** How many of today's posts were only written to disk, in a line. */
 const writtenToday = (n) => (n === 1 ? 'מצגת אחת של היום לא נשלחה לרשתות' : `${n} מצגות של היום לא נשלחו לרשתות`);
 
+/**
+ * The one card a workspace with no account on air yet sees, on Today and on the account page (server.js `setup`, the
+ * paywall's beforePaying): what setting up is, and one button to it, or on with it (the audit, 2026-11-12, P1-20).
+ */
+export function setupCard(setup) {
+  if (!setup) return '';
+  const started = Boolean(setup.started);
+  return `<section class="panel home-panel start" id="start"><header><h2>${started ? 'ממשיכים בהקמת החשבון' : 'מתחילים כאן'}</h2></header>
+<p class="m0">${started ? 'ההקמה התחילה, ונשאר להשלים אותה. בסוף שלה מחכים לכם פוסטים לדוגמה, ואחרי זה מעלים את החשבון לאוויר.' : 'כותבים במה העסק עוסק, בוחרים מקורות ומקבלים פוסטים לדוגמה. אחר כך מחברים את הרשתות, והפוסטים מתחילים להגיע לאישור.'}</p>
+<div class="actions p0x pt10"><a class="btn primary" href="${esc(setup.href)}">${started ? '' : icon('plus')}${started ? 'להמשיך בהקמת החשבון' : 'להקים את החשבון'}</a></div></section>`;
+}
+
 export function todayPage(ctx, d) {
+  // Nothing on air yet: Today is the way to set up, and nothing else (no counts of zero, no "nothing to approve").
+  if (d.setup) return layout({ ...ctx, title: 'היום', active: 'today' }, `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
+${d.progressHtml || ''}
+${setupCard(d.setup)}`);
   const count = (k) => d.groups.reduce((s, g) => s + g[k].length, 0);
   const todo = needsYou(d, 6, ctx);
   // One number leads: what went out today, with the latest of it. What waits for the owner and what is scheduled sit
@@ -930,11 +948,14 @@ ${takedownForm}`;
 // The page shows the account the switcher picked (server.js), the operator's too. Given several (the function takes a
 // list), each is a section of its own, the same layout one under the other.
 
-export function accountsPage(ctx, rows) {
-  // A new account is also the switcher's last row: on a phone that is where it is.
-  const body = `<div class="head"><h1>החשבון</h1><span class="end m-hide"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
-${rows.map((r) => accountSection(ctx, r)).join('')}`;
-  return layout({ ...ctx, title: 'חשבונות', active: 'accounts' }, body);
+export function accountsPage(ctx, rows, { setup = null } = {}) {
+  // A new account is also the switcher's last row: on a phone that is where it is. A customer whose workspace has its
+  // one account is offered none (ctx.newAccount, server.js): it led to a refusal. With none yet, the page is the way to
+  // set it up, on a phone too (the audit, 2026-11-12, P1-20 and P2-31).
+  const add = ctx.newAccount !== false && rows.length ? `<span class="end m-hide"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span>` : '';
+  const body = `<div class="head"><h1>החשבון</h1>${add}</div>
+${rows.length ? rows.map((r) => accountSection(ctx, r)).join('') : setupCard(setup)}`;
+  return layout({ ...ctx, title: 'החשבון', active: 'accounts' }, body);
 }
 
 /** One account: its header, a paused account's banner, the grid of panels, and the power switch. */
@@ -1347,6 +1368,8 @@ export function topicPanel(t) {
 /* ------------------------------------------------------------ sources */
 
 const SOURCE_STATUS = { approved: ['מאושר', 'ok'], pending: ['ממתין לאישור', 'warn'], removed: ['הוסר', 'ghost'] };
+/** A source Teder approved by itself: its general knowledge, Wikipedia for research, one a round of samples found. */
+const byTeder = (s) => s.key === MODEL_KEY || s.key === WIKI_KEY || s.config?.byTeder === true;
 const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'נתונים' };
 
 export function sourcesPage(ctx, { packs, current, sources, deeper = '', form = {}, problems = [] }) {
@@ -1356,9 +1379,9 @@ export function sourcesPage(ctx, { packs, current, sources, deeper = '', form = 
     .map((s) => {
       const [he, cls] = SOURCE_STATUS[s.status] || [s.status, ''];
       return `<article class="card acc acc-${esc(current.id)} srccard"><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span><span class="chip ghost">${esc(TYPE_HE[s.type] || s.type)}</span>${s.score ? `<span class="chip sig" title="${esc(s.score.reason || '')}">סמכות ${esc(s.score.authority)}/10</span>` : ''}<span class="end muted small">${s.docs} מסמכים</span></div>
-<h3 class="srcname" dir="auto">${esc(s.name)}</h3>${s.key === MODEL_KEY ? `<span class="chip warn">${esc(UNSOURCED_HE)}</span>` : `<a class="small ltr" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a>`}
-<p class="muted small m6" dir="auto">${esc(s.why || '')}</p>
-<p class="muted small m4 when">${s.approved_at ? `אושר ${esc(shortDate(s.approved_at))}` : ''}${s.last_ok_at ? ` · נקרא ${esc(stamp(s.last_ok_at))}` : ''}${s.last_error ? ` · <span class="chip bad">${ctx.operator ? esc(s.last_error.slice(0, 80)) : 'הקריאה האחרונה לא הצליחה'}</span>` : ''}</p>
+<h3 class="srcname" dir="auto">${esc(s.key === MODEL_KEY ? MODEL_NAME : s.name)}</h3>${s.key === MODEL_KEY ? `<span class="chip warn">${esc(UNSOURCED_HE)}</span>` : `<a class="small ltr" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a>`}
+<p class="muted small m6" dir="auto">${esc(s.key === MODEL_KEY ? MODEL_WHY : s.why || '')}</p>
+<p class="muted small m4 when">${s.status === 'approved' && byTeder(s) ? `נוסף על ידי תדר${s.approved_at ? ` ב-${esc(shortDate(s.approved_at))}` : ''}` : s.approved_at ? `אושר ${esc(shortDate(s.approved_at))}` : ''}${s.last_ok_at ? ` · נקרא ${esc(stamp(s.last_ok_at))}` : ''}${s.last_error ? ` · <span class="chip bad">${ctx.operator ? esc(s.last_error.slice(0, 80)) : 'הקריאה האחרונה לא הצליחה'}</span>` : ''}</p>
 <div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אישור', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
     })
     .join('');
@@ -1366,9 +1389,13 @@ export function sourcesPage(ctx, { packs, current, sources, deeper = '', form = 
   const more = ctx.unpaid ? '' : `<span class="end m-hide"><a class="btn sm" href="/topics">${icon('spark')}נושאים</a><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span>`;
   // On a phone the two are rows at the foot of the page, after the sources and the way to add one.
   const moreRows = ctx.unpaid ? '' : `<nav class="list m-only mlinks" aria-label="עוד במקורות">${navRow('/topics', 'spark', 'נושאים')}${navRow(`/facts?account=${esc(current.id)}`, 'shield', 'עובדות שנבדקו ביד')}</nav>`;
-  const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span>${more}</div>
+  // What is true of the sources (the audit, 2026-11-12, P1-11): every fact on a slide is quoted word for word from an
+  // approved source's document, and some of them Teder adds itself (Wikipedia, strong sources found while the samples
+  // were written, and general knowledge when the sources are thin, src/sources/model.js), marked on their cards. It said
+  // "רק מקור מאושר יכול לתמוך בעובדה" and "only after you approve it", and showed Teder's own as "אושר <date>".
+  const body = `<div class="head"><h1>מקורות</h1><span class="sub">מכאן תדר לוקח את העובדות</span>${more}</div>
 ${tabs}
-<p class="lede m-hide">עובדה בשקף חייבת ציטוט ממסמך של מקור מאושר של החשבון. מקור שמוסר כאן מפסיק לתמוך בכל פוסט שעוד לא פורסם, והפוסט ייחסם בבדיקה שלפני הפרסום.</p>
+<p class="lede m-hide">כל עובדה בשקף מצוטטת מילה במילה ממסמך של מקור מאושר. חלק מהמקורות תדר מוסיף בעצמו, כמו ויקיפדיה, וכשאין מספיק במקורות הוא נעזר בידע כללי, ואז הפוסט מסומן "כדאי לבדוק". מקור שמסירים כאן לא ישמש פוסטים שעוד לא עלו.</p>
 ${deeper}
 <div class="cols"><div class="grid12">${list || `<div class="empty"><b>אין מקורות</b></div>`}</div>
 ${fold('add', 'הוספת מקור', `<section class="panel"><header><h2>הוספת מקור</h2></header>
@@ -1377,7 +1404,7 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(
 <label class="f">שם<input type="text" name="name" required value="${esc(form.name || '')}"></label>
 <label class="f">כתובת <small>https בלבד</small><input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
 <label class="f">סוג<select name="type"><option value="rss">פיד חדשות</option><option value="web">דף באתר</option><option value="api">מקור נתונים</option></select></label>
-<label class="f">למה סומכים עליו? <small>יופיע ליד כל עובדה ממנו</small><textarea name="why" required minlength="10">${esc(form.why || '')}</textarea></label>
+<label class="f">למה סומכים עליו?<textarea name="why" required minlength="10">${esc(form.why || '')}</textarea></label>
 <button class="btn primary" type="submit">${icon('plus')}להוסיף כמקור מאושר</button></form></section>`)}</div>
 ${catalogPanel(ctx, current, sources)}
 ${moreRows}`;
@@ -1562,7 +1589,7 @@ const navRow = (href, ic, t) => `<a href="${href}"><span class="ico">${icon(ic)}
 export function morePage(ctx) {
   const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;
   const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
-${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד פוסטים לדוגמה')}
+${ctx.newAccount === false ? '' : row('/new', 'plus', 'חשבון חדש', 'ממקור ועד פוסטים לדוגמה')}
 ${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, מכסות, מפתחות' : 'התראות, החבילה החודשית, החשבון שלך')}
 ${ctx.operator ? row('/demos', 'accounts', 'דמואים לחנויות', 'חנויות שביקשו דמו באתר') : ''}
 ${ctx.operator ? row('/leads', 'inbox', 'לידים', 'חנויות שתורן מצא, מהדמו ועד התשובה') : ''}
@@ -1580,7 +1607,10 @@ export const GATE = {
   error: { title: 'אי אפשר לבדוק כרגע מי נכנס', text: 'שירות הכניסה לא ענה. נסו שוב בעוד דקה.' },
   // The paywall (src/billing/entitlement.js): signed in, but the workspace has not paid for Teder. How to pay is
   // accounts' to say (its /setup page), whichever way it takes payment, so this says only what is true either way.
-  unpaid: { title: 'תדר מחכה לתשלום', text: 'תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות שלכם נשמרים כמו שהם.' },
+  // What is kept and what is not after a stop (src/billing/retention.js): the posts, sources and settings stay, and
+  // what was connected through Zernio is disconnected STOP_GRACE_DAYS after it (the audit, 2026-11-12, P1-13: it said
+  // everything is kept "כמו שהם").
+  unpaid: { title: 'תדר מחכה לתשלום', text: `תדר נפתח אחרי שהתשלום מגיע אלינו. בחשבון שלכם כתוב איך משלמים. המצגות, המקורות וההגדרות נשמרים. החיבורים לטיקטוק, לאינסטגרם ולפייסבוק מתנתקים ${STOP_GRACE_DAYS} ימים אחרי שתדר נעצר, ואחרי התשלום מחברים אותם שוב בדף החשבון.` },
 };
 
 /** The owner's line for a customer whose samples are ready and who has not paid yet (2026-11-02, the audit's item 2). */

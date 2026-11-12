@@ -149,3 +149,20 @@ test('a post that moved on meanwhile is refused in words, never by its status co
     ctx.db.update('posts', postId, { status: 'queued', published_at: null });
   }
 });
+
+test('a paid workspace with no account yet: Today is one card that leads to setting it up, and the pages that need an account go there', async () => {
+  const cookie = fake.session(customer(5)).cookie;
+  const home = await (await get('/', cookie)).text();
+  assert.match(home, /<h2>מתחילים כאן<\/h2>/);
+  assert.match(home, /<a class="btn primary" href="\/new">[\s\S]*?להקים את החשבון<\/a>/);
+  assert.doesNotMatch(home, /אין מה לאשר כרגע|class="kpis"|class="spend"/, 'no counts of zero, no "nothing to approve", no ring of 0 / 0');
+  const accounts = await (await get('/accounts', cookie)).text();
+  assert.match(accounts, /להקים את החשבון/, 'the account page leads there too, on a phone as well (no m-hide)');
+  assert.doesNotMatch(accounts, /m-hide"><a class="btn sm" href="\/new">/);
+  const sources = await get('/sources', cookie);
+  assert.equal(sources.status, 303);
+  assert.equal(sources.headers.get('location'), '/');
+  // A workspace with its one account is offered no other: the switcher, the account page and More.
+  const own = login();
+  for (const p of ['/', '/accounts', '/more']) assert.doesNotMatch(await (await get(p, own)).text(), /href="\/new"/, p);
+});

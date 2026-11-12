@@ -179,5 +179,7 @@ export function monthOf(db, pack, { t = Date.now(), byDay = null, shabbat = null
   // (`whole` is then the plan itself).
   const share = monthShare(db, pack.id);
   const whole = planOf(db, pack.id).suggested;
-  return { month, slots: kept, all, plan: share, whole, shared: share !== whole, rest: restBy.shabbat + restBy.holidays, restBy, rules: rulesOf(sched) };
+  // The days of the month a post may go out on, for what the thinned month says (src/web/schedule.js monthLine).
+  const days = datesOf(month).filter((d) => slotsFor(d, plain).slots.length).length;
+  return { month, slots: kept, all, days, plan: share, whole, shared: share !== whole, rest: restBy.shabbat + restBy.holidays, restBy, rules: rulesOf(sched) };
 }

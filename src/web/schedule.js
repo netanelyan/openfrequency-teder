@@ -44,6 +44,13 @@ function rulesLine({ shabbat, holidays }) {
 function monthLine(m) {
   // An account that shares the plan with the workspace's other accounts is thinned to its part of it.
   const part = m.shared ? `החלק של החשבון הזה בחבילה הוא ${m.plan} פוסטים בחודש, מתוך ${m.whole} לכל החשבונות שלכם` : `החבילה שלכם היא ${m.plan} פוסטים בחודש`;
+  // Thinned to the plan (src/schedule/slots.js monthSlots): a day's second time first, so while the plan covers every
+  // day chosen, some days get one post instead of two; under that the posts spread over the month and some days get
+  // none. The small plan's 15 read "פוסט אחד במקום שניים" over a month of 27 days (the audit, 2026-11-12, P1-14).
+  if (m.all > m.plan && m.days > m.plan) {
+    const every = m.days / m.plan;
+    return `לפי הבחירה הזו יש בחודש הבא מקום ל-${m.all} פוסטים. ${part}, אז הפוסטים יתפזרו על כל החודש, ${every >= 1.75 ? `בערך פוסט אחד כל ${Math.round(every) === 2 ? 'יומיים' : `${Math.round(every)} ימים`}` : 'ובחלק מהימים שבחרתם לא ייצא פוסט'}.`;
+  }
   if (m.all > m.plan) return `לפי הבחירה הזו יש בחודש הבא מקום ל-${m.all} פוסטים. ${part}, ולכן בחלק מהימים ייצא פוסט אחד במקום שניים.`;
   if (m.all === m.plan) return m.shared ? `לפי הבחירה הזו יוצאים בחודש הבא ${m.plan} פוסטים, כל החלק של החשבון הזה בחבילה.` : `לפי הבחירה הזו יוצאים בחודש הבא ${m.plan} פוסטים, כל החבילה.`;
   return `לפי הבחירה הזו יוצאים בחודש הבא ${m.all} פוסטים, פחות מ-${m.plan} ${m.shared ? 'שבחלק של החשבון הזה בחבילה' : 'שבחבילה'}. אפשר להוסיף ימים או שעה שנייה.`;

@@ -78,7 +78,7 @@ test('two samples are not enough to go on; the third opens going live, one press
   assert.match(html, /<p class="muted small m0">3 דוגמאות עברו את כל הבדיקות\.<\/p>/);
   // The one step left, at the top of the page with its button, and no "עברתי על הדוגמאות" before it (the owner,
   // 2026-11-08: "there is no button for the setup, and someone cant know if he finished it or not").
-  assert.match(html, /<div class="banner info" id="golive">[^]*נשאר צעד אחד: להעלות את החשבון לאוויר[^]*action="\/new\/o-3\/live"/, 'the step left, with its button');
+  assert.match(html, /<div class="banner info" id="golive">[^]*הדוגמאות מוכנות, ונשאר להעלות את החשבון לאוויר[^]*action="\/new\/o-3\/live"/, 'the step left, with its button');
   assert.doesNotMatch(html, /action="\/new\/o-3\/reviewed"/, 'no step of its own before it');
   assert.doesNotMatch(html, /חמישה פוסטים|חמש הדוגמאות|מתוך 5/, 'nothing promises five');
   // Home's block says the account is not live yet, however long ago the samples were written, until it is.
