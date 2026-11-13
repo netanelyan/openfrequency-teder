@@ -298,7 +298,7 @@ export function kindProblems(format, post) {
       const words = ` ${normHe(t)} `;
       return ans.some((w) => words.includes(` ${w} `) || new RegExp(` [והבלמשכ]${w} `).test(words));
     };
-    const early = [['the cover', `${post.hook} ${post.sub}`], ['the captions', `${post.caption} ${post.captionShort}`], ['the keywords', (post.keywords || []).join(' ')], ...content.filter((s) => s.role === 'clue').map((s, i) => [`clue ${i + 1}`, `${s.title} ${s.body}`])];
+    const early = [['the cover', `${post.hook} ${post.hookTiktok || ''} ${post.sub}`], ['the captions', `${post.caption} ${post.captionShort}`], ['the keywords', (post.keywords || []).join(' ')], ...content.filter((s) => s.role === 'clue').map((s, i) => [`clue ${i + 1}`, `${s.title} ${s.body}`])];
     content.forEach((s, i) => s.role === 'clue' && /(?:^|\s)רמז\s*(?:\d|מספר|ראשון|שני|שלישי|רביעי)/.test(`${s.title} ${s.body}`) && out.push(`slide ${i + 1}: no clue numbers in the text, the design draws them`));
     for (const [where, text] of early) if (spoils(text)) out.push(`${where} gives the answer away ("${subj.answer}"): it may appear only on the reveal slide`);
   }

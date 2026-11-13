@@ -792,6 +792,9 @@ async function cutFor(img, { style, kind, size, grids }) {
 
 const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i.test(file) ? 'image/svg+xml' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg'};base64,${readFileSync(file).toString('base64')}`;
 
+/** The cover line a platform's slides draw: TikTok's own where the post has one (build.js onTiktok), else the cover line. */
+export const coverLineFor = (post, size) => (size === 'tiktok' && post.extra?.hookTiktok ? post.extra.hookTiktok : post.hook);
+
 /**
  * Render every slide of a post for every platform of its pack.
  * post: { id, hook, sub, caption, token, extra }; slides: [{ kind, role, title, body, a, b, factKeys, sources, visual }];
@@ -920,7 +923,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         ...s,
         ...places[i],
         ...(postKind === 'list' ? { n, of: items } : {}),
-        hook: post.hook,
+        hook: coverLineFor(post, size),
         sub: post.sub,
         handle: pack.meta.handle,
         noHandle,

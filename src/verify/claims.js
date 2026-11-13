@@ -296,7 +296,7 @@ export function gate({ slides, facts, caption = '', hook = '', sub = '', extra =
   });
   if (attributed.size > ATTRIBUTED_MAX) problems.push(`the slides state ${attributed.size} attributed facts (${[...attributed].join(', ')}): ${ATTRIBUTED_MAX} at most, the rest of the post stands on facts`);
   for (const [where, text] of [
-    ['the cover', `${hook} ${sub} ${(extra.keywords || []).join(' ')} ${extra.subject?.date || ''} ${visualText(extra.coverVisual)}`],
+    ['the cover', `${hook} ${extra.hookTiktok || ''} ${sub} ${(extra.keywords || []).join(' ')} ${extra.subject?.date || ''} ${visualText(extra.coverVisual)}`],
     ['the caption', `${caption} ${extra.captionIg || ''}`],
   ]) {
     // "שמונה שנים" on a cover is a number like "8": held to the quotes, unless it is the post's own count.

@@ -66,7 +66,10 @@ test('the pages carry their folds: Settings each part, a post its slides for Ins
   // The panel inside each is the panel it was, so its links (#plan, #schedule) still land on it.
   assert.match(settings, /data-mfold="plan" open><summary>החבילה החודשית<\/summary><section class="panel" id="plan">/);
   const post = await get(`/post/${postId}`);
-  for (const key of ['instagram', 'caption', 'light', 'details']) assert.match(post, new RegExp(`data-mfold="${key}" open>`), `the post page: ${key}`);
+  for (const key of ['caption', 'light', 'details']) assert.match(post, new RegExp(`data-mfold="${key}" open>`), `the post page: ${key}`);
+  // Instagram's slides are no fold under TikTok's: one row, by a switch (the owner, 2026-11-13: "2 rows into 1 row").
+  assert.doesNotMatch(post, /data-mfold="instagram"/);
+  assert.match(post, /<div class="pf-ig"><div class="strip ig" data-strip>/);
   assert.match(post, /<details class="mfold in" data-mfold="caption" open><summary>הטקסט שעולה עם המצגת<\/summary><div class="capwrap">/);
   assert.match(post, /<details class="mfold" data-mfold="details" open><summary>העובדות והבדיקות<\/summary>/);
   const sources = await get('/sources');

@@ -210,6 +210,12 @@ function slidesOf(draft) {
     { where: 'cover', get: () => draft.hook, set: (v) => (draft.hook = v) },
     { where: 'cover line 2', get: () => draft.sub, set: (v) => (draft.sub = v) },
   ] }];
+  // TikTok's own cover line (build.js onTiktok) is drawn over the same line under it: its slide's lines count both, and
+  // the line under it, already read above, is not read twice (`again`).
+  if (draft.hookTiktok) out.push({ slide: 0, where: 'cover tiktok', list: false, blocks: [
+    { where: 'cover tiktok', get: () => draft.hookTiktok, set: (v) => (draft.hookTiktok = v) },
+    { where: 'cover line 2', again: true, get: () => draft.sub, set: (v) => (draft.sub = v) },
+  ] });
   draft.slides.forEach((s, i) => {
     if (s.kind !== 'item') return;
     out.push({ slide: i, where: `slide ${i}`, list: LIST_ROLES.has(s.role), blocks: [
@@ -235,7 +241,7 @@ export function lineDraft(draft, pack = null) {
   });
   for (const sl of slidesOf(draft)) {
     for (const b of sl.blocks) {
-      if (sl.list && b.body) continue;
+      if ((sl.list && b.body) || b.again) continue;
       const before = String(b.get() || '');
       if (!before.trim()) continue;
       const after = breakBlock(before, wordsPerLine);
@@ -294,6 +300,7 @@ export function overlayProblems(draft, pack = null) {
       const lines = linesOf(text);
       if (sl.list && b.body) continue;
       count += lines.length;
+      if (b.again) continue;
       lines.forEach((l, k) => {
         const n = wordsOf(l).length;
         if (n > maxW) add(b.where, `line ${k + 1} has ${n} words: at most ${maxW} a line, broken by hand`);
@@ -310,7 +317,8 @@ export function overlayProblems(draft, pack = null) {
     }
     if (sl.list) continue;
     if (count > maxL) add(sl.where, `${count} lines of text: at most ${maxL} on a slide (title and text together)`);
-    else if (count < minL) add(sl.where, `${count === 1 ? 'one line' : `${count} lines`} of text: at least ${minL} on a slide (title and text together)`);
+    // TikTok's own cover line is short by design (build.js onTiktok, read in a second): its cover has no fewest lines.
+    else if (count < minL && sl.where !== 'cover tiktok') add(sl.where, `${count === 1 ? 'one line' : `${count} lines`} of text: at least ${minL} on a slide (title and text together)`);
   }
   return out;
 }

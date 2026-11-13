@@ -27,12 +27,13 @@ import { oneLineOf } from './closing.js';
 
 export const REPAIR_ATTEMPTS = 2;
 
-const TEXTS = ['cover', 'cover line 2', 'caption', 'caption short', 'keywords'];
+const TEXTS = ['cover', 'cover tiktok', 'cover line 2', 'caption', 'caption short', 'keywords'];
 const NEVER = /^(compliance|honesty|brand|rule)/;
 
 /** The text of one repair target in a draft, as the writer is shown it. */
 export function targetText(draft, target) {
   if (target === 'cover') return draft.hook || '';
+  if (target === 'cover tiktok') return draft.hookTiktok || '';
   if (target === 'cover line 2') return draft.sub || '';
   if (target === 'caption') return draft.caption || '';
   if (target === 'caption short') return draft.captionShort || '';
@@ -99,6 +100,7 @@ export function applyRepair(draft, target, r, { facts, factLock = false }) {
   const good = new Set(facts.filter((f) => f.verified).map((f) => f.key));
   const fix = (s) => mechanicalFix(String(s || '').trim()).text;
   if (target === 'cover') next.hook = fix(r.text);
+  else if (target === 'cover tiktok') next.hookTiktok = fix(r.text);
   else if (target === 'cover line 2') next.sub = fix(r.text);
   else if (target === 'caption') next.caption = String(r.text || '').split('\n').map(fix).filter(Boolean).join('\n\n');
   else if (target === 'caption short') next.captionShort = fix(r.text);

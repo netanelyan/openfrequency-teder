@@ -54,7 +54,7 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
  * of the form hanging bare under the bar on a phone). On a card in a list it opens inside the card, as before.
  */
 function rejectForm(ctx, post, { ajax = null, left = null, own = false } = {}) {
-  const w = DELETABLE.includes(post.status) ? DELETE_WORDS : REJECT_WORDS;
+  const w = deletable(post) ? DELETE_WORDS : REJECT_WORDS;
   const canRedo = !post.sample && left !== 0;
   // A new post comes for the day only while more than an hour of it is left (src/autonomy/every-day.js DAY_LEFT_MS).
   const tail = !canRedo || left == null ? (left === 0 && !post.sample ? `<p class="muted small m0">ההחלפות של החודש נוצלו. ${w.after} מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה.</p>` : '') : `<p class="muted small m0">${w.after} מגיע פוסט אחר לאותו יום, כל עוד נשארה ממנו יותר משעה. אפשר גם לבקש שהפוסט הזה ייכתב מחדש לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>`;
@@ -72,6 +72,21 @@ const DELETE_WORDS = { path: 'delete', ask: 'למה למחוק?', go: 'למחו�
  */
 const deleteRow = (ctx, post, left) => `<div class="actions p0x pt10"><button class="btn sm ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}למחוק את הפוסט</button></div>
 ${rejectForm(ctx, post, { left, own: true })}`;
+
+/** A post that could never go out (discardable): the same row, one press and a second to confirm, nothing to choose. */
+const discardRow = (ctx, post) => `<div class="actions p0x pt10">${postButton(ctx, `/post/${post.id}/delete`, `${icon('x')}למחוק את הפוסט`, { cls: 'btn sm ghost danger', confirm: 'לחצו שוב כדי למחוק' })}</div>`;
+
+/** Where a post that is out is deleted by hand, each platform with its link where we have one. */
+const DELETE_THERE_HE = { tiktok: 'באפליקציה של טיקטוק', instagram: 'באפליקציה של אינסטגרם', facebook: 'בעמוד הפייסבוק' };
+
+/** A post already out (isOut): the same row, and what it opens says where to delete it, since we cannot from here. */
+function outRow(post) {
+  const where = sentPlatforms(post.publish || {}).filter((p) => !post.publish[p].error);
+  const link = (p) => post.publish?.[p]?.permalink || post.publish?.[p]?.url || post.publish?.[p]?.flow?.externalUrl || null;
+  const items = where.map((p) => `<li>${esc(PLATFORM_HE[p] || p)}: מוחקים ${esc(DELETE_THERE_HE[p] || 'שם')}${link(p) ? ` · <a href="${esc(link(p))}" target="_blank" rel="noopener noreferrer">לפוסט ${icon('ext')}</a>` : ''}</li>`).join('');
+  return `<div class="actions p0x pt10"><button class="btn sm ghost danger" type="button" data-toggle="#gone-${esc(post.id)}" aria-expanded="false">${icon('x')}למחוק את הפוסט</button></div>
+<div class="rejectbox panel own" id="gone-${esc(post.id)}"><p class="m0">הפוסט כבר עלה, ומכאן אי אפשר למחוק אותו מהרשתות. מוחקים אותו בכל רשת בנפרד:</p>${items ? `<ul class="factlist m0">${items}</ul>` : ''}</div>`;
+}
 
 /** What a post counted as in the customer's month (src/budget/quota.js). */
 const QUOTA_KIND_HE = { suggestion: 'הצעה', redo: 'החלפה', retry: 'לא נספר, הבדיקות שלנו עצרו אותו' };
@@ -298,6 +313,25 @@ export const EDITABLE = ['queued', 'approved', 'sample'];
 /** The statuses of a scheduled post that can still be deleted, before it goes out (the rule src/web/actions.js deletePost enforces). */
 export const DELETABLE = ['approved', 'held'];
 
+/**
+ * Every post's page has one way to delete it, in the same place under its card, red and small (the owner, 2026-11-13:
+ * "where is the delete button? i dont want this post anymore"). What it does depends on where the post stands:
+ *   deletable    scheduled (DELETABLE), its TikTok draft alone sent ('drafted': nothing of it is public, the draft is
+ *                the owner's to delete in the app), or failed before any platform took it: the reason form, and the day
+ *                still gets its post (actions.js deletePost, as a rejection)
+ *   discardable  stopped by the checks, or its day passed unapproved: it could never go out, so one press and a second
+ *                to confirm take it off the lists, and nothing comes instead
+ *   out          on TikTok, Instagram or a Page already: this button deletes nothing there (TikTok has no delete for a
+ *                published post in any official API; Instagram's and a Page's go only with a takedown notice,
+ *                src/publish/takedown.js, which counts toward a pause), so the row says where to delete it, with its links
+ * A post waiting for approval keeps "דחייה" in its bar, and one going out right now has none.
+ */
+// Nothing of it went out: the month's count reads it the same way (src/budget/quota.js, a failed post with no published_at).
+export const neverOut = (post) => !post.published_at;
+export const deletable = (post) => DELETABLE.includes(post.status) || post.status === 'drafted' || (post.status === 'failed' && neverOut(post));
+export const discardable = (post) => ['blocked', 'expired'].includes(post.status) || shownStatus(post) === 'written';
+const isOut = (post) => (post.status === 'published' && shownStatus(post) !== 'written') || (post.status === 'failed' && !neverOut(post));
+
 /** A time, with its date when it is not today's. */
 const atHe = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
 
@@ -341,6 +375,25 @@ function hasLine(post, s) {
 }
 /** A slide's corner when its facts are general knowledge. */
 const GENERAL_HE = 'ידע כללי';
+
+/**
+ * A post's slides on its page, in one row (the owner, 2026-11-13, on TikTok's row with Instagram's under it: "again, 2
+ * rows into 1 row"). Each platform has slides of its own (TikTok's 9:16 and, since that day, its own cover line;
+ * Instagram's 4:5, a Facebook Page's too; each closing slide its own action), so the row shows one platform's at a
+ * time, TikTok's first, and a switch over it shows the other's in its place. A post with one platform's slides has no
+ * switch. Without the stylesheet's :checked rules both show, one under the other.
+ */
+function slidesRow(post, pack) {
+  const id = esc(post.id);
+  const tk = post.media?.tiktok?.length;
+  const ig = post.media?.instagram?.length;
+  const tiktok = tk ? `<input type="checkbox" class="ttv" id="ttv-${id}"><label class="ttv-l" for="ttv-${id}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}` : '';
+  if (!(tk && ig)) return tk ? `<h3 class="lbl">טיקטוק <span>9:16</span></h3>${tiktok}` : ig ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : '';
+  const igName = (pack?.meta?.platforms || []).includes('facebook') ? 'אינסטגרם ופייסבוק' : 'אינסטגרם';
+  return `<div class="pf"><input type="radio" class="pf-in pf-tk-on" name="pf-${id}" id="pf-tk-${id}" checked><input type="radio" class="pf-in pf-ig-on" name="pf-${id}" id="pf-ig-${id}">
+<div class="seg pf-seg"><label for="pf-tk-${id}" class="pf-l-tk">טיקטוק <small>9:16</small></label><label for="pf-ig-${id}" class="pf-l-ig">${igName} <small>4:5</small></label></div>
+<div class="pf-tk">${tiktok}</div><div class="pf-ig">${strip(post, 'instagram')}</div></div>`;
+}
 
 function strip(post, platform = 'tiktok', { mock = null } = {}) {
   const files = post.media?.[platform] || [];
@@ -495,9 +548,9 @@ ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישו
 ${EDITABLE.includes(post.status) && !ctx.unpaid ? `<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}לערוך</a>` : ''}
 ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button>` : ''}
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
-${DELETABLE.includes(post.status) ? `<button class="btn ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}מחיקה</button>` : ''}
+${deletable(post) ? `<button class="btn ghost danger" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}מחיקה</button>` : ''}
 </div>
-${decide || DELETABLE.includes(post.status) ? rejectForm(ctx, post, { ajax: 'remove', left: post.sample ? null : left }) : ''}
+${decide || deletable(post) ? rejectForm(ctx, post, { ajax: 'remove', left: post.sample ? null : left }) : ''}
 ${captionDetails(post, pack?.meta?.platforms || [])}
 ${factsBlock(ctx, post)}
 </article>`;
@@ -870,11 +923,13 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
     })
     .join('');
   const scores = post.checks?.scores || [];
+  // A post with slides of its own for TikTok and for Instagram may have TikTok's own cover line (build.js onTiktok).
+  const tiktokCover = Boolean(post.media?.tiktok?.length && post.media?.instagram?.length);
   const edit = `<details class="panel edit" id="edit"${problems.length || values ? ' open' : ''}><summary><h2 class="inline">עריכת הטקסט</h2></summary>
 ${problems.length ? `<div class="problems"><b>השינוי לא נשמר, הבדיקות עצרו אותו:</b><ul>${problems.map((p) => `<li>${withSupport(p)}</li>`).join('')}</ul></div>` : ''}
 <p class="muted small">אחרי השמירה תדר בודק שוב את הטקסט ואת העובדות, ומצייר את השקפים מחדש. מספר שלא מופיע בציטוט מהמקור לא יעבור. עריכה לא נספרת כהחלפה.</p>
 <form method="post" action="/post/${esc(post.id)}/edit" class="formgrid">${csrfField(ctx)}
-<fieldset><legend>שקף הפתיחה</legend><label class="f">כותרת<input type="text" name="hook" value="${esc(v.hook)}" maxlength="90"></label><label class="f">שורה שנייה<input type="text" name="sub" value="${esc(v.sub || '')}" maxlength="120"></label></fieldset>
+<fieldset><legend>שקף הפתיחה</legend><label class="f">כותרת<input type="text" name="hook" value="${esc(v.hook)}" maxlength="90"></label>${tiktokCover ? `<label class="f">כותרת לטיקטוק <small>קצרה וחדה יותר, כי בטיקטוק גוללים מהר. אם משאירים ריק, בטיקטוק תופיע הכותרת שלמעלה.</small><input type="text" name="hook_tiktok" value="${esc(values ? values.hook_tiktok ?? '' : post.data?.hookTiktok || '')}" maxlength="90"></label>` : ''}<label class="f">שורה שנייה<input type="text" name="sub" value="${esc(v.sub || '')}" maxlength="120"></label></fieldset>
 ${items
   .map((s, i) => {
     const val = values ? { title: values[`title_${i}`], body: values[`body_${i}`] } : s;
@@ -935,8 +990,7 @@ ${written ? writtenBanner(ctx, post) : tiktokDraftBanners(ctx, post)}
 ${notices}
 <section class="card acc acc-${esc(post.account_id)} post${slidesShown ? '' : ' stopped'}"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span>${kind ? `<span class="chip">${esc(kind)}</span>` : ''}${when ? `<span class="chip">${icon('clock')}${esc(when)}</span>` : ''}</div>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
-${post.media?.tiktok?.length ? `<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}` : ''}
-${post.media?.instagram?.length ? fold('instagram', 'איך זה נראה באינסטגרם', `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}`, { inCard: true, one: false }) : ''}
+${slidesRow(post, pack)}
 ${trustLine(post, ctx)}
 ${post.caption || post.caption_ig ? fold('caption', 'הטקסט שעולה עם המצגת', `<div class="capwrap">${captionBlock(post, pack?.meta?.platforms || [])}</div>`, { inCard: true, one: false }) : ''}
 </section>
@@ -944,7 +998,7 @@ ${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${
 ${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null, own: true })}` : ''}
 ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
 ${post.status === 'held' ? `<div class="actionbar"><a class="btn primary" href="/accounts?account=${esc(post.account_id)}#connect-${esc(post.account_id)}">לחבר</a></div>` : ''}
-${DELETABLE.includes(post.status) ? deleteRow(ctx, post, d.quota && !post.sample ? d.quota.redos.left : null) : ''}
+${deletable(post) ? deleteRow(ctx, post, d.quota && !post.sample ? d.quota.redos.left : null) : discardable(post) ? discardRow(ctx, post) : isOut(post) ? outRow(post) : ''}
 ${post.status === 'failed' ? `<div class="actionbar">${retryButton(ctx, post, { cls: 'btn primary' })}</div><p class="muted small">שולחים רק לאן שהמצגת עוד לא עלתה. מה שכבר עלה לא נשלח שוב.</p>` : ''}
 ${EDITABLE.includes(post.status) && d.photos ? fold('light', 'שינויים קטנים', lightPanel(ctx, d)) : ''}
 ${EDITABLE.includes(post.status) ? edit : ''}

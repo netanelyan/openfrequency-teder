@@ -232,7 +232,9 @@ test('deleted a moment after the approval, while its draft is on its way: the dr
   }
 });
 
-test('only a scheduled post is deleted: one going out right now, one waiting for approval and one already out are refused, and say why', async () => {
+// The owner, 2026-11-13: "where is the delete button? i dont want this post anymore": a post whose TikTok draft alone
+// went ('drafted') is deleted as a scheduled one is (src/web/pages.js deletable), and one already out says where.
+test('a post going out right now, one waiting for approval and one already out are refused, and say why; a TikTok draft alone is deleted', async () => {
   const { home, cleanup } = tempHome();
   try {
     const { ctx, db, id } = await queued(home, at('2026-10-13', '12:45'));
@@ -244,9 +246,15 @@ test('only a scheduled post is deleted: one going out right now, one waiting for
     // publishPost marks a post 'publishing' before it sends anything: it is not stopped halfway.
     refused('publishing', /^הפוסט עולה ממש עכשיו, אז כבר אי אפשר למחוק אותו\.$/, 409);
     refused('queued', /^הפוסט עוד מחכה לאישור\. אם הוא לא מתאים, אפשר לדחות אותו\.$/);
-    refused('published', /^אפשר למחוק רק פוסט מתוזמן שעוד לא עלה\.$/);
-    refused('drafted', /^אפשר למחוק רק פוסט מתוזמן שעוד לא עלה\.$/);
+    refused('published', /^הפוסט כבר עלה, ומכאן אי אפשר למחוק אותו מהרשתות\. מוחקים אותו באפליקציה של כל רשת\.$/);
+    refused('rejected', /^אפשר למחוק רק פוסט שעוד לא עלה\.$/);
     assert.throws(() => deletePost(ctx, owner, { id: 'nope' }, {}), (e) => e.status === 404);
+    // Its TikTok draft alone went: nothing of it is public; it comes down, and the draft is the owner's to delete.
+    db.update('posts', id, { status: 'drafted' });
+    const r = deletePost(ctx, owner, { id }, { reason: 'topic', redo: '0' });
+    assert.match(r.message, /^הפוסט נמחק ולא ייצא\..*הטיוטה הקודמת כבר בתיבת הטיוטות של טיקטוק: מחקו אותה באפליקציה\.$/);
+    assert.deepEqual([loadPost(db, id).status, loadPost(db, id).reject.deleted], ['rejected', true]);
+    await r.job;
   } finally {
     cleanup();
   }
@@ -287,9 +295,10 @@ test('a scheduled post\'s page: "לפרסם עכשיו" leads, "ביטול אי�
     assert.match(html, new RegExp(`action="/post/${id}/delete"`));
     assert.doesNotMatch(html, /publish-now|unapprove/);
 
-    // Out: nothing to delete here (a takedown is something else).
+    // Out: the same row says where to delete it, and nothing is sent from here (a takedown is something else).
     db.update('posts', id, { status: 'published', published_at: new Date().toISOString() });
-    assert.doesNotMatch(page(), /\/delete"|למחוק את הפוסט/);
+    assert.match(page(), /למחוק את הפוסט[\s\S]*הפוסט כבר עלה, ומכאן אי אפשר למחוק אותו מהרשתות/);
+    assert.doesNotMatch(page(), /\/delete"/);
   } finally {
     cleanup();
   }

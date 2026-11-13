@@ -277,6 +277,7 @@ export function hookProblems(pack, format, draft, facts = []) {
   const lib = templatesOf(pack);
   if (!lib.length || kindName(format) === 'list') return out;
   const others = [
+    ['cover tiktok', draft.hookTiktok],
     ['cover line 2', draft.sub],
     ...draft.slides.flatMap((s, i) => (s.kind === 'item' ? [[`slide ${i} title`, s.title], [`slide ${i} text`, s.body]] : [])),
     ['caption', draft.caption],

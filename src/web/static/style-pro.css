@@ -388,6 +388,7 @@ details.panel > summary { min-height: 28px; }
 .logo-tile { border-radius: 8px; }
 
 /* Pickers: a radio row (.seg) with the chosen one white; a format to tick, a white tile whose border turns violet. */
+.pf-tk-on:checked ~ .pf-seg .pf-l-tk, .pf-ig-on:checked ~ .pf-seg .pf-l-ig { background: var(--seg-on); box-shadow: 0 0 0 1px var(--edge), 0 1px 0 rgba(26, 26, 26, 0.06); }
 .seg label { border-radius: 6px; }
 .seg input:checked + label { background: var(--seg-on); box-shadow: 0 0 0 1px var(--edge), 0 1px 0 rgba(26, 26, 26, 0.06); }
 .fmt-pick { border-radius: 8px; border-color: var(--line-2); background: var(--surface); }

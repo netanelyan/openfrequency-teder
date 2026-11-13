@@ -129,6 +129,8 @@ export function styleFitProblems(draft, { style, platforms = ['tiktok'], overlay
     const title = S.rank && m.rank && m.title ? `${m.rank}. ${m.title}` : m.title;
     if (m.kind === 'cover') {
       check('cover', 'hook', m.hook, m.highlight);
+      // TikTok's own cover line (build.js onTiktok), drawn on TikTok's slides only: measured at TikTok's size.
+      if (draft.hookTiktok && size === 'tiktok') check('cover tiktok', 'hook', draft.hookTiktok, m.highlight);
       check('cover line 2', 'sub', m.sub);
     } else if (m.kind === 'number') {
       check(`slide ${i} title`, 'ntitle', title, m.highlight);

@@ -1258,6 +1258,18 @@ details.more[open] > summary { background: var(--fill-2); }
 .tparts b { font-weight: 600; color: var(--ink-2); text-align: end; }
 @media (max-width: 560px) { .topic { grid-template-columns: 1fr; } .topic .tside { justify-items: start; } }
 
+/* ---- a post's slides in one row (pages.js slidesRow): TikTok's or Instagram's, by the switch over them. The radios
+   stand before the switch and the two rows, so the chosen one shows by :checked alone, with no script. */
+.pf { display: flex; flex-direction: column; }
+.pf-in { position: absolute; opacity: 0; pointer-events: none; }
+.pf-seg { margin: 16px 20px 0; max-width: 360px; }
+.pf-seg label { min-height: 44px; }
+.pf-tk-on:checked ~ .pf-seg .pf-l-tk, .pf-ig-on:checked ~ .pf-seg .pf-l-ig { background: var(--seg-on); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04); }
+.pf-tk-on:focus-visible ~ .pf-seg .pf-l-tk, .pf-ig-on:focus-visible ~ .pf-seg .pf-l-ig { outline: 3px solid color-mix(in srgb, var(--accent-fill) 60%, transparent); }
+.pf-tk-on:checked ~ .pf-ig, .pf-ig-on:checked ~ .pf-tk { display: none; }
+.pf-tk { display: flex; flex-direction: column; }
+.pf-tk > .ttv-l { align-self: flex-start; margin: 12px 20px 0; }
+
 /* ---- TikTok view (the post page): TikTok's furniture over each slide, to see what runs under it. Mirrored as the
    Hebrew app draws it: the button rail on the left. The dashed box is the band the slide styles keep text inside. */
 .ttv { position: absolute; opacity: 0; pointer-events: none; }

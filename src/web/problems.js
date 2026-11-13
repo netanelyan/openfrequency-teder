@@ -13,6 +13,7 @@ function placeHe(where, { igCaption = false } = {}) {
   const w = String(where || '').trim();
   let m;
   if (/^cover line 2$/.test(w)) return 'השורה השנייה בשקף הפתיחה';
+  if (/^cover tiktok$/.test(w)) return 'הכותרת לטיקטוק';
   if (/^(the )?cover$/.test(w)) return 'שקף הפתיחה';
   if ((m = /^slide (\d+) title$/.exec(w))) return `שקף ${m[1]}, הכותרת`;
   if ((m = /^slide (\d+) text$/.exec(w))) return `שקף ${m[1]}, הטקסט`;

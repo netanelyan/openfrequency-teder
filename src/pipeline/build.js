@@ -357,9 +357,11 @@ export function mentionsDay(text, day) {
  * Every text of a post, labelled, for the checks. `frame`: the fixed words of the cover's hook template, when it
  * has one (src/formats/hooks.js coverFrame): the voice check and the review read the cover knowing it.
  */
-export function textsOf({ hook, sub, slides, caption, captionShort }, { frame = [] } = {}) {
+export function textsOf({ hook, hookTiktok, sub, slides, caption, captionShort }, { frame = [] } = {}) {
   const out = [
     { where: 'cover', kind: 'cover', text: hook, ...(frame.length ? { role: 'template', frame } : {}) },
+    // TikTok's own cover line (onTiktok below), read as a cover: never a template's, so no frame excuses a teaser in it.
+    { where: 'cover tiktok', kind: 'cover', text: hookTiktok },
     { where: 'cover line 2', kind: 'sub', text: sub },
   ];
   slides.forEach((s, i) => {
@@ -370,7 +372,8 @@ export function textsOf({ hook, sub, slides, caption, captionShort }, { frame = 
   // A post with an Instagram caption has TikTok's long one too; a phase 1 post has the one caption.
   out.push({ where: 'caption', kind: captionShort ? 'captionLong' : 'caption', text: caption });
   out.push({ where: 'caption short', kind: 'captionShort', text: captionShort });
-  return out.filter((t) => t.text || t.kind === 'cover');
+  // The cover is read even empty (a cover is never empty); TikTok's own line only when there is one.
+  return out.filter((t) => t.text || t.where === 'cover');
 }
 
 /**
@@ -388,7 +391,26 @@ export function igCaption({ hook, captionShort, question }) {
  * What the gate and the token hold beyond the slides, in one fixed order. The closing slide is in it (its line and its
  * action, src/pipeline/closing.js): the renderer draws only what the gate signed, the closing slide included.
  */
-const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '', ...(d.coverVisual ? { coverVisual: d.coverVisual } : {}), ...closingExtra(d) });
+export const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '', ...(d.coverVisual ? { coverVisual: d.coverVisual } : {}), ...(d.hookTiktok ? { hookTiktok: d.hookTiktok } : {}), ...closingExtra(d) });
+
+/**
+ * TikTok's own cover line (the owner, 2026-11-13: "hooks on tiktok should be catchier. instagram is a slower paced
+ * social media, so our hooks are good for instagram, less for tiktok"). The writer gives it in the same call as the
+ * rest (prompts.js, hookTiktok), for an account on TikTok, and only TikTok's slides draw it (render.js): Instagram and
+ * a Facebook Page keep the cover line as it was. It is a cover like the other: the voice, the overlay's lines, the
+ * style's fit and the fact gate read it, and the gate signs it (extraOf). "" when the post has none (a cover from a
+ * template, an account not on TikTok, a post made before it, or the same words): TikTok then draws the cover line.
+ */
+export const TIKTOK_HOOK_WORDS = 9;
+export const onTiktok = (pack) => (pack?.meta?.platforms || ['tiktok']).includes('tiktok');
+
+/** The writer's TikTok cover line as the draft keeps it: "" where TikTok draws the cover line itself. */
+export function tiktokHookOf(pack, d, fromTemplate = false) {
+  const t = String(d?.hookTiktok || '').trim();
+  if (!t || fromTemplate || !onTiktok(pack)) return '';
+  const flat = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+  return flat(t) === flat(d.hook) ? '' : t;
+}
 
 /** The fact gate, with what this kind of post allows: its structure numbers, its fact-free roles. */
 export function gateDraft(format, draft, facts, { allow = [] } = {}) {
@@ -427,6 +449,9 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   // highlight is a short phrase of its own headline.
   const style = draft.style || null;
   for (const x of style ? styleFitProblems(draft, { style, platforms: pack.meta.platforms, overlay: overlayOf(pack), places: slidePlaces(draft.slides), postKind: kindName(f) }) : highlightProblems(draft)) problems.push(x);
+  // TikTok's cover is read in its first second: a few words on a phone.
+  const tkWords = String(draft.hookTiktok || '').split(/\s+/).filter(Boolean).length;
+  if (tkWords > TIKTOK_HOOK_WORDS) problems.push({ where: 'cover tiktok', code: 'length', msg: `TikTok's cover line has ${tkWords} words: at most ${TIKTOK_HOOK_WORDS}, read in under two seconds` });
   // A phase 1 post's one caption is not a story, but its hashtags are still the engine's.
   if (kindName(f) === 'list') for (const x of hashtagProblems(draft)) problems.push(x);
   else {
@@ -581,6 +606,7 @@ export function fixDraft(draft) {
     }
   };
   fix('cover', () => draft.hook, (v) => (draft.hook = v));
+  if (draft.hookTiktok) fix('cover tiktok', () => draft.hookTiktok, (v) => (draft.hookTiktok = v));
   fix('cover line 2', () => draft.sub, (v) => (draft.sub = v));
   // The story's beats keep the blank line between them.
   fix('caption', () => draft.caption, (v) => (draft.caption = v), /\n\s*\n/.test(draft.caption || '') ? '\n\n' : '\n');
@@ -645,6 +671,8 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
     // The slide style the post is drawn in, when it is not the account's own (a style test): its texts must fit it.
     ...(style ? { style } : {}),
     hook: fromTemplate ? filled.text : String(d.hook || '').trim(),
+    // TikTok's own cover line (onTiktok above): none on a template's cover (the template is TikTok's too).
+    hookTiktok: tiktokHookOf(pack, d, fromTemplate),
     sub: String(d.sub || '').trim(),
     // The code chose the pattern (or offered the templates), so the results are credited to what the cover is.
     hookPattern: fromTemplate ? `tpl:${tpl.id}` : hook?.id || null,
@@ -672,7 +700,8 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   // A countdown's or a list's short caption is its cover line, as every viral one's is ("5 facts about UFC you may
   // didn't know !"), with its question when it has one: told to give nothing away, the writer still put the best fact
   // in it, run after run.
-  if (ONE_LINE_KINDS.has(kindName(format)) && captionStyleOf(pack) === 'short' && draft.hook) draft.caption = joinCaption(draft.hook.replace(/\s*\n\s*/g, ' '), d.question);
+  // The caption is TikTok's, so it is TikTok's cover line when the post has one of its own.
+  if (ONE_LINE_KINDS.has(kindName(format)) && captionStyleOf(pack) === 'short' && draft.hook) draft.caption = joinCaption((draft.hookTiktok || draft.hook).replace(/\s*\n\s*/g, ' '), d.question);
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
   const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
@@ -714,14 +743,14 @@ export function checkDraft(ctx, pack, { draft, format, facts, items, attempt = 0
 }
 
 // Which limits a repaired text is told, by target.
-const TARGET_KIND = { cover: 'cover', 'cover line 2': 'sub', caption: 'captionLong', 'caption short': 'captionShort' };
+const TARGET_KIND = { cover: 'cover', 'cover tiktok': 'cover', 'cover line 2': 'sub', caption: 'captionLong', 'caption short': 'captionShort' };
 // The closing slide's line: one short line (src/pipeline/closing.js CLOSING_LINE).
 const CLOSING_LIMITS = { maxChars: CLOSING_LINE.maxChars, sentences: CLOSING_LINE.sentences };
 
 /** One target as the repair call is shown it: its text now, its role, its limits and the checks it failed. */
 function repairTarget(draft, pack, target, problems) {
   const s = /^slide \d+$/.test(target) ? draft.slides[Number(target.slice(6))] : null;
-  const text = target === 'keywords' ? (draft.keywords || []).join(', ') : { cover: draft.hook, 'cover line 2': draft.sub, caption: draft.caption, 'caption short': draft.captionShort, closing: draft.closing?.line }[target];
+  const text = target === 'keywords' ? (draft.keywords || []).join(', ') : { cover: draft.hook, 'cover tiktok': draft.hookTiktok, 'cover line 2': draft.sub, caption: draft.caption, 'caption short': draft.captionShort, closing: draft.closing?.line }[target];
   return {
     target, role: s?.role, problems: problems.map((p) => p.msg),
     limits: TARGET_KIND[target] ? limitsFor(TARGET_KIND[target], pack) : target === 'closing' ? CLOSING_LIMITS : s ? limitsFor('slideBody', pack) : null,
@@ -1020,7 +1049,7 @@ export function detailsDepth(det, made, { modelPage = null, outline = null } = {
 export function postDraft(post) {
   const data = post.data || {};
   const d = {
-    hook: post.hook || '', sub: post.sub || '', caption: post.caption || '', captionShort: data.captionShort || '', question: data.question || '',
+    hook: post.hook || '', ...(data.hookTiktok ? { hookTiktok: data.hookTiktok } : {}), sub: post.sub || '', caption: post.caption || '', captionShort: data.captionShort || '', question: data.question || '',
     subject: data.subject || {}, keywords: data.keywords || [], cta: data.cta || null, hookPattern: post.hook_pattern || '',
     ...(data.hookTemplate ? { hookTemplate: data.hookTemplate } : {}),
     // The closing slide, as it was signed (a post made before it has none, and closes as it did).
@@ -1568,6 +1597,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
           if (!v) continue;
           next.slides[t.idx].visual = v;
         } else if (t.where === 'cover') next.hook = text;
+        else if (t.where === 'cover tiktok') next.hookTiktok = text;
         else if (t.where === 'cover line 2') next.sub = text;
         else if (t.where === 'caption') next.caption = text;
         else if (t.where === 'caption short') next.captionShort = text;
@@ -1704,7 +1734,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     return finish(status, {
       // The cover is credited to its template while it still opens with it (a rewrite may have made it a plain line).
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: coverCredit(pack, format, draft),
-      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined, closing: draft.closing },
+      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, hookTiktok: draft.hookTiktok || undefined, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual, hookTemplate: templateOnCover(pack, format, draft) ? draft.hookTemplate : undefined, closing: draft.closing },
       checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, ...(photos.get('end') ? { endImage: photos.get('end').id } : {}), coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), sceneImages: ['bg2', 'bg3'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(textLed.length ? { textLed: textLed.map((g) => g.slide) } : {}), ...(texture ? { texture, mode } : {}), ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });

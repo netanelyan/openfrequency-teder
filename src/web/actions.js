@@ -2,7 +2,7 @@ import path from 'node:path';
 import { waitingImages } from '../images/index.js';
 import { now, nowIso } from '../core/clock.js';
 import { audit, setSetting, step } from '../core/store.js';
-import { loadPost, checkPost, formatOfPost, igCaption, postDraft, textsOf } from '../pipeline/build.js';
+import { loadPost, checkPost, formatOfPost, igCaption, postDraft, textsOf, tiktokHookOf } from '../pipeline/build.js';
 import { drawAgain, photoChoices, withImages } from '../pipeline/light.js';
 import { redoPost } from '../pipeline/redo.js';
 import { dayOpen, daySlotOf, refillSlot } from '../autonomy/every-day.js';
@@ -18,6 +18,7 @@ import { publishErrorHe } from '../publish/errors.js';
 import { restAt } from '../schedule/shabbat.js';
 import { rulesFor } from '../schedule/choice.js';
 import { STATUS_HE, dayHe, shortDate, timeHe, untilHe } from './ui.js';
+import { deletable, discardable } from './pages.js';
 // Whether a TikTok draft can go now, for what the approval says (canRun is imported once more under its own name: the
 // import above it is the cost rule's to change).
 import { canRun as canSend } from '../autonomy/rails.js';
@@ -231,8 +232,19 @@ const DRAFT_COMING = 'הטיוטה של הפוסט שנמחק בדרך לאפל�
 export function deletePost(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
   if (post.status === 'publishing') throw new ActionError('הפוסט עולה ממש עכשיו, אז כבר אי אפשר למחוק אותו.', 409);
-  if (!['approved', 'held'].includes(post.status)) throw new ActionError(post.status === 'queued' ? 'הפוסט עוד מחכה לאישור. אם הוא לא מתאים, אפשר לדחות אותו.' : 'אפשר למחוק רק פוסט מתוזמן שעוד לא עלה.');
+  // One that could never go out (stopped by the checks, its day passed unapproved, written to disk only): off the lists,
+  // with nothing in its place (pages.js discardable).
+  if (discardable(post)) return discard(ctx, user, post);
+  // Failed before any platform took it: as a scheduled one (pages.js deletable).
+  if (!deletable(post)) throw new ActionError(post.status === 'queued' ? 'הפוסט עוד מחכה לאישור. אם הוא לא מתאים, אפשר לדחות אותו.' : ['published', 'failed'].includes(post.status) ? 'הפוסט כבר עלה, ומכאן אי אפשר למחוק אותו מהרשתות. מוחקים אותו באפליקציה של כל רשת.' : 'אפשר למחוק רק פוסט שעוד לא עלה.');
   return decline(ctx, user, post, form, { deleting: true });
+}
+
+/** deletePost for a post that could never go out: rejected and marked deleted, with no reason asked and nothing instead. */
+function discard(ctx, user, post) {
+  ctx.db.update('posts', post.id, { status: 'rejected', reject_json: { reason: 'other', note: '', by: user.name, at: nowIso(), redo: 'declined', deleted: true }, updated_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'delete_post', accountId: post.account_id, postId: post.id, detail: via(user, { was: post.status }) });
+  return { ok: true, message: 'הפוסט נמחק.' };
 }
 
 /** reject and deletePost, once the post is known to be the session's and in a state to come down. */
@@ -259,7 +271,8 @@ function decline(ctx, user, post, form, { deleting = false } = {}) {
   const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : !wants ? 'declined' : !runs ? 'paused' : 'none', ...(fresh ? { day: 'writing' } : {}), ...(deleting ? { deleted: true } : {}) };
   ctx.db.update('posts', id, { reject_json: rejected });
   audit(ctx.db, { actor: user.name, action: deleting ? 'delete_post' : 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo, day: fresh ? 'writing' : null, ...(deleting ? { was: post.status } : {}) }) });
-  const draftLeft = left ? ` ${DRAFT_LEFT}` : deleting && coming ? ` ${DRAFT_COMING}` : '';
+  // A post whose TikTok draft alone went ('drafted') has it in the app whichever way it was sent.
+  const draftLeft = left || post.status === 'drafted' ? ` ${DRAFT_LEFT}` : deleting && coming ? ` ${DRAFT_COMING}` : '';
   // A rejection says "נדחה" its own ways; a deletion says once that the post will not go out, then the same news of
   // what comes instead.
   const result = (declined, tail = '', job = null) => {
@@ -404,6 +417,8 @@ export async function edit(ctx, user, { id }, form) {
   let item = -1;
   const draft = postDraft(post);
   draft.hook = clean(form.hook, 90);
+  // TikTok's own cover line (build.js onTiktok): emptied, or the same words as the cover line, TikTok draws the cover line.
+  if (form.hook_tiktok != null) draft.hookTiktok = tiktokHookOf(pack, { hookTiktok: clean(form.hook_tiktok, 90), hook: draft.hook });
   draft.sub = clean(form.sub, 120);
   draft.caption = clean(form.caption, legacy ? 400 : 900);
   if (form.caption_short != null) draft.captionShort = clean(form.caption_short, 260);
@@ -430,6 +445,7 @@ export async function edit(ctx, user, { id }, form) {
       if (String(before || '') !== String(after || '')) changes.push({ slide_idx: slideIdx, field, before, after });
     };
     note(null, 'hook', post.hook, draft.hook);
+    note(null, 'hook_tiktok', post.data?.hookTiktok, draft.hookTiktok);
     note(null, 'sub', post.sub, draft.sub);
     note(null, 'caption', post.caption, draft.caption);
     note(null, 'caption_short', post.data?.captionShort, draft.captionShort);
@@ -440,7 +456,7 @@ export async function edit(ctx, user, { id }, form) {
       ctx.db.run('UPDATE slides SET title = ?, body = ? WHERE post_id = ? AND idx = ?', draft.slides[i].title, draft.slides[i].body, id, i);
     });
     for (const c of changes) ctx.db.insert('edits', { post_id: id, account_id: post.account_id, ...c, user_id: user.id, at: nowIso() });
-    ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true, style: look.hash }, updated_at: nowIso() });
+    ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort, hookTiktok: draft.hookTiktok || undefined }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true, style: look.hash }, updated_at: nowIso() });
     saveFiles(ctx.db, id, files);
     step(ctx.db, id, 'edit', 'ok', via(user, { by: user.name, changes: changes.length }));
     audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: via(user, { changes: changes.length }) });

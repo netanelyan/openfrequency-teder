@@ -100,7 +100,8 @@ test('a post the checks stopped before it had slides: its page draws no "TikTok 
   // One with slides keeps them, the view and its caption.
   const full = await (await get(`/post/${postId}`, cookie)).text();
   assert.match(full, /<section class="card acc acc-demo post"><div class="meta">/);
-  assert.match(full, /<h3 class="lbl">טיקטוק <span>9:16<\/span><\/h3><input type="checkbox" class="ttv"[^>]*><label class="ttv-l"[^>]*>[^]*?תצוגת טיקטוק<\/label><div class="strip"/);
+  // TikTok's and Instagram's slides in one row, by a switch over it (src/web/pages.js slidesRow); TikTok's view on TikTok's.
+  assert.match(full, /<div class="seg pf-seg"><label [^>]*class="pf-l-tk">טיקטוק <small>9:16<\/small><\/label>[^]*?<div class="pf-tk"><input type="checkbox" class="ttv"[^>]*><label class="ttv-l"[^>]*>[^]*?תצוגת טיקטוק<\/label><div class="strip"/);
   assert.match(full, /<div class="capwrap"><p class="caption">/);
 });
 

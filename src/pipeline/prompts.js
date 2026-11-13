@@ -99,6 +99,8 @@ export const SLIDES_SCHEMA = {
   type: 'object',
   properties: {
     hook: { type: 'string' },
+    // TikTok's own cover line (build.js onTiktok): "" where TikTok draws the cover line.
+    hookTiktok: { type: 'string' },
     sub: { type: 'string' },
     hookPattern: { type: 'string' },
     // A cover from a hook template (src/formats/hooks.js): its id, what fills its slots, and the facts it promises.
@@ -150,7 +152,7 @@ export const SLIDES_SCHEMA = {
       additionalProperties: false,
     },
   },
-  required: ['hook', 'sub', 'hookPattern', 'hookTemplate', 'hookSlots', 'hookFacts', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual', 'closing'],
+  required: ['hook', 'hookTiktok', 'sub', 'hookPattern', 'hookTemplate', 'hookSlots', 'hookFacts', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual', 'closing'],
   additionalProperties: false,
 };
 
@@ -368,7 +370,12 @@ const SLIDES_TASK = {
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
 - hookTemplate, hookSlots, hookFacts: when the request offers COVER TEMPLATES, the cover is written from the first of them, in the order given, whose promise this post's facts keep (COVER TEMPLATES above): its id, the words for its slots, the ids of the facts it promises. When none does, hookTemplate is "", every slot "" and hookFacts [], and the hook follows the cover pattern.
 - hook: the cover line. 3 to 11 words. From a template, it is the template with its slots filled (the code writes it again from hookSlots, in the account's voice). Otherwise after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a real question or a concrete fact that only the slides explain ("איך ברצלונה הפכה 4:0 ל-6:1 בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). It names what the post is about, as one sentence or one question: no colon, no label, no teaser that hides the subject. Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
-- sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request).
+- hookTiktok: TikTok's cover line. Only TikTok's slides draw it; Instagram and Facebook keep "hook", which suits their slower feed. On TikTok the cover has about one second before the thumb moves on, so this is the same promise, about the same subject and on the same facts, said to stop a fast scroll: 3 to 8 words, read in under two seconds on a phone. Open on the strongest word. What stops a scroll there: the post's single most surprising concrete detail up front (a number, a price, a time, a name, a place); tension (something that should not be true, a cost, a mistake people make, a before and after); or a direct question to them, in the plural, that the slides answer. Cut every word that only sets the scene. The catch comes from what is specific and true, never from hiding the point: it names what the post is about, every number in it is in a fact's quote, and it promises only what the slides deliver. Every rule of the cover holds for it (HEBREW THAT SOUNDS LIKE A PERSON and its NEVER list, LINES), and like the cover it never gives the payoff of a guess-who or a ranking away. "" when the cover is written from a COVER TEMPLATE (the template is TikTok's cover too), when the request says the account is not on TikTok, or when "hook" is already the catchiest honest line. Examples, made up for a coffee shop's post about storing beans (they are not facts, and a number goes in only when a quote holds it):
+  hook "איך שומרים על פולי קפה טריים יותר זמן", hookTiktok "המקרר הורס לכם את הקפה" (a concrete claim with tension, which the slides explain)
+  hook "מה עושים עם קפה שנשאר מאתמול", hookTiktok "קפה של אתמול? אל תשפכו אותו" (a question to them, and the turn they did not expect)
+  hook "כמה זמן פולי קפה נשארים טריים אחרי הקלייה", hookTiktok "אחרי שבועיים הפולים כבר לא אותו דבר" (the number first, as the quote says it)
+  Never like these: "לא תאמינו מה קורה לקפה שלכם" and "הטעות שכולם עושים עם קפה" (they hide the point), "עצרו הכל, זה חשוב" (urgency with nothing behind it), "הקפה הכי טוב בעולם" (a claim no fact holds).
+- sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request). It stands under TikTok's cover line too, so it reads after either.
 - hookHighlight, and each slide's highlight: the one word or short phrase (up to 3 words) of the cover line, or of that slide's title, that the design marks in the account's colour: the number, the name or the word the line turns on, copied exactly as it is written there; or "" when nothing in it stands out. One a slide at most, never the whole line.
 - subject: as in the outline (you may shorten a name).
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences, broken into lines as the request's LINES says (or one item a line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
@@ -392,7 +399,7 @@ const REPAIR_TASK = {
 
 The code checks refused some texts of one post. The request gives each of those texts (its target), what it may use, and the checks' exact messages. Rewrite only those texts so that every message is answered, and keep the rest of each text: its point, its facts, the account's voice, the line breaks the LINES rule asks for. The other texts of the post are not yours to change.
 - A slide (target "slide N"): return title, body, a and b (a stat slide's two values, "" otherwise) and facts: the ids of the facts the slide states.
-- The cover ("cover"), the line under it ("cover line 2") and the Instagram caption ("caption short"): return the text in "text". A cover written from a cover template keeps the template's own words and changes only what fills its slots, or, when its promise cannot be kept, becomes a plain line with none of the template's words.
+- The cover ("cover"), TikTok's cover line ("cover tiktok"), the line under them ("cover line 2") and the Instagram caption ("caption short"): return the text in "text". TikTok's cover line stays 3 to 8 words, the catchier way to say the cover's promise. A cover written from a cover template keeps the template's own words and changes only what fills its slots, or, when its promise cannot be kept, becomes a plain line with none of the template's words.
 - The TikTok caption ("caption"): "text" holds four lines, hook, problem, discovery and result, one a line, the closing question at the end of the last.
 - The keywords ("keywords"): "text", separated by commas, at least one in Hebrew and one in English letters.
 - The closing slide ("closing"): its one line in "text", as CLOSING SLIDE in the request says: this post's topic tied to what the slide sends people to, naming it, within the rules listed there. Its action is the code's: never in the line.
@@ -553,6 +560,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     kindName(format) === 'ranking' ? rankRules(pack) : '',
     day ? `TODAY: ${day}.` : '',
     // The templates first, the format's pattern for a post no template fits (src/formats/hooks.js).
+    pack?.meta && !(pack.meta.platforms || ['tiktok']).includes('tiktok') ? 'TIKTOK: this account is not on TikTok, so hookTiktok is "".' : '',
     templates.length ? `COVER TEMPLATES FOR THIS POST, best first: ${templates.map((t) => `[${t.id}]`).join(', ')}. The cover is written from the first whose promise these facts keep, speaking ${SPEAKER_EN[speakerOf(pack)]}; "" when none does.` : '',
     hook ? `COVER PATTERN${templates.length ? ' (when no template fits)' : ''}: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
