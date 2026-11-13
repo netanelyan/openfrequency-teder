@@ -75,6 +75,26 @@ export function publishedByHand(db, post, { by = 'owner', t = now() } = {}) {
   return true;
 }
 
+/**
+ * Zernio linked a draft to the post the owner published from it (its numbers are that post's: src/metrics/collect.js
+ * reads them by the draft's id). A draft still waiting, or one the owner marked as published by hand, is theirs, with
+ * the post's id and address, as one the watch found would be; a post that was only that draft is out. The watch reads
+ * the owner's posts for WATCH_HOURS only, and a draft marked by hand has no post id: this is how either gets its link.
+ * Returns whether anything changed.
+ */
+export function draftFound(db, post, { id, url = null, t = now() }) {
+  const results = post.publish || {};
+  const flow = results.tiktok?.flow;
+  if (!flow || !id || !['waiting', 'mine'].includes(flow.state) || flow.externalId) return false;
+  const was = flow.state;
+  Object.assign(flow, { state: 'mine', externalId: id, externalUrl: url, foundAt: flow.foundAt || new Date(t).toISOString() });
+  if (url && !results.tiktok.url) results.tiktok.url = url;
+  save(db, post.id, results);
+  nowOut(db, post, t);
+  if (was === 'waiting') step(db, post.id, 'tiktok', 'ok', { flow: 'mine', external: id, url, by: 'metrics' });
+  return true;
+}
+
 /** What a TikTok draft post is now, in the owner's words. */
 export const FLOW_HE = {
   drafted: ['בטיוטות של טיקטוק', 'ghost'],
@@ -149,7 +169,7 @@ export async function watchDrafts(ctx, { t = now(), list = null, send = null } =
 
       if (flow.state === 'fallback') {
         if (t - Date.parse(flow.fallback.at) > WATCH_HOURS * HOUR) continue;
-        const m = matchDraft({ caption: post.caption, sentAt: flow.sentAt }, await external(), claimed);
+        const m = matchDraft({ caption: post.caption, sentAt: flow.sentAt, draftId: results.tiktok.draftId }, await external(), claimed);
         if (!m) continue;
         // The draft went out after the fallback did: two of the same post. Flagged for the owner; nothing is deleted.
         Object.assign(flow, { state: 'duplicate', externalId: m.id, externalUrl: m.url, foundAt: new Date(t).toISOString() });
@@ -163,7 +183,7 @@ export async function watchDrafts(ctx, { t = now(), list = null, send = null } =
       }
 
       // ---- waiting
-      const m = matchDraft({ caption: post.caption, sentAt: flow.sentAt }, await external(), claimed);
+      const m = matchDraft({ caption: post.caption, sentAt: flow.sentAt, draftId: results.tiktok.draftId }, await external(), claimed);
       if (m) {
         Object.assign(flow, { state: 'mine', externalId: m.id, externalUrl: m.url, foundAt: new Date(t).toISOString() });
         // The post's numbers are read from the owner's post (Zernio's analytics take an external id too).

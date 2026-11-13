@@ -11,7 +11,7 @@ import { assertAllowed, WRITE_RULES } from '../src/core/net.js';
 import { israelInstant } from '../src/schedule/israel.js';
 import { monthKey } from '../src/core/clock.js';
 import { publishPost, publisherFor, sendDraft } from '../src/publish/index.js';
-import { zernioAnalytics, ZernioError } from '../src/publish/zernio.js';
+import { externalPosts, zernioAnalytics, ZernioError } from '../src/publish/zernio.js';
 import { collectMetrics } from '../src/metrics/collect.js';
 import { quotasData } from '../src/web/data.js';
 import { DIR, signature } from '../src/assistant/sign.js';
@@ -82,6 +82,8 @@ function fakeZernio() {
       return reply(201, { post: { _id: id, status: 'published', platforms: [{ platform: pl, status: 'published', platformPostId: `${pl}-${id}`, platformPostUrl: `https://www.${pl}.com/p/${id}` }] } });
     }
     if (method === 'GET' && p === '/analytics') {
+      // An account's list: every post Zernio synced, ours and external ones alike (its source=external answered none).
+      if (!q.postId && q.accountId) return reply(200, q.source ? { posts: [] } : { posts: st.list || [] });
       const a = st.analytics[q.postId];
       return a ? reply(a.status || 200, a.body) : reply(404, { error: 'not found' });
     }
@@ -321,7 +323,7 @@ test("per-post numbers: Zernio's answer for one post, a platform still syncing l
   ] } };
   const got = await zernioAnalytics('z1');
   assert.deepEqual(Object.keys(got), ['tiktok'], 'a platform still syncing is not a zero');
-  assert.deepEqual(got.tiktok, { views: 1200, reach: 900, likes: 80, comments: 4, shares: 12, saves: null, linkClicks: 2, follows: 3, profileVisits: 15 });
+  assert.deepEqual(got.tiktok, { views: 1200, reach: 900, likes: 80, comments: 4, shares: 12, saves: null, linkClicks: 2, follows: 3, profileVisits: 15, postId: null, url: null });
   Z.analytics.gone = { status: 424, body: { status: 'failed' } };
   assert.equal(await zernioAnalytics('gone'), null);
   Z.analytics.paid = { status: 402, body: { error: 'Analytics add-on required', code: 'analytics_addon_required' } };
@@ -346,6 +348,47 @@ test("per-post numbers: Zernio's answer for one post, a platform still syncing l
   const o2 = await collectMetrics(ctx, { t: Date.parse('2026-10-13T12:00:00Z'), only: ['mz2'] });
   assert.match(o2.why, /Analytics add-on/);
   assert.equal(Z.calls.length - before, 1, 'one refusal is the answer for every post: not asked again');
+});
+
+test("a TikTok draft the owner published is read by the draft's id, linked to their post, and a post with no TikTok numbers for days is flagged", async () => {
+  const t0 = '2026-10-10T10:00:00.000Z';
+  const T = Date.parse('2026-10-15T12:00:00Z'); // five days on: past the 96 hours a post may go without a TikTok number
+  const flow = (state, extra = {}) => ({ mode: 'now', state, sentAt: t0, slotAt: t0, remindedAt: t0, ...extra });
+  const row = (id, tiktok) => db.insert('posts', { id, account_id: 'alpha', format_id: 'f', status: 'published', published_at: t0, publish_json: { tiktok, instagram: { via: 'zernio', zernioId: `ig-${id}` } }, created_at: t0, updated_at: t0 });
+  // Waiting in the drafts, and the owner published it: Zernio links the draft to their post and answers its numbers.
+  row('dr1', { via: 'zernio', postId: 'p_inbox_url~v2.1', draft: true, draftId: 'draft1', flow: flow('waiting') });
+  Z.analytics.draft1 = { body: { postId: 'draft1', status: 'published', syncStatus: 'synced', platformPostUrl: 'https://www.tiktok.com/@a/video/7706436263884229940', platformAnalytics: [{ platform: 'tiktok', status: 'published', syncStatus: 'synced', platformPostId: '7706436263884229940', platformPostUrl: 'https://www.tiktok.com/@a/video/7706436263884229940', analytics: { views: 424, reach: 402, likes: 5, comments: 0, shares: 1 } }] } };
+  // Marked as published by hand, and Zernio has not linked it: nothing is written, and after 96 hours it is flagged.
+  row('dr2', { via: 'zernio', postId: 'p_inbox_url~v2.2', draft: true, draftId: 'draft2', flow: flow('mine', { byHand: true, foundAt: t0 }) });
+  Z.analytics.draft2 = { status: 202, body: { postId: 'draft2', status: 'published', syncStatus: 'pending', platformAnalytics: [{ platform: 'tiktok', status: 'published', syncStatus: 'pending', platformPostId: 'p_inbox_url~v2.2', analytics: null, errorMessage: 'tiktok API returned null (temporarily unavailable)' }] } };
+  // Still in the drafts and never published: not linked, nothing written, and nothing flagged (it is not out).
+  row('dr3', { via: 'zernio', postId: 'p_inbox_url~v2.3', draft: true, draftId: 'draft3', flow: flow('waiting') });
+  Z.analytics.draft3 = Z.analytics.draft2;
+  for (const id of ['dr1', 'dr2', 'dr3']) Z.analytics[`ig-${id}`] = { body: { postId: `ig-${id}`, platformAnalytics: [{ platform: 'instagram', syncStatus: 'synced', analytics: { views: 1, reach: 1 } }] } };
+
+  const out = await collectMetrics(ctx, { t: T, only: ['dr1', 'dr2', 'dr3'] });
+  const tiktok = (id) => db.get("SELECT views, likes, shares FROM metrics WHERE post_id = ? AND platform = 'tiktok'", id);
+  assert.deepEqual({ ...tiktok('dr1') }, { views: 424, likes: 5, shares: 1 }, "the draft's id answers its published post's numbers");
+  assert.equal(tiktok('dr2') ?? null, null, 'a draft still syncing is not a zero');
+  assert.equal(tiktok('dr3') ?? null, null);
+  const f1 = loadPost(db, 'dr1').publish.tiktok;
+  assert.deepEqual([f1.flow.state, f1.flow.externalId, f1.url], ['mine', '7706436263884229940', 'https://www.tiktok.com/@a/video/7706436263884229940'], 'linked: theirs, with its address');
+  assert.equal(loadPost(db, 'dr3').publish.tiktok.flow.state, 'waiting');
+  assert.deepEqual(out.linked, ['dr1']);
+  assert.deepEqual(out.missing, ['dr2'], 'out on TikTok for days with no number: flagged, never a quiet zero');
+});
+
+test("the owner's TikTok posts are Zernio's whole list kept to the external ones, each with the draft it was", async () => {
+  Z.list = [
+    { _id: 'ext1', latePostId: 'draftA', isExternal: true, publishedAt: '2026-10-13T10:05:00Z', content: 'וואטסאפ הושקה ב-2009', platforms: [{ platform: 'tiktok', platformPostId: '7707015466534964501', platformPostUrl: 'https://www.tiktok.com/@a/video/7707015466534964501' }], platformPostUrl: 'https://www.tiktok.com/@a/video/7707015466534964501' },
+    { _id: 'ours1', isExternal: false, publishedAt: '2026-10-13T11:00:00Z', content: 'פוסט שעלה דרך Zernio' },
+  ];
+  const before = Z.calls.length;
+  const got = await externalPosts('tt1', { from: Date.parse('2026-10-13T09:00:00Z') });
+  const ask = Z.calls.slice(before).find((c) => c.path === '/analytics');
+  assert.equal(ask.q.source, undefined, "Zernio's source=external answered no posts: the list is asked for whole");
+  assert.deepEqual(got, [{ id: 'ext1', publishedAt: '2026-10-13T10:05:00Z', content: 'וואטסאפ הושקה ב-2009', url: 'https://www.tiktok.com/@a/video/7707015466534964501', draftId: 'draftA' }]);
+  Z.list = [];
 });
 
 test("what Zernio bills each account's profile this month, read daily into the ledger next to the API spend", async () => {

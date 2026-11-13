@@ -235,30 +235,40 @@ export async function trendingSound(accountId, { countryCode = 'IL', recent = []
 
 /**
  * The account's TikTok posts that were not sent through Zernio, published since `from`, as Zernio synced them from
- * TikTok: [{ id, publishedAt, content, url }]. A draft the owner publishes in the app comes back this way, the same
- * analytics read the metrics use (src/metrics/collect.js), filtered to source=external.
+ * TikTok: [{ id, publishedAt, content, url, draftId }]. A draft the owner publishes in the app comes back this way, the
+ * same analytics read the metrics use (src/metrics/collect.js), with `isExternal` true and `latePostId` the draft it was
+ * (draftId). The list is asked for whole and kept to the external posts here: Zernio's own `source=external` filter
+ * answered no posts at all for an account whose list had two external ones (the live account, 2026-11-13), so no draft
+ * was ever found by it.
  */
 export async function externalPosts(accountId, { from }) {
-  const q = new URLSearchParams({ accountId, platform: 'tiktok', source: 'external', fromDate: new Date(from).toISOString().slice(0, 10), sortBy: 'date', order: 'desc', limit: '50' });
+  const q = new URLSearchParams({ accountId, platform: 'tiktok', fromDate: new Date(from).toISOString().slice(0, 10), sortBy: 'date', order: 'desc', limit: '50' });
   const body = await getJson(`${BASE()}/analytics?${q}`, { headers: auth() });
   const list = body?.posts || body?.data || (body?.post ? [body.post] : []);
-  return list.map((p) => {
-    const part = (p.platformAnalytics || []).find((x) => x.platform === 'tiktok') || {};
-    return { id: String(p.postId || p._id || part.platformPostId || ''), publishedAt: p.publishedAt || null, content: String(p.content || ''), url: p.platformPostUrl || part.platformPostUrl || null };
-  }).filter((p) => p.id && p.publishedAt);
+  return list
+    .filter((p) => p && p.isExternal === true)
+    .map((p) => {
+      const part = (p.platformAnalytics || p.platforms || []).find((x) => x.platform === 'tiktok') || {};
+      return { id: String(p.postId || p._id || part.platformPostId || ''), publishedAt: p.publishedAt || null, content: String(p.content || ''), url: p.platformPostUrl || part.platformPostUrl || null, draftId: p.latePostId ? String(p.latePostId) : null };
+    })
+    .filter((p) => p.id && p.publishedAt);
 }
 
 const words = (s) => String(s || '').replace(/#\S+/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter((w) => w.length > 1);
 
 /**
- * The external post that is this draft published, or null. Pure. It went out after the draft was sent, no one else
- * claimed it, and its caption is ours: at least half the words of our caption's first line are in it (the owner may
- * trim it, add a word, change the tags). With no caption to compare (TikTok returned none), the one post published
- * since the draft was sent is it, when there is exactly one.
+ * The external post that is this draft published, or null. Pure. The one Zernio says was this draft (its draftId) is
+ * it, first. Else it went out after the draft was sent, no one else claimed it, and its caption is ours: at least half
+ * the words of our caption's first line are in it (the owner may trim it, add a word, change the tags). With no caption
+ * to compare (TikTok returned none), the one post published since the draft was sent is it, when there is exactly one.
  */
-export function matchDraft({ caption, sentAt }, posts, claimed = []) {
+export function matchDraft({ caption, sentAt, draftId = null }, posts, claimed = []) {
+  const open = posts.filter((p) => !claimed.includes(p.id));
+  const linked = draftId ? open.find((p) => p.draftId === draftId) : null;
+  if (linked) return linked;
   const since = Date.parse(sentAt) - 5 * 60_000;
-  const fresh = posts.filter((p) => Date.parse(p.publishedAt) >= since && !claimed.includes(p.id));
+  // A post Zernio links to another draft is that draft's.
+  const fresh = open.filter((p) => Date.parse(p.publishedAt) >= since && !(p.draftId && p.draftId !== draftId));
   const ours = words(String(caption || '').split('\n').find((l) => l.trim()) || '');
   const close = (p) => {
     const theirs = new Set(words(p.content));
@@ -318,7 +328,9 @@ export async function zernioAnalytics(zernioId) {
   const parts = Array.isArray(body?.platformAnalytics) && body.platformAnalytics.length ? body.platformAnalytics : body?.platform && body?.analytics ? [{ platform: body.platform, analytics: body.analytics, syncStatus: body.syncStatus }] : [];
   for (const p of parts) {
     if (!p?.platform || !p.analytics || ['pending', 'unavailable'].includes(p.syncStatus) || p.status === 'failed') continue;
-    out[p.platform] = statsOf(p.platform, p.analytics);
+    // Which post on the platform the numbers are of, and its address: a draft's numbers are its published post's, once
+    // Zernio linked the two (src/metrics/collect.js links the post to it).
+    out[p.platform] = { ...statsOf(p.platform, p.analytics), postId: p.platformPostId ? String(p.platformPostId) : null, url: p.platformPostUrl || null };
   }
   // The list shape (an older answer, or a lookup that came back as one).
   for (const p of body?.posts || (body?.post ? [body.post] : [])) if (p.platform && p.analytics && !out[p.platform]) out[p.platform] = statsOf(p.platform, p.analytics);

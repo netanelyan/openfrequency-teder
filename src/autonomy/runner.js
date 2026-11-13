@@ -9,7 +9,7 @@ import { buildPost, PausedError } from '../pipeline/build.js';
 import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
-import { collectMetrics, learn } from '../metrics/collect.js';
+import { collectMetrics, learn, MISSING_HOURS } from '../metrics/collect.js';
 import { autonomyMode, canGenerate, canRun } from './rails.js';
 import { usage } from '../budget/quota.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
@@ -471,6 +471,11 @@ export async function tick(ctx, { t = now() } = {}) {
     setSetting(db, 'metrics:last', new Date(t).toISOString());
     report.metrics = await collectMetrics(ctx, { t });
     report.formats = learn(ctx, { t });
+    // Posts out on TikTok for days with no number from it: the reading is broken, never a quiet zero on the chart.
+    const missing = report.metrics.missing || [];
+    if (missing.length) {
+      await alertOperator(ctx, 'metrics:tiktok-missing', { title: 'Teder: TikTok numbers missing', body: `${missing.length} post(s) out on TikTok for ${MISSING_HOURS / 24}+ days have no TikTok numbers from Zernio: ${missing.slice(0, 5).join(', ')}` }, { t }).catch((e) => ctx.log?.(`alert metrics: ${e.message}`));
+    }
   }
 
   // ---- 5a. an Instagram Login token is refreshed before its 60 days run out (once a day it is asked)

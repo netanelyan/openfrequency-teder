@@ -84,6 +84,13 @@ test("the owner's post is found by its caption, after the draft was sent, and ne
   assert.equal(matchDraft({ caption, sentAt }, posts, ['ours']), null, 'claimed by another draft');
   assert.equal(matchDraft({ caption, sentAt }, [p('x', '2026-10-13T10:00:00Z', '')]).id, 'x', 'no caption to compare: the one new post');
   assert.equal(matchDraft({ caption, sentAt }, [p('x', '2026-10-13T10:00:00Z', ''), p('y', '2026-10-13T10:01:00Z', '')]), null, 'two uncaptioned posts: neither is assumed');
+
+  // The post Zernio says was this draft is it, whatever its caption became; one it links to another draft is not ours.
+  const linked = { ...p('linked', '2026-10-13T10:10:00Z', 'כיתוב שהבעלים כתבו מחדש'), draftId: 'draft-1' };
+  const theirs = { ...p('theirs', '2026-10-13T10:06:00Z', 'בזיליקום במרפסת: חמישה דברים שהוא צריך'), draftId: 'draft-2' };
+  assert.equal(matchDraft({ caption, sentAt, draftId: 'draft-1' }, [theirs, linked]).id, 'linked');
+  assert.equal(matchDraft({ caption, sentAt, draftId: 'draft-9' }, [theirs]), null, "another draft's post, even with our caption");
+  assert.equal(matchDraft({ caption, sentAt, draftId: 'draft-1' }, [linked], ['linked']), null, 'claimed already');
 });
 
 test('notifications go through the door to the push services only, empty and signed; Telegram stays refused', async () => {
