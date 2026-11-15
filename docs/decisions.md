@@ -3266,3 +3266,14 @@ asks Teder, on this machine, with OF_INTERNAL_TOKEN (test/fixtures/teder-leads.j
 Toran moves Teder's lead to match what the operator marks on the shared page (they answered, not interested, back on
 the list, neither), so a store that answered gets no Teder reminder, and a take-down there takes Teder's demo down too.
 /leads and /demos stay as they are. Tested in test/leads-internal.test.js.
+
+## 2026-11-15: text on boxes, each line's box clear of the next
+
+The owner, on a slide in the boxes layout: "This style makes the text look bugged". A box drawn behind a line is the
+line's content area, its face's ascent and descent: 1.47 em in Heebo, 1.19 in Rubik, 1.0 in Karantina, and on Windows
+not what it is on Linux. At the layout's line height (1.02) each line's box was drawn over the bottom of the letters of
+the line above, in every style; E's boxes on a photograph overlapped the same way. Wherever boxes are drawn (the boxes
+layout, E's box look) every face is now set on the box metrics (styles/index.js BOX_METRICS: 0.8 em over the line,
+0.2 under it, as @font-face ascent-override and descent-override, so the font files are the same), and the line is set
+as tall as its box and a small gap. Tested in test/format-v3.test.js: no line's box covers the line above, in every style
+and in E's box look.

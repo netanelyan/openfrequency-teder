@@ -279,6 +279,35 @@ test('a slide in text mode is designed: never plain centred text in one weight a
   }
 });
 
+test("text on boxes: each line's box stands clear of the next one's, in every style and in E's box look on a photograph", { timeout: 120_000 }, async () => {
+  // The owner, 2026-11-15, on a boxes slide: "This style makes the text look bugged". A box is its line's content
+  // area, the face's ascent and descent (1.47 em in Heebo): at a line height of 1.02 the next line's box was drawn
+  // over the bottom of the letters above it. The faces are set on the box metrics (BOX_METRICS) wherever boxes are.
+  const tab = await (await getBrowser()).newPage({ viewport: { width: 1080, height: 1920 } });
+  const title = '5 דולר לכולם היה רק בהתחלה';
+  const body = 'מהמחיר הזה בא השם פייבר, והיום הרבה מוכרים גובים יותר, ושירותים באתר יכולים להגיע לאלפי דולרים';
+  const photo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920"><rect width="1080" height="1920" fill="#4a6070"/></svg>');
+  const cases = [
+    ...Object.keys(STYLES).map((name) => ({ name, slide: { texture: { kind: 'fabric', seed: 4, angle: 10, dark: true, layout: 'boxes' } } })),
+    { name: 'E', slide: { photo } },
+  ];
+  try {
+    for (const { name, slide } of cases) {
+      const theme = themeOf({ meta: { style: { name, text: 'box' } }, theme: { colors: { accent: '#3DDC97' } } }, name);
+      await tab.setContent(stylePage({ theme, size: 'tiktok', slide: { kind: 'item', role: 'fact', postKind: 'story', n: 7, of: 8, title, body, highlight: 'רק בהתחלה', factKeys: [], sources: [], ...slide } }), { waitUntil: 'load' });
+      await tab.evaluate(() => document.fonts.ready);
+      const runs = await tab.evaluate(() => [...document.querySelectorAll('.ln')].map((ln) => [...ln.getClientRects()].map((r) => [r.top, r.bottom])));
+      const where = `${name}${slide.photo ? ' on a photograph' : ''}`;
+      assert.ok(runs.some((r) => r.length >= 2), `${where}: a text runs to two lines at least`);
+      for (const rects of runs) {
+        for (let i = 1; i < rects.length; i++) assert.ok(rects[i][0] >= rects[i - 1][1] - 0.5, `${where}: line ${i + 1}'s box covers line ${i} (${Math.round(rects[i - 1][1] - rects[i][0])}px)`);
+      }
+    }
+  } finally {
+    await tab.close();
+  }
+});
+
 test('a post in text mode keeps one layout on all its slides, and the layout changes from post to post', async () => {
   const layouts = new Set(Array.from({ length: 40 }, (_, i) => textureFor(`post${i}`).layout));
   assert.deepEqual([...layouts].sort(), [...LAYOUTS].sort(), 'every layout is used');

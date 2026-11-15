@@ -43,8 +43,14 @@ const DIGITS_FROM = { Karantina: { family: 'Rubik', sizeAdjust: '88%' } };
 /** The family a headline is set in: the display face, or its composite with readable digits. */
 export const headlineFamily = (display) => (DIGITS_FROM[display] ? `'${display} Headline'` : `'${display}'`);
 
+// A face's own line metrics, set for text on boxes: a box drawn behind a line is the line's content area, which is
+// the face's ascent and descent, from 1.0 em (Karantina) to 1.47 em (Heebo), and on Windows not what it is on Linux.
+// Taller than the line, each line's box covered the bottom of the letters of the line above (2026-11-15). With the
+// metrics set, a box is the same height around the letters in every face, on every system.
+const metricsCss = (m) => (m ? `ascent-override:${Math.round(m.ascent * 100)}%;descent-override:${Math.round(m.descent * 100)}%;` : '');
+
 /** The composite headline face, when the display face needs one: its own glyphs, another face's digits. */
-export function headlineFaces(display) {
+export function headlineFaces(display, metrics = null) {
   const d = DIGITS_FROM[display];
   if (!d || !isFont(display) || !isFont(d.family)) return '';
   const fam = `${display} Headline`;
@@ -54,8 +60,8 @@ export function headlineFaces(display) {
   const digitsFile = FONTS[d.family][0].file;
   return FONTS[display]
     .flatMap((f) => [
-      `@font-face{font-family:'${fam}';src:url(${dataUri(f.file)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;unicode-range:U+0000-002F,U+003A-10FFFF;}`,
-      `@font-face{font-family:'${fam}';src:url(${dataUri(digitsFile)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;unicode-range:U+0030-0039;size-adjust:${d.sizeAdjust};}`,
+      `@font-face{font-family:'${fam}';src:url(${dataUri(f.file)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;unicode-range:U+0000-002F,U+003A-10FFFF;${metricsCss(metrics)}}`,
+      `@font-face{font-family:'${fam}';src:url(${dataUri(digitsFile)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;unicode-range:U+0030-0039;size-adjust:${d.sizeAdjust};${metricsCss(metrics)}}`,
     ])
     .join('\n');
 }
@@ -69,15 +75,15 @@ function dataUri(file) {
   return cache.get(file);
 }
 
-/** @font-face rules for the named families, inlined. */
-export function fontFaces(families) {
+/** @font-face rules for the named families, inlined; `metrics` ({ ascent, descent } in em) sets every face's line metrics. */
+export function fontFaces(families, metrics = null) {
   const seen = new Set();
   const out = [];
   for (const fam of families) {
     if (seen.has(fam) || !isFont(fam)) continue;
     seen.add(fam);
     for (const f of FONTS[fam]) {
-      out.push(`@font-face{font-family:'${fam}';src:url(${dataUri(f.file)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;}`);
+      out.push(`@font-face{font-family:'${fam}';src:url(${dataUri(f.file)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;${metricsCss(metrics)}}`);
     }
   }
   return out.join('\n');

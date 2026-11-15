@@ -533,8 +533,15 @@ export function cornerNumber(m, slide) {
   return m.rank || (slide.n ? String(slide.n) : '');
 }
 
+const layoutOf = (slide) => (LAYOUTS.includes(slide.texture?.layout) ? slide.texture.layout : 'marker');
+
+// The line metrics of text on boxes (fonts.js), in em: the letters of a Hebrew face stand 0.55 to 0.63 em over the
+// line, its digits and Latin capitals to 0.74, its lamed to 0.8, its final letters 0.2 under it. A content area of
+// 1 em from 0.8 over the line to 0.2 under it, and a box's padding on it, holds them evenly in every face.
+export const BOX_METRICS = { ascent: 0.8, descent: 0.2 };
+
 function drawText(m, slide, g, S) {
-  const layout = LAYOUTS.includes(slide.texture?.layout) ? slide.texture.layout : 'marker';
+  const layout = layoutOf(slide);
   // The display line a size up from the style's own, its floor and its lines kept (the writer wrote to those).
   // Its floor a little under the style's: the boxes and the heavier weight take some of the width the writer wrote to.
   const up = (spec, f) => ({ ...spec, px: Math.round(spec.px * f), floor: Math.round((spec.floor || spec.px * BODY_FLOOR) * 0.85) });
@@ -594,14 +601,15 @@ const CSS_TEXT = (g, S) => `
 /* boxes: each line on its own solid box, centred, as TikTok's text tool sets it (to the start, half the slide stood
    empty beside short lines) */
 .st .blk.tl-boxes{align-items:center;text-align:center}
-/* The boxes reach past the words by their padding: the line's own box is that much wider, so they stay inside it. */
-.tl-boxes .tl-head{padding:0 .3em}
-.tl-boxes .tl-sub{padding:0 .37em}
+/* The boxes reach past the words by their padding: the line's own box is that much wider, so they stay inside it.
+   A box is the line's 1 em (BOX_METRICS) and its padding; the line is that and a gap, so no box covers the line above
+   (at 1.02 the next line's box hid the bottom of the letters, and the boxes looked broken). */
+.tl-boxes .tl-head{padding:0 .3em;line-height:1.22}
+.tl-boxes .tl-sub{padding:0 .37em;line-height:1.32}
 .tl-marker .tl-head{padding:0 .1em}
-.tl-boxes .tl-head .ln{background:#FFFFFF;color:#111111;padding:.04em .28em .1em;border-radius:.16em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tl-boxes .tl-head .ln{background:#FFFFFF;color:#111111;padding:.08em .28em .06em;border-radius:.16em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .tl-boxes .tl-head mark.hi{background:var(--accent);color:var(--on-accent);border-radius:.12em;padding:0 .06em}
-
-.tl-boxes .tl-sub .ln{background:rgba(0,0,0,.62);color:#FFFFFF;padding:.1em .35em .16em;border-radius:.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tl-boxes .tl-sub .ln{background:rgba(0,0,0,.62);color:#FFFFFF;padding:.1em .35em .08em;border-radius:.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .tl-boxes .tl-num{background:var(--accent);color:var(--on-accent);align-self:center;padding:${g.y(6)}px ${g.hs(28)}px;border-radius:${g.hs(18)}px}
 /* corner: the number huge on a sticker of the colour at the start of the slide, the words stacked under it */
 .st .blk.tl-corner{justify-content:center;align-items:flex-start;text-align:right}
@@ -844,13 +852,15 @@ export function stylePage({ theme, size, slide: given, overlay = null }) {
   const ground = !hasPhoto(slide) && slide.texture ? `<div class="texg" style="${textureCss({ ...slide.texture, dark: S.dark !== false }, { ground: st.colors.bg, text: st.colors.text, accent: st.colors.accent }, 1080, g.h)}"></div>` : '';
   const families = familiesOf(st.name);
   const karantina = families.includes('Karantina');
+  // Text on boxes (the boxes layout, E's box look) in every face on the box metrics, so its boxes never overlap.
+  const metrics = (textMode ? layoutOf(slide) === 'boxes' : look === 'box') ? BOX_METRICS : null;
   const z = g.z;
   return `<!doctype html>
 <html lang="he" dir="rtl">
 <head><meta charset="utf-8"><title>${esc(slide.title || slide.hook || '')}</title>
 <style>
-${fontFaces(families)}
-${karantina ? headlineFaces('Karantina') : ''}
+${fontFaces(families, metrics)}
+${karantina ? headlineFaces('Karantina', metrics) : ''}
 ${base(g, st.colors, S)}
 ${CSS[st.name](g, S)}
 ${VISUAL_CSS}
